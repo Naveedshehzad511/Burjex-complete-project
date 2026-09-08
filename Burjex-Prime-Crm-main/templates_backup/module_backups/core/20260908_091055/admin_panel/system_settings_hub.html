@@ -1,0 +1,30 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}System Management — {{ crm_company_name|default:"CRM" }}{% endblock %}
+
+{% block admin_shell_header_title %}
+<div>
+  <h1 class="bp-topbar-title">System Management</h1>
+  <p class="bp-topbar-subtitle">Theme, account configuration, integrations and automation</p>
+</div>
+{% endblock %}
+
+{% block admin_content %}
+<div class="bp-s-68">
+
+  <div class="bp-grid-3">
+    {% for row in sections %}
+    <a href="{% url row.url_name %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-264">
+        <i class="fa-solid fa-gear fa-sm" aria-hidden="true"></i>
+      </div>
+      <div class="bp-s-189">{{ row.title }}</div>
+      <p class="bp-s-190">Open dedicated module</p>
+      <div class="bp-s-191">
+        Open <i class="fa-solid fa-arrow-right fa-xs" aria-hidden="true"></i>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}

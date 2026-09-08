@@ -1,0 +1,109 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}User Activity{% endblock %}
+{% block um_body %}
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-5 mb-6 shadow-sm">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+      </div>
+      <div>
+        <h2 class="text-sm font-bold text-slate-900 dark:text-white">Activity Log</h2>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Filter and review recent transactions and document submissions.</p>
+      </div>
+    </div>
+    
+    <form method="get" class="flex flex-col sm:flex-row gap-3 items-end p-4 bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-100 dark:border-slate-800">
+      <div class="w-full sm:min-w-[320px]">
+        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Select User Profile</label>
+        <select name="user_id" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+          <option value="">All users</option>
+          {% for u in users %}
+            <option value="{{ u.id }}" {% if selected and selected.id == u.id %}selected{% endif %}>{{ u.email }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="w-full sm:w-auto h-10 px-6 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-2">
+        <i class="fa-solid fa-filter"></i> Filter
+      </button>
+    </form>
+  </div>
+  
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col h-full">
+      <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center gap-2">
+        <i class="fa-solid fa-money-bill-transfer text-emerald-500"></i>
+        <h3 class="font-bold text-sm text-slate-900 dark:text-white">Recent Transactions</h3>
+      </div>
+      <div class="p-5 flex-1">
+        <div class="space-y-3">
+          {% for t in transactions %}
+            <div class="flex items-start gap-4 p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 transition-colors">
+              <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                <i class="fa-solid fa-money-bill-1-wave text-slate-500 dark:text-slate-400 text-xs"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex justify-between items-start gap-2 mb-1">
+                  <div class="font-bold text-sm text-slate-900 dark:text-white truncate">{{ t.actor.email }}</div>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 shrink-0">{{ t.tx_type }}</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                  <span class="font-medium text-slate-700 dark:text-slate-300">{{ t.amount }} {{ t.currency }}</span>
+                  <span class="text-slate-300 dark:text-slate-600">•</span>
+                  <span>{{ t.status }}</span>
+                  <span class="text-slate-300 dark:text-slate-600">•</span>
+                  <span>{{ t.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+              </div>
+            </div>
+          {% empty %}
+            <div class="flex flex-col items-center justify-center py-8 text-center">
+              <div class="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
+                <i class="fa-solid fa-inbox text-lg"></i>
+              </div>
+              <p class="text-sm font-medium text-slate-900 dark:text-white">No activity</p>
+              <p class="text-xs text-slate-500">No recent transactions found.</p>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    
+    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col h-full">
+      <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center gap-2">
+        <i class="fa-solid fa-file-invoice text-indigo-500"></i>
+        <h3 class="font-bold text-sm text-slate-900 dark:text-white">Recent Document Activity</h3>
+      </div>
+      <div class="p-5 flex-1">
+        <div class="space-y-3">
+          {% for d in documents %}
+            <div class="flex items-start gap-4 p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 transition-colors">
+              <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                <i class="fa-solid fa-file text-slate-500 dark:text-slate-400 text-xs"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex justify-between items-start gap-2 mb-1">
+                  <div class="font-bold text-sm text-slate-900 dark:text-white truncate">{{ d.user.email }}</div>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 shrink-0">{{ d.doc_type }}</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                  <span class="{% if d.status == 'APPROVED' %}text-emerald-600 dark:text-emerald-400 font-medium{% elif d.status == 'REJECTED' %}text-rose-600 dark:text-rose-400 font-medium{% else %}text-slate-700 dark:text-slate-300 font-medium{% endif %}">{{ d.status }}</span>
+                  <span class="text-slate-300 dark:text-slate-600">•</span>
+                  <span>{{ d.uploaded_at|date:"M d, Y H:i" }}</span>
+                </div>
+              </div>
+            </div>
+          {% empty %}
+            <div class="flex flex-col items-center justify-center py-8 text-center">
+              <div class="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
+                <i class="fa-solid fa-inbox text-lg"></i>
+              </div>
+              <p class="text-sm font-medium text-slate-900 dark:text-white">No activity</p>
+              <p class="text-xs text-slate-500">No recent documents found.</p>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+

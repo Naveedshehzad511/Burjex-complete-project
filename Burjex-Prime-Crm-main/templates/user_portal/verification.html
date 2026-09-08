@@ -1,0 +1,21 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Verification - Burjex Prime{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">Verification</h1>
+  <p class="portal-page-subtitle">KYC verification status controlled by admin.</p>
+
+  <div class="portal-stat-grid mb-5">
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">KYC Status</div>
+      <div class="portal-stat-value">{{ u.kyc_status }}</div>
+    </div>
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Documents Uploaded</div>
+      <div class="portal-stat-value">{{ documents_count }}</div>
+    </div>
+  </div>
+
+  <a href="{% url 'user-compliance' %}" class="portal-btn-primary">Upload Verification Documents</a>
+{% endblock %}

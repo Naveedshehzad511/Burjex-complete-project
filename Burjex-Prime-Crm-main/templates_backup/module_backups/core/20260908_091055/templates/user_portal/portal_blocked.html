@@ -1,0 +1,12 @@
+{% extends "user_portal/base.html" %}
+{% block title %}Account unavailable{% endblock %}
+{% block content %}
+  <div class="max-w-md mx-auto mt-16 rounded-xl p-8 text-center" style="background:var(--portal-surface-bg);border:1px solid var(--portal-border);">
+    <div class="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--portal-text-muted);"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    </div>
+    <h1 class="text-lg font-semibold mb-2" style="color:var(--portal-text-main);">Account unavailable</h1>
+    <p class="text-sm" style="color:var(--portal-text-muted);">{{ message|default:"Please contact support." }}</p>
+    <a href="{% url 'logout' %}" class="inline-block mt-6 text-sm font-medium hover:underline" style="color:var(--portal-brand-primary);">Sign out</a>
+  </div>
+{% endblock %}

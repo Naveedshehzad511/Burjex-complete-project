@@ -1,0 +1,62 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Trading Account Requests{% endblock %}
+
+{% block admin_content %}
+  <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+    <h1 class="text-xl font-semibold mb-4">Trading Account Requests</h1>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="p-2 text-left">ID</th>
+            <th class="p-2 text-left">Client</th>
+            <th class="p-2 text-left">Account Type</th>
+            <th class="p-2 text-left">Currency</th>
+            <th class="p-2 text-left">Leverage</th>
+            <th class="p-2 text-left">Status</th>
+            <th class="p-2 text-left">Date</th>
+            <th class="p-2 text-left">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr class="border-b">
+              <td class="p-2">#{{ r.id }}</td>
+              <td class="p-2">{{ r.user.email }}</td>
+              <td class="p-2">{{ r.account_type.account_name }}</td>
+              <td class="p-2">{{ r.currency }}</td>
+              <td class="p-2">1:{{ r.leverage }}</td>
+              <td class="p-2">
+                {% if r.status == "APPROVED" %}
+                  <span class="text-emerald-600 font-semibold">Approved</span>
+                {% elif r.status == "REJECTED" %}
+                  <span class="text-rose-600 font-semibold">Rejected</span>
+                {% else %}
+                  <span class="text-amber-600 font-semibold">Pending</span>
+                {% endif %}
+              </td>
+              <td class="p-2">{{ r.created_at|date:"Y-m-d H:i" }}</td>
+              <td class="p-2">
+                {% if r.status == "PENDING" %}
+                  <div class="flex gap-2">
+                    <form method="post">{% csrf_token %}<input type="hidden" name="request_id" value="{{ r.id }}"/><input type="hidden" name="action" value="approve"/><button class="px-3 py-1 rounded bg-emerald-600 text-white">Approve</button></form>
+                    <form method="post">{% csrf_token %}<input type="hidden" name="request_id" value="{{ r.id }}"/><input type="hidden" name="action" value="reject"/><button class="px-3 py-1 rounded bg-rose-600 text-white">Reject</button></form>
+                  </div>
+                {% else %}
+                  {% if r.created_mt5_account %}
+                    <span class="text-xs text-slate-500">MT5 #{{ r.created_mt5_account.login_id }}</span>
+                  {% else %}
+                    <span class="text-xs text-slate-500">Processed</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td class="p-3 text-slate-500" colspan="8">No account requests yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

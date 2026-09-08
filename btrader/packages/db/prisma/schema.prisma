@@ -1,0 +1,1240 @@
+// ============================================================================
+//  B-Trader — Trading Platform Database Schema
+//  Multi-tenant SaaS trading engine. SEPARATE database from Example CRM.
+//  Integrates with the CRM via APIs only (see CrmSyncOutbox + ApiKey).
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  // Generate engines for the local host AND Alpine/musl arm64 + OpenSSL 3
+  // (node:22-alpine in Docker). Add linux-musl-arm64-openssl-3.0.x for x64 boxes
+  // → "linux-musl-openssl-3.0.x".
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+//  ENUMS
+// ============================================================================
+
+enum TenantStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum UserRole {
+  SUPER_ADMIN   // platform operator (cross-tenant)
+  TENANT_ADMIN  // broker admin
+  TENANT_STAFF  // broker dealer/support (scoped permissions)
+  TRADER        // end client
+  SERVICE       // machine account (CRM, bridges)
+}
+
+enum AccountStatus {
+  ACTIVE
+  TRADING_DISABLED  // can view/close, cannot open
+  READ_ONLY
+  ARCHIVED
+}
+
+enum AccountType {
+  STANDARD
+  ECN
+  RAW
+  ISLAMIC   // swap-free
+  DEMO
+}
+
+enum InstrumentClass {
+  FOREX
+  METALS
+  STOCKS
+  INDICES
+  CRYPTO
+  COMMODITIES
+  CUSTOM
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP
+  STOP_LIMIT
+  BUY_STOP
+  SELL_STOP
+  BUY_LIMIT
+  SELL_LIMIT
+}
+
+enum OrderStatus {
+  PENDING      // pending/working order resting in book
+  PARTIAL      // partially filled
+  FILLED
+  CANCELLED
+  REJECTED
+  EXPIRED
+}
+
+enum TimeInForce {
+  GTC   // good till cancelled
+  IOC   // immediate or cancel
+  FOK   // fill or kill
+  DAY   // good for day (session)
+  GTD   // good till date
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+}
+
+// Execution book. A = STP (cover to LP, broker flat). B = warehouse (broker is
+// the counterparty / house). Account.book may be null = inherit from the group.
+enum BookType {
+  A
+  B
+}
+
+// #2B: how a trading group fills market orders.
+//  MARKET  = fill at the current market price (with the group's execution
+//            slippage); the price the client saw is indicative only.
+//  INSTANT = honour the price the client clicked when the market is still
+//            within tolerance; requote (reject with the new price) when it has
+//            moved beyond `instantDeviationPoints`. Brokers run a hybrid model:
+//            e.g. MARKET on ECN groups, INSTANT on Standard groups.
+enum ExecutionMode {
+  MARKET
+  INSTANT
+}
+
+// How a trading group charges dealing commission.
+enum GroupCommissionType {
+  NONE         // no commission (spread-only group, e.g. Standard)
+  PER_LOT      // fixed value per 1.0 lot (charged at open)
+  PER_SIDE     // fixed value per 1.0 lot, charged on each side (open + close)
+  ROUND_TURN   // fixed value per 1.0 lot for the full round-turn (charged at open)
+  PERCENT      // value % of notional, charged on each side
+}
+
+// Per-symbol pricing mode on a trading-group Symbol Mapping row.
+enum SymbolPricingMethod {
+  SPREAD_ONLY            // widen client spread into [min,max]; no commission
+  COMMISSION_ONLY        // raw LP spread; commission from mapping
+  SPREAD_AND_COMMISSION  // both spread band and commission
+}
+
+// Lifecycle of an A-book cover (hedge) order routed to the liquidity provider.
+enum HedgeKind {
+  CLIENT_COVER  // 1:1 A-book cover of a client position
+  BROKER_MANUAL // desk-initiated cover from the dealing screen
+  BROKER_AUTO   // auto net-hedge when B-book exposure crosses a threshold
+}
+
+enum HedgeStatus {
+  PENDING       // sent to LP, awaiting fill
+  FILLED        // LP confirmed the cover
+  REJECTED      // LP rejected; broker is exposed (alerted)
+  CLOSE_PENDING // FILLED cover awaiting async close by the MT5 bridge
+  CLOSED        // cover closed when the client position closed
+}
+
+// Driver used to route A-book orders to the market.
+enum LpExecDriver {
+  MOCK       // simulated bridge (instant fill) — runs without real credentials
+  PRIMEXM
+  CENTROID
+  ONEZERO
+  MT5        // async: the MT5 Manager bridge polls + executes covers via DealerSend
+}
+
+// How client prices are selected when a tenant has multiple liquidity providers.
+enum PricingMode {
+  PRIMARY      // a single designated feed drives prices (default / legacy behaviour)
+  BEST_SPREAD  // per symbol, the narrowest FRESH spread across providers wins
+}
+
+// How a routing rule picks the LP venue that covers an A-book order. Pricing
+// (which LP the client is priced off) is independent of this.
+enum VenueMode {
+  FIXED       // always cover at the rule's chosen provider (e.g. price LP4, cover LP2)
+  BEST_PRICE  // cover at whichever provider is currently active in pricing (bt:bestsrc)
+}
+
+// How a liquidity provider's PRICE FEED reaches B-Trader.
+enum FeedTransport {
+  MT5_PUSH   // the MT5 Manager/EA bridge POSTs ticks to /ingest (inbound)
+  WS_PULL    // B-Trader dials out to a WebSocket/REST quote stream
+  FIX_PULL   // B-Trader runs a FIX market-data session (connector per LP spec)
+}
+
+enum DealType {
+  OPEN
+  CLOSE
+  PARTIAL_CLOSE
+  BALANCE       // manual balance adjustment
+  DEPOSIT
+  WITHDRAWAL
+  BONUS
+  DIVIDEND
+  SWAP
+  COMMISSION
+  CREDIT
+}
+
+enum SwapType {
+  POINTS
+  PERCENT
+  MONEY
+}
+
+enum AdjustmentType {
+  DEPOSIT
+  WITHDRAWAL
+  BONUS
+  DIVIDEND
+  CREDIT
+  MANUAL
+  CORRECTION
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  FORCE_LOGOUT
+  ORDER_PLACE
+  ORDER_MODIFY
+  ORDER_CANCEL
+  POSITION_CLOSE
+  POSITION_MODIFY
+  BALANCE_ADJUST
+  LEVERAGE_CHANGE
+  SYMBOL_CHANGE
+  TENANT_CHANGE
+  RISK_BREACH
+  BOOK_CHANGE
+  LP_CONFIG_CHANGE
+}
+
+// ============================================================================
+//  TENANCY & BRANDING
+// ============================================================================
+
+model Tenant {
+  id            String       @id @default(uuid())
+  name          String
+  slug          String       @unique
+  // Registrable domain; app subdomains (app./admin./api.) stripped before match.
+  domain        String?      @unique
+  adminDomain   String?      @unique
+  appDomain     String?      @unique   // client mobile/web API host
+  status        TenantStatus @default(PENDING)
+  baseCurrency  String       @default("USD")
+  timezone      String       @default("UTC")
+
+  // Multi-provider client pricing (see LiquidityProvider). PRIMARY = a single
+  // feed drives prices; BEST_SPREAD = narrowest fresh spread per symbol wins,
+  // with a hysteresis margin (in points) to stop the chosen source flapping.
+  pricingMode           PricingMode @default(PRIMARY)
+  bestSpreadMarginPoints Int        @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  suspendedAt   DateTime?
+  suspendReason String?
+  deletedAt     DateTime?
+
+  // Admin "Sync from MT5 now": set to now() to ask the bridge to reconcile
+  // symbols/groups immediately instead of waiting for its timer.
+  bridgeSyncRequestedAt DateTime?
+
+  branding   TenantBranding?
+  settings   TenantSetting[]
+  users      User[]
+  accounts   Account[]
+  symbols    Symbol[]
+  symbolGroups SymbolGroup[]
+  tradingGroups TradingGroup[]
+  orders     Order[]
+  positions  Position[]
+  deals      Deal[]
+  adjustments BalanceAdjustment[]
+  apiKeys    ApiKey[]
+  auditLogs  AuditLog[]
+  riskLimits RiskLimit[]
+  sessions   Session[]
+  crmOutbox  CrmSyncOutbox[]
+  hedgeOrders HedgeOrder[]
+  lpConfigs  LpExecutionConfig[]
+  autoHedgeRules AutoHedgeRule[]
+  routingRules RoutingRule[]
+  liquidityProviders LiquidityProvider[]
+  crmConfig  CrmConfig?
+
+  @@index([slug])
+  @@index([domain])
+  @@index([status])
+  @@map("tenants")
+}
+
+model TenantBranding {
+  id            String  @id @default(uuid())
+  tenantId      String  @unique
+  appName       String  @default("B-Trader")
+  logoUrl       String?
+  logoDarkUrl   String?
+  faviconUrl    String?
+  primaryColor  String  @default("#1652F0")
+  accentColor   String  @default("#0BB07B")
+  supportEmail  String?
+  supportPhone  String?
+  // iOS/Android white-label bundle identifiers for store builds.
+  iosBundleId   String?
+  androidPackage String?
+  customCss     String? @db.Text
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_branding")
+}
+
+model TenantSetting {
+  id       String @id @default(uuid())
+  tenantId String
+  key      String
+  value    Json
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("tenant_settings")
+}
+
+// ============================================================================
+//  USERS / AUTH / SESSIONS
+// ============================================================================
+
+model User {
+  id           String     @id @default(uuid())
+  tenantId     String?    // null for SUPER_ADMIN (platform-level)
+  email        String
+  passwordHash String?
+  role         UserRole   @default(TRADER)
+  firstName    String?
+  lastName     String?
+  phone        String?
+  country      String?
+  isActive     Boolean    @default(true)
+  // CRM linkage: the CRM user id this trader maps to (for sync).
+  crmUserId    String?
+  mfaSecret    String?
+  mfaEnabled   Boolean    @default(false)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  tenant   Tenant?   @relation(fields: [tenantId], references: [id])
+  accounts Account[]
+  sessions Session[]
+  permissions UserPermission[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([crmUserId])
+  @@index([role])
+  @@map("users")
+}
+
+model UserPermission {
+  id     String @id @default(uuid())
+  userId String
+  // RBAC: dot-scoped permission e.g. "orders.close", "balance.adjust".
+  scope  String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scope])
+  @@index([userId])
+  @@map("user_permissions")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  tenantId     String?
+  userId       String
+  refreshHash  String   // hashed refresh token
+  ip           String?
+  userAgent    String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshHash])
+  @@map("sessions")
+}
+
+model ApiKey {
+  id          String    @id @default(uuid())
+  tenantId    String?   // null = platform-scope key
+  name        String
+  keyId       String    @unique           // public id
+  secretHash  String                       // legacy/display hash
+  secret      String?                       // raw HMAC secret (needed to verify signatures; encrypt at rest in prod)
+  scopes      String[]                     // e.g. ["crm.read","crm.write","balance.adjust"]
+  ipAllowlist String[]                     // CIDR entries; empty = any
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([keyId])
+  @@map("api_keys")
+}
+
+// ============================================================================
+//  INSTRUMENTS / SYMBOLS  (no hardcoded instruments — fully admin-driven)
+// ============================================================================
+
+model SymbolGroup {
+  id        String  @id @default(uuid())
+  tenantId  String
+  name      String                       // e.g. "Forex Majors", "Crypto"
+  markupBid Decimal @default(0) @db.Decimal(12, 6)  // group-level markup (points)
+  markupAsk Decimal @default(0) @db.Decimal(12, 6)
+  // Default execution book for clients in this group (account.book overrides it).
+  defaultBook BookType @default(B)
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  symbols   Symbol[]
+  tradingGroupAccess TradingGroupSymbolAccess[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("symbol_groups")
+}
+
+// ============================================================================
+//  TRADING GROUPS  (client account groups: Standard, Raw, ECN, STP, …)
+//  Each broker defines its own. The `name` MUST match the CRM's account-type
+//  group name (AccountTypeOption.mt5Group) so CRM-provisioned accounts land in
+//  the right group. A group sets the spread markup + commission its clients pay
+//  plus default leverage/book/swap.
+// ============================================================================
+
+model TradingGroup {
+  id              String   @id @default(uuid())
+  tenantId        String
+  name            String                       // matches CRM AccountTypeOption.mt5Group
+  description     String?
+  enabled         Boolean  @default(true)
+
+  // Defaults applied to accounts assigned to this group.
+  defaultLeverage Int      @default(100)
+  defaultBook     BookType @default(B)
+  swapFree        Boolean  @default(false)
+
+  // Client-facing symbol suffix shown to this group's accounts (MT5-style):
+  // e.g. ".s" → a Standard client sees/trades "EURUSD.s" while internally it is
+  // the canonical "EURUSD". Display-only; pricing comes from the group rules.
+  clientSymbolSuffix String?
+
+  // Pricing — group-wide defaults (overridable per class/symbol via rules).
+  markupPoints    Int                 @default(0)   // extra spread points added to LP price
+  // Execution slippage penalty (points) applied against clients in this group on
+  // every fill — open, close, SL, TP, stop-out — to deter latency/HFT abuse.
+  // 0 = off. Undisclosed, on top of markup; direction always worsens the client.
+  slippagePoints  Int                 @default(0)
+  commissionType  GroupCommissionType @default(NONE)
+  commissionValue Decimal             @default(0) @db.Decimal(18, 6)
+
+  // #2B: execution model for this group. INSTANT honours the clicked price or
+  // requotes; MARKET fills at market. `instantDeviationPoints` is the max the
+  // market may move from the client's quote (in points) before an INSTANT order
+  // is requoted; 0 falls back to the symbol's slippagePoints, and if that is
+  // also 0 any adverse move requotes (broker-safe default).
+  executionMode         ExecutionMode @default(MARKET)
+  instantDeviationPoints Int          @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rules    GroupMarkupRule[]
+  accounts Account[]
+  symbolAccess TradingGroupSymbolAccess[]
+  symbolPicks  TradingGroupSymbol[]
+  symbolMappings TradingGroupSymbolMapping[]
+  routingRules RoutingRule[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("trading_groups")
+}
+
+// Per-symbol LP → Client mapping + independent pricing for a trading group.
+// Clients on this group see `clientSymbol` and pay the mapping's spread markup
+// and/or commission. Changing the LP feed later only requires updating
+// `lpSymbol` (or ProviderSymbolMap) — groups are not recreated.
+model TradingGroupSymbolMapping {
+  id              String              @id @default(uuid())
+  tradingGroupId  String
+  lpSymbol        String                                   // LP / Market Watch symbol, e.g. XAUUSD
+  clientSymbol    String                                   // client-facing name, e.g. XAUUSD.P
+  symbolId        String?                                  // resolved canonical Symbol row
+  pricingMethod   SymbolPricingMethod @default(SPREAD_ONLY)
+  minSpreadPoints Int                 @default(0)          // Spread Markup floor (points) — Spec §5.1
+  maxSpreadPoints Int                 @default(0)          // Spread Markup ceiling (0 = fixed at min)
+  commissionType  GroupCommissionType @default(NONE)
+  commissionValue Decimal             @default(0) @db.Decimal(18, 6)
+  enabled         Boolean             @default(true)
+  sortOrder       Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  tradingGroup TradingGroup @relation(fields: [tradingGroupId], references: [id], onDelete: Cascade)
+  symbol       Symbol?      @relation(fields: [symbolId], references: [id], onDelete: SetNull)
+
+  @@unique([tradingGroupId, lpSymbol])
+  @@unique([tradingGroupId, clientSymbol])
+  @@index([tradingGroupId])
+  @@index([symbolId])
+  @@map("trading_group_symbol_mappings")
+}
+
+// ============================================================================
+//  INSTRUMENT VISIBILITY  (which symbol groups a client trading group can see)
+//  Lets a broker expose different instrument sets to different account groups,
+//  e.g. VIP accounts get Crypto + Forex while Standard accounts get Forex only.
+//
+//  Semantics (enforced in SymbolsService.list):
+//    • A trading group with NO rows here  -> its accounts see ALL enabled
+//      symbols (backward-compatible default — nothing changes for existing
+//      brokers until they opt in).
+//    • A trading group with one+ rows     -> its accounts see ONLY symbols
+//      whose SymbolGroup is listed, intersected with each symbol's `enabled`
+//      flag. (A symbol with no SymbolGroup is therefore hidden from restricted
+//      groups — the MT5 importer buckets every symbol into a class group.)
+// ============================================================================
+model TradingGroupSymbolAccess {
+  tradingGroupId String
+  symbolGroupId  String
+
+  tradingGroup TradingGroup @relation(fields: [tradingGroupId], references: [id], onDelete: Cascade)
+  symbolGroup  SymbolGroup  @relation(fields: [symbolGroupId], references: [id], onDelete: Cascade)
+
+  @@id([tradingGroupId, symbolGroupId])
+  @@index([symbolGroupId])
+  @@map("trading_group_symbol_access")
+}
+
+// Per-SYMBOL instrument access for a trading group (finer than the symbol-group
+// buckets above). When a group has any rows here, its accounts see ONLY these
+// exact symbols (precedence: per-symbol > symbol-group buckets > all enabled).
+// Lets a broker hand-pick e.g. 30 symbols for a "Standard" group.
+model TradingGroupSymbol {
+  tradingGroupId String
+  symbolId       String
+
+  tradingGroup TradingGroup @relation(fields: [tradingGroupId], references: [id], onDelete: Cascade)
+  symbol       Symbol       @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@id([tradingGroupId, symbolId])
+  @@index([symbolId])
+  @@map("trading_group_symbols")
+}
+
+// Layered override for a group. Resolution order when pricing a symbol:
+//   per-symbol rule  >  per-instrument-class rule  >  group default.
+model GroupMarkupRule {
+  id              String          @id @default(uuid())
+  groupId         String
+  instrumentClass InstrumentClass?                 // set for a per-class rule
+  symbolId        String?                          // set for a per-symbol rule (wins)
+  markupPoints    Int             @default(0)
+  // Optional commission override (null = inherit the group's commission).
+  commissionType  GroupCommissionType?
+  commissionValue Decimal?        @db.Decimal(18, 6)
+
+  group  TradingGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  symbol Symbol?      @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([symbolId])
+  @@map("group_markup_rules")
+}
+
+model Symbol {
+  id            String          @id @default(uuid())
+  tenantId      String
+  groupId       String?
+  symbol        String                              // "EURUSD", "XAUUSD", "BTCUSD"
+  description   String?
+  class         InstrumentClass @default(FOREX)
+  baseCurrency  String                              // "EUR"
+  quoteCurrency String                              // "USD"
+  enabled       Boolean         @default(true)
+
+  // Price/precision
+  digits        Int             @default(5)
+  pipSize       Decimal         @default(0.0001) @db.Decimal(18, 10)
+
+  // Contract spec
+  contractSize  Decimal         @default(100000) @db.Decimal(20, 8)
+  minLot        Decimal         @default(0.01) @db.Decimal(12, 4)
+  maxLot        Decimal         @default(100) @db.Decimal(12, 4)
+  lotStep       Decimal         @default(0.01) @db.Decimal(12, 4)
+
+  // Margin
+  marginCurrency String         @default("USD")
+  marginRate     Decimal        @default(1) @db.Decimal(12, 6)  // multiplier on notional/leverage
+  // #14: crypto & metals margin. When set (> 0) this is the fraction of notional
+  // required as margin — e.g. 0.10 = 10% = 10x, 0.05 = 5% = 20x — and it does NOT
+  // use the account's currency leverage (spec: "currency leverage must not apply
+  // to crypto/silver"). null = leverage-based margin (the FX default above).
+  marginPercent  Decimal?       @db.Decimal(12, 6)
+  leverageCap    Int?                                            // optional symbol-level cap
+
+  // Execution
+  slippagePoints Int            @default(0)        // DEFAULT SLIPPAGE = 0 per spec
+  spreadMarkup   Int            @default(0)        // extra points added to LP spread
+  stopsLevel     Int            @default(0)        // min distance (points) for SL/TP/pending
+
+  // News mode — legitimate, disclosed volatility control (NOT price faking). While
+  // active the client price is widened symmetrically by newsSpreadPoints (still a
+  // REAL price) and, if newsHaltOpens, opening new positions is paused (closes
+  // still allowed). Dealer toggles it around high-impact news.
+  newsMode        Boolean       @default(false)
+  newsSpreadPoints Int          @default(0)        // extra spread points while news mode is on
+  newsHaltOpens   Boolean       @default(true)     // pause NEW opens while news mode is on
+
+  // Routing override: if set to A, every order on this symbol is forced A-book
+  // regardless of the client's book (use for risky/uncovered instruments).
+  // null = no override.
+  forceBook      BookType?
+
+  // Swaps (overnight financing)
+  swapType       SwapType       @default(POINTS)
+  swapLong       Decimal        @default(0) @db.Decimal(18, 6)
+  swapShort      Decimal        @default(0) @db.Decimal(18, 6)
+  swap3DayWeekday Int           @default(3)        // Wed = triple swap default
+
+  // Sessions: JSON array of {day, open, close} in tenant tz. Empty = 24/7.
+  tradingSessions Json?
+
+  sortOrder      Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  group     SymbolGroup? @relation(fields: [groupId], references: [id])
+  orders    Order[]
+  positions Position[]
+  ticks     SymbolTick[]
+  groupMarkupRules GroupMarkupRule[]
+  routingRules RoutingRule[]
+  providerSymbolMaps ProviderSymbolMap[]
+  tradingGroupPicks TradingGroupSymbol[]
+  tradingGroupMappings TradingGroupSymbolMapping[]
+
+  @@unique([tenantId, symbol])
+  @@index([tenantId])
+  @@index([tenantId, enabled])
+  @@index([class])
+  @@map("symbols")
+}
+
+// OHLC candles for charts, aggregated from the upstream feed (e.g. MT5 history
+// pushed by the bridge). Global per upstream symbol + timeframe (not per-tenant);
+// charts use mid-price bars. The live forming bar is built client-side from ticks.
+model MarketCandle {
+  symbol    String
+  tf        String   // '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d'
+  t         Int      // bar open time, epoch SECONDS
+  o         Decimal  @db.Decimal(20, 8)
+  h         Decimal  @db.Decimal(20, 8)
+  l         Decimal  @db.Decimal(20, 8)
+  c         Decimal  @db.Decimal(20, 8)
+  v         Decimal  @default(0) @db.Decimal(20, 4)
+  updatedAt DateTime @updatedAt
+
+  @@id([symbol, tf, t])
+  @@index([symbol, tf, t])
+  @@map("market_candles")
+}
+
+// Per-tenant CRM integration config. Each broker points B-Trader at THEIR CRM's
+// webhook; outbound trading/balance events are HMAC-signed with webhookSecret.
+// Inbound auth (CRM → B-Trader) uses ApiKey records scoped to the same tenant.
+model CrmConfig {
+  id            String   @id @default(uuid())
+  tenantId      String   @unique
+  webhookUrl    String?                        // CRM endpoint that receives events
+  webhookSecret String?                        // HMAC secret B-Trader signs events with
+  enabled       Boolean  @default(false)
+  events        String[] @default([])          // optional filter; empty = all events
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("crm_configs")
+}
+
+// Latest tick snapshot per symbol (hot path lives in Redis; this is durable cache).
+model SymbolTick {
+  symbolId  String   @id
+  bid       Decimal  @db.Decimal(20, 8)
+  ask       Decimal  @db.Decimal(20, 8)
+  ts        DateTime
+  symbol    Symbol   @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@map("symbol_ticks")
+}
+
+// ============================================================================
+//  ACCOUNTS  (trading accounts — money + leverage + status)
+// ============================================================================
+
+model Account {
+  id            String        @id @default(uuid())
+  tenantId      String
+  userId        String
+  login         String                              // human-facing login number, unique per tenant
+  passwordHash  String?                             // MAIN trading password (account-number login), bcrypt
+  // INVESTOR (read-only) password, bcrypt. When a client logs in with THIS
+  // instead of the main password, the session is read-only (spec #3B): it can
+  // view positions/orders/history but every trade mutation is refused. null =
+  // no read-only credential set (legacy accounts, or where it equals the main).
+  investorPasswordHash String?
+  type          AccountType   @default(STANDARD)
+  groupId       String?                             // client trading group (Standard/Raw/ECN/STP)
+  status        AccountStatus @default(ACTIVE)
+  currency      String        @default("USD")
+  leverage      Int           @default(100)
+  isDemo        Boolean       @default(false)
+
+  // Execution book for this client. null = inherit the group's defaultBook.
+  // A = orders routed to LP (STP); B = warehoused (broker is the house).
+  book          BookType?
+
+  // Money (authoritative; engine mutates inside transactions)
+  balance       Decimal       @default(0) @db.Decimal(28, 8)
+  credit        Decimal       @default(0) @db.Decimal(28, 8)  // bonus/credit, non-withdrawable
+  // Live aggregates (recomputed by engine each tick; cached here for CRM reads)
+  equity        Decimal       @default(0) @db.Decimal(28, 8)
+  margin        Decimal       @default(0) @db.Decimal(28, 8)
+  freeMargin    Decimal       @default(0) @db.Decimal(28, 8)
+  marginLevel   Decimal       @default(0) @db.Decimal(28, 8)  // %
+  floatingPL    Decimal       @default(0) @db.Decimal(28, 8)
+
+  marginCallLevel  Int        @default(100)   // % — warn
+  stopOutLevel     Int        @default(50)    // % — force liquidation
+
+  crmAccountId  String?       // CRM TradingAccount.id this maps to
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+  group       TradingGroup? @relation(fields: [groupId], references: [id])
+  orders      Order[]
+  positions   Position[]
+  deals       Deal[]
+  adjustments BalanceAdjustment[]
+
+  @@unique([tenantId, login])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([userId])
+  @@index([crmAccountId])
+  @@map("accounts")
+}
+
+// ============================================================================
+//  ORDERS / POSITIONS / DEALS
+// ============================================================================
+
+model Order {
+  id            String      @id @default(uuid())
+  tenantId      String
+  accountId     String
+  symbolId      String
+  side          OrderSide
+  type          OrderType
+  status        OrderStatus @default(PENDING)
+  timeInForce   TimeInForce @default(GTC)
+
+  book          BookType?                        // resolved execution book at placement
+  volume        Decimal     @db.Decimal(12, 4)   // requested lots
+  filledVolume  Decimal     @default(0) @db.Decimal(12, 4)
+  price         Decimal?    @db.Decimal(20, 8)   // limit price (null for market)
+  stopPrice     Decimal?    @db.Decimal(20, 8)   // trigger for stop / stop-limit
+  slPrice       Decimal?    @db.Decimal(20, 8)
+  tpPrice       Decimal?    @db.Decimal(20, 8)
+  // Price the client requested at click (market: the quote they saw; pending:
+  // the limit/stop). avgFillPrice is what they actually got — the gap = slippage.
+  requestedPrice Decimal?   @db.Decimal(20, 8)
+  avgFillPrice  Decimal?    @db.Decimal(20, 8)
+  slippagePoints Int        @default(0)
+  // Client-supplied idempotency key (UUID). Same (account, key) returns the first order.
+  clientOrderId String?
+  // When a pending / STOP_LIMIT actually became marketable (not createdAt).
+  triggeredAt   DateTime?
+  // STOP_LIMIT stage: stop has been crossed; now waiting for the limit.
+  stopTriggered Boolean     @default(false)
+
+  expiresAt     DateTime?
+  comment       String?
+  rejectReason  String?
+  // Set when this order opened/affected a position.
+  positionId    String?
+  source        String?     // "mobile" | "admin" | "crm" | "api"
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  filledAt      DateTime?
+
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account  Account @relation(fields: [accountId], references: [id])
+  symbol   Symbol  @relation(fields: [symbolId], references: [id])
+  position Position? @relation(fields: [positionId], references: [id])
+
+  @@index([tenantId])
+  @@index([accountId, status])
+  @@index([symbolId, status])
+  @@index([status])
+  @@index([tenantId, accountId, clientOrderId])
+  @@map("orders")
+}
+
+model Position {
+  id            String         @id @default(uuid())
+  tenantId      String
+  accountId     String
+  symbolId      String
+  side          OrderSide
+  status        PositionStatus @default(OPEN)
+  book          BookType       @default(B)          // resolved book at open (immutable)
+
+  volume        Decimal        @db.Decimal(12, 4)   // current open lots
+  // Partial A-book: lots of this position allocated to the LP (A). Warehoused
+  // (B-book) lots = volume - coveredVolume. Set at open from the rule's coverage
+  // ratio, bumped by manual cover-more, reduced proportionally on close.
+  coveredVolume Decimal        @default(0) @db.Decimal(12, 4)
+  openPrice     Decimal        @db.Decimal(20, 8)
+  closePrice    Decimal?       @db.Decimal(20, 8)
+  slPrice       Decimal?       @db.Decimal(20, 8)
+  tpPrice       Decimal?       @db.Decimal(20, 8)
+
+  marginUsed    Decimal        @default(0) @db.Decimal(28, 8)
+  swap          Decimal        @default(0) @db.Decimal(28, 8)
+  commission    Decimal        @default(0) @db.Decimal(28, 8)
+  profit        Decimal        @default(0) @db.Decimal(28, 8)  // realized at close; floating while open (cache)
+
+  comment       String?
+  openedAt      DateTime       @default(now())
+  closedAt      DateTime?
+  updatedAt     DateTime       @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id])
+  symbol  Symbol  @relation(fields: [symbolId], references: [id])
+  orders  Order[]
+  deals   Deal[]
+  hedges  HedgeOrder[]
+
+  @@index([tenantId])
+  @@index([accountId, status])
+  @@index([symbolId])
+  @@index([status])
+  @@index([tenantId, book, status])
+  // Serves the hottest read in the system: emitLiveUpdates() reloads every open
+  // position on a symbol twice a second, filtering on exactly these three
+  // columns. Without a composite the planner BitmapAnds the symbolId and status
+  // indexes and filters tenantId on the heap - measured at 3.4M rows that meant
+  // walking 767k index entries to return 35k, vs a direct index scan here.
+  @@index([tenantId, symbolId, status])
+  @@map("positions")
+}
+
+// ============================================================================
+//  A-BOOK COVER / HEDGE ORDERS  (1:1 STP cover sent to the liquidity provider)
+// ============================================================================
+
+// One cover order routed to the LP for an A-book client position. The client
+// fills at the platform price; this records the LP leg so the broker stays flat.
+// The gap between the client fill and the LP fill is the broker's A-book markup.
+model HedgeOrder {
+  id            String      @id @default(uuid())
+  tenantId      String
+  // Null for broker-initiated hedges (manual desk cover / auto net-hedge) that
+  // aren't tied to a single client position.
+  positionId    String?
+  accountId     String?
+  symbolId      String
+  symbolName    String                                  // upstream symbol routed
+  side          OrderSide                               // LP side mirrors the client side
+  volume        Decimal     @db.Decimal(12, 4)
+  status        HedgeStatus @default(PENDING)
+  kind          HedgeKind   @default(CLIENT_COVER)      // who/what initiated this hedge
+  driver        LpExecDriver @default(MOCK)
+  // Specific LP venue this cover routed to (Phase 3 per-provider execution).
+  // Null = legacy/driver-resolved venue (the single-bridge path).
+  lpProviderId  String?
+  quotedSpread  Decimal?    @db.Decimal(20, 8)          // pricing spread at order time (TCA)
+
+  requestPrice  Decimal?    @db.Decimal(20, 8)          // client fill / price sent to LP
+  fillPrice     Decimal?    @db.Decimal(20, 8)          // LP open fill
+  closePrice    Decimal?    @db.Decimal(20, 8)          // LP close fill
+  slippage      Decimal     @default(0) @db.Decimal(20, 8)  // fillPrice - requestPrice (broker markup leg)
+  externalRef   String?                                 // LP order id
+  rejectReason  String?
+
+  openedAt      DateTime    @default(now())
+  closedAt      DateTime?
+  updatedAt     DateTime    @updatedAt
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  position   Position?          @relation(fields: [positionId], references: [id])
+  lpProvider LiquidityProvider? @relation(fields: [lpProviderId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, kind, status])
+  @@index([tenantId, lpProviderId, status])
+  @@index([positionId])
+  @@index([accountId])
+  @@index([externalRef])
+  @@map("hedge_orders")
+}
+
+// Per-tenant A-book LP venue configuration. Credentials live in env/secret store;
+// only a reference is held here. A tenant may configure MULTIPLE venues (one row
+// per driver) so routing rules can send e.g. metals to PRIMEXM and FX to ONEZERO
+// (true multi-venue). The Routing Rules layer picks which venue covers an order;
+// `isDefault` marks the venue used when no rule specifies one.
+model LpExecutionConfig {
+  id            String       @id @default(uuid())
+  tenantId      String
+  // Phase 3: each execution venue is tied to a specific LiquidityProvider so two
+  // same-driver LPs (e.g. two MT5 cover venues) are distinct. Null = legacy
+  // tenant-level venue keyed by driver (the original single-venue path).
+  lpProviderId  String?      @unique
+  driver        LpExecDriver @default(MOCK)
+  enabled       Boolean      @default(false)        // when false, A-book falls back to warehouse + alert
+  isDefault     Boolean      @default(false)        // tenant's fallback venue when a rule sets no provider
+  label         String?                             // human-facing venue name (e.g. "PrimeXM London")
+  coverLogin    String?                             // MT5 cover-account login (per-venue, async bridge)
+  endpoint      String?                             // FIX host:port or REST base url
+  senderCompId  String?                             // FIX SenderCompID / account login
+  targetCompId  String?                             // FIX TargetCompID
+  credentialRef String?                             // key into the secret store (never the secret itself)
+  // Simulation knobs for the MOCK driver (basis points of slippage on cover fills).
+  simSlippageBps Int         @default(0)
+  simRejectPct   Int         @default(0)            // % of cover orders the mock rejects (for testing alerts)
+  status        String?                             // last connection status
+  updatedAt     DateTime     @updatedAt
+  createdAt     DateTime     @default(now())
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lpProvider LiquidityProvider? @relation(fields: [lpProviderId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, driver])
+  @@map("lp_execution_configs")
+}
+
+// Per-symbol auto net-hedge rule. When the broker's net B-book exposure on a
+// symbol exceeds `thresholdLots`, the engine auto-covers the EXCESS to the MT5
+// cover account (leaving up to `thresholdLots` of risk warehoused). Set
+// thresholdLots = 0 to keep the book fully flat on that symbol.
+model AutoHedgeRule {
+  id            String   @id @default(uuid())
+  tenantId      String
+  symbolName    String
+  enabled       Boolean  @default(false)
+  thresholdLots Decimal  @default(0) @db.Decimal(12, 4)  // tolerated unhedged net (lots)
+  minClipLots   Decimal  @default(0.01) @db.Decimal(12, 4)  // don't send hedges smaller than this
+  maxClipLots   Decimal? @db.Decimal(12, 4)               // optional cap per auto-hedge order
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, symbolName])
+  @@index([tenantId, enabled])
+  @@map("auto_hedge_rules")
+}
+
+// ============================================================================
+//  ROUTING RULES  (MT5-style: Group × Symbol/Class → book + LP venue)
+//  The dealing layer above the per-account book switch. Each rule scopes on an
+//  optional trading group AND an optional instrument (a specific symbol OR a
+//  whole class); null scope fields are wildcards. For a given order the engine
+//  picks the MOST-SPECIFIC matching rule and uses its book + LP venue.
+//
+//  Specificity (most→least): symbol (4) > trading group (2) > class (1); ties
+//  broken by `priority` desc then `createdAt` asc. The resolved book still
+//  yields to a symbol's `forceBook` hard override; `lpDriver` null falls back to
+//  the tenant's default LpExecutionConfig venue.
+// ============================================================================
+model RoutingRule {
+  id              String           @id @default(uuid())
+  tenantId        String
+  // Scope — all optional. null = matches any (wildcard).
+  tradingGroupId  String?                            // client account group
+  symbolId        String?                            // a specific symbol (most specific)
+  instrumentClass InstrumentClass?                   // a whole instrument class
+  // Resolved routing outcome.
+  book            BookType                           // A (cover to LP) | B (warehouse)
+  // A-book LP venue. venueMode = FIXED → cover at lpProviderId (or legacy
+  // lpDriver); BEST_PRICE → cover at the currently-active pricing provider.
+  venueMode       VenueMode    @default(FIXED)
+  lpProviderId    String?                            // specific provider for FIXED mode
+  lpDriver        LpExecDriver?                      // legacy: driver-level venue; null = tenant default
+  // Partial A-book: % of an A-book order covered to the LP at open (0–100).
+  // 100 = full STP; <100 warehouses the remainder as B-book risk.
+  coverageRatio   Int          @default(100)
+  priority        Int      @default(0)               // tiebreak among equally-specific rules (higher wins)
+  enabled         Boolean  @default(true)
+  description     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tradingGroup TradingGroup?      @relation(fields: [tradingGroupId], references: [id], onDelete: Cascade)
+  symbol       Symbol?            @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+  lpProvider   LiquidityProvider? @relation(fields: [lpProviderId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, enabled])
+  @@index([tradingGroupId])
+  @@index([symbolId])
+  @@index([lpProviderId])
+  @@map("routing_rules")
+}
+
+// ============================================================================
+//  LIQUIDITY PROVIDERS  (one "company" = a price feed + an execution venue)
+//  The master record for a multi-venue / liquidity-aggregation setup. Phase 1
+//  uses the FEED side: each provider authenticates its inbound feed with its own
+//  `feedToken` (or is pulled via WS/FIX), and market-data keeps that provider's
+//  quotes SEPARATE so spreads can be compared across providers. `isPrimaryFeed`
+//  marks the single provider that currently drives client pricing (so adding
+//  more providers for monitoring never changes live prices). Execution config
+//  for the same provider lives in LpExecutionConfig (linked in a later phase).
+// ============================================================================
+model LiquidityProvider {
+  id            String        @id @default(uuid())
+  tenantId      String
+  name          String                                  // "LP4 — PrimeXM London"
+  code          String                                  // short tag stamped on each tick (e.g. "LP4")
+  transport     FeedTransport @default(MT5_PUSH)
+  driver        LpExecDriver  @default(MT5)             // execution transport this provider maps to
+  enabled       Boolean       @default(true)
+  isPrimaryFeed Boolean       @default(false)           // drives client pricing today (exactly one)
+  staleMs       Int           @default(2000)            // ignore quotes older than this when comparing
+
+  // Symbol mapping: this LP's feed names → B-Trader canonical symbols.
+  //   symbolSuffix  — default suffix to strip (e.g. ".a" so "EURUSD.a" → "EURUSD")
+  //   suffixByClass — per-instrument-class suffix overrides, JSON {class: suffix}
+  //                   (e.g. {"FOREX":".a","METALS":".m"}); explicit map wins over both.
+  symbolSuffix  String?
+  suffixByClass Json?
+
+  // Inbound push auth (MT5_PUSH): the bridge sends this in X-Feed-Token.
+  feedToken     String?
+  // Outbound pull connection (WS_PULL / FIX_PULL); secret resolved from env store.
+  feedEndpoint  String?                                 // WS/REST URL or FIX host:port
+  senderCompId  String?                                 // FIX SenderCompID
+  targetCompId  String?                                 // FIX TargetCompID
+  credentialRef String?                                 // key into the secret store (never the secret)
+
+  status        String?                                 // last connection/feed status
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  execConfig   LpExecutionConfig?                      // execution venue (Phase 3, optional)
+  routingRules RoutingRule[]                           // rules that fix covers to this provider
+  hedgeOrders  HedgeOrder[]                            // covers routed to this provider
+  symbolMaps   ProviderSymbolMap[]                     // explicit feed-name → symbol overrides
+
+  @@unique([tenantId, code])
+  @@unique([feedToken])
+  @@index([tenantId, enabled])
+  @@map("liquidity_providers")
+}
+
+// Explicit per-provider symbol overrides for cases a suffix-strip can't handle
+// (e.g. "GOLD" → XAUUSD, "EUR/USD" → EURUSD). Checked BEFORE suffix logic.
+model ProviderSymbolMap {
+  id           String @id @default(uuid())
+  tenantId     String
+  lpProviderId String
+  rawSymbol    String                                   // upstream name as the LP sends it (upper-cased)
+  symbolId     String                                   // the B-Trader symbol it maps to
+
+  lpProvider LiquidityProvider @relation(fields: [lpProviderId], references: [id], onDelete: Cascade)
+  symbol     Symbol            @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@unique([lpProviderId, rawSymbol])
+  @@index([tenantId])
+  @@index([symbolId])
+  @@map("provider_symbol_maps")
+}
+
+// Immutable ledger of everything that moves money or volume (audit-grade).
+model Deal {
+  id            String   @id @default(uuid())
+  tenantId      String
+  accountId     String
+  positionId    String?
+  symbolId      String?
+  type          DealType
+  side          OrderSide?
+  volume        Decimal? @db.Decimal(12, 4)
+  price         Decimal? @db.Decimal(20, 8)
+  profit        Decimal  @default(0) @db.Decimal(28, 8)
+  swap          Decimal  @default(0) @db.Decimal(28, 8)
+  commission    Decimal  @default(0) @db.Decimal(28, 8)
+  balanceAfter  Decimal  @db.Decimal(28, 8)
+  comment       String?
+  externalRef   String?  // CRM deposit/withdrawal id, etc.
+  createdAt     DateTime @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account  Account   @relation(fields: [accountId], references: [id])
+  position Position? @relation(fields: [positionId], references: [id])
+
+  @@index([tenantId])
+  @@index([accountId, createdAt])
+  @@index([type])
+  @@index([externalRef])
+  @@map("deals")
+}
+
+// Manual / CRM-originated money movements (deposit, withdraw, bonus, dividend).
+model BalanceAdjustment {
+  id          String         @id @default(uuid())
+  tenantId    String
+  accountId   String
+  type        AdjustmentType
+  amount      Decimal        @db.Decimal(28, 8)   // signed
+  currency    String         @default("USD")
+  comment     String?
+  externalRef String?        @unique              // CRM txn id — idempotency key
+  performedBy String?        // user id (admin) or "crm:service"
+  dealId      String?
+  createdAt   DateTime       @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([tenantId])
+  @@index([accountId])
+  @@index([externalRef])
+  @@map("balance_adjustments")
+}
+
+// ============================================================================
+//  RISK MANAGEMENT
+// ============================================================================
+
+model RiskLimit {
+  id            String  @id @default(uuid())
+  tenantId      String
+  scope         String  // "tenant" | "account:<id>" | "symbol:<id>" | "group:<id>"
+  maxLotPerOrder   Decimal? @db.Decimal(12, 4)
+  maxOpenLots      Decimal? @db.Decimal(12, 4)
+  maxOpenPositions Int?
+  maxNetExposure   Decimal? @db.Decimal(28, 8)  // notional in base currency
+  maxDailyLossPct  Decimal? @db.Decimal(8, 4)
+  enabled       Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, scope])
+  @@index([tenantId])
+  @@map("risk_limits")
+}
+
+// ============================================================================
+//  AUDIT & CRM SYNC
+// ============================================================================
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  tenantId    String?
+  actorId     String?     // user/api-key id
+  actorType   String?     // "user" | "apikey" | "system"
+  action      AuditAction
+  entity      String?     // "order","position","account",...
+  entityId    String?
+  ip          String?
+  before      Json?
+  after       Json?
+  meta        Json?
+  createdAt   DateTime    @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([action])
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
+
+// Reliable outbox: events B-Trader must deliver to the CRM webhook.
+// A worker drains this with retries/backoff → at-least-once delivery.
+model CrmSyncOutbox {
+  id          String   @id @default(uuid())
+  tenantId    String
+  eventType   String   // "account.snapshot","position.closed","deal.created",...
+  payload     Json
+  status      String   @default("PENDING") // PENDING | SENT | FAILED
+  attempts    Int      @default(0)
+  nextAttempt DateTime @default(now())
+  lastError   String?
+  createdAt   DateTime @default(now())
+  sentAt      DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttempt])
+  @@index([tenantId])
+  @@map("crm_sync_outbox")
+}
+
+// Central HQ dashboard registry: one row per separately-deployed company
+// server. Platform-level (no tenant relation) — only the deployment acting
+// as HQ ever has rows here. `token` is that server's HQ_TOKEN (read-only
+// overview credential; grants no trading/admin authority).
+model HqServer {
+  id        String   @id @default(uuid())
+  name      String
+  baseUrl   String   // e.g. https://api.newco.com
+  token     String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("hq_servers")
+}

@@ -1,0 +1,480 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Compliance - Burjex Prime{% endblock %}
+
+{% block user_content %}
+<style>
+  .badge {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .badge-blue {
+    background: rgba(11, 60, 93, 0.1);
+    color: var(--portal-brand-primary);
+  }
+
+  input[type="file"] {
+    padding: 0;
+    line-height: 1.5;
+  }
+  input[type="file"]::file-selector-button {
+    margin-right: 1rem;
+    padding: 0.5625rem 1.125rem;
+    border: 1px solid transparent;
+    border-radius: calc(var(--portal-radius, 12px) - 2px);
+    background: var(--portal-brand-button, var(--portal-brand-primary, #0b3c5d));
+    color: var(--portal-button-text, #fff);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+  }
+  input[type="file"]::file-selector-button:hover {
+    opacity: 1;
+    background: var(--portal-button-hover, var(--portal-brand-primary, #0b3c5d));
+  }
+  input[type="file"]::file-selector-button:active { 
+    transform: scale(0.98); 
+  }
+  html[data-portal-theme="dark"] input[type="file"]::file-selector-button {
+    background: var(--portal-brand-button, var(--portal-brand-primary, #0b3c5d));
+  }
+
+  .badge-green {
+    background: rgba(5, 150, 105, 0.1);
+    color: #065f46;
+  }
+
+  .badge-yellow {
+    background: rgba(217, 119, 6, 0.1);
+    color: #92400e;
+  }
+
+  .badge-red {
+    background: rgba(220, 38, 38, 0.1);
+    color: #b91c1c;
+  }
+
+  .badge-gray {
+    background: var(--portal-muted-bg);
+    color: var(--portal-text-muted);
+    border: 1px solid var(--portal-border);
+  }
+
+  html[data-portal-theme="dark"] .badge-green {
+    background: rgba(52, 211, 153, 0.15);
+    color: #6ee7b7;
+  }
+
+  html[data-portal-theme="dark"] .badge-yellow {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fde68a;
+  }
+
+  html[data-portal-theme="dark"] .badge-red {
+    background: rgba(248, 113, 113, 0.15);
+    color: #fca5a5;
+  }
+
+  html[data-portal-theme="dark"] .badge-blue {
+    background: rgba(96, 165, 250, 0.15);
+    color: #93c5fd;
+  }
+
+  @media (max-width: 768px) {
+    body {
+      overflow: hidden;
+    }
+
+    .mobile-form-shell {
+      position: fixed;
+      inset: 56px 0 0 0;
+      width: 100%;
+      height: calc(100vh - 56px);
+      overflow: hidden;
+    }
+
+    .mobile-form-scroll {
+      height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 16px;
+    }
+  }
+</style>
+
+<div class="mobile-form-shell">
+  <div class="mobile-form-scroll space-y-5">
+
+    <!-- User information -->
+    <div class="portal-card">
+      <div class="portal-card-header">
+        <h1 class="portal-card-title">Compliance / KYC</h1>
+      </div>
+      <h2 class="text-sm font-bold mb-3" style="color:var(--portal-text-main);">1. User Information</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+        <div class="rounded-lg p-3" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+          <span class="portal-section-heading block">Full Name</span>
+          <div class="font-semibold mt-0.5" style="color:var(--portal-text-main);">{{ request.user.display_name }}</div>
+        </div>
+        <div class="rounded-lg p-3" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+          <span class="portal-section-heading block">Email</span>
+          <div class="font-semibold mt-0.5" style="color:var(--portal-text-main);">{{ request.user.email }}</div>
+        </div>
+        <div class="rounded-lg p-3" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+          <span class="portal-section-heading block">Country</span>
+          <div class="font-semibold mt-0.5" style="color:var(--portal-text-main);">{{ request.user.country|default:"-" }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KYC status banner -->
+    {% if all_kyc_approved %}
+    <div class="portal-alert portal-alert--success">
+      <span>✓</span>
+      <div>
+        <div class="font-semibold">Account Verified</div>
+        <div class="text-sm mt-0.5">Your account is fully verified.</div>
+      </div>
+    </div>
+    {% else %}
+    <div class="portal-alert portal-alert--error">
+      <span>!</span>
+      <div>
+        <div class="font-semibold">Incomplete KYC</div>
+        <div class="text-sm mt-0.5">Your verification is still in progress.</div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Proof of Identity -->
+    {% if compliance_settings.show_compliance_section and compliance_settings.enable_identity_verification %}
+    <div class="portal-card">
+      <div class="portal-card-header">
+        <h2 class="portal-card-title">2. Proof of Identity</h2>
+      </div>
+      <div class="mb-4 space-y-2 text-sm">
+        <div class="flex items-center gap-2">
+          <span style="color:var(--portal-text-muted);">Front:</span>
+          {% if identity_front_status == 'verified' %}<span class="badge badge-green">Verified</span>
+          {% elif identity_front_status == 'rejected' %}<span class="badge badge-red">Rejected</span>
+          {% elif identity_front_status == 'pending' %}<span class="badge badge-yellow">Pending</span>
+          {% else %}<span class="badge badge-gray">Incomplete</span>{% endif %}
+        </div>
+        <div class="flex items-center gap-2">
+          <span style="color:var(--portal-text-muted);">Back:</span>
+          {% if identity_back_status == 'verified' %}<span class="badge badge-green">Verified</span>
+          {% elif identity_back_status == 'rejected' %}<span class="badge badge-red">Rejected</span>
+          {% elif identity_back_status == 'pending' %}<span class="badge badge-yellow">Pending</span>
+          {% else %}<span class="badge badge-gray">Incomplete</span>{% endif %}
+        </div>
+      </div>
+      {% if identity_can_upload %}
+      <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="upload_identity" />
+        <div>
+          <label class="portal-form-label">Document Type</label>
+          <select name="identity_document_type" class="portal-input" required>
+            <option value="National ID">National ID</option>
+            <option value="Passport">Passport</option>
+            <option value="Driving License">Driving License</option>
+          </select>
+        </div>
+        <div>
+          <label class="portal-form-label">Upload Document (Front) <span class="text-red-500">*</span></label>
+          <input type="file" name="identity_front" class="block w-full text-sm text-slate-500 cursor-pointer" required accept=".pdf,.jpg,.jpeg,.png" />
+        </div>
+        
+        <div>
+          <label class="portal-form-label">Upload Document (Back) <span class="text-red-500">*</span></label>
+          <input type="file" name="identity_back" class="block w-full text-sm text-slate-500 cursor-pointer" required accept=".pdf,.jpg,.jpeg,.png" />
+        </div>
+        <div class="md:col-span-2">
+          <button class="portal-btn-primary" type="submit">Submit for Verification</button>
+        </div>
+      </form>
+      {% endif %}
+      {% if identity_latest and identity_can_delete %}
+      <form method="post" class="mt-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_identity">
+        <input type="hidden" name="id" value="{{ identity_latest.id }}">
+        <button class="text-xs px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">Delete
+          submission</button>
+      </form>
+      {% endif %}
+      <div class="mt-3 flex flex-wrap gap-2">
+        {% for r in identity_rows|slice:":3" %}
+        <span class="badge badge-gray">{{ r.document_type }} — {{ r.status }}</span>
+        {% empty %}
+        <span class="text-xs" style="color:var(--portal-text-muted);">No identity submission yet.</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Proof of Address -->
+    {% if compliance_settings.show_compliance_section and compliance_settings.enable_address_verification %}
+    <div class="portal-card">
+      <div class="portal-card-header">
+        <h2 class="portal-card-title">3. Proof of Address</h2>
+      </div>
+      <div class="mb-4">
+        {% if address_component_status == 'verified' %}<span class="badge badge-green">Verified</span>
+        {% elif address_component_status == 'rejected' %}<span class="badge badge-red">Rejected</span>
+        {% elif address_component_status == 'pending' %}<span class="badge badge-yellow">Pending</span>
+        {% else %}<span class="badge badge-gray">Incomplete</span>{% endif %}
+      </div>
+      {% if address_can_upload %}
+      <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="upload_address" />
+        <div>
+          <label class="portal-form-label">Document Type</label>
+          <select name="address_document_type" class="portal-input" required>
+            <option value="Bank Statement">Bank Statement</option>
+            <option value="Utility Bill">Utility Bill</option>
+            <option value="National ID Card (with address)">National ID Card (with address)</option>
+            <option value="Government Letter">Government Letter</option>
+            <option value="Rental Agreement / Tenancy Contract">Rental Agreement / Tenancy Contract</option>
+            <option value="Internet / Phone Bill">Internet / Phone Bill</option>
+            <option value="Credit Card Statement">Credit Card Statement</option>
+          </select>
+        </div>
+        <div>
+          <label class="portal-form-label">Upload Proof of Address <span class="text-red-500">*</span></label>
+          <input type="file" name="address_file" class="block w-full text-sm text-slate-500 cursor-pointer" required accept=".pdf,.jpg,.jpeg,.png" />
+        </div>
+        <div class="md:col-span-2">
+          <button class="portal-btn-primary" type="submit">Submit for Verification</button>
+        </div>
+      </form>
+      {% endif %}
+      {% if address_latest and address_can_delete %}
+      <form method="post" class="mt-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_address">
+        <input type="hidden" name="id" value="{{ address_latest.id }}">
+        <button class="text-xs px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">Delete
+          submission</button>
+      </form>
+      {% endif %}
+      <div class="mt-3 flex flex-wrap gap-2">
+        {% for r in address_rows|slice:":3" %}
+        <span class="badge badge-gray">{{ r.document_type }} — {{ r.status }}</span>
+        {% empty %}
+        <span class="text-xs" style="color:var(--portal-text-muted);">No address submission yet.</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Bank verification -->
+    {% if compliance_settings.show_bank_section and compliance_settings.enable_bank_verification %}
+    <div id="bank-verification" class="portal-card">
+      <div class="portal-card-header">
+        <h2 class="portal-card-title">4. Verified Bank Accounts</h2>
+        {% if bank_can_submit %}<a href="#bank-verification" class="portal-btn-primary text-xs px-3 py-1.5">+ Add Bank
+          Account</a>{% endif %}
+      </div>
+
+      {% if not bank_can_submit %}
+      <div class="portal-alert portal-alert--warning mb-4 text-xs">You have reached the maximum number of bank accounts.
+        Remove a pending or rejected entry or contact support.</div>
+      {% endif %}
+      <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="submit_bank" />
+        <div>
+          <label class="portal-form-label">Account Title</label>
+          <input
+            name="account_name"
+            class="portal-input"
+            placeholder="As on bank records"
+            {% if bank_form_row %}value="{{ bank_form_row.account_name }}"{% endif %}
+            {% if not bank_can_submit %}disabled{% endif %}
+          />
+        </div>
+        <div>
+          <label class="portal-form-label">Account Number</label>
+          <input
+            name="account_number"
+            class="portal-input"
+            {% if bank_form_row %}value="{{ bank_form_row.account_number }}"{% endif %}
+            {% if not bank_can_submit %}disabled{% endif %}
+          />
+        </div>
+        <div>
+          <label class="portal-form-label">IBAN</label>
+          <input
+            name="iban"
+            class="portal-input"
+            {% if bank_form_row %}value="{{ bank_form_row.iban }}"{% endif %}
+            {% if not bank_can_submit %}disabled{% endif %}
+          />
+        </div>
+        <div>
+          <label class="portal-form-label">SWIFT Code</label>
+          <input
+            name="swift_code"
+            class="portal-input"
+            {% if bank_form_row %}value="{{ bank_form_row.swift_code }}"{% endif %}
+            {% if not bank_can_submit %}disabled{% endif %}
+          />
+        </div>
+        <div>
+          <label class="portal-form-label">Bank Name</label>
+          <input
+            name="bank_name"
+            class="portal-input"
+            {% if bank_form_row %}value="{{ bank_form_row.bank_name }}"{% endif %}
+            {% if not bank_can_submit %}disabled{% endif %}
+          />
+        </div>
+        <div>
+          <label class="portal-form-label">Country</label>
+          <input
+            name="bank_country"
+            class="portal-input"
+            value="{% if bank_form_row %}{{ bank_form_row.country }}{% else %}{{ request.user.country }}{% endif %}"
+            {% if not bank_can_submit %}disabled{% endif %}
+          />
+        </div>
+        <div class="md:col-span-2">
+          <button type="submit" class="portal-btn-primary" {% if not bank_can_submit %}disabled
+            style="opacity:.5;cursor:not-allowed;" {% endif %}>
+            {% if bank_form_row %}Update Details{% else %}Add Details{% endif %}
+          </button>
+        </div>
+      </form>
+      {% for r in bank_rows %}
+      {% if r.status != 'APPROVED' %}
+      <form method="post" class="mt-2 inline-block mr-2">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_bank">
+        <input type="hidden" name="id" value="{{ r.id }}">
+        <button type="submit" class="text-xs px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
+          Delete {{ r.bank_name|truncatechars:24 }} ({{ r.get_status_display }})
+        </button>
+      </form>
+      {% endif %}
+      {% endfor %}
+      <div class="mt-3 space-y-2">
+        {% for r in bank_rows %}
+        <div class="flex flex-wrap items-center gap-2 pt-2" style="border-top:1px solid var(--portal-border-subtle);">
+          <span class="font-medium text-sm" style="color:var(--portal-text-main);">{{ r.bank_name }}</span>
+          <span class="text-xs" style="color:var(--portal-text-muted);">{{ r.account_name }}{% if r.branch %} · {{
+            r.branch }}{% endif %}</span>
+          {% if r.status == 'APPROVED' %}<span class="badge badge-green">Verified</span>
+          {% elif r.status == 'PENDING' %}<span class="badge badge-yellow">Pending</span>
+          {% else %}<span class="badge badge-red">{{ r.status }}</span>{% endif %}
+        </div>
+        {% empty %}
+        <span class="text-xs" style="color:var(--portal-text-muted);">No bank details submitted yet.</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Crypto wallets -->
+    {% if compliance_settings.show_crypto_section and compliance_settings.enable_crypto_verification %}
+    <div class="portal-card">
+      <div class="portal-card-header">
+        <h2 class="portal-card-title">5. Verified Crypto Wallets</h2>
+      </div>
+
+      {% if not crypto_can_submit %}
+      <div class="portal-alert portal-alert--warning mb-4 text-xs">You have reached the maximum number of crypto
+        wallets. Remove a pending or rejected entry or contact support.</div>
+      {% endif %}
+      <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="submit_crypto" />
+        <div class="md:col-span-2">
+          <label class="portal-form-label">Wallet Name <span
+              style="color:var(--portal-text-muted);font-weight:400;">(optional label)</span></label>
+          <input
+            name="wallet_name"
+            class="portal-input"
+            placeholder="e.g. Main USDT"
+            {% if crypto_form_row %}value="{{ crypto_form_row.wallet_name }}"{% endif %}
+            {% if not crypto_can_submit %}disabled{% endif %}
+          />
+        </div>
+        <div>
+          <label class="portal-form-label">Network</label>
+          <select
+            name="crypto_network"
+            class="portal-input"
+            required
+            {% if not crypto_can_submit %}disabled{% endif %}
+          >
+            {% for n in crypto_network_options %}
+            <option value="{{ n.label }}" {% if crypto_form_row and crypto_form_row.network == n.label %}selected{% endif %}>{{ n.label }}</option>
+            {% empty %}
+            {% if crypto_form_row %}
+            <option value="{{ crypto_form_row.network }}" selected>{{ crypto_form_row.network }}</option>
+            {% else %}
+            <option value="" disabled selected>No networks configured — contact support</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="portal-form-label">Wallet Address</label>
+          <input
+            name="wallet_address"
+            class="portal-input font-mono text-xs"
+            required
+            {% if crypto_form_row %}value="{{ crypto_form_row.wallet_address }}"{% endif %}
+            {% if not crypto_can_submit %}disabled{% endif %}
+          />
+        </div>
+        <div class="md:col-span-2">
+          <button type="submit" class="portal-btn-primary" {% if not crypto_can_submit %}disabled
+            style="opacity:.5;cursor:not-allowed;" {% endif %}>
+            {% if crypto_form_row %}Update Details{% else %}Add Details{% endif %}
+          </button>
+        </div>
+      </form>
+      {% for r in crypto_rows %}
+      {% if r.status != 'APPROVED' %}
+      <form method="post" class="mt-2 inline-block mr-2">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_crypto">
+        <input type="hidden" name="id" value="{{ r.id }}">
+        <button type="submit" class="text-xs px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
+          Delete {% if r.wallet_name %}{{ r.wallet_name }}{% else %}{{ r.network }}{% endif %} ({{ r.get_status_display
+          }})
+        </button>
+      </form>
+      {% endif %}
+      {% endfor %}
+      <div class="mt-3 space-y-2">
+        {% for r in crypto_rows %}
+        <div class="flex flex-wrap items-center gap-2 pt-2" style="border-top:1px solid var(--portal-border-subtle);">
+          <span class="font-medium text-sm" style="color:var(--portal-text-main);">
+            {% if r.wallet_name %}{{ r.wallet_name }}{% else %}{{ r.network }}{% endif %}
+          </span>
+          <span class="font-mono text-xs truncate max-w-[200px]" style="color:var(--portal-text-muted);">{{
+            r.wallet_address }}</span>
+          {% if r.status == 'APPROVED' %}<span class="badge badge-green">Verified</span>
+          {% elif r.status == 'PENDING' %}<span class="badge badge-yellow">Pending</span>
+          {% else %}<span class="badge badge-red">{{ r.status }}</span>{% endif %}
+        </div>
+        {% empty %}
+        <span class="text-xs" style="color:var(--portal-text-muted);">No crypto wallet submitted yet.</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

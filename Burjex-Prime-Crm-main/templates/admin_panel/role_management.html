@@ -1,0 +1,36 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Role Management{% endblock %}
+{% block admin_content %}
+<div class="space-y-4">
+  <div class="bg-white border rounded-xl p-4 shadow-sm">
+    <h1 class="text-xl font-semibold mb-3">Role Management</h1>
+    <form method="post" class="flex gap-2">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="create">
+      <input name="role_name" class="border rounded px-3 py-2 w-full max-w-sm" placeholder="Create new role (e.g. KYC, Support, Custom)">
+      <button class="bg-indigo-600 text-white rounded px-4 py-2">Add Role</button>
+    </form>
+  </div>
+  {% for g in groups %}
+  <div class="bg-white border rounded-xl p-4 shadow-sm">
+    <h2 class="font-semibold mb-2">{{ g.name }}</h2>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="update">
+      <input type="hidden" name="group_id" value="{{ g.id }}">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm max-h-56 overflow-auto border rounded p-2">
+        {% for p in perms %}
+        <label class="inline-flex items-center gap-2">
+          <input type="checkbox" name="perm_ids" value="{{ p.id }}" {% if p in g.permissions.all %}checked{% endif %}>
+          {{ p.content_type.app_label }}.{{ p.codename }}
+        </label>
+        {% endfor %}
+      </div>
+      <button class="mt-3 bg-indigo-600 text-white rounded px-4 py-2 text-sm">Save Permissions</button>
+    </form>
+  </div>
+  {% empty %}
+  <div class="bg-white border rounded-xl p-4 shadow-sm text-slate-500">No roles yet.</div>
+  {% endfor %}
+</div>
+{% endblock %}

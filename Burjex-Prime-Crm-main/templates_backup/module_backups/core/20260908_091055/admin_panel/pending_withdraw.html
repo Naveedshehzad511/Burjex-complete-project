@@ -1,0 +1,360 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Pending Withdrawals - Admin Panel{% endblock %}
+
+{% block admin_content %}
+  <div id="loading-spinner" class="hidden fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm items-center justify-center">
+    <div class="bg-white dark:bg-slate-900 px-6 py-4 rounded-xl shadow-2xl flex flex-col items-center gap-3">
+      <div class="w-8 h-8 border-4 border-indigo-100 dark:border-indigo-900/50 border-t-indigo-600 dark:border-t-indigo-500 rounded-full animate-spin"></div>
+      <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Processing...</span>
+    </div>
+  </div>
+  <style>
+    #loading-spinner.active { display: flex !important; }
+  </style>
+
+  <script>
+    let currentApproveForm = null;
+
+    function openApproveModal(id, btnEl) {
+      currentApproveForm = btnEl.closest("form");
+      document.getElementById('approve-id').innerText = id;
+      openModal('global-approve-modal');
+    }
+
+    function confirmGlobalApprove() {
+      if (currentApproveForm && currentApproveForm.dataset.submitting) return;
+      if (currentApproveForm) currentApproveForm.dataset.submitting = 'true';
+      
+      const btn = document.querySelector('#global-approve-modal button.bg-emerald-500');
+      if (btn) {
+          btn.disabled = true;
+          btn.innerText = "Processing...";
+          btn.classList.add("opacity-75", "cursor-not-allowed");
+      }
+      
+      closeModal('global-approve-modal');
+      const spinner = document.getElementById("loading-spinner");
+      if (spinner) spinner.classList.add("active");
+      if (currentApproveForm) currentApproveForm.submit();
+    }
+
+    function openModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove("hidden");
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add("hidden");
+    }
+
+    function openRejectWithdrawModal(txId) {
+      document.getElementById("withdraw-reject-tx-id").value = txId;
+      document.getElementById("withdraw-reject-reason").value = "";
+      document.getElementById("withdraw-reject-modal").classList.remove("hidden");
+    }
+
+    function closeRejectWithdrawModal() {
+      document.getElementById("withdraw-reject-modal").classList.add("hidden");
+    }
+  </script>
+
+  <!-- Reject Modal -->
+  <div id="withdraw-reject-modal" class="hidden fixed inset-0 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" style="z-index: 9999;" onclick="if(event.target===this)closeRejectWithdrawModal()">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white">Reject Withdrawal</h3>
+        <button type="button" class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors" onclick="closeRejectWithdrawModal()">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-6">
+        <p class="text-sm text-slate-500 mb-4">Reason is required. The client will receive it by email.</p>
+        <form method="post" id="withdraw-reject-form" onsubmit="
+          if (this.dataset.submitting) return false;
+          this.dataset.submitting = 'true';
+          const btn = this.querySelector('button[type=submit]');
+          if (btn) {
+              btn.disabled = true;
+              btn.innerText = 'Processing...';
+              btn.classList.add('opacity-75', 'cursor-not-allowed');
+          }
+          document.getElementById('loading-spinner').classList.add('active');
+        ">
+          {% csrf_token %}
+          <input type="hidden" name="tx_id" id="withdraw-reject-tx-id" value="" />
+          <input type="hidden" name="action" value="reject" />
+          <div class="space-y-2 mb-6">
+            <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300" for="withdraw-reject-reason">Rejection reason</label>
+            <textarea name="reject_reason" id="withdraw-reject-reason" required rows="4" class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm" placeholder="Explain why this withdrawal was rejected"></textarea>
+          </div>
+          <div class="flex items-center justify-end gap-3">
+            <button type="button" class="h-10 px-4 rounded-lg text-sm font-semibold btn-cancel transition-colors" onclick="closeRejectWithdrawModal()">Cancel</button>
+            <button type="submit" class="h-10 px-6 rounded-lg text-sm font-semibold bg-rose-500 hover:bg-rose-600 text-white transition-colors shadow-sm">Submit Rejection</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Approve Modal -->
+  <div id="global-approve-modal" class="hidden fixed inset-0 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" style="z-index: 9999;" onclick="if(event.target===this)closeModal('global-approve-modal')">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col transform transition-all" onclick="event.stopPropagation()">
+      <div class="px-6 py-5 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center shrink-0">
+            <i class="fa-solid fa-check text-xl"></i>
+          </div>
+          <h3 class="text-lg font-bold text-slate-900 dark:text-white">Approve Withdrawal</h3>
+        </div>
+      </div>
+      <div class="p-6 text-slate-600 dark:text-slate-400">
+        <p>Do you really want to approve this withdrawal?</p>
+        <p class="text-sm mt-2">Withdrawal ID: #<span id="approve-id"></span></p>
+      </div>
+      <div class="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+        <button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" onclick="closeModal('global-approve-modal')">Cancel</button>
+        <button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-600 transition-colors" onclick="confirmGlobalApprove()">Yes, Approve</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page Header -->
+  <div class="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+        <i class="fa-solid fa-building-columns"></i>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-slate-900 dark:text-white">Pending Withdrawals</h1>
+      </div>
+    </div>
+    <div class="w-full lg:w-auto">
+      {% include "admin_panel/includes/status_filter_boxes.html" with url_name="admin-pending-withdraw" list_status=list_status status_counts=status_counts query_ex_status=query_ex_status %}
+    </div>
+  </div>
+
+  <!-- Table card -->
+  <script>
+    let debounceTimer;
+    function debounceSubmit() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        document.getElementById('withdrawFilterForm').submit();
+      }, 500);
+    }
+  </script>
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden mb-6">
+
+    <div class="overflow-x-auto w-full">
+      <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+        <thead>
+          <tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Date</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Client</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Gateway</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Amount</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Ref</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Notes</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+          {% for r in rows %}
+            {% with t=r.tx %}
+            <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors group">
+              <td class="px-4 py-3 text-slate-500 font-medium text-xs">{{ t.created_at|date:"Y-m-d H:i" }}</td>
+              <td class="px-4 py-3">
+                <div class="font-bold text-slate-900 dark:text-white">{{ t.actor.get_full_name|default:t.actor.email }}</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">{{ t.actor.email }}</div>
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400 font-medium">{{ r.method_label }}</td>
+              <td class="px-4 py-3 font-bold text-emerald-600 dark:text-emerald-400">{{ t.amount }} <span class="text-xs font-normal">{{ t.currency }}</span></td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs font-mono">{{ t.reference|default:"-" }}</td>
+              <td class="px-4 py-3 text-slate-500 text-xs max-w-[150px] truncate" title="{{ t.user_notes }}">{{ t.user_notes|truncatechars:60|default:"-" }}</td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-2">
+                  <button type="button" class="h-7 px-3 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" onclick="openModal('withdraw-modal-{{ t.id }}')">View</button>
+
+                  {% if list_status == "pending" %}
+                    <form method="post" class="inline-block m-0 p-0">
+                      {% csrf_token %}
+                      <input type="hidden" name="tx_id" value="{{ t.id }}" />
+                      <input type="hidden" name="action" value="approve" />
+                      <button type="button" class="h-7 px-3 rounded text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-white transition-colors" onclick="openApproveModal('{{ t.id }}', this);">Approve</button>
+                    </form>
+                    <button type="button" class="h-7 px-3 rounded text-xs font-semibold bg-rose-500 hover:bg-rose-600 text-white transition-colors" onclick="openRejectWithdrawModal('{{ t.id }}')">Reject</button>
+                  {% else %}
+                    <div class="flex flex-col items-end gap-1">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase {% if t.status == 'REJECTED' %}bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800{% else %}bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800{% endif %}">{{ t.get_status_display }}</span>
+                      {% if t.processed_by %}
+                        <span class="text-[10px] text-slate-400">by {{ t.processed_by.email }}</span>
+                      {% endif %}
+                    </div>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endwith %}
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="flex items-center justify-center gap-3 py-6">
+                  <div class="w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                    <i class="fa-solid fa-folder-open"></i>
+                  </div>
+                  <h3 class="text-xs font-bold text-slate-900 dark:text-white">
+                    {% if list_status == "pending" %}No pending withdrawals.{% elif list_status == "approved" %}No approved withdrawals.{% else %}No rejected withdrawals.{% endif %}
+                  </h3>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Withdrawal Detail Modals -->
+  {% for r in rows %}
+    {% with t=r.tx %}
+    <div id="withdraw-modal-{{ t.id }}" class="hidden fixed inset-0 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" style="z-index: 9999;">
+      <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]" onclick="event.stopPropagation()">
+        <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+          <div>
+            <div class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Withdrawal Request</div>
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white">#{{ t.id }} — {{ t.get_tx_type_display }}</h3>
+          </div>
+          <button type="button" class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors" onclick="closeModal('withdraw-modal-{{ t.id }}')">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <div class="p-6 overflow-y-auto">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Left column -->
+            <div class="space-y-6">
+              <div>
+                <h4 class="text-xs font-bold uppercase tracking-widest text-indigo-500 mb-3 flex items-center gap-2"><i class="fa-solid fa-user"></i> Client Profile</h4>
+                <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-2 text-sm border border-slate-100 dark:border-slate-700">
+                  <div class="flex justify-between"><span class="text-slate-500">ID:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ t.actor_id }}</span></div>
+                  <div class="flex justify-between"><span class="text-slate-500">Name:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ t.actor.get_full_name|default:t.actor.email }}</span></div>
+                  <div class="flex justify-between"><span class="text-slate-500">Email:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ t.actor.email }}</span></div>
+                </div>
+              </div>
+
+              <div>
+                <h4 class="text-xs font-bold uppercase tracking-widest text-emerald-500 mb-3 flex items-center gap-2"><i class="fa-solid fa-chart-line"></i> Trading Account</h4>
+                {% if r.latest_account %}
+                  <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-2 text-sm border border-slate-100 dark:border-slate-700">
+                    <div class="flex justify-between"><span class="text-slate-500">MT5 Login:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ r.latest_account.login_id }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Server:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ r.latest_account.server }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Group:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ r.latest_account.group.name }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Leverage:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ r.latest_account.leverage }}x</span></div>
+                  </div>
+                {% else %}
+                  <div class="bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 p-4 rounded-xl text-sm border border-amber-200 dark:border-amber-800/50 flex items-center gap-3">
+                    <i class="fa-solid fa-triangle-exclamation text-lg"></i> No MT5 account on file.
+                  </div>
+                {% endif %}
+              </div>
+
+              <div>
+                <h4 class="text-xs font-bold uppercase tracking-widest text-amber-500 mb-3 flex items-center gap-2"><i class="fa-solid fa-scale-balanced"></i> Balances</h4>
+                <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-3 text-sm border border-slate-100 dark:border-slate-700">
+                  <div class="space-y-2">
+                    <div class="flex justify-between"><span class="text-slate-500">Current Wallet:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ r.live_wallet }} {{ t.currency }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Total Pending:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ r.live_pending }} {{ t.currency }}</span></div>
+                  </div>
+                  
+                  {% if t.balance_snapshot_wallet is not None %}
+                    <div class="pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                      <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Snapshot at request</div>
+                      <div class="flex justify-between"><span class="text-slate-500">Wallet:</span> <span class="text-slate-700 dark:text-slate-300">{{ t.balance_snapshot_wallet }} {{ t.currency }}</span></div>
+                      <div class="flex justify-between"><span class="text-slate-500">Pending:</span> <span class="text-slate-700 dark:text-slate-300">{{ t.balance_snapshot_pending }} {{ t.currency }}</span></div>
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+
+            <!-- Right column -->
+            <div class="space-y-6">
+              <div>
+                <h4 class="text-xs font-bold uppercase tracking-widest text-rose-500 mb-3 flex items-center gap-2"><i class="fa-solid fa-money-bill-transfer"></i> Withdrawal Details</h4>
+                <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-2 text-sm border border-slate-100 dark:border-slate-700">
+                  <div class="flex justify-between"><span class="text-slate-500">Amount:</span> <span class="font-bold text-rose-600 dark:text-rose-400 text-lg">{{ t.amount }} <span class="text-xs font-normal">{{ t.currency }}</span></span></div>
+                  <div class="flex justify-between"><span class="text-slate-500">Method:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ r.method_label }}</span></div>
+                  <div class="flex justify-between"><span class="text-slate-500">Reference:</span> <span class="font-mono text-slate-900 dark:text-white">{{ t.reference|default:"-" }}</span></div>
+                  <div class="flex justify-between"><span class="text-slate-500">Funds Source:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ r.funds_source_label }}</span></div>
+                  {% if r.transfers_filter_email %}
+                    <div class="flex justify-end">
+                      <a class="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline" href="{% url 'admin-transfers' %}?email={{ r.transfers_filter_email|urlencode }}"><i class="fa-solid fa-arrow-up-right-from-square"></i> View internal transfer history</a>
+                    </div>
+                  {% endif %}
+                  
+                  <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <span class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Payout Instructions</span>
+                    <pre class="whitespace-pre-wrap font-sans text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-100 dark:border-slate-800 text-[13px]">{{ t.account_details|default:"—" }}</pre>
+                  </div>
+                  
+                  <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <span class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-1">Notes</span>
+                    <div class="text-slate-700 dark:text-slate-300 italic">{{ t.user_notes|default:"-" }}</div>
+                  </div>
+                </div>
+              </div>
+
+              {% if t.status == "REJECTED" and t.reject_reason %}
+                <div class="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/50 p-4 rounded-xl text-sm">
+                  <div class="font-bold text-rose-700 dark:text-rose-400 mb-1">Rejection reason:</div>
+                  <div class="text-rose-600 dark:text-rose-300">{{ t.reject_reason }}</div>
+                </div>
+              {% endif %}
+
+              {% if t.payment_screenshot %}
+                <div>
+                  <h4 class="text-xs font-bold uppercase tracking-widest text-purple-500 mb-3 flex items-center gap-2"><i class="fa-solid fa-image"></i> Attachment</h4>
+                  <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-2 border border-slate-100 dark:border-slate-700 flex flex-col items-center">
+                    <img class="max-h-64 object-contain rounded-lg mb-3" src="{{ t.payment_screenshot.url }}" alt="Screenshot" />
+                    <a class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1" href="{{ t.payment_screenshot.url }}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open in new tab</a>
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between">
+          <button type="button" class="h-10 px-6 rounded-lg text-sm font-semibold btn-cancel transition-colors" onclick="closeModal('withdraw-modal-{{ t.id }}')">Close</button>
+
+          {% if list_status == "pending" %}
+            <div class="flex items-center gap-3">
+              <button type="button" class="h-10 px-6 rounded-lg text-sm font-semibold bg-rose-500 hover:bg-rose-600 text-white transition-colors shadow-sm" onclick="closeModal('withdraw-modal-{{ t.id }}'); openRejectWithdrawModal('{{ t.id }}');">Reject</button>
+              
+              <form method="post" class="m-0 p-0">
+                {% csrf_token %}
+                <input type="hidden" name="tx_id" value="{{ t.id }}" />
+                <input type="hidden" name="action" value="approve" />
+                <button type="button" class="h-10 px-6 rounded-lg text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white transition-colors shadow-sm" onclick="openApproveModal('{{ t.id }}', this);">Approve</button>
+              </form>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <script>
+      (function() {
+        var modal = document.getElementById('withdraw-modal-{{ t.id }}');
+        if (modal) {
+          modal.addEventListener('click', function(e) {
+            if (e.target === modal) { modal.classList.add('hidden'); }
+          });
+        }
+      })();
+    </script>
+    {% endwith %}
+  {% endfor %}
+
+{% endblock %}

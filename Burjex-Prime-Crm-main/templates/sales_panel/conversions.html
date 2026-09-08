@@ -1,0 +1,60 @@
+{% extends "sales_panel/base.html" %}
+
+{% block title %}Conversions - Sales CRM{% endblock %}
+{% block admin_shell_page_title %}Conversions{% endblock %}
+
+{% block admin_content %}
+  {% include "sales_panel/includes/table_page_styles.html" %}
+
+  <div class="bp-page-header">
+    <div>
+      <h1 class="bp-page-title"><i class="fa-solid fa-arrow-trend-up" style="color:var(--bp-success);margin-right:0.5rem;"></i>Conversions</h1>
+      <p class="bp-page-subtitle">Leads marked as <strong>Converted</strong> in the marketing pipeline.</p>
+    </div>
+  </div>
+
+  <div class="bp-section">
+    <div class="bp-card">
+      <div class="bp-card-header">
+        <span class="bp-card-header-title"><i class="fa-solid fa-users" style="margin-right:0.5rem;"></i>Converted Leads</span>
+      </div>
+      <div class="bp-card-body" style="padding:0;">
+        {% if leads %}
+          <div class="bp-table -wrap">
+            <table class="bp-table">
+              <thead>
+                <tr>
+                  <th><i class="fa-solid fa-user" style="margin-right:0.4rem;opacity:0.6;"></i>Lead</th>
+                  <th><i class="fa-solid fa-envelope" style="margin-right:0.4rem;opacity:0.6;"></i>Email</th>
+                  <th><i class="fa-solid fa-bullhorn" style="margin-right:0.4rem;opacity:0.6;"></i>Campaign</th>
+                  <th><i class="fa-solid fa-calendar-days" style="margin-right:0.4rem;opacity:0.6;"></i>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for lead in leads %}
+                  <tr>
+                    <td><strong>{{ lead.full_name|default:"—" }}</strong></td>
+                    <td>{{ lead.email|default:"—" }}</td>
+                    <td>
+                      {% if lead.campaign.name %}
+                        <span class="bp-badge bp-badge-info">{{ lead.campaign.name }}</span>
+                      {% else %}
+                        <span class="bp-badge bp-badge-neutral">—</span>
+                      {% endif %}
+                    </td>
+                    <td><span class="bp-caption">{{ lead.created_at|date:"M j, Y" }}</span></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div style="padding:2.5rem;text-align:center;color:var(--bp-text-muted,#64748B);">
+            <i class="fa-solid fa-inbox" style="font-size:2.5rem;margin-bottom:1rem;opacity:0.35;display:block;"></i>
+            <p class="bp-label" style="margin:0;">No converted leads yet.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endblock %}

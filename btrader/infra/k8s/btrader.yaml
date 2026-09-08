@@ -1,0 +1,170 @@
+# ============================================================================
+#  B-Trader Kubernetes manifests (namespace, config, secrets, deployments,
+#  services, HPA, ingress). Apply: kubectl apply -f infra/k8s/btrader.yaml
+#  Images are placeholders (registry/btrader-<service>:tag) — wire to CI.
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata: { name: btrader }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: btrader-config, namespace: btrader }
+data:
+  NODE_ENV: 'production'
+  API_PORT: '4100'
+  WS_PORT: '4101'
+  LP_BRIDGE_DRIVER: 'generic-ws'
+  JWT_EXPIRES_IN: '15m'
+  JWT_REFRESH_EXPIRES_IN: '30d'
+  ENGINE_SHARD_COUNT: '1'
+  ENGINE_SHARD: '0'
+  LP_ROUTE_TIMEOUT_MS: '5000'
+---
+apiVersion: v1
+kind: Secret
+metadata: { name: btrader-secrets, namespace: btrader }
+type: Opaque
+stringData:
+  DATABASE_URL: 'postgresql://btrader:CHANGE@postgres:5432/btrader?schema=public'
+  REDIS_URL: 'redis://redis:6379'
+  JWT_SECRET: 'CHANGE-access'
+  JWT_REFRESH_SECRET: 'CHANGE-refresh'
+  ENCRYPTION_KEY: 'CHANGE-32-char-key'
+  CRM_INTEGRATION_KEY: 'CHANGE-crm-key'
+  LP_BRIDGE_WS_URL: 'wss://lp.example.com/stream'
+  LP_BRIDGE_API_KEY: 'CHANGE'
+---
+# ── gateway-api ──────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: gateway-api, namespace: btrader }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: gateway-api } }
+  template:
+    metadata: { labels: { app: gateway-api } }
+    spec:
+      containers:
+        - name: gateway-api
+          image: registry/btrader-gateway-api:latest
+          ports: [{ containerPort: 4100 }]
+          envFrom:
+            - configMapRef: { name: btrader-config }
+            - secretRef: { name: btrader-secrets }
+          readinessProbe: { httpGet: { path: /v1/health, port: 4100 }, initialDelaySeconds: 10, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /v1/health, port: 4100 }, initialDelaySeconds: 20, periodSeconds: 15 }
+          resources: { requests: { cpu: '250m', memory: '256Mi' }, limits: { cpu: '1', memory: '512Mi' } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: gateway-api, namespace: btrader }
+spec:
+  selector: { app: gateway-api }
+  ports: [{ port: 4100, targetPort: 4100 }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: gateway-api-hpa, namespace: btrader }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: gateway-api }
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 65 } }
+---
+# ── ws-gateway (sticky-less; Redis fan-out) ──────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ws-gateway, namespace: btrader }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: ws-gateway } }
+  template:
+    metadata: { labels: { app: ws-gateway } }
+    spec:
+      containers:
+        - name: ws-gateway
+          image: registry/btrader-ws-gateway:latest
+          ports: [{ containerPort: 4101 }]
+          envFrom:
+            - configMapRef: { name: btrader-config }
+            - secretRef: { name: btrader-secrets }
+          resources: { requests: { cpu: '200m', memory: '256Mi' }, limits: { cpu: '1', memory: '512Mi' } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ws-gateway, namespace: btrader }
+spec:
+  selector: { app: ws-gateway }
+  ports: [{ port: 4101, targetPort: 4101 }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: ws-gateway-hpa, namespace: btrader }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: ws-gateway }
+  minReplicas: 3
+  maxReplicas: 30
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 60 } }
+---
+# ── trading-engine (stateful-ish; partition by tenant shard) ─────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: trading-engine, namespace: btrader }
+spec:
+  replicas: 1
+  # Scale with ENGINE_SHARD_COUNT=N and one replica per shard (ENGINE_SHARD=0..N-1).
+  # Two unsharded replicas fight the Redis instance lock and one will exit.
+  selector: { matchLabels: { app: trading-engine } }
+  template:
+    metadata: { labels: { app: trading-engine } }
+    spec:
+      containers:
+        - name: trading-engine
+          image: registry/btrader-trading-engine:latest
+          envFrom:
+            - configMapRef: { name: btrader-config }
+            - secretRef: { name: btrader-secrets }
+          resources: { requests: { cpu: '500m', memory: '512Mi' }, limits: { cpu: '2', memory: '1Gi' } }
+---
+# ── market-data (single writer per LP feed; HA via leader election) ───────────
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: market-data, namespace: btrader }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: market-data } }
+  template:
+    metadata: { labels: { app: market-data } }
+    spec:
+      containers:
+        - name: market-data
+          image: registry/btrader-market-data:latest
+          envFrom:
+            - configMapRef: { name: btrader-config }
+            - secretRef: { name: btrader-secrets }
+          resources: { requests: { cpu: '300m', memory: '256Mi' }, limits: { cpu: '1', memory: '512Mi' } }
+---
+# ── Ingress (host-based tenant routing + WS) ─────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: btrader-ingress
+  namespace: btrader
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /v1
+            pathType: Prefix
+            backend: { service: { name: gateway-api, port: { number: 4100 } } }
+          - path: /ws
+            pathType: Prefix
+            backend: { service: { name: ws-gateway, port: { number: 4101 } } }

@@ -1,0 +1,46 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Account History - User Portal{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">Account History</h1>
+
+  <div class="space-y-4">
+    {% for a in accounts %}
+      <div class="portal-card">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <div class="font-semibold" style="color:var(--portal-text-main);">
+              {% if a.account_type == "DEMO" %}Demo Account{% else %}Real Account{% endif %}
+            </div>
+            <div class="text-xs mt-1" style="color:var(--portal-text-muted);">Login: {{ a.login_id }} / {{ a.server }}</div>
+            <div class="text-xs mt-0.5" style="color:var(--portal-text-muted);">Group: {{ a.group.name }}</div>
+          </div>
+          <span class="portal-badge {% if a.account_type == 'DEMO' %}portal-badge--slate{% else %}portal-badge--green{% endif %}">
+            {% if a.account_type == "DEMO" %}Demo{% else %}Real{% endif %}
+          </span>
+        </div>
+        <div class="portal-stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));">
+          <div class="portal-stat-card">
+            <div class="portal-stat-label">Balance</div>
+            <div class="portal-stat-value portal-stat-value--primary">{{ a.balance }}</div>
+          </div>
+          <div class="portal-stat-card">
+            <div class="portal-stat-label">Equity</div>
+            <div class="portal-stat-value portal-stat-value--primary">{{ a.equity }}</div>
+          </div>
+          <div class="portal-stat-card">
+            <div class="portal-stat-label">Free Margin</div>
+            <div class="portal-stat-value portal-stat-value--primary">{{ a.free_margin }}</div>
+          </div>
+          <div class="portal-stat-card">
+            <div class="portal-stat-label">Unrealized P&amp;L</div>
+            <div class="portal-stat-value portal-stat-value--primary">{{ a.unrealized_pnl }}</div>
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="portal-card" style="text-align:center;color:var(--portal-text-muted);">No trading accounts yet.</div>
+    {% endfor %}
+  </div>
+{% endblock %}

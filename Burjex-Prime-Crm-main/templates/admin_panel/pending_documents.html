@@ -1,0 +1,251 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Pending Documents - Admin Panel{% endblock %}
+
+{% block admin_content %}
+  <div id="loading-spinner" class="hidden fixed inset-0 bg-black/30 z-50 items-center justify-center">
+    <div class="bg-white border rounded-lg p-4 flex items-center gap-3">
+      <div class="w-6 h-6 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+      <div class="text-sm font-semibold text-slate-800">Processing...</div>
+    </div>
+  </div>
+
+  <script>
+    function confirmAndSpin(entity, action, id) {
+      const label = entity + (id ? (" #" + id) : "");
+      if (!confirm("Confirm " + action.toUpperCase() + " for " + label + "?")) return false;
+      const spinner = document.getElementById("loading-spinner");
+      if (spinner) spinner.classList.remove("hidden");
+      return true;
+    }
+
+    function openModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove("hidden");
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add("hidden");
+    }
+  </script>
+
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-xl font-semibold">Pending Documents</h1>
+
+  </div>
+
+  <div class="bg-white border rounded-lg p-4 mb-4">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      <div>
+        <label class="text-xs text-slate-600 mb-1 block">Doc Type</label>
+        <select name="doc_type" class="w-full border rounded px-2 py-2 text-sm">
+          <option value="">All</option>
+          {% for value,label in doc_type_choices %}
+            <option value="{{ value }}" {% if filters.doc_type == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-600 mb-1 block">User Email</label>
+        <input name="email" value="{{ filters.email }}" class="w-full border rounded px-2 py-2 text-sm" placeholder="Search..." />
+      </div>
+
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="expiring_soon" value="1" {% if filters.expiring_soon %}checked{% endif %} />
+        <label class="text-sm text-slate-700">Expiring soon (7 days)</label>
+      </div>
+
+      <div class="flex gap-2">
+        <button class="bg-indigo-600 text-white rounded px-3 py-2 text-sm hover:bg-indigo-700" type="submit">
+          Filter
+        </button>
+        <a class="bg-white border text-indigo-700 rounded px-3 py-2 text-sm hover:bg-slate-50" href="{% url 'admin-docs-pending' %}">
+          Reset
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <div class="bg-white border rounded-lg overflow-hidden">
+    <div class="p-3 text-sm text-slate-600 border-b">
+      {{ documents.count }} pending document(s)
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="text-left bg-slate-50">
+          <tr>
+            <th class="p-2 border-b">Uploaded</th>
+            <th class="p-2 border-b">User</th>
+            <th class="p-2 border-b">Doc Type</th>
+            <th class="p-2 border-b">Expires</th>
+              <th class="p-2 border-b">Uploaded Document</th>
+              <th class="p-2 border-b">Uploaded By</th>
+              <th class="p-2 border-b">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in documents %}
+            <tr class="border-t">
+              <td class="p-2 border-b">{{ d.uploaded_at|date:"Y-m-d H:i" }}</td>
+              <td class="p-2 border-b">{{ d.user.email }}</td>
+              <td class="p-2 border-b">{{ d.get_doc_type_display }}</td>
+              <td class="p-2 border-b">
+                {% if d.expires_at %}{{ d.expires_at|date:"Y-m-d" }}{% else %}-{% endif %}
+              </td>
+                <td class="p-2 border-b">
+                  {% if d.file %}
+                    <a class="text-indigo-700 hover:underline" href="{{ d.file.url }}" target="_blank" rel="noopener noreferrer">
+                      View
+                    </a>
+                    <div class="text-xs text-slate-500 mt-1 truncate max-w-[220px]">
+                      {{ d.file.name|default:"-" }}
+                    </div>
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+              <td class="p-2 border-b">
+                {% if d.uploaded_by %}{{ d.uploaded_by.email }}{% else %}-{% endif %}
+              </td>
+              <td class="p-2 border-b">
+                <div class="flex gap-2">
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="doc_id" value="{{ d.id }}" />
+                    <input type="hidden" name="action" value="approve" />
+                      <button
+                        class="bg-emerald-600 text-white rounded px-2 py-1 text-xs hover:bg-emerald-700"
+                        type="submit"
+                        onclick="return confirmAndSpin('document', 'approve', '{{ d.id }}');"
+                      >
+                      Approve
+                    </button>
+                  </form>
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="doc_id" value="{{ d.id }}" />
+                    <input type="hidden" name="action" value="reject" />
+                      <button
+                        class="bg-rose-600 text-white rounded px-2 py-1 text-xs hover:bg-rose-700"
+                        type="submit"
+                        onclick="return confirmAndSpin('document', 'reject', '{{ d.id }}');"
+                      >
+                      Reject
+                    </button>
+                  </form>
+
+                  <button
+                    type="button"
+                    class="bg-white border border-indigo-200 text-indigo-700 rounded px-2 py-1 text-xs hover:bg-indigo-50"
+                    onclick="openModal('document-modal-{{ d.id }}')"
+                  >
+                    Review
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Document Review Modal -->
+            <div id="document-modal-{{ d.id }}" class="hidden fixed inset-0 z-50 bg-black/40">
+              <div class="bg-white rounded-lg max-w-4xl w-[92vw] mx-auto mt-10 p-5">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <div class="text-sm text-slate-600">Document Review</div>
+                    <div class="text-lg font-semibold">#{{ d.id }}</div>
+                  </div>
+                  <button
+                    type="button"
+                    class="text-slate-500 hover:text-slate-800"
+                    onclick="closeModal('document-modal-{{ d.id }}')"
+                    aria-label="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <div class="font-semibold mb-2">User & Document</div>
+                    <div>User: {{ d.user.email }}</div>
+                    <div>Doc Type: {{ d.get_doc_type_display }}</div>
+                    <div>Expires: {% if d.expires_at %}{{ d.expires_at|date:"Y-m-d" }}{% else %}-{% endif %}</div>
+                    <div>Uploaded At: {{ d.uploaded_at|date:"Y-m-d H:i" }}</div>
+                    <div class="mt-2 text-xs text-slate-500">
+                      Uploaded By: {% if d.uploaded_by %}{{ d.uploaded_by.email }}{% else %}-{% endif %}
+                    </div>
+
+                    <div class="mt-4 font-semibold mb-2">Status</div>
+                    <div class="text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 inline-block">
+                      {{ d.status }}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="font-semibold mb-2">Uploaded File</div>
+                    {% if d.file %}
+                      <div class="border rounded-lg overflow-hidden bg-slate-50">
+                        <iframe src="{{ d.file.url }}" class="w-full h-[420px]"></iframe>
+                      </div>
+                      <div class="text-xs text-slate-500 mt-2">
+                        <a class="text-indigo-700 hover:underline" href="{{ d.file.url }}" target="_blank" rel="noopener noreferrer">
+                          Open in new tab
+                        </a>
+                      </div>
+                    {% else %}
+                      <div class="text-sm text-slate-600">No file uploaded.</div>
+                    {% endif %}
+                  </div>
+                </div>
+
+                <div class="mt-5 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    class="bg-white border border-slate-200 rounded px-4 py-2 text-sm hover:bg-slate-50"
+                    onclick="closeModal('document-modal-{{ d.id }}')"
+                  >
+                    Close
+                  </button>
+
+                  <form method="post" class="inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="doc_id" value="{{ d.id }}" />
+                    <input type="hidden" name="action" value="approve" />
+                    <button
+                      class="bg-emerald-600 text-white rounded px-4 py-2 text-sm hover:bg-emerald-700"
+                      type="submit"
+                      onclick="return confirmAndSpin('document', 'approve', '{{ d.id }}');"
+                    >
+                      Approve
+                    </button>
+                  </form>
+
+                  <form method="post" class="inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="doc_id" value="{{ d.id }}" />
+                    <input type="hidden" name="action" value="reject" />
+                    <button
+                      class="bg-rose-600 text-white rounded px-4 py-2 text-sm hover:bg-rose-700"
+                      type="submit"
+                      onclick="return confirmAndSpin('document', 'reject', '{{ d.id }}');"
+                    >
+                      Reject
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          {% empty %}
+            <tr>
+                <td class="p-6 text-sm text-slate-600" colspan="7">No pending documents found.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
+
+

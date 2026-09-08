@@ -1,0 +1,5 @@
+# Template for a new company deployment target.
+# Copy to <company>.conf and fill in — then `./deploy.sh <company>`.
+# SERVER is the only required key.
+SERVER="root@<new-server-ip>"
+REMOTE_DIR="/root/btrader"

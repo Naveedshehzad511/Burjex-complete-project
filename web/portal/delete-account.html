@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<!--
+  Public account-deletion page.
+
+  Google Play's data-deletion policy requires a route a person can reach
+  WITHOUT installing the app — this URL goes in the Play Console Data safety
+  form. It has to work for someone who has already uninstalled, so nothing here
+  is behind a login and nothing depends on the app being present.
+
+  Generated from tenants/delete-account.template.html by tools/build-tenant.sh.
+  Edit the template, not the generated file.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Delete your account — Burjex Prime</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    :root {
+      --navy: #002D58;
+      --ink: #10202f;
+      --muted: #5b6b7a;
+      --line: #e3e8ee;
+      --bg: #f6f8fa;
+      --card: #ffffff;
+      --danger: #b3261e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #e8eef5; --muted: #9fb0c0; --line: #24323f;
+        --bg: #0e1621; --card: #16212e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      background: var(--navy); color: #fff; padding: 28px 20px;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+    header .wrap { padding: 0; display: flex; align-items: center; gap: 14px; }
+    header img { width: 44px; height: 44px; border-radius: 10px; }
+    header h1 { font-size: 20px; margin: 0; font-weight: 700; }
+    header p { margin: 2px 0 0; opacity: .82; font-size: 14px; }
+    main { padding: 28px 0 60px; }
+    .card {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 14px; padding: 20px 22px; margin: 0 0 16px;
+    }
+    h2 { font-size: 17px; margin: 0 0 10px; }
+    ol, ul { margin: 10px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .danger { color: var(--danger); font-weight: 600; }
+    a { color: inherit; }
+    .btn {
+      display: inline-block; background: var(--navy); color: #fff;
+      text-decoration: none; padding: 13px 22px; border-radius: 10px;
+      font-weight: 700; margin-top: 6px;
+    }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td {
+      text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line);
+      vertical-align: top; font-size: 14.5px;
+    }
+    th { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <img src="icons/Icon-192.png" alt="">
+      <div>
+        <h1>Delete your Burjex Prime account</h1>
+        <p>How to request deletion, and what happens to your data</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="card">
+      <h2>Request deletion from the app</h2>
+      <ol>
+        <li>Open the Burjex Prime app and sign in.</li>
+        <li>Open the menu, then <strong>Account &rsaquo; Delete Account</strong>.</li>
+        <li>Choose a reason, confirm your password, and submit.</li>
+      </ol>
+      <p class="muted">
+        You can also do this in a browser — no app install needed.
+      </p>
+      <a class="btn" href="/">Open the client portal</a>
+    </div>
+
+    <div class="card">
+      <h2>If you can no longer sign in</h2>
+      <p>
+        Email <a href="mailto:support@burjexprime.com">support@burjexprime.com</a> from the
+        address registered on your account and ask us to delete it. We may ask
+        you to verify your identity before we act — this protects you from
+        someone else closing your account.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>What happens next</h2>
+      <p>
+        Your request is held for <strong>30 days</strong>, during
+        which you can cancel it from the app. After that your personal data is
+        erased. <span class="danger">This cannot be undone.</span>
+      </p>
+      <p class="muted">
+        If you hold a balance, an open trade or a withdrawal in progress, our
+        team will contact you to settle it before your account closes. You do
+        not need to settle anything before submitting the request.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>What we delete and what we must keep</h2>
+      <table>
+        <tr><th>Deleted</th><th>Kept</th></tr>
+        <tr>
+          <td>
+            Name, email, phone, address and date of birth<br>
+            Identity and address documents<br>
+            Saved bank accounts and crypto addresses<br>
+            Sign-in credentials and two-factor settings<br>
+            Support conversations and notifications
+          </td>
+          <td>
+            Records of deposits, withdrawals and completed trades<br>
+            Identity-verification records required by anti-money-laundering law<br>
+            Anything subject to an ongoing legal or regulatory matter
+          </td>
+        </tr>
+      </table>
+      <p class="muted" style="margin-top:14px">
+        As a regulated broker we are required by law to keep certain financial
+        and identity records for a set period after an account closes. These are
+        restricted to compliance use only — they are not used to contact you or
+        for any other purpose.
+      </p>
+    </div>
+
+    <footer class="wrap" style="padding-left:0;padding-right:0">
+      Burjex Prime — client portal and trading terminal.
+    </footer>
+  </main>
+</body>
+</html>

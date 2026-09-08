@@ -1,0 +1,32 @@
+{% extends "sales_panel/base.html" %}
+
+{% block title %}Performance - Sales CRM{% endblock %}
+{% block admin_shell_page_title %}Performance{% endblock %}
+
+{% block admin_content %}
+  {% include "sales_panel/includes/table_page_styles.html" %}
+  <div class="sp-page">
+    <div class="sp-page__head">
+      <h2>Performance</h2>
+      <p>Analytics and monitoring tools for revenue, clients, and risk.</p>
+    </div>
+    <div class="sp-hub-grid">
+      <a class="sp-hub-tile" href="{% url 'admin-analytics-revenue' %}">
+        <div class="sp-hub-tile__title"><i class="fa-solid fa-chart-line" aria-hidden="true"></i>Revenue analytics</div>
+        <div class="sp-hub-tile__sub">Trends and breakdowns</div>
+      </a>
+      <a class="sp-hub-tile" href="{% url 'admin-analytics-deposits' %}">
+        <div class="sp-hub-tile__title"><i class="fa-solid fa-coins" aria-hidden="true"></i>Deposit analytics</div>
+        <div class="sp-hub-tile__sub">Funding performance</div>
+      </a>
+      <a class="sp-hub-tile" href="{% url 'admin-analytics-clients' %}">
+        <div class="sp-hub-tile__title"><i class="fa-solid fa-user-group" aria-hidden="true"></i>Client analytics</div>
+        <div class="sp-hub-tile__sub">Acquisition and activity</div>
+      </a>
+      <a class="sp-hub-tile" href="{% url 'admin-risk-monitor' %}">
+        <div class="sp-hub-tile__title"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i>Risk monitor</div>
+        <div class="sp-hub-tile__sub">Exposure and alerts</div>
+      </a>
+    </div>
+  </div>
+{% endblock %}

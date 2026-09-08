@@ -1,0 +1,96 @@
+{% extends "sales_layout.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block admin_shell_page_title %}{{ page_title }}{% endblock %}
+{% block admin_content %}
+<div class="max-w-2xl mx-auto px-2 pb-12">
+  <h1 class="text-xl font-semibold text-slate-900 mb-4">{{ page_title }}</h1>
+  <form method="post" class="mt-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+    {% csrf_token %}
+    {% if not manager_user %}
+    <div>
+      <label class="block text-sm font-medium mb-1">Select Client Email</label>
+      <select name="client_user_id" class="w-full rounded-lg border border-slate-200 px-3 py-2" required>
+        <option value="">Select existing client</option>
+        {% for c in eligible_clients %}
+        <option value="{{ c.id }}">{{ c.email }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% else %}
+    <div class="text-sm text-slate-600">Email: <strong>{{ manager_user.email }}</strong> (fixed from existing client record)</div>
+    {% endif %}
+    <div class="grid md:grid-cols-2 gap-3">
+      <div><label class="block text-sm font-medium mb-1">First Name</label><input name="first_name" value="{{ manager_user.first_name|default:'' }}" class="w-full rounded-lg border border-slate-200 px-3 py-2" /></div>
+      <div><label class="block text-sm font-medium mb-1">Last Name</label><input name="last_name" value="{{ manager_user.last_name|default:'' }}" class="w-full rounded-lg border border-slate-200 px-3 py-2" /></div>
+    </div>
+    <div><label class="block text-sm font-medium mb-1">Username</label><input name="username" value="{{ manager_user.username|default:'' }}" class="w-full rounded-lg border border-slate-200 px-3 py-2" placeholder="auto if empty on create" /></div>
+    {% if manager_user %}
+    <div><label class="block text-sm font-medium mb-1">Reset Password (optional)</label><input type="password" name="new_password" class="w-full rounded-lg border border-slate-200 px-3 py-2" /></div>
+    {% else %}
+    <div><label class="block text-sm font-medium mb-1">Password</label><input type="password" name="password" class="w-full rounded-lg border border-slate-200 px-3 py-2" required /></div>
+    {% endif %}
+    <div><label class="block text-sm font-medium mb-1">Referral Slug</label><input name="referral_slug" value="{% if manager_user.crm_staff_profile %}{{ manager_user.crm_staff_profile.referral_slug }}{% endif %}" class="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm" required /></div>
+    <div><label class="block text-sm font-medium mb-1">Assign Role</label><select name="crm_role_id" class="w-full rounded-lg border border-slate-200 px-3 py-2"><option value="">No role</option>{% for r in crm_roles %}<option value="{{ r.id }}" {% if manager_user.crm_role_id == r.id %}selected{% endif %}>{{ r.name }}</option>{% endfor %}</select></div>
+    <div><label class="block text-sm font-medium mb-1">Assign Department (Optional)</label><select name="department_id" class="w-full rounded-lg border border-slate-200 px-3 py-2"><option value="">No department</option>{% for d in departments %}<option value="{{ d.id }}" {% if manager_user.crm_department_id == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+    <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="is_active" {% if not manager_user or manager_user.is_active %}checked{% endif %} /> Active</label>
+
+    <div class="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-3">
+      <h3 class="text-sm font-semibold text-slate-800">Manager target settings</h3>
+      <p class="text-xs text-slate-500">Admin only. Progress uses <strong>assigned clients</strong> only (referral, funnel manager, or explicit assignment).</p>
+      <label class="inline-flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" name="manager_target_enabled" {% if active_manager_target %}checked{% endif %} />
+        Enable KPI target for this manager
+      </label>
+      <div class="grid md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Target type</label>
+          <select name="manager_target_type" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="deposit" {% if not active_manager_target or active_manager_target.target_type == 'deposit' %}selected{% endif %}>Deposit based</option>
+            <option value="volume" {% if active_manager_target and active_manager_target.target_type == 'volume' %}selected{% endif %}>Volume based (lots)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Target value</label>
+          <input type="number" name="manager_target_value" step="any" min="0"
+            value="{% if active_manager_target %}{{ active_manager_target.target_value }}{% endif %}"
+            class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="e.g. 50000 or 500" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-xs font-medium text-slate-600 mb-1">Target period</label>
+          <select name="manager_target_period" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="monthly" {% if not active_manager_target or active_manager_target.period == 'monthly' %}selected{% endif %}>Monthly (resets each calendar month)</option>
+            <option value="weekly" {% if active_manager_target and active_manager_target.period == 'weekly' %}selected{% endif %}>Weekly (Mon–Sun)</option>
+            <option value="daily" {% if active_manager_target and active_manager_target.period == 'daily' %}selected{% endif %}>Daily</option>
+          </select>
+        </div>
+      </div>
+      <label class="inline-flex items-center gap-2 text-sm">
+        <input type="checkbox" name="manager_target_custom_range" {% if active_manager_target and active_manager_target.start_date %}checked{% endif %} />
+        Use fixed date range (optional)
+      </label>
+      <div class="grid md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-slate-600 mb-1">Start date</label>
+          <input type="date" name="manager_target_start" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value="{% if active_manager_target and active_manager_target.start_date %}{{ active_manager_target.start_date|date:'Y-m-d' }}{% endif %}" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-600 mb-1">End date</label>
+          <input type="date" name="manager_target_end" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value="{% if active_manager_target and active_manager_target.end_date %}{{ active_manager_target.end_date|date:'Y-m-d' }}{% endif %}" />
+        </div>
+      </div>
+    </div>
+
+    <button class="w-full rounded-lg bg-indigo-600 text-white py-2.5 font-semibold">{% if manager_user %}Update Manager{% else %}Create Manager{% endif %}</button>
+  </form>
+  {% if manager_user %}
+  <form method="post" class="mt-4 rounded-xl border border-rose-100 bg-rose-50/50 p-4">
+    {% csrf_token %}
+    <input type="hidden" name="clear_manager_target" value="1" />
+    <p class="text-sm text-slate-600 mb-2">Clear the active target (admin). Progress resets until a new target is saved.</p>
+    <button type="submit" class="rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-50">Reset / clear target</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

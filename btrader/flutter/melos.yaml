@@ -1,0 +1,16 @@
+name: btrader
+repository: https://example.com/btrader
+packages:
+  - packages/**
+  - apps/**
+
+command:
+  bootstrap:
+    usePubspecOverrides: true
+
+scripts:
+  analyze:
+    run: melos exec -- "flutter analyze"
+    description: Analyze all packages
+  format:
+    run: melos exec -- "dart format ."

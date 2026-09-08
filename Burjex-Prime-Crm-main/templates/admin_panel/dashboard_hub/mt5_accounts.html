@@ -1,0 +1,73 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block admin_content %}
+<div class="max-w-6xl mx-auto space-y-6">
+  <div class="bg-indigo-600 text-white rounded-xl px-5 py-4 shadow-sm">
+    <h1 class="text-xl font-semibold">{{ title }}</h1>
+    <p class="text-sm text-white/80 mt-1">Accounts synced in CRM from your trading platform integration.</p>
+  </div>
+  <div class="flex flex-wrap gap-2 items-center">
+    <a href="?account_type=live&q={{ q|urlencode }}" class="px-4 py-2 rounded-lg text-sm font-medium {% if account_type == 'live' %}bg-indigo-600 text-white{% else %}bg-white border border-slate-200 text-slate-700{% endif %}">Live</a>
+    <a href="?account_type=demo&q={{ q|urlencode }}" class="px-4 py-2 rounded-lg text-sm font-medium {% if account_type == 'demo' %}bg-indigo-600 text-white{% else %}bg-white border border-slate-200 text-slate-700{% endif %}">Demo</a>
+  </div>
+  <form method="get" class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-wrap gap-3 items-end">
+    <input type="hidden" name="account_type" value="{{ account_type }}">
+    <div class="flex-1 min-w-[200px]">
+      <label class="text-xs text-slate-600 block mb-1">Search</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Login, email, username" class="w-full border rounded-lg px-3 py-2 text-sm">
+    </div>
+    <button type="submit" class="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-medium">Search</button>
+    <a href="?account_type={{ account_type }}" class="border border-slate-200 rounded-lg px-4 py-2 text-sm">Reset</a>
+    <a href="?account_type={{ account_type }}&q={{ q|urlencode }}&export=csv" class="border border-slate-200 rounded-lg px-4 py-2 text-sm font-medium">Export CSV</a>
+  </form>
+  <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50 text-left">
+          <tr>
+            <th class="p-3">Login</th>
+            <th class="p-3">User</th>
+            <th class="p-3">Email</th>
+            <th class="p-3">Server</th>
+            <th class="p-3">Balance</th>
+            <th class="p-3">Equity</th>
+            <th class="p-3">Free Margin</th>
+            <th class="p-3">Type</th>
+            <th class="p-3">Status</th>
+            <th class="p-3">Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in page_obj.object_list %}
+          <tr class="border-t border-slate-100 hover:bg-slate-50/80">
+            <td class="p-3 font-mono">{{ row.login_id }}</td>
+            <td class="p-3">{% if row.user %}{{ row.user.display_name }}{% else %}—{% endif %}</td>
+            <td class="p-3">{% if row.user %}{{ row.user.email }}{% else %}—{% endif %}</td>
+            <td class="p-3">{{ row.server|default:"—" }}</td>
+            <td class="p-3 font-medium">{{ row.balance|default:0 }}</td>
+            <td class="p-3">{{ row.equity|default:0 }}</td>
+            <td class="p-3">{{ row.free_margin|default:0 }}</td>
+            <td class="p-3">{{ row.get_account_type_display }}</td>
+            <td class="p-3">{{ row.get_status_display }}</td>
+            <td class="p-3 whitespace-nowrap">{{ row.updated_at|date:"Y-m-d H:i" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td class="p-6 text-slate-500" colspan="10">No accounts found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="px-5 py-3 border-t border-slate-100 flex flex-wrap items-center gap-2 text-sm">
+      {% if page_obj.has_previous %}
+      <a class="px-3 py-1 border rounded-lg" href="?account_type={{ account_type }}&q={{ q|urlencode }}&page={{ page_obj.previous_page_number }}">Previous</a>
+      {% endif %}
+      <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+      <a class="px-3 py-1 border rounded-lg" href="?account_type={{ account_type }}&q={{ q|urlencode }}&page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

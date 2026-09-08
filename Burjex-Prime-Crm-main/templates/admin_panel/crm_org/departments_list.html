@@ -1,0 +1,40 @@
+{% extends "sales_layout.html" %}
+{% block title %}Departments{% endblock %}
+{% block admin_shell_page_title %}Sales Departments{% endblock %}
+{% block admin_content %}
+<div class="max-w-6xl mx-auto px-2 pb-12">
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-xl font-semibold text-slate-900">Departments</h1>
+    <a href="{% url 'admin-crm-department-add' %}" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-semibold">Create Department</a>
+  </div>
+  <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50">
+        <tr>
+          <th class="px-4 py-3 text-left">Department</th>
+          <th class="px-4 py-3 text-left">Slug</th>
+          <th class="px-4 py-3 text-left">Assigned Managers</th>
+          <th class="px-4 py-3 text-left">Status</th>
+          <th class="px-4 py-3 text-left">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in departments %}
+        <tr class="border-t border-slate-100">
+          <td class="px-4 py-3 font-medium">{{ d.name }}</td>
+          <td class="px-4 py-3 font-mono text-xs">{{ d.slug }}</td>
+          <td class="px-4 py-3">{{ d.assigned_managers_count|default:0 }}</td>
+          <td class="px-4 py-3">{% if d.is_active %}Active{% else %}Inactive{% endif %}</td>
+          <td class="px-4 py-3 space-x-3">
+            <a href="{% url 'admin-crm-department-edit' d.pk %}" class="text-indigo-600 hover:underline">Edit</a>
+            <a href="{% url 'admin-crm-permissions' %}" class="text-slate-700 hover:underline">Department Roles</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="px-4 py-8 text-center text-slate-500">No departments yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

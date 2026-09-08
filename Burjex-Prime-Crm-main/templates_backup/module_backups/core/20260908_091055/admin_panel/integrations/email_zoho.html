@@ -1,0 +1,56 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Zoho Mail{% endblock %}
+{% block admin_content %}
+<div class="max-w-2xl mx-auto space-y-6 pb-10 px-2">
+  <a href="{% url 'admin-integrations-email-sms' %}" class="text-sm text-indigo-600 hover:underline">← Email &amp; SMS</a>
+  <h1 class="text-xl font-semibold text-slate-900">Zoho Mail</h1>
+  <form method="post" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-5">
+    {% csrf_token %}
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="enabled" {% if row.enabled %}checked{% endif %} class="rounded border-slate-300" />
+      <span class="text-sm font-medium">Enable integration</span>
+    </label>
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="is_active" {% if row.is_active %}checked{% endif %} class="rounded border-slate-300" />
+      <span class="text-sm">Status: active</span>
+    </label>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Integration name</label>
+      <input type="text" name="integration_name" value="{{ row.integration_name }}" class="w-full border rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <h2 class="text-xs font-bold uppercase text-slate-500">Credentials</h2>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Client ID</label>
+      <input type="text" name="client_id" value="{{ extra.client_id|default:'' }}" class="w-full border rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Client secret</label>
+      <input type="password" name="client_secret" value="" placeholder="{% if extra.client_secret %}•••• (leave blank to keep){% endif %}" class="w-full border rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <h2 class="text-xs font-bold uppercase text-slate-500">Account settings</h2>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Department ID</label>
+      <input type="text" name="department_id" value="{{ extra.department_id|default:'' }}" class="w-full border rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Operator ID</label>
+      <input type="text" name="operator_id" value="{{ extra.operator_id|default:'' }}" class="w-full border rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Webhook URL</label>
+      <input type="url" name="webhook_url" value="{{ extra.webhook_url|default:'' }}" class="w-full border rounded-lg px-3 py-2 text-sm" />
+      {% if webhook_auto %}
+      <p class="text-xs text-slate-500 mt-1">Reference (email hub): {{ webhook_auto }}</p>
+      {% endif %}
+    </div>
+    {% if row.last_test_at %}
+    <p class="text-xs text-slate-500">Last test: {% if row.last_test_ok %}OK{% else %}Failed{% endif %} — {{ row.last_test_detail|truncatechars:160 }}</p>
+    {% endif %}
+    <div class="flex flex-wrap gap-2">
+      <button type="submit" name="action" value="save" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium">Save configuration</button>
+      <button type="submit" name="action" value="test" class="rounded-lg border border-slate-300 px-4 py-2 text-sm">Test connection</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+

@@ -1,0 +1,1007 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Dashboard - Burjex Prime{% endblock %}
+{% block portal_shell_page_title %}Dashboard{% endblock %}
+{% block portal_shell_mobile_title %}Dashboard{% endblock %}
+
+{% block portal_top_profile %}{% endblock %}
+
+{% block user_content %}
+<style>
+  /* Dashboard — all colours resolved from CSS variables for full light/dark theme support */
+  .broker-card {
+    border: 1px solid var(--portal-border);
+    background: var(--portal-surface-bg);
+    border-radius: 14px;
+    box-shadow: var(--portal-card-shadow);
+    color: var(--portal-text-main);
+  }
+
+  .badge {
+    border-radius: 9999px;
+    font-size: 11px;
+    line-height: 1;
+    padding: 6px 10px;
+    font-weight: 600;
+  }
+
+  .dash-tabs {
+    display: inline-flex;
+    border-radius: 12px;
+    border: 1px solid var(--portal-border);
+    background: var(--portal-muted-bg);
+    padding: 4px;
+    gap: 4px;
+    margin-bottom: 1rem;
+  }
+
+  .dash-tab-btn {
+    border: none;
+    background: transparent;
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--portal-text-muted);
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .dash-tab-btn:focus-visible {
+    outline: 2px solid var(--portal-brand-primary);
+    outline-offset: 2px;
+  }
+
+  .dash-tab-btn.is-active.dash-tab--real {
+    background: var(--portal-brand-button, var(--portal-brand-primary));
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(11, 60, 93, 0.25);
+  }
+
+  .dash-tab-btn.is-active.dash-tab--demo {
+    background: var(--portal-text-muted);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(100, 116, 139, 0.35);
+  }
+
+  .dash-tab-hidden {
+    display: none !important;
+  }
+
+  .account-card-wrap.is-filtered-out {
+    display: none !important;
+  }
+
+  .demo-meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--portal-text-muted);
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .demo-meta-strip .demo-sep {
+    color: var(--portal-border);
+    font-weight: 400;
+  }
+
+  .demo-meta-strip .demo-kind {
+    color: var(--portal-text-main);
+    font-weight: 600;
+  }
+
+  .demo-meta-strip .account-kind-real {
+    color: #047857;
+  }
+
+  html[data-portal-theme="dark"] .demo-meta-strip .account-kind-real {
+    color: #34d399;
+  }
+
+  .balance-grid--demo-tab {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .demo-balance-panel {
+    display: none;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--portal-border-subtle);
+  }
+
+  .demo-balance-panel.is-open {
+    display: block;
+  }
+
+  .account-dropdown.demo-js-dropdown {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-6px);
+    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
+  }
+
+  .account-dropdown.demo-js-dropdown.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .account-dropdown.demo-js-dropdown a,
+  .account-dropdown.demo-js-dropdown button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--portal-text-main);
+    text-decoration: none;
+    border: none;
+    background: none;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+
+  .account-dropdown.demo-js-dropdown a:hover,
+  .account-dropdown.demo-js-dropdown button:hover {
+    background: var(--portal-muted-bg);
+    color: var(--portal-brand-primary);
+  }
+
+  .btn-action {
+    border: 1px solid var(--portal-border);
+    background: var(--portal-muted-bg);
+    color: var(--portal-text-main);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .btn-trade {
+    background: var(--portal-brand-button, var(--portal-brand-primary));
+    color: #fff;
+    border-color: var(--portal-brand-button, var(--portal-brand-primary));
+  }
+
+  .balance-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 15px;
+    align-items: stretch;
+  }
+
+  .balance-card {
+    background: var(--portal-surface-bg);
+    padding: 16px 18px;
+    border-radius: var(--portal-radius, 12px);
+    box-shadow: var(--portal-card-shadow);
+    border: 1px solid var(--portal-border);
+    min-height: 104px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .balance-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--portal-text-muted);
+  }
+
+  .balance-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--portal-brand-primary);
+    margin-top: 6px;
+    line-height: 1.2;
+  }
+
+  @media (max-width: 360px) {
+    .balance-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .action-btn {
+      min-width: 100%;
+    }
+  }
+
+  .quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 10px;
+  }
+
+  .action-btn {
+    flex: 1;
+    min-width: 120px;
+    padding: 14px;
+    border-radius: 10px;
+    font-weight: 600;
+    height: 48px;
+    border: 1px solid var(--portal-brand-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+
+  .action-btn:hover {
+    opacity: 0.9;
+  }
+
+  .deposit,
+  .withdraw {
+    background: var(--portal-brand-button, var(--portal-brand-primary));
+    color: #fff;
+  }
+
+  .portal-dash-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .account-card-wrap {
+    position: relative;
+    margin-bottom: 15px;
+  }
+
+  .account-card-wrap:last-child {
+    margin-bottom: 0;
+  }
+
+  .account-card {
+    background: var(--portal-surface-bg);
+    border-radius: var(--portal-radius, 12px);
+    padding: 18px;
+    border: 1px solid var(--portal-border);
+    box-shadow: var(--portal-card-shadow);
+  }
+
+  .account-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .account-info {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .account-number {
+    font-size: 13px;
+    color: var(--portal-text-muted);
+    line-height: 1.35;
+  }
+
+  .account-menu {
+    flex-shrink: 0;
+    position: relative;
+    margin-top: -2px;
+  }
+
+  .account-menu details {
+    position: relative;
+  }
+
+  .menu-btn {
+    border: none;
+    background: transparent;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--portal-brand-primary);
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: background 0.15s ease;
+  }
+
+  .menu-btn:hover {
+    background: var(--portal-muted-bg);
+  }
+
+  .account-menu details summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .account-menu details summary {
+    list-style: none;
+  }
+
+  .account-dropdown {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    width: 15rem;
+    background: var(--portal-surface-bg);
+    border: 1px solid var(--portal-border);
+    border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(2, 6, 23, 0.12);
+    z-index: 30;
+    overflow: hidden;
+  }
+
+  html[data-portal-theme="dark"] .account-dropdown {
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  }
+
+  .account-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px 28px;
+    align-items: flex-start;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--portal-border-subtle);
+  }
+
+  .stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .stat-item .stat-label {
+    color: var(--portal-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .stat-value {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--portal-brand-primary);
+  }
+
+  .account-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+    align-items: center;
+  }
+
+  .account-actions .btn-action {
+    flex: 1;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: auto;
+    height: auto;
+    text-decoration: none;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  @media (max-width: 1024px) {
+    .account-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px 20px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .account-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 16px;
+    }
+
+    .account-actions {
+      flex-direction: row;
+      align-items: stretch;
+    }
+
+    .account-actions .btn-action {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>
+
+{% if kyc_alert %}
+<div class="mb-4 rounded-xl p-3 flex items-center justify-between gap-3"
+  style="background:rgba(251,191,36,0.10);border:1px solid rgba(251,191,36,0.35);">
+  <div class="text-sm font-medium flex items-center gap-2" style="color:var(--portal-text-main);">
+    <span aria-hidden="true">⚠</span>
+    <span>{{ kyc_alert }}</span>
+  </div>
+  <a href="{% url 'user-compliance' %}" class="portal-btn-primary text-sm px-3 py-1.5">Complete Now</a>
+</div>
+{% endif %}
+
+<div class="mb-4">
+  <div class="flex items-center justify-between gap-2 flex-wrap">
+    {% if dashboard_settings.enable_open_new_account %}
+    <a id="dashOpenAccountLink"
+      href="{% url 'accounts-open-account' %}?type={% if tab == 'demo' %}demo{% else %}real{% endif %}"
+      class="inline-flex items-center rounded-xl portal-btn-primary px-4 py-2 text-sm font-semibold">+ Open Account</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if dashboard_settings.enable_real_demo_tabs %}
+<div class="dash-tabs" id="dashAccountTabs" role="tablist" aria-label="Account type">
+  <button type="button" role="tab" id="dashTabReal"
+    class="dash-tab-btn dash-tab--real{% if tab == 'real' %} is-active{% endif %}" data-dash-tab="real"
+    aria-selected="{% if tab == 'real' %}true{% else %}false{% endif %}">Real</button>
+  <button type="button" role="tab" id="dashTabDemo"
+    class="dash-tab-btn dash-tab--demo{% if tab == 'demo' %} is-active{% endif %}" data-dash-tab="demo"
+    aria-selected="{% if tab == 'demo' %}true{% else %}false{% endif %}">Demo</button>
+</div>
+{% if tab_metrics %}{{ tab_metrics|json_script:"dashTabMetrics" }}{% endif %}
+{% endif %}
+
+{% if dashboard_settings.show_balance %}
+<div
+  class="balance-grid mb-6{% if dashboard_settings.enable_real_demo_tabs and tab == 'demo' %} balance-grid--demo-tab{% endif %}"
+  id="dashBalanceGrid">
+  <div class="balance-card">
+    <div class="balance-title">Total Balance</div>
+    <div class="balance-value"><span class="js-dash-metric" data-metric="total_balance">{{ total_balance }}</span> USD
+    </div>
+  </div>
+  <div
+    class="balance-card js-dash-stat-real-only{% if dashboard_settings.enable_real_demo_tabs and tab == 'demo' %} dash-tab-hidden{% endif %}">
+    <div class="balance-title">Equity</div>
+    <div class="balance-value"><span class="js-dash-metric" data-metric="total_equity">{{ total_equity }}</span> USD
+    </div>
+  </div>
+  <div
+    class="balance-card js-dash-stat-real-only{% if dashboard_settings.enable_real_demo_tabs and tab == 'demo' %} dash-tab-hidden{% endif %}">
+    <div class="balance-title">{% if wallet_only_withdrawal_ui %}Withdrawable (Wallet){% else %}Available to Withdraw
+      {% endif %}</div>
+    <div class="balance-value"><span class="js-dash-metric" data-metric="available_to_withdraw">{{ available_to_withdraw
+        }}</span> USD</div>
+
+  </div>
+  <div class="balance-card">
+    <div class="balance-title">Open PnL</div>
+    <div class="balance-value"><span class="js-dash-metric" data-metric="open_pnl">{{ open_pnl }}</span> USD</div>
+  </div>
+</div>
+{% endif %}
+
+<!-- 1. Quick Actions -->
+<div
+  class="portal-card mb-6{% if dashboard_settings.enable_real_demo_tabs and tab == 'demo' %} dash-tab-hidden{% endif %}"
+  id="dashQuickActions">
+  <h2 class="text-sm font-bold mb-3" style="color:var(--portal-text-main);">Quick Actions</h2>
+  <div class="quick-actions">
+    {% if dashboard_settings.enable_deposit_button %}
+    <button type="button" class="action-btn deposit" onclick="window.location.href='{% url 'user-deposit' %}'">
+      Deposit
+    </button>
+    {% endif %}
+    {% if dashboard_settings.enable_withdraw_button %}
+    <button type="button" class="action-btn withdraw" onclick="window.location.href='{% url 'user-withdraw' %}'">
+      Withdraw
+    </button>
+    {% endif %}
+    {% if show_transfer_to_wallet_cta %}
+    <button type="button" class="action-btn deposit"
+      onclick="window.location.href='{% url 'user-internal-transfer' %}'">
+      Internal Transfer
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- 2-3. No Trading Accounts Found / Account List -->
+{% if dashboard_settings.show_trading_accounts %}
+{% if accounts|length == 0 %}
+<div class="broker-card p-5 text-slate-600 mb-6">
+  No Trading Accounts Found
+</div>
+{% else %}
+<h2 class="text-sm font-bold mb-3" style="color:var(--portal-text-main);">Account List</h2>
+{% if dashboard_settings.enable_real_demo_tabs and tab_metrics %}
+<div id="dashTabEmptyState" class="broker-card p-5 text-slate-600 mb-6 hidden text-center text-sm font-medium"
+  role="status" aria-live="polite"></div>
+{% endif %}
+<div class="mb-6" id="dashAccountListRoot">
+  {% for a in accounts %}
+  <div class="account-card-wrap" data-login="{{ a.login_id }}"
+    data-account-kind="{% if a.base_account_type == 'DEMO' %}demo{% else %}live{% endif %}">
+    {% if a.base_account_type == "DEMO" %}
+    <div class="account-card">
+      <div class="account-header">
+        <div class="account-info">
+          <div class="demo-meta-strip" aria-label="Account summary">
+            <span class="demo-kind">Demo</span>
+            <span class="demo-sep" aria-hidden="true">|</span>
+            <span>{% firstof a.group.crm_group_name a.group.name a.account_label "Standard" %}</span>
+          </div>
+          <div class="account-number">Account #{{ a.login_id }}</div>
+        </div>
+        <div class="account-menu">
+          <button type="button" class="menu-btn js-demo-more-btn" aria-expanded="false" aria-haspopup="true"
+            aria-label="Account options">⋮</button>
+          <div class="account-dropdown demo-js-dropdown js-demo-more-panel" role="menu">
+            <a role="menuitem" href="{% url 'user-account-information' a.login_id %}">Add nickname</a>
+            <a role="menuitem" href="{% url 'user-account-leverage' a.login_id %}">Adjust leverage</a>
+            <button type="button" role="menuitem" class="js-demo-archive-hint">Archive account</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="account-stats">
+        <div class="stat-item">
+          <span class="stat-label">Balance</span>
+          <span class="stat-value" data-live="balance">{{ a.balance }} USD</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Credit</span>
+          <span class="stat-value" data-live="credit">{{ a.credit|default:"0" }} USD</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Equity</span>
+          <span class="stat-value" data-live="equity">{{ a.equity|default:"0" }} USD</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Margin</span>
+          <span class="stat-value" data-live="margin">0 USD</span>
+        </div>
+      </div>
+
+      {% if dashboard_settings.show_buttons %}
+      <div class="account-actions">
+        {% if dashboard_settings.enable_trade_button and a.trading_enabled %}
+        <a href="{% url 'user-trading-platform' %}?account={{ a.login_id }}" class="btn-action deposit">Trade</a>
+        {% endif %}
+        <button type="button"
+          class="btn-action border border-slate-200 bg-slate-50 text-slate-800 js-demo-set-balance-btn"
+          title="Set balance" aria-expanded="false" aria-controls="demo-bal-panel-{{ a.login_id }}">Set Balance</button>
+      </div>
+      {% endif %}
+      <div id="demo-bal-panel-{{ a.login_id }}" class="demo-balance-panel">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <form method="post" action="{% url 'user-demo-balance-action' a.login_id %}" class="flex gap-2 flex-wrap">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add">
+            <input name="amount" type="number" step="0.01" min="0.01"
+              class="flex-1 min-w-[120px] border border-slate-200 rounded-lg px-2 py-1.5 text-xs"
+              placeholder="Add funds">
+            <button type="submit"
+              class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Add</button>
+          </form>
+          <form method="post" action="{% url 'user-demo-balance-action' a.login_id %}" class="flex gap-2 flex-wrap">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="remove">
+            <input name="amount" type="number" step="0.01" min="0.01"
+              class="flex-1 min-w-[120px] border border-slate-200 rounded-lg px-2 py-1.5 text-xs"
+              placeholder="Remove funds">
+            <button type="submit"
+              class="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold">Remove</button>
+          </form>
+          <form method="post" action="{% url 'user-demo-balance-action' a.login_id %}" class="flex gap-2">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reset">
+            <button type="submit"
+              class="w-full px-3 py-1.5 rounded-lg bg-slate-700 text-white text-xs font-semibold">Reset balance</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="account-card">
+      <div class="account-header">
+        <div class="account-info">
+          <div class="demo-meta-strip" aria-label="Account summary">
+            <span class="demo-kind account-kind-real">Real</span>
+            <span class="demo-sep" aria-hidden="true">|</span>
+            <span>{% firstof a.group.crm_group_name a.group.name a.account_label "Standard" %}</span>
+          </div>
+          <div class="account-number">Account #{{ a.login_id }}</div>
+        </div>
+        {% if dashboard_settings.enable_account_dropdown_menu %}
+        <div class="account-menu">
+          <details>
+            <summary class="menu-btn" aria-label="Account actions">⋮</summary>
+            <div class="account-dropdown">
+              <a class="block px-4 py-2 text-sm font-medium"
+                style="color:var(--portal-text-main);transition:background 0.12s;"
+                onmouseover="this.style.background='var(--portal-muted-bg)'" onmouseout="this.style.background=''"
+                href="{% url 'user-account-information' a.login_id %}">Account Information</a>
+              <a class="block px-4 py-2 text-sm font-medium"
+                style="color:var(--portal-text-main);transition:background 0.12s;"
+                onmouseover="this.style.background='var(--portal-muted-bg)'" onmouseout="this.style.background=''"
+                href="{% url 'user-internal-transfer' %}?from_account=TRADING:{{ a.trading_account_row.id|default:'' }}">Transfer
+                Funds</a>
+              <a class="block px-4 py-2 text-sm font-medium"
+                style="color:var(--portal-text-main);transition:background 0.12s;"
+                onmouseover="this.style.background='var(--portal-muted-bg)'" onmouseout="this.style.background=''"
+                href="{% url 'user-account-leverage' a.login_id %}">Change Leverage</a>
+              <a class="block px-4 py-2 text-sm font-medium"
+                style="color:var(--portal-text-main);transition:background 0.12s;"
+                onmouseover="this.style.background='var(--portal-muted-bg)'" onmouseout="this.style.background=''"
+                href="{% url 'user-account-credential' a.login_id 'trading' %}">Change Trading Password</a>
+              <a class="block px-4 py-2 text-sm font-medium"
+                style="color:var(--portal-text-main);transition:background 0.12s;"
+                onmouseover="this.style.background='var(--portal-muted-bg)'" onmouseout="this.style.background=''"
+                href="{% url 'user-account-statements' a.login_id %}">Manage Statements</a>
+              <a class="block px-4 py-2 text-sm font-medium"
+                style="color:var(--portal-text-main);transition:background 0.12s;"
+                onmouseover="this.style.background='var(--portal-muted-bg)'" onmouseout="this.style.background=''"
+                href="{% url 'user-account-credential' a.login_id 'investor' %}">Set Read Only Access</a>
+            </div>
+          </details>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="account-stats">
+        <div class="stat-item">
+          <span class="stat-label">Balance</span>
+          <span class="stat-value" data-live="balance">{{ a.balance }} USD</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Credit</span>
+          <span class="stat-value" data-live="credit">{{ a.credit|default:"0" }} USD</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Equity</span>
+          <span class="stat-value" data-live="equity">{{ a.equity|default:"0" }} USD</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Margin</span>
+          <span class="stat-value" data-live="margin">0 USD</span>
+        </div>
+      </div>
+
+      {% if dashboard_settings.show_buttons %}
+      <div class="account-actions">
+        {% if dashboard_settings.enable_deposit_button and a.deposit_enabled %}
+        <a href="{% url 'user-deposit' %}" class="btn-action deposit">Deposit</a>
+        {% endif %}
+        {% if dashboard_settings.enable_withdraw_button and a.withdraw_enabled %}
+        <a href="{% url 'user-withdraw' %}" class="btn-action withdraw">Withdraw</a>
+        {% endif %}
+        {% if dashboard_settings.enable_trade_button and a.trading_enabled %}
+        <a href="{% url 'user-trading-platform' %}?account={{ a.login_id }}" class="btn-action btn-trade">Trade</a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
+<!-- 4. Open Positions -->
+<div class="portal-card">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-bold" style="color:var(--portal-brand-primary);">Open Positions</h2>
+    <span id="openPositionsUpdating" class="text-xs text-slate-400 hidden">Updating...</span>
+  </div>
+
+  <div class="portal-table-wrap overflow-x-auto w-full">
+    <table class="portal-table" id="openPositionsTable" style="display: none;">
+      <thead>
+        <tr>
+          <th>Account</th>
+          <th>Symbol</th>
+          <th>Type</th>
+          <th>Volume</th>
+          <th>Open Price</th>
+          <th>Current Price</th>
+          <th>Profit</th>
+        </tr>
+      </thead>
+      <tbody id="openPositionsBody">
+      </tbody>
+    </table>
+  </div>
+  <p id="openPositionsEmpty" class="text-sm" style="color:var(--portal-text-muted); margin: 0; padding: 1rem 0;">Loading
+    positions...</p>
+</div>
+<script>
+  (function () {
+    function updateCard(card, loginId) {
+      fetch("/user/accounts/" + loginId + "/metrics/")
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d || !d.ok) return;
+          var map = {
+            balance: d.balance + " " + d.currency,
+            credit: d.credit + " " + d.currency,
+            equity: d.equity + " " + d.currency,
+            margin: d.margin + " " + d.currency,
+            free_margin: d.free_margin + " " + d.currency
+          };
+          Object.keys(map).forEach(function (k) {
+            var el = card.querySelector('[data-live="' + k + '"]');
+            if (el) el.textContent = map[k];
+          });
+
+          // Dispatch event to recalculate totals
+          document.dispatchEvent(new CustomEvent('accountMetricsUpdated'));
+        });
+    }
+
+    function startMetricsPolling() {
+      document.querySelectorAll(".account-card-wrap[data-login]").forEach(function (card) {
+        var loginId = card.getAttribute("data-login");
+        if (!loginId) return;
+        updateCard(card, loginId);
+        setInterval(function () { updateCard(card, loginId); }, 3000);
+      });
+    }
+
+    var metricsNode = document.getElementById("dashTabMetrics");
+    var tabBar = document.getElementById("dashAccountTabs");
+
+    startMetricsPolling();
+
+    // Recalculate totals across visible accounts
+    document.addEventListener('accountMetricsUpdated', function () {
+      var balGrid = document.getElementById("dashBalanceGrid");
+      if (!balGrid) return;
+      var t = tabFromUrl();
+      var kind = t === "demo" ? "demo" : "live";
+      var sum_balance = 0;
+      var sum_equity = 0;
+      var sum_free_margin = 0;
+
+      document.querySelectorAll(".account-card-wrap[data-account-kind='" + kind + "']").forEach(function (wrap) {
+        var bEl = wrap.querySelector('[data-live="balance"]');
+        var eEl = wrap.querySelector('[data-live="equity"]');
+        var fmEl = wrap.querySelector('[data-live="free_margin"]');
+        if (bEl) sum_balance += parseFloat(bEl.textContent.split(' ')[0] || 0);
+        if (eEl) sum_equity += parseFloat(eEl.textContent.split(' ')[0] || 0);
+        if (fmEl) sum_free_margin += parseFloat(fmEl.textContent.split(' ')[0] || 0);
+      });
+
+      // Update the DOM elements with live totals from trading accounts
+      var pnl = sum_equity - sum_balance;
+      var pnlEl = balGrid.querySelector('.js-dash-metric[data-metric="open_pnl"]');
+      if (pnlEl) pnlEl.textContent = pnl.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+      var tbEl = balGrid.querySelector('.js-dash-metric[data-metric="total_balance"]');
+      var teEl = balGrid.querySelector('.js-dash-metric[data-metric="total_equity"]');
+      if (tbEl) {
+        tbEl.textContent = sum_balance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      }
+      if (teEl) {
+        teEl.textContent = sum_equity.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      }
+
+      var availEl = balGrid.querySelector('.js-dash-metric[data-metric="available_to_withdraw"]');
+      if (availEl && t === "real" && availEl.parentElement.innerText.indexOf("Wallet") === -1) {
+        availEl.textContent = Math.max(0, sum_free_margin).toFixed(2);
+      }
+    });
+
+    if (tabBar) {
+      var tabMetrics = {};
+      if (metricsNode) {
+        try {
+          tabMetrics = JSON.parse(metricsNode.textContent || "{}");
+        } catch (e) {
+          tabMetrics = {};
+        }
+      }
+
+      function tabFromUrl() {
+        var p = new URLSearchParams(window.location.search).get("tab");
+        return p === "demo" ? "demo" : "real";
+      }
+
+      function setUrlTab(t) {
+        var u = new URL(window.location.href);
+        u.searchParams.set("tab", t);
+        window.history.replaceState({}, "", u.pathname + u.search + u.hash);
+      }
+
+      function applyTab(t) {
+        var kind = t === "demo" ? "demo" : "live";
+        tabBar.querySelectorAll(".dash-tab-btn").forEach(function (btn) {
+          var active = btn.getAttribute("data-dash-tab") === t;
+          btn.classList.toggle("is-active", active);
+          btn.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        var m = tabMetrics[t] || {};
+        document.querySelectorAll(".js-dash-metric").forEach(function (el) {
+          var key = el.getAttribute("data-metric");
+          if (key && m[key] !== undefined) el.textContent = m[key];
+        });
+        var visible = 0;
+        document.querySelectorAll(".account-card-wrap[data-account-kind]").forEach(function (wrap) {
+          var match = wrap.getAttribute("data-account-kind") === kind;
+          wrap.classList.toggle("is-filtered-out", !match);
+          if (match) visible += 1;
+        });
+        var emptyEl = document.getElementById("dashTabEmptyState");
+        if (emptyEl) {
+          if (visible === 0) {
+            emptyEl.classList.remove("hidden");
+            emptyEl.textContent = t === "demo" ? "No demo trading accounts yet." : "No real trading accounts yet.";
+          } else {
+            emptyEl.classList.add("hidden");
+            emptyEl.textContent = "";
+          }
+        }
+        var openLink = document.getElementById("dashOpenAccountLink");
+        if (openLink) {
+          var base = openLink.getAttribute("href").split("?")[0];
+          openLink.setAttribute("href", base + "?type=" + (t === "demo" ? "demo" : "real"));
+        }
+        var qa = document.getElementById("dashQuickActions");
+        if (qa) {
+          if (t === "demo") {
+            qa.classList.add("dash-tab-hidden");
+          } else {
+            qa.classList.remove("dash-tab-hidden");
+          }
+        }
+        document.querySelectorAll(".js-dash-stat-real-only").forEach(function (el) {
+          el.classList.toggle("dash-tab-hidden", t === "demo");
+        });
+        var balGrid = document.getElementById("dashBalanceGrid");
+        if (balGrid) {
+          balGrid.classList.toggle("balance-grid--demo-tab", t === "demo");
+        }
+      }
+
+      tabBar.querySelectorAll(".dash-tab-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var t = btn.getAttribute("data-dash-tab");
+          if (!t) return;
+          setUrlTab(t);
+          applyTab(t);
+        });
+      });
+
+      applyTab(tabFromUrl());
+    }
+
+    document.querySelectorAll(".js-demo-set-balance-btn").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var id = btn.getAttribute("aria-controls");
+        var panel = id ? document.getElementById(id) : null;
+        if (!panel) return;
+        var open = !panel.classList.contains("is-open");
+        panel.classList.toggle("is-open", open);
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+    });
+
+    function closeAllDemoMore() {
+      document.querySelectorAll(".js-demo-more-panel.is-open").forEach(function (p) {
+        p.classList.remove("is-open");
+      });
+      document.querySelectorAll(".js-demo-more-btn[aria-expanded='true']").forEach(function (b) {
+        b.setAttribute("aria-expanded", "false");
+      });
+    }
+
+    document.querySelectorAll(".js-demo-more-btn").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var panel = btn.parentElement && btn.parentElement.querySelector(".js-demo-more-panel");
+        if (!panel) return;
+        var willOpen = !panel.classList.contains("is-open");
+        closeAllDemoMore();
+        if (willOpen) {
+          panel.classList.add("is-open");
+          btn.setAttribute("aria-expanded", "true");
+        }
+      });
+    });
+
+    document.addEventListener("click", function () {
+      closeAllDemoMore();
+    });
+
+    document.querySelectorAll(".js-demo-more-panel").forEach(function (panel) {
+      panel.addEventListener("click", function (e) {
+        e.stopPropagation();
+      });
+    });
+
+    document.querySelectorAll(".js-demo-archive-hint").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        closeAllDemoMore();
+        window.alert("To archive a demo account, please contact support.");
+      });
+    });
+
+    // --- Open Positions ---
+    function fetchOpenPositions() {
+      var table = document.getElementById("openPositionsTable");
+      var body = document.getElementById("openPositionsBody");
+      var empty = document.getElementById("openPositionsEmpty");
+      var updating = document.getElementById("openPositionsUpdating");
+
+      if (updating) updating.classList.remove("hidden");
+
+      fetch("{% url 'user-accounts-open-positions-api' %}")
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (updating) updating.classList.add("hidden");
+
+          if (!data || !data.ok) {
+            table.style.display = "none";
+            empty.style.display = "block";
+            empty.textContent = data ? (data.error || "Could not load positions.") : "Could not load positions.";
+            return;
+          }
+
+          if (!data.positions || data.positions.length === 0) {
+            table.style.display = "none";
+            empty.style.display = "block";
+            empty.textContent = "No open positions.";
+            return;
+          }
+
+          empty.style.display = "none";
+          table.style.display = "table";
+          body.innerHTML = "";
+
+          data.positions.forEach(function (p) {
+            var tr = document.createElement("tr");
+
+            var typeClass = p.type === "Buy" ? "portal-badge--blue" : (p.type === "Sell" ? "portal-badge--amber" : "portal-badge--slate");
+            var profitVal = parseFloat(p.profit);
+            var profitClass = profitVal > 0 ? "portal-badge--green" : (profitVal < 0 ? "portal-badge--red" : "portal-badge--slate");
+
+            tr.innerHTML = `
+              <td>${p.login_id}</td>
+              <td style="font-weight: 600;">${p.symbol}</td>
+              <td><span class="portal-badge ${typeClass}">${p.type}</span></td>
+              <td>${p.volume}</td>
+              <td>${p.price_open}</td>
+              <td>${p.price_current}</td>
+              <td><span class="portal-badge ${profitClass}">${p.profit}</span></td>
+            `;
+            body.appendChild(tr);
+          });
+        })
+        .catch(function () {
+          if (updating) updating.classList.add("hidden");
+          table.style.display = "none";
+          empty.style.display = "block";
+          empty.textContent = "Could not load positions.";
+        });
+    }
+
+    fetchOpenPositions();
+    setInterval(fetchOpenPositions, 3000);
+
+  })();
+</script>
+{% endblock %}

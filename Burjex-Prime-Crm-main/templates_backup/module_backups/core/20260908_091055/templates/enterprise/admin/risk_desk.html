@@ -1,0 +1,116 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Risk Desk{% endblock %}
+{% block admin_content %}
+
+<div class="bp-page-header">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-shield-halved me-2"></i>Risk Desk</h1>
+    <p class="bp-page-subtitle">Exposure, A/B book assignment, and automated risk alerts.</p>
+  </div>
+</div>
+
+{% if alerts %}
+<div class="bp-alert bp-alert-warning mb-4">
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <strong>Open Risk Alerts</strong>
+  </div>
+  <ul style="list-style:none;padding:0;margin:0;">
+    {% for a in alerts %}
+    <li style="display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem;justify-content:space-between;border-bottom:1px solid rgba(0,0,0,0.08);padding:0.5rem 0;">
+      <span class="bp-small"><i class="fa-regular fa-clock me-1"></i>{{ a.created_at|date:"Y-m-d H:i" }} &mdash; <strong>{{ a.user.email }}</strong> &mdash; {{ a.message }}</span>
+      <form method="post" class="inline">{% csrf_token %}
+        <input type="hidden" name="alert_id" value="{{ a.id }}">
+        <button type="submit" class="bp-btn bp-btn-primary bp-btn-xs"><i class="fa-solid fa-check me-1"></i>Acknowledge</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="bp-card mb-4">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title"><i class="fa-solid fa-magnifying-glass me-2"></i>Search &amp; Load Profile</span>
+  </div>
+  <div class="bp-card-body">
+    <form class="bp-grid-2" style="align-items:flex-end;gap:1rem;margin-bottom:1rem;">
+      <div class="bp-form-group" style="margin:0;">
+        <label class="bp-form-label">Client Email</label>
+        <input name="q" value="{{ filters.q }}" class="bp-input" placeholder="Search by email…">
+      </div>
+      <div>
+        <button type="submit" class="bp-btn bp-btn-primary"><i class="fa-solid fa-search me-1"></i>Search</button>
+      </div>
+    </form>
+    <form method="post" style="border-top:1px solid var(--bp-border);padding-top:1rem;">{% csrf_token %}
+      <div class="bp-grid-2" style="align-items:flex-end;gap:1rem;">
+        <div class="bp-form-group" style="margin:0;">
+          <label class="bp-form-label">Create / Open Risk Profile</label>
+          <input name="create_email" placeholder="client@email.com" class="bp-input">
+        </div>
+        <div>
+          <button type="submit" class="bp-btn bp-btn-secondary"><i class="fa-solid fa-user-shield me-1"></i>Load Profile</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="bp-card">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title"><i class="fa-solid fa-table-list me-2"></i>Risk Profiles</span>
+  </div>
+  <div class="bp-card-body" style="padding:0;">
+    <div class="bp-table -wrap">
+      <table class="bp-table">
+        <thead>
+          <tr>
+            <th><i class="fa-solid fa-user me-1"></i>Client</th>
+            <th><i class="fa-solid fa-gauge-high me-1"></i>Score</th>
+            <th><i class="fa-solid fa-book me-1"></i>Booking</th>
+            <th><i class="fa-solid fa-circle-dollar-to-slot me-1"></i>Exposure Limit</th>
+            <th><i class="fa-solid fa-chart-line me-1"></i>Current Exposure</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in page_obj.object_list %}
+          <tr>
+            <td>{{ p.user.email }}</td>
+            <td>
+              {% if p.risk_score >= 75 %}
+                <span class="bp-badge bp-badge-error">{{ p.risk_score }}</span>
+              {% elif p.risk_score >= 50 %}
+                <span class="bp-badge bp-badge-warning">{{ p.risk_score }}</span>
+              {% else %}
+                <span class="bp-badge bp-badge-success">{{ p.risk_score }}</span>
+              {% endif %}
+            </td>
+            <td><span class="bp-badge bp-badge-info">{{ p.get_booking_display }}</span></td>
+            <td>{{ p.exposure_limit_usd }}</td>
+            <td>{{ p.exposure_current_usd }}</td>
+            <td>
+              <a href="{% url 'admin-enterprise-risk-edit' p.pk %}" class="bp-btn bp-btn-outline bp-btn-xs">
+                <i class="fa-solid fa-pen-to-square me-1"></i>Edit
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" style="text-align:center;padding:2rem;color:var(--bp-text-muted, #64748b);">
+              <i class="fa-solid fa-inbox fa-2x mb-2" style="display:block;opacity:0.3;"></i>
+              No risk profiles yet. Profiles are created when risk rules run or you edit a client from this list after first touch.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="bp-card-footer">
+    <span class="bp-small">{{ page_obj }}</span>
+  </div>
+</div>
+
+{% endblock %}

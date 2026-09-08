@@ -1,0 +1,19 @@
+<label class="bp-form-group">
+  <span class="bp-form-label">{{ label }}</span>
+  <div class="flex items-center gap-3">
+    <input
+      type="color"
+      value="{{ value|default:fallback }}"
+      class="h-10 w-14 rounded-lg border border-slate-200 cursor-pointer shrink-0"
+      data-sync-color="{{ name }}"
+    />
+    <input
+      type="text"
+      name="{{ name }}"
+      value="{{ value }}"
+      placeholder="{{ fallback }}"
+      class="bp-input font-mono flex-1"
+      data-preview-field
+    />
+  </div>
+</label>

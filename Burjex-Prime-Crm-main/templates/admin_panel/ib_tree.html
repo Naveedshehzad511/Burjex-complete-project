@@ -1,0 +1,176 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}IB Tree - Burjex Prime{% endblock %}
+
+{% block admin_shell_header_title %}
+<div>
+  <h1 class="bp-topbar-title">IB Tree</h1>
+  <p class="bp-topbar-subtitle">Referral network for {{ ib_user.display_name }}</p>
+</div>
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="bp-page-header">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-900 dark:text-white mb-4"><i class="fa-solid fa-sitemap me-2"></i>IB Tree: {{ ib_user.display_name }}</h1>
+    <div class="bp-page-subtitle">View all referred clients and their total deposits and withdrawals up to 3 levels deep.</div>
+  </div>
+  <div class="bp-s-125">
+    <a href="{% url 'admin-ib-users' %}" class="bp-btn bp-btn-outline bp-btn-sm">
+      <i class="fa-solid fa-arrow-left me-1"></i> Back to IB Users
+    </a>
+  </div>
+</div>
+
+<div class="bg-white dark:bg-slate-900 p-4 sm:p-6 shadow-sm border border-slate-200 dark:border-slate-800 rounded-xl">
+
+  <!-- Root Node -->
+  <div class="flex items-center gap-4 relative z-20 pb-2 bg-white dark:bg-slate-900">
+    <div class="w-12 h-12 rounded-full flex items-center justify-center text-white shrink-0 bg-indigo-600 dark:bg-indigo-500">
+      <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+    </div>
+    <div>
+      <div class="font-bold text-[16px] text-slate-900 dark:text-white">
+        {{ ib_user.display_name|default:ib_user.email|default:"IB (Root)" }}
+      </div>
+      <div class="text-[14px] text-slate-500 dark:text-slate-400">
+        {{ ib_user.email }} (Root)
+      </div>
+    </div>
+  </div>
+
+  <!-- Children Nodes Wrapper -->
+  <div class="relative">
+    <div class="space-y-0">
+      
+      <!-- Level 1 Label Node -->
+      <div class="relative flex items-center z-10 group">
+        <div class="absolute z-0 border-l border-slate-200 dark:border-slate-700" style="left: 24px; top: -24px; bottom: 0;"></div>
+        <div class="absolute z-0 border-t border-slate-200 dark:border-slate-700" style="left: 24px; top: 50%; width: 32px;"></div>
+        <div class="shrink-0" style="width: 56px;"></div>
+        <div class="flex items-center gap-3 flex-1 py-4 z-10 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+          <div class="font-bold text-sm text-slate-700 dark:text-slate-300 flex items-center">
+            <i class="fa-solid fa-layer-group text-indigo-400 mr-2"></i> Level 1 (Direct Referrals)
+          </div>
+        </div>
+      </div>
+      
+      {% for member in level1 %}
+      <div class="relative flex items-center z-10 group">
+        <div class="absolute z-0 border-l border-slate-200 dark:border-slate-700" style="left: 44px; top: 0; bottom: 0;"></div>
+        <div class="absolute z-0 border-t border-slate-200 dark:border-slate-700" style="left: 44px; top: 50%; width: 24px;"></div>
+        <div class="shrink-0" style="width: 68px;"></div>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between flex-1 py-3 z-10 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center gap-4 mb-2 sm:mb-0">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </div>
+            <div>
+              <div class="font-bold text-[14px] text-slate-900 dark:text-white">{{ member.display_name|default:member.email|default:"Client" }}</div>
+              <div class="text-[12px] text-slate-500 dark:text-slate-400">{{ member.email }}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 pl-12 sm:pl-0">
+            <div class="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-full text-xs border border-emerald-100 dark:border-emerald-800/50">Dep: ${{ member.total_deposit|default:"0.00"|floatformat:2 }}</div>
+            <div class="text-rose-600 dark:text-rose-400 font-bold bg-rose-50 dark:bg-rose-900/30 px-3 py-1 rounded-full text-xs border border-rose-100 dark:border-rose-800/50">Wdl: ${{ member.total_withdrawal|default:"0.00"|floatformat:2 }}</div>
+          </div>
+        </div>
+      </div>
+      {% empty %}
+      <div class="relative flex items-center z-10 group">
+        <div class="absolute z-0 border-l border-slate-200 dark:border-slate-700" style="left: 44px; top: 0; bottom: 0;"></div>
+        <div class="absolute z-0 border-t border-slate-200 dark:border-slate-700" style="left: 44px; top: 50%; width: 24px;"></div>
+        <div class="shrink-0" style="width: 68px;"></div>
+        <div class="flex-1 py-3 z-10 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs italic">No clients in this level.</div>
+      </div>
+      {% endfor %}
+
+      <!-- Level 2 Label Node -->
+      <div class="relative flex items-center z-10 group">
+        <div class="absolute z-0 border-l border-slate-200 dark:border-slate-700" style="left: 24px; top: 0; bottom: 0;"></div>
+        <div class="absolute z-0 border-t border-slate-200 dark:border-slate-700" style="left: 24px; top: 50%; width: 32px;"></div>
+        <div class="shrink-0" style="width: 56px;"></div>
+        <div class="flex items-center gap-3 flex-1 py-4 z-10 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+          <div class="font-bold text-sm text-slate-700 dark:text-slate-300 flex items-center">
+            <i class="fa-solid fa-layer-group text-indigo-400 mr-2"></i> Level 2 (Sub-IB Referrals)
+          </div>
+        </div>
+      </div>
+      
+      {% for member in level2 %}
+      <div class="relative flex items-center z-10 group">
+        <div class="absolute z-0 border-l border-slate-200 dark:border-slate-700" style="left: 44px; top: 0; bottom: 0;"></div>
+        <div class="absolute z-0 border-t border-slate-200 dark:border-slate-700" style="left: 44px; top: 50%; width: 24px;"></div>
+        <div class="shrink-0" style="width: 68px;"></div>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between flex-1 py-3 z-10 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center gap-4 mb-2 sm:mb-0">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </div>
+            <div>
+              <div class="font-bold text-[14px] text-slate-900 dark:text-white">{{ member.display_name|default:member.email|default:"Client" }}</div>
+              <div class="text-[12px] text-slate-500 dark:text-slate-400">{{ member.email }}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 pl-12 sm:pl-0">
+            <div class="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-full text-xs border border-emerald-100 dark:border-emerald-800/50">Dep: ${{ member.total_deposit|default:"0.00"|floatformat:2 }}</div>
+            <div class="text-rose-600 dark:text-rose-400 font-bold bg-rose-50 dark:bg-rose-900/30 px-3 py-1 rounded-full text-xs border border-rose-100 dark:border-rose-800/50">Wdl: ${{ member.total_withdrawal|default:"0.00"|floatformat:2 }}</div>
+          </div>
+        </div>
+      </div>
+      {% empty %}
+      <div class="relative flex items-center z-10 group">
+        <div class="absolute z-0 border-l border-slate-200 dark:border-slate-700" style="left: 44px; top: 0; bottom: 0;"></div>
+        <div class="absolute z-0 border-t border-slate-200 dark:border-slate-700" style="left: 44px; top: 50%; width: 24px;"></div>
+        <div class="shrink-0" style="width: 68px;"></div>
+        <div class="flex-1 py-3 z-10 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs italic">No clients in this level.</div>
+      </div>
+      {% endfor %}
+
+      <!-- Level 3 Label Node -->
+      <div class="relative flex items-center z-10 group">
+        <div class="absolute z-0 border-l border-slate-200 dark:border-slate-700" style="left: 24px; top: 0; {% if not level3 %}bottom: 50%;{% else %}bottom: 0;{% endif %}"></div>
+        <div class="absolute z-0 border-t border-slate-200 dark:border-slate-700" style="left: 24px; top: 50%; width: 32px;"></div>
+        <div class="shrink-0" style="width: 56px;"></div>
+        <div class="flex items-center gap-3 flex-1 py-4 z-10 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+          <div class="font-bold text-sm text-slate-700 dark:text-slate-300 flex items-center">
+            <i class="fa-solid fa-layer-group text-indigo-400 mr-2"></i> Level 3
+          </div>
+        </div>
+      </div>
+      
+      {% for member in level3 %}
+      <div class="relative flex items-center z-10 group">
+        <div class="absolute z-0 border-l border-slate-200 dark:border-slate-700" style="left: 44px; top: 0; {% if forloop.last %}bottom: 50%;{% else %}bottom: 0;{% endif %}"></div>
+        <div class="absolute z-0 border-t border-slate-200 dark:border-slate-700" style="left: 44px; top: 50%; width: 24px;"></div>
+        <div class="shrink-0" style="width: 68px;"></div>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between flex-1 py-3 z-10 bg-white dark:bg-slate-900 {% if not forloop.last %}border-b border-slate-100 dark:border-slate-800{% endif %}">
+          <div class="flex items-center gap-4 mb-2 sm:mb-0">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </div>
+            <div>
+              <div class="font-bold text-[14px] text-slate-900 dark:text-white">{{ member.display_name|default:member.email|default:"Client" }}</div>
+              <div class="text-[12px] text-slate-500 dark:text-slate-400">{{ member.email }}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 pl-12 sm:pl-0">
+            <div class="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-full text-xs border border-emerald-100 dark:border-emerald-800/50">Dep: ${{ member.total_deposit|default:"0.00"|floatformat:2 }}</div>
+            <div class="text-rose-600 dark:text-rose-400 font-bold bg-rose-50 dark:bg-rose-900/30 px-3 py-1 rounded-full text-xs border border-rose-100 dark:border-rose-800/50">Wdl: ${{ member.total_withdrawal|default:"0.00"|floatformat:2 }}</div>
+          </div>
+        </div>
+      </div>
+      {% empty %}
+      <div class="relative flex items-center z-10 group">
+        <div class="absolute z-0 border-l border-slate-200 dark:border-slate-700" style="left: 44px; top: 0; bottom: 50%;"></div>
+        <div class="absolute z-0 border-t border-slate-200 dark:border-slate-700" style="left: 44px; top: 50%; width: 24px;"></div>
+        <div class="shrink-0" style="width: 68px;"></div>
+        <div class="flex-1 py-3 z-10 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs italic">No clients in this level.</div>
+      </div>
+      {% endfor %}
+
+    </div>
+  </div>
+</div>
+{% endblock %}

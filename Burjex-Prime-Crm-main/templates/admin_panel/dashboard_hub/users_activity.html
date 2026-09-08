@@ -1,0 +1,27 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}User activity — 30 days{% endblock %}
+{% block admin_content %}
+<div class="max-w-5xl mx-auto space-y-6">
+  <div class="bg-indigo-600 text-white rounded-xl px-5 py-4 shadow-sm">
+    <h1 class="text-xl font-semibold">Active vs inactive users</h1>
+    <p class="text-sm text-white/80 mt-1">Active = logged in within the last 30 days. Inactive = no login in 30 days or never logged in.</p>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <a href="{{ active_url }}" class="block bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:border-emerald-300 hover:shadow-md transition">
+      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Active (30d)</p>
+      <p class="text-3xl font-bold text-emerald-700 mt-2">{{ active_count|default:0 }}</p>
+      <p class="text-sm text-indigo-600 font-semibold mt-4">Open list →</p>
+    </a>
+    <a href="{{ inactive_url }}" class="block bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:border-amber-300 hover:shadow-md transition">
+      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Inactive (30d)</p>
+      <p class="text-3xl font-bold text-amber-700 mt-2">{{ inactive_count|default:0 }}</p>
+      <p class="text-sm text-indigo-600 font-semibold mt-4">Open list →</p>
+    </a>
+  </div>
+  <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-600">
+    <a href="{{ all_users_url }}" class="text-indigo-600 font-semibold hover:underline">All registered users</a>
+    <span class="text-slate-400 mx-2">·</span>
+    Full user list with filters, search, and export.
+  </div>
+</div>
+{% endblock %}

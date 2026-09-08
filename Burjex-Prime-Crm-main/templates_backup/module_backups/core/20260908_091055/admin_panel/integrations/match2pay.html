@@ -1,0 +1,60 @@
+﻿{% extends "admin_panel/base.html" %}
+{% block title %}Match2Pay{% endblock %}
+{% block admin_content %}
+<div class="max-w-xl mx-auto space-y-6 pb-10 px-2">
+  <div class="flex flex-wrap items-center gap-3 text-sm">
+    <a href="{% url 'admin-integrations-hub' %}" class="text-indigo-600 hover:underline">&larr; Integrations</a>
+    <a href="{% url 'admin-treasury-deposit-methods' %}" class="text-slate-600 hover:underline">Payment gateways (deposit)</a>
+  </div>
+  <h1 class="text-xl font-semibold text-slate-900">Match2Pay</h1>
+  <p class="text-sm text-slate-600">Add the wallet URL, API token, and API secret supplied by Match2Pay.</p>
+  <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+    Live deposits require Match2Pay to whitelist this server IP <strong>5.226.139.8</strong>. Until that is done, generating a USDT address returns HTTP 403.
+  </div>
+  <p class="text-sm text-slate-600" style="display:none"></p>
+
+  <form method="post" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-6">
+    {% csrf_token %}
+
+    <div class="flex items-center gap-2">
+      <input type="checkbox" name="integration_enabled" id="integration_enabled" class="rounded border-slate-300" {% if obj.enabled %}checked{% endif %} />
+      <label for="integration_enabled" class="text-sm text-slate-800 font-medium">Active</label>
+    </div>
+
+    <div>
+      <h2 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Credentials</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">API token</label>
+          <input type="password" name="api_token" value="" placeholder="{% if obj.api_token %}Saved - leave blank to keep{% endif %}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">API secret</label>
+          <input type="password" name="api_secret" value="" placeholder="{% if obj.api_secret %}Saved - leave blank to keep{% endif %}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h2 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Wallet URL</h2>
+      <div>
+        <label class="block text-sm text-slate-600 mb-1">API URL</label>
+        <input type="url" name="api_url" value="{{ obj.api_url }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="https://wallet.match2pay.com" />
+        <p class="text-xs text-slate-500 mt-1">Paste the wallet URL. If you enter only <code class="text-[11px]">https://wallet.match2pay.com</code>, the deposit endpoint is added automatically.</p>
+      </div>
+    </div>
+
+    <div>
+      <h2 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Webhook</h2>
+      <div>
+        <label class="block text-sm text-slate-600 mb-1">Public webhook URL (register with provider)</label>
+        <input type="url" readonly value="{{ public_webhook_url|default:webhook_stub }}" class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3 py-2 text-sm text-slate-700 cursor-default" />
+      </div>
+    </div>
+
+    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium">Save configuration</button>
+  </form>
+</div>
+{% endblock %}
+
+

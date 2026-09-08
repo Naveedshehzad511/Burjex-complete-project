@@ -1,0 +1,63 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}Approved Documents{% endblock %}
+{% block um_body %}
+  <div class="bp-page-header" style="margin-bottom: 1.5rem;">
+    <div>
+      <h1 class="bp-page-title" style="display:flex; align-items:center;">
+        <i class="fa-solid fa-file-circle-check" style="background: linear-gradient(135deg, #10b981 0%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-right: 0.5rem;"></i>
+        Approved KYC Documents
+      </h1>
+      <p class="bp-page-subtitle">Manage users with fully approved compliance documents.</p>
+    </div>
+  </div>
+
+  <div class="bp-card">
+    <div class="bp-card-body p-0">
+      <div class="overflow-x-auto w-full">
+        <table class="bp-table min-w-full text-sm">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Registration Date</th>
+              <th>Marketing Name</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              {% with u=row.user %}
+              <tr>
+                <td class="font-medium text-slate-500">#{{ u.id }}</td>
+                <td>
+                  <a href="{% url 'admin-user-view' u.pk %}" class="font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300">
+                    {{ u.display_name }}
+                  </a>
+                </td>
+                <td class="text-slate-800 dark:text-slate-200 font-medium">{{ u.email }}</td>
+                <td class="text-slate-600 dark:text-slate-400">{{ u.phone|default:"—" }}</td>
+                <td class="text-slate-600 dark:text-slate-400">{{ u.date_joined|date:"M d, Y" }} <span class="opacity-70 text-xs">{{ u.date_joined|date:"H:i" }}</span></td>
+                <td class="text-slate-600 dark:text-slate-400">{{ row.marketing_name|default:"—" }}</td>
+                <td>
+                  <a href="{% url 'admin-docs-all' %}?user_id={{ u.id }}&status=APPROVED" class="bp-btn btn-gradient px-4 py-2 text-xs font-bold tracking-wide h-auto w-full text-center sm:w-auto inline-flex items-center justify-center rounded-lg">
+                    <i class="fa-regular fa-folder-open me-2"></i> Details
+                  </a>
+                </td>
+              </tr>
+              {% endwith %}
+            {% empty %}
+              <tr>
+                <td colspan="7" class="p-8 text-center text-slate-500">
+                  <i class="fa-solid fa-file-circle-check text-2xl mb-2 block text-slate-300"></i>
+                  No users with approved documents found.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endblock %}

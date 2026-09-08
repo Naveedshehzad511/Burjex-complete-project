@@ -1,0 +1,292 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}IB Dashboard - Burjex Prime{% endblock %}
+
+{% block user_content %}
+  <div class="portal-card mb-6">
+    <div class="portal-card-header">
+      <div>
+        <div class="portal-card-title">IB Dashboard</div>
+
+      </div>
+      {% if not ib_profile %}
+        <div>
+          {% if pending_ib %}
+            <div class="portal-alert portal-alert--warning" style="margin:0;">Your IB application is pending review.</div>
+          {% else %}
+            <a href="{% url 'user-ib-apply' %}" class="portal-btn-primary">Apply for IB</a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+
+    {% if referral_link %}
+    <div class="mt-4 rounded-xl p-4" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+      <label class="portal-form-label mb-2" for="referralLink">Copy Referral Link</label>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <input type="text" id="referralLink" readonly class="portal-input flex-1 font-mono text-sm" value="{{ referral_link }}" />
+        <button type="button" onclick="copyReferralLink()" class="portal-btn-primary shrink-0">Copy</button>
+      </div>
+    </div>
+    <script>
+      function copyReferralLink() {
+        var el = document.getElementById("referralLink");
+        if (!el) return;
+        var val = el.value || "";
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(val);
+        } else {
+          el.select(); el.setSelectionRange(0, 99999);
+          try { document.execCommand("copy"); } catch (e) {}
+        }
+      }
+    </script>
+    {% endif %}
+
+    {% if ib_profile %}
+      {% if ib_progress %}
+      <div class="mt-6 rounded-xl p-5" style="border:1px solid var(--portal-border);" id="ibProgressRoot" data-poll-url="{% url 'user-ib-progress-api' %}">
+        <div class="font-bold text-sm mb-1" style="color:var(--portal-brand-primary);">My IB level progress</div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-5">
+          <!-- Lots -->
+          <div>
+            <div class="mb-2 flex justify-between text-xs" style="color:var(--portal-text-muted);">
+              <span>Volume (lots)</span>
+              <span><span data-ip-lots-pct>{{ ib_progress.lots_pct }}</span>%</span>
+            </div>
+            <div class="h-2.5 rounded-full overflow-hidden mb-2" style="background:var(--portal-border);">
+              <div class="h-full rounded-full transition-all duration-500" style="width:{{ ib_progress.lots_pct }}%;background:var(--portal-brand-primary);" data-ip-lots-bar></div>
+            </div>
+            <div class="flex justify-between text-[10px]" style="color:var(--portal-text-muted);">
+              <span>Cur: <span data-ip-lots-cur>{{ ib_progress.lots_cur|floatformat:2 }}</span></span>
+              <span>Req: <span data-ip-lots-req>{{ ib_progress.lots_req|floatformat:2 }}</span></span>
+            </div>
+          </div>
+          <!-- Deposit -->
+          <div>
+            <div class="mb-2 flex justify-between text-xs" style="color:var(--portal-text-muted);">
+              <span>Team Deposit</span>
+              <span><span data-ip-dep-pct>{{ ib_progress.dep_pct }}</span>%</span>
+            </div>
+            <div class="h-2.5 rounded-full overflow-hidden mb-2" style="background:var(--portal-border);">
+              <div class="h-full rounded-full transition-all duration-500" style="width:{{ ib_progress.dep_pct }}%;background:var(--portal-brand-primary);" data-ip-dep-bar></div>
+            </div>
+            <div class="flex justify-between text-[10px]" style="color:var(--portal-text-muted);">
+              <span>Cur: $<span data-ip-dep-cur>{{ ib_progress.dep_cur|floatformat:2 }}</span></span>
+              <span>Req: $<span data-ip-dep-req>{{ ib_progress.dep_req|floatformat:2 }}</span></span>
+            </div>
+          </div>
+          <!-- Referrals -->
+          <div>
+            <div class="mb-2 flex justify-between text-xs" style="color:var(--portal-text-muted);">
+              <span>Referrals</span>
+              <span><span data-ip-refs-pct>{{ ib_progress.refs_pct }}</span>%</span>
+            </div>
+            <div class="h-2.5 rounded-full overflow-hidden mb-2" style="background:var(--portal-border);">
+              <div class="h-full rounded-full transition-all duration-500" style="width:{{ ib_progress.refs_pct }}%;background:var(--portal-brand-primary);" data-ip-refs-bar></div>
+            </div>
+            <div class="flex justify-between text-[10px]" style="color:var(--portal-text-muted);">
+              <span>Cur: <span data-ip-refs-cur>{{ ib_progress.refs_cur|floatformat:0 }}</span></span>
+              <span>Req: <span data-ip-refs-req>{{ ib_progress.refs_req|floatformat:0 }}</span></span>
+            </div>
+          </div>
+        </div>
+        {% if ib_progress.next_reward_title %}
+        <div class="text-sm pt-3" style="border-top:1px solid var(--portal-border);">
+          <span style="color:var(--portal-text-muted);">Next reward:</span>
+          <span class="font-semibold" style="color:var(--portal-brand-primary);" data-ip-reward>{{ ib_progress.next_reward_title }}</span>
+          {% if ib_progress.next_reward_remaining_label %}
+          <span class="block mt-1 text-xs" style="color:var(--portal-text-muted);" data-ip-reward-extra>{{ ib_progress.next_reward_remaining_label }}</span>
+          {% endif %}
+        </div>
+        {% endif %}
+        <div class="mt-6 overflow-x-auto pb-1">
+          <div class="flex gap-2 min-w-min items-stretch">
+            {% for lv in ib_progress.levels %}
+            <div class="flex flex-col items-center min-w-[4.5rem]">
+              <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2
+                {% if ib_progress.current_level and lv.id == ib_progress.current_level.id %}
+                  bg-[var(--portal-brand-primary)] text-white border-[var(--portal-brand-primary)]
+                {% elif ib_progress.current_level and lv.sequence < ib_progress.current_level.sequence %}
+                  bg-emerald-50 text-emerald-800 border-emerald-200
+                {% else %}
+                  border-[var(--portal-border)] text-[var(--portal-text-muted)]
+                {% endif %}"
+                style="{% if ib_progress.current_level and lv.id == ib_progress.current_level.id %}background:var(--portal-brand-primary);color:#fff;border-color:var(--portal-brand-primary);{% else %}background:var(--portal-muted-bg);border-color:var(--portal-border);color:var(--portal-text-muted);{% endif %}">
+                {{ lv.sequence }}
+              </div>
+              <div class="text-[10px] text-center mt-1 max-w-[5rem] leading-tight" style="color:var(--portal-text-muted);">{{ lv.name }}</div>
+            </div>
+            {% if not forloop.last %}
+            <div class="flex items-center text-lg px-0" style="color:var(--portal-border);">→</div>
+            {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <script>
+        (function () {
+          var root = document.getElementById("ibProgressRoot");
+          if (!root) return;
+          var url = root.getAttribute("data-poll-url");
+          if (!url) return;
+          function setText(sel, v) { var el = root.querySelector(sel); if (el) el.textContent = v; }
+          function tick() {
+            fetch(url, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+              .then(function (r) { return r.json(); })
+              .then(function (j) {
+                if (!j || !j.ok) return;
+                setText("[data-ip-lots-pct]", j.lots_pct);
+                setText("[data-ip-lots-cur]", j.lots_cur);
+                setText("[data-ip-lots-req]", j.lots_req);
+                var barLots = root.querySelector("[data-ip-lots-bar]");
+                if (barLots) barLots.style.width = Math.min(100, parseInt(j.lots_pct, 10) || 0) + "%";
+
+                setText("[data-ip-dep-pct]", j.dep_pct);
+                setText("[data-ip-dep-cur]", j.dep_cur);
+                setText("[data-ip-dep-req]", j.dep_req);
+                var barDep = root.querySelector("[data-ip-dep-bar]");
+                if (barDep) barDep.style.width = Math.min(100, parseInt(j.dep_pct, 10) || 0) + "%";
+
+                setText("[data-ip-refs-pct]", j.refs_pct);
+                setText("[data-ip-refs-cur]", j.refs_cur);
+                setText("[data-ip-refs-req]", j.refs_req);
+                var barRefs = root.querySelector("[data-ip-refs-bar]");
+                if (barRefs) barRefs.style.width = Math.min(100, parseInt(j.refs_pct, 10) || 0) + "%";
+
+                setText("[data-ip-current-level]", j.current_level || "—");
+                setText("[data-ip-next-level]", j.next_level || (j.at_top_tier ? "Top tier" : "—"));
+                setText("[data-ip-commission]", "Rate: " + (j.commission_rate || ""));
+                setText("[data-ip-reward]", j.next_reward_title || "");
+                var rx = root.querySelector("[data-ip-reward-extra]");
+                if (rx) rx.textContent = j.next_reward_remaining_label || "";
+              }).catch(function () {});
+          }
+          setInterval(tick, 25000);
+        })();
+      </script>
+      {% endif %}
+      <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-4">
+        <div class="rounded-xl p-5 flex flex-col justify-between" style="background: linear-gradient(135deg, var(--portal-brand-primary) 0%, #1e293b 100%); color: #fff; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+          <div>
+            <div class="text-xs uppercase tracking-wider opacity-85 font-medium">Available Balance</div>
+            <div class="text-3xl font-bold mt-2">${{ ib_wallet_available|floatformat:2 }}</div>
+          </div>
+          <div class="mt-4">
+            <a href="{% url 'user-ib-withdraw-request' %}" class="inline-block text-center w-full bg-white text-slate-900 text-xs font-semibold py-2 px-4 rounded-lg hover:bg-slate-100 transition-colors">
+              Withdraw Funds
+            </a>
+          </div>
+        </div>
+        <div class="rounded-xl p-5" style="background:var(--portal-muted-bg); border:1px solid var(--portal-border);">
+          <div class="portal-stat-label" style="text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; color: var(--portal-text-muted);">Total Earned</div>
+          <div class="text-2xl font-bold mt-2" style="color:var(--portal-text-main);">${{ ib_wallet_earned|floatformat:2 }}</div>
+          <div class="text-xs mt-3" style="color:var(--portal-text-muted);">{{ month_name }}: ${{ monthly_commission|floatformat:2 }}</div>
+        </div>
+        <div class="rounded-xl p-5" style="background:var(--portal-muted-bg); border:1px solid var(--portal-border);">
+          <div class="portal-stat-label" style="text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; color: var(--portal-text-muted);">Paid Withdrawn</div>
+          <div class="text-2xl font-bold mt-2" style="color:var(--portal-text-main);">${{ ib_wallet_withdrawn|floatformat:2 }}</div>
+          <div class="text-xs mt-3" style="color:var(--portal-text-muted);">Paid to options</div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if ib_profile %}
+  <!-- Referral Stats section -->
+  <div class="portal-card mb-6">
+    <div class="portal-card-header">
+      <div class="portal-card-title">Referral Performance</div>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="p-4 rounded-xl text-center" style="background: var(--portal-muted-bg); border: 1px solid var(--portal-border);">
+        <div class="text-xs font-semibold mb-1" style="color: var(--portal-text-muted);">Registrations</div>
+        <div class="text-xl font-bold" style="color: var(--portal-text-main);">{{ referral_registrations }}</div>
+      </div>
+      <div class="p-4 rounded-xl text-center" style="background: var(--portal-muted-bg); border: 1px solid var(--portal-border);">
+        <div class="text-xs font-semibold mb-1" style="color: var(--portal-text-muted);">KYC Approved</div>
+        <div class="text-xl font-bold" style="color: var(--portal-text-main);">{{ referral_kyc_approved }}</div>
+      </div>
+      <div class="p-4 rounded-xl text-center" style="background: var(--portal-muted-bg); border: 1px solid var(--portal-border);">
+        <div class="text-xs font-semibold mb-1" style="color: var(--portal-text-muted);">Depositors</div>
+        <div class="text-xl font-bold" style="color: var(--portal-text-main);">{{ referral_depositors }}</div>
+      </div>
+      <div class="p-4 rounded-xl text-center" style="background: var(--portal-muted-bg); border: 1px solid var(--portal-border);">
+        <div class="text-xs font-semibold mb-1" style="color: var(--portal-text-muted);">Active Traders</div>
+        <div class="text-xl font-bold" style="color: var(--portal-text-main);">{{ referral_active_traders }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="portal-card">
+      <div class="portal-card-header"><div class="portal-card-title">Live accounts</div></div>
+      <div class="flex justify-between text-sm py-2" style="border-bottom:1px solid var(--portal-border-subtle);">
+        <span style="color:var(--portal-text-muted);">Total live</span><span class="font-semibold">{{ live_total }}</span>
+      </div>
+      <div class="flex justify-between text-sm py-2">
+        <span style="color:var(--portal-text-muted);">Active (status)</span><span class="font-semibold">{{ live_active }}</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="portal-card mb-6">
+    <div class="portal-card-header"><div class="portal-card-title">Team deposit report</div></div>
+    <div class="portal-stat-grid">
+      <div class="portal-stat-card">
+        <div class="portal-stat-label">Team deposits</div>
+        <div class="portal-stat-value">{{ team_dep }}</div>
+      </div>
+      <div class="portal-stat-card">
+        <div class="portal-stat-label">Team withdrawals</div>
+        <div class="portal-stat-value">{{ team_wdr }}</div>
+      </div>
+      <div class="portal-stat-card">
+        <div class="portal-stat-label">Net deposit</div>
+        <div class="portal-stat-value">{{ team_net }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="portal-card mb-6">
+    <div class="portal-card-header">
+      <div>
+        <div class="portal-card-title">Client growth</div>
+        <p class="text-xs mt-1" style="color:var(--portal-text-muted);">New team clients per month (last 6 months).</p>
+      </div>
+    </div>
+    <div class="h-72 w-full">
+      <canvas id="ibGrowthChart" aria-label="Growth chart"></canvas>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    (function () {
+      var el = document.getElementById("ibGrowthChart");
+      if (!el || typeof Chart === "undefined") return;
+      var labels = {{ chart_labels_json|safe }};
+      var clients = {{ chart_clients_json|safe }};
+      var primary = getComputedStyle(document.documentElement).getPropertyValue("--portal-brand-primary").trim() || "#0B3C5D";
+      new Chart(el, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [
+            { label: "New clients", data: clients, borderColor: primary, backgroundColor: "rgba(100,116,139,0.08)", tension: 0.25, fill: true }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom" } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+    })();
+  </script>
+
+
+  {% endif %}
+{% endblock %}

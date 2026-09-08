@@ -1,0 +1,14 @@
+{
+  "Mt5Server": "YOUR_MT5_SERVER_IP:443",
+  "Mt5Login": 0,
+  "Mt5Password": "CHANGE_ME",
+  "FeedToken": "CHANGE_ME",
+  "BridgeApiUrl": "https://api.example.com/v1",
+  "BridgeToken": "CHANGE_ME",
+  "BtTenantId": "YOUR_TENANT_ID",
+  "ReconcileEnabled": false,
+  "GroupsReconcileEnabled": false,
+  "EnableClasses": "FOREX,CRYPTO",
+  "HedgeEnabled": false,
+  "Mt5CoverLogin": 0
+}

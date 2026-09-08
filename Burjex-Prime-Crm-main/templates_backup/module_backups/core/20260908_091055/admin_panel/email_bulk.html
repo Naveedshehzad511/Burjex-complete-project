@@ -1,0 +1,32 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Bulk Email{% endblock %}
+{% block admin_content %}
+<div class="max-w-4xl bg-[#FFFFFF] border border-[#E7DCCF] rounded-xl p-6 shadow-sm">
+  <h1 class="text-xl font-semibold mb-4 text-[#6A4B34]">Bulk Email</h1>
+  <form method="post" class="grid grid-cols-1 gap-4">
+    {% csrf_token %}
+    <div>
+      <label class="block text-sm mb-1">Target Role (Optional)</label>
+      <select name="role" class="w-full border rounded px-3 py-2 text-sm">
+        <option value="">All Roles</option>
+        {% for value, label in roles %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Subject</label>
+      <input name="subject" class="w-full border rounded px-3 py-2 text-sm" required />
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Message</label>
+      <textarea name="body" rows="8" class="w-full border rounded px-3 py-2 text-sm"></textarea>
+    </div>
+    <div>
+      <button class="bg-[#6A4B34] text-white px-4 py-2 rounded">Send Bulk Email</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+

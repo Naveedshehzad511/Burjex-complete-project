@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B-Trader · Mobile Trader App — Mockup</title>
+<style>
+  :root{
+    --bg:#070b14; --surface:#0f1729; --surface2:#0a0f1c; --line:#1d2840;
+    --text:#e6e9f0; --muted:#8a93a6; --faint:#5b6478;
+    --brand:#1652F0; --buy:#0BB07B; --sell:#E5484D; --pos:#34d399; --neg:#f87171;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#05080f;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:32px}
+  h1{font-size:22px;font-weight:600;margin-bottom:4px}
+  .lead{color:var(--muted);margin-bottom:8px;max-width:760px;line-height:1.6}
+  .toolbar{display:flex;gap:10px;align-items:center;margin:18px 0 26px}
+  .toggle{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .toggle button{background:transparent;color:var(--muted);border:0;padding:8px 16px;font-size:13px;cursor:pointer}
+  .toggle button.on{background:var(--brand);color:#fff}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,320px));gap:26px}
+  .device{background:var(--bg);border:10px solid #11161f;border-radius:38px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  .screen{display:flex;flex-direction:column;height:660px}
+  .label{color:var(--muted);font-size:12px;margin:0 0 8px 4px;letter-spacing:.04em;text-transform:uppercase}
+  .statusbar{display:flex;justify-content:space-between;align-items:center;padding:10px 18px 2px;color:var(--muted);font-size:12px}
+  .statusbar .ico{letter-spacing:3px}
+  .appbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px}
+  .appbar h2{font-size:16px;font-weight:600}
+  .brandlogo{width:18px;height:18px;border-radius:6px;background:var(--brand);display:inline-block;vertical-align:-3px;margin-right:8px}
+  .num{font-variant-numeric:tabular-nums}
+  .muted{color:var(--muted)} .faint{color:var(--faint)} .pos{color:var(--pos)} .neg{color:var(--neg)}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;margin:0 14px;padding:13px}
+  .acctgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 12px}
+  .k{color:var(--faint);font-size:11px}.v{font-size:14px;font-weight:600}
+  .listrow{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid #101a2e}
+  .sym{font-weight:600;font-size:14px}.sub{color:var(--faint);font-size:11px}
+  .bid{color:var(--neg)}.ask{color:var(--pos)}.px{font-weight:600}
+  .grow{flex:1}
+  .nav{display:flex;justify-content:space-around;padding:9px 4px 14px;border-top:1px solid #101a2e;background:var(--surface2);margin-top:auto}
+  .nav div{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--faint);font-size:10px}
+  .nav .on{color:var(--brand)}
+  .nav .dot{width:20px;height:20px;border-radius:6px;border:2px solid currentColor;opacity:.85}
+  .chips{display:flex;gap:6px;padding:0 14px 10px;flex-wrap:wrap}
+  .chip{padding:6px 11px;border-radius:16px;background:var(--line);color:var(--muted);font-size:11px}
+  .chip.on{background:var(--brand);color:#fff}
+  .tiles{display:flex;gap:8px;padding:6px 14px 12px;align-items:center}
+  .tile{flex:1;border-radius:12px;padding:12px;text-align:center}
+  .tile.sell{background:rgba(229,72,77,.12);border:1px solid rgba(229,72,77,.4)}
+  .tile.buy{background:rgba(11,176,123,.14);border:1px solid rgba(11,176,123,.45)}
+  .tile small{display:block;font-size:11px;margin-bottom:2px}
+  .tile .p{font-size:20px;font-weight:600}
+  .field{background:#0b1220;border:1px solid var(--line);border-radius:9px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;color:var(--text)}
+  .stepper{display:flex;align-items:center;gap:10px;padding:0 14px}
+  .stepbtn{width:38px;height:38px;border-radius:9px;background:var(--line);display:flex;align-items:center;justify-content:center;font-size:20px}
+  .ctaRow{display:flex;gap:8px;padding:8px 14px 0}
+  .cta{flex:1;padding:14px;border-radius:12px;text-align:center;font-weight:600;color:#fff}
+  .cta.sell{background:var(--sell)}.cta.buy{background:var(--buy)}
+  .toggleSwitch{margin-left:auto;width:36px;height:20px;border-radius:12px;background:var(--brand);position:relative}
+  .toggleSwitch span{position:absolute;right:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff}
+  .posrow{display:flex;align-items:center;padding:12px 14px;border-top:1px solid #101a2e;gap:8px}
+  .opt{display:flex;align-items:center;gap:12px;padding:13px 16px;border-top:1px solid #101a2e;font-size:14px;color:#dce1ec}
+  .optico{width:18px;height:18px;border-radius:5px;border:2px solid var(--muted);opacity:.7}
+  .smallbtn{background:var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:#fff}
+
+  /* LIGHT THEME */
+  body.light{background:#dfe4ee}
+  body.light .device{border-color:#cfd6e2}
+  .light .screen,.light .statusbar{background:#f4f6fa}
+  .light{--bg:#f4f6fa;--surface:#fff;--surface2:#fff;--line:#e6e9f0;--text:#0b1220;--muted:#5b6478;--faint:#8a93a6;--pos:#0f9d6e;--neg:#d92d2d}
+  .light .listrow,.light .nav,.light .opt,.light .posrow{border-top-color:#eceff5}
+  .light .chip{background:#eef0f6;color:#475}
+  .light .field{background:#f1f3f8}
+  .light .stepbtn,.light .smallbtn{background:#eef0f6;color:#0b1220}
+</style>
+</head>
+<body>
+  <h1>B-Trader — Mobile Trader App</h1>
+  <p class="lead">Flutter (Material 3) white-label trading app. Live bid/ask over WebSocket, all order types, MT5-style account metrics. This is a static visual mockup of the six core screens; toggle light/dark to preview both themes.</p>
+  <div class="toolbar">
+    <div class="toggle">
+      <button id="dark" class="on" onclick="setTheme('dark')">Dark</button>
+      <button id="light" onclick="setTheme('light')">Light</button>
+    </div>
+    <span class="muted" style="font-size:13px">Brand color shown: Demo Broker blue (per-tenant)</span>
+  </div>
+
+  <div class="grid">
+
+    <!-- MARKETS -->
+    <div>
+      <p class="label">Markets</p>
+      <div class="device"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="ico">• ▮ ▰</span></div>
+        <div class="appbar"><h2><span class="brandlogo"></span>Demo Trader</h2><span class="muted">◔</span></div>
+        <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+          <div><div class="k">Equity</div><div class="v num">$10,420.50</div></div>
+          <div style="text-align:right"><div class="k">Floating P/L</div><div class="v pos num">+120.50</div></div>
+        </div>
+        <div style="height:8px"></div>
+        <div class="listrow"><div><div class="sym">EURUSD</div><div class="sub">Euro / US Dollar</div></div><div><span class="px bid num">1.10243</span> &nbsp; <span class="px ask num">1.10251</span></div></div>
+        <div class="listrow"><div><div class="sym">GBPUSD</div><div class="sub">Pound / US Dollar</div></div><div><span class="px bid num">1.27108</span> &nbsp; <span class="px ask num">1.27121</span></div></div>
+        <div class="listrow"><div><div class="sym">XAUUSD</div><div class="sub">Gold / US Dollar</div></div><div><span class="px bid num">2350.18</span> &nbsp; <span class="px ask num">2350.42</span></div></div>
+        <div class="listrow"><div><div class="sym">BTCUSD</div><div class="sub">Bitcoin / US Dollar</div></div><div><span class="px bid num">68142.5</span> &nbsp; <span class="px ask num">68159.0</span></div></div>
+        <div class="grow"></div>
+        <div class="nav"><div class="on"><span class="dot"></span>Markets</div><div><span class="dot"></span>Charts</div><div><span class="dot"></span>Trade</div><div><span class="dot"></span>Portfolio</div><div><span class="dot"></span>Account</div></div>
+      </div></div>
+    </div>
+
+
+    <!-- CHARTS -->
+    <div>
+      <p class="label">Charts — live candles</p>
+      <div class="device"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="ico">&#8226; &#9646; &#9648;</span></div>
+        <div class="appbar"><h2>EURUSD &#9662;</h2><span class="num" style="font-weight:600">1.10247</span></div>
+        <div class="chips"><span class="chip">1m</span><span class="chip on">5m</span><span class="chip">15m</span><span class="chip">1H</span><span class="chip">4H</span><span class="chip">1D</span></div>
+        <div style="flex:1;padding:6px 8px">
+          <svg viewBox="0 0 300 230" width="100%" height="100%" preserveAspectRatio="none">
+            <line x1="0" y1="40" x2="270" y2="40" stroke="#1d2840" stroke-width="0.5"/>
+            <line x1="0" y1="95" x2="270" y2="95" stroke="#1d2840" stroke-width="0.5"/>
+            <line x1="0" y1="150" x2="270" y2="150" stroke="#1d2840" stroke-width="0.5"/>
+            <line x1="0" y1="205" x2="270" y2="205" stroke="#1d2840" stroke-width="0.5"/>
+            <line x1="14" y1="118" x2="14" y2="134" stroke="#f87171" stroke-width="1"/><rect x="10" y="120" width="8" height="6" fill="#f87171"/><line x1="26" y1="120" x2="26" y2="146" stroke="#f87171" stroke-width="1"/><rect x="22" y="126" width="8" height="15" fill="#f87171"/><line x1="38" y1="136" x2="38" y2="158" stroke="#f87171" stroke-width="1"/><rect x="34" y="142" width="8" height="16" fill="#f87171"/><line x1="50" y1="157" x2="50" y2="161" stroke="#f87171" stroke-width="1"/><rect x="46" y="158" width="8" height="2" fill="#f87171"/><line x1="62" y1="150" x2="62" y2="164" stroke="#f87171" stroke-width="1"/><rect x="58" y="160" width="8" height="3" fill="#f87171"/><line x1="74" y1="155" x2="74" y2="184" stroke="#f87171" stroke-width="1"/><rect x="70" y="163" width="8" height="10" fill="#f87171"/><line x1="86" y1="165" x2="86" y2="184" stroke="#34d399" stroke-width="1"/><rect x="82" y="170" width="8" height="3" fill="#34d399"/><line x1="98" y1="160" x2="98" y2="190" stroke="#f87171" stroke-width="1"/><rect x="94" y="170" width="8" height="16" fill="#f87171"/><line x1="110" y1="185" x2="110" y2="203" stroke="#f87171" stroke-width="1"/><rect x="106" y="186" width="8" height="13" fill="#f87171"/><line x1="122" y1="186" x2="122" y2="206" stroke="#34d399" stroke-width="1"/><rect x="118" y="188" width="8" height="11" fill="#34d399"/><line x1="134" y1="178" x2="134" y2="194" stroke="#34d399" stroke-width="1"/><rect x="130" y="183" width="8" height="5" fill="#34d399"/><line x1="146" y1="182" x2="146" y2="201" stroke="#f87171" stroke-width="1"/><rect x="142" y="183" width="8" height="16" fill="#f87171"/><line x1="158" y1="187" x2="158" y2="202" stroke="#34d399" stroke-width="1"/><rect x="154" y="192" width="8" height="6" fill="#34d399"/><line x1="170" y1="183" x2="170" y2="196" stroke="#34d399" stroke-width="1"/><rect x="166" y="189" width="8" height="3" fill="#34d399"/><line x1="182" y1="170" x2="182" y2="192" stroke="#34d399" stroke-width="1"/><rect x="178" y="178" width="8" height="11" fill="#34d399"/><line x1="194" y1="169" x2="194" y2="189" stroke="#34d399" stroke-width="1"/><rect x="190" y="176" width="8" height="3" fill="#34d399"/><line x1="206" y1="164" x2="206" y2="187" stroke="#34d399" stroke-width="1"/><rect x="202" y="167" width="8" height="8" fill="#34d399"/><line x1="218" y1="162" x2="218" y2="190" stroke="#f87171" stroke-width="1"/><rect x="214" y="167" width="8" height="14" fill="#f87171"/><line x1="230" y1="175" x2="230" y2="194" stroke="#f87171" stroke-width="1"/><rect x="226" y="181" width="8" height="13" fill="#f87171"/><line x1="242" y1="178" x2="242" y2="200" stroke="#34d399" stroke-width="1"/><rect x="238" y="188" width="8" height="6" fill="#34d399"/><line x1="254" y1="170" x2="254" y2="196" stroke="#34d399" stroke-width="1"/><rect x="250" y="174" width="8" height="14" fill="#34d399"/><line x1="266" y1="164" x2="266" y2="179" stroke="#34d399" stroke-width="1"/><rect x="262" y="171" width="8" height="3" fill="#34d399"/>
+            <line x1="0" y1="78" x2="270" y2="78" stroke="#1652F0" stroke-width="1" stroke-dasharray="4 4"/>
+            <rect x="271" y="70" width="28" height="16" rx="3" fill="#1652F0"/>
+            <text x="274" y="82" fill="#fff" font-size="9" font-family="monospace">1.10251</text>
+            <text x="274" y="38" fill="#8a93a6" font-size="9" font-family="monospace">1.1042</text>
+            <text x="274" y="148" fill="#8a93a6" font-size="9" font-family="monospace">1.1010</text>
+          </svg>
+        </div>
+        <div class="ctaRow" style="padding:8px 14px 14px"><div class="cta sell">SELL 1.10243</div><div class="cta buy">BUY 1.10251</div></div>
+        <div class="nav"><div><span class="dot"></span>Markets</div><div class="on"><span class="dot"></span>Charts</div><div><span class="dot"></span>Trade</div><div><span class="dot"></span>Portfolio</div><div><span class="dot"></span>Account</div></div>
+      </div></div>
+    </div>
+
+    <!-- TRADE -->
+    <div>
+      <p class="label">Trade — order ticket</p>
+      <div class="device"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="ico">• ▮ ▰</span></div>
+        <div class="appbar"><h2>‹ EURUSD</h2><span class="muted">☆</span></div>
+        <div class="tiles">
+          <div class="tile sell"><small style="color:var(--neg)">SELL</small><div class="p num">1.10243</div></div>
+          <div class="faint" style="font-size:11px;text-align:center">spread<br>0.8</div>
+          <div class="tile buy"><small style="color:var(--pos)">BUY</small><div class="p num">1.10251</div></div>
+        </div>
+        <div class="chips"><span class="chip on">Market</span><span class="chip">Buy Limit</span><span class="chip">Sell Limit</span><span class="chip">Buy Stop</span><span class="chip">Sell Stop</span></div>
+        <div class="k" style="padding:0 14px 5px">Volume (lots)</div>
+        <div class="stepper"><div class="stepbtn">−</div><div class="grow" style="text-align:center;font-size:18px;font-weight:600" class="num">0.10</div><div class="stepbtn">+</div></div>
+        <div style="display:flex;gap:8px;padding:12px 14px 0">
+          <div class="grow"><div class="k" style="margin-bottom:5px">Stop loss</div><div class="field"><span class="muted">1.10100</span></div></div>
+          <div class="grow"><div class="k" style="margin-bottom:5px">Take profit</div><div class="field"><span class="muted">1.10500</span></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px 4px;font-size:13px"><span class="brandlogo" style="margin:0"></span>One-click trading<span class="toggleSwitch"><span></span></span></div>
+        <div class="ctaRow"><div class="cta sell">SELL 0.10</div><div class="cta buy">BUY 0.10</div></div>
+        <div class="grow"></div>
+        <div class="nav"><div><span class="dot"></span>Markets</div><div><span class="dot"></span>Charts</div><div class="on"><span class="dot"></span>Trade</div><div><span class="dot"></span>Portfolio</div><div><span class="dot"></span>Account</div></div>
+      </div></div>
+    </div>
+
+    <!-- PORTFOLIO -->
+    <div>
+      <p class="label">Portfolio</p>
+      <div class="device"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="ico">• ▮ ▰</span></div>
+        <div class="appbar"><h2>Portfolio</h2><span class="neg" style="font-size:13px">Close all</span></div>
+        <div class="card">
+          <div class="acctgrid">
+            <div><div class="k">Balance</div><div class="v num">10,300.00</div></div>
+            <div><div class="k">Equity</div><div class="v num">10,420.50</div></div>
+            <div><div class="k">Margin</div><div class="v num">110.25</div></div>
+            <div><div class="k">Free margin</div><div class="v num">10,310.25</div></div>
+            <div><div class="k">Margin level</div><div class="v num">9451%</div></div>
+            <div><div class="k">Floating P/L</div><div class="v pos num">+120.50</div></div>
+          </div>
+        </div>
+        <div class="k" style="padding:10px 14px 2px">Open positions (2)</div>
+        <div class="posrow"><div class="grow"><div class="sym">EURUSD <span class="ask">BUY</span></div><div class="sub">0.10 lots @ 1.10180 · SL — TP —</div></div><div class="pos num" style="font-weight:600">+24.30</div><span class="smallbtn">⌃</span><span class="smallbtn">½</span><span class="smallbtn" style="background:#7f1d1d">✕</span></div>
+        <div class="posrow"><div class="grow"><div class="sym">XAUUSD <span class="bid">SELL</span></div><div class="sub">0.05 lots @ 2349.10 · SL 2356 TP 2340</div></div><div class="neg num" style="font-weight:600">−12.10</div><span class="smallbtn">⌃</span><span class="smallbtn">½</span><span class="smallbtn" style="background:#7f1d1d">✕</span></div>
+        <div class="grow"></div>
+        <div class="nav"><div><span class="dot"></span>Markets</div><div><span class="dot"></span>Charts</div><div><span class="dot"></span>Trade</div><div class="on"><span class="dot"></span>Portfolio</div><div><span class="dot"></span>Account</div></div>
+      </div></div>
+    </div>
+
+    <!-- HISTORY -->
+    <div>
+      <p class="label">History</p>
+      <div class="device"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="ico">• ▮ ▰</span></div>
+        <div class="appbar"><h2>History</h2></div>
+        <div class="listrow"><div><div class="sym">CLOSE · BUY · 0.10 lots</div><div class="sub">@ 1.10420 · Jun 12, 14:32</div></div><div class="pos num" style="font-weight:600">+24.00</div></div>
+        <div class="listrow"><div><div class="sym">CLOSE · SELL · 0.05 lots</div><div class="sub">@ 2347.10 · Jun 12, 13:10</div></div><div class="neg num" style="font-weight:600">−18.50</div></div>
+        <div class="listrow"><div><div class="sym">DEPOSIT</div><div class="sub">Jun 11, 09:02</div></div><div class="muted num">10,000.00</div></div>
+        <div class="listrow"><div><div class="sym">BONUS</div><div class="sub">Jun 11, 09:03</div></div><div class="muted num">300.00</div></div>
+        <div class="listrow"><div><div class="sym">CLOSE · BUY · 0.20 lots</div><div class="sub">@ 1.10010 · Jun 10, 17:45</div></div><div class="pos num" style="font-weight:600">+62.00</div></div>
+        <div class="grow"></div>
+        <div class="nav"><div><span class="dot"></span>Markets</div><div><span class="dot"></span>Charts</div><div><span class="dot"></span>Trade</div><div><span class="dot"></span>Portfolio</div><div><span class="dot"></span>Account</div></div>
+      </div></div>
+    </div>
+
+    <!-- ACCOUNT -->
+    <div>
+      <p class="label">Account</p>
+      <div class="device"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="ico">• ▮ ▰</span></div>
+        <div class="appbar"><h2>Account</h2></div>
+        <div class="card" style="border-color:var(--brand)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:10px"><span class="v">#500001</span><span class="muted" style="font-size:12px">Standard · 1:100</span></div>
+          <div class="acctgrid" style="grid-template-columns:1fr 1fr">
+            <div><div class="k">Balance</div><div class="v num">10,300.00 USD</div></div>
+            <div><div class="k">Equity</div><div class="v num">10,420.50 USD</div></div>
+            <div><div class="k">Free margin</div><div class="v num">10,310.25</div></div>
+            <div><div class="k">Margin level</div><div class="v num">9451%</div></div>
+          </div>
+          <div style="color:var(--brand);font-size:12px;font-weight:600;margin-top:10px">Active</div>
+        </div>
+        <div class="opt"><span class="optico"></span>Leverage<span class="muted" style="margin-left:auto">1:100</span></div>
+        <div class="opt"><span class="optico"></span>Deposit</div>
+        <div class="opt"><span class="optico"></span>Withdraw</div>
+        <div class="opt"><span class="optico"></span>Settings</div>
+        <div class="opt neg"><span class="optico" style="border-color:var(--neg)"></span>Sign out</div>
+        <div class="grow"></div>
+        <div class="nav"><div><span class="dot"></span>Markets</div><div><span class="dot"></span>Charts</div><div><span class="dot"></span>Trade</div><div><span class="dot"></span>Portfolio</div><div class="on"><span class="dot"></span>Account</div></div>
+      </div></div>
+    </div>
+
+  </div>
+
+<script>
+  function setTheme(t){
+    document.body.classList.toggle('light', t==='light');
+    document.getElementById('dark').classList.toggle('on', t==='dark');
+    document.getElementById('light').classList.toggle('on', t==='light');
+  }
+</script>
+</body>
+</html>

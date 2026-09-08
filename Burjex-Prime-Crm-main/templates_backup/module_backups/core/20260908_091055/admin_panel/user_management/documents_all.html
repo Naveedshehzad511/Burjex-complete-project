@@ -1,0 +1,107 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}User Documents List{% endblock %}
+{% block um_body %}
+  <div class="bp-page-header" style="margin-bottom: 1.5rem;">
+    <div>
+      <h1 class="bp-page-title" style="display:flex; align-items:center;">
+        <i class="fa-solid fa-file-shield" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-right: 0.5rem;"></i>
+        User Documents
+      </h1>
+      <p class="bp-page-subtitle">Manage all compliance documents across different statuses.</p>
+    </div>
+  </div>
+
+      <div class="overflow-x-auto w-full">
+        <table class="bp-table min-w-full text-sm">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Document Type</th>
+              <th class="text-center">Image</th>
+              <th>Status</th>
+              <th>Date</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in documents %}
+              <tr>
+                <td class="font-medium text-slate-500">#{{ d.id }}</td>
+                <td>
+                  <a href="{% url 'admin-user-view' d.user.pk %}" class="font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300">
+                    {{ d.user.display_name }}
+                  </a>
+                </td>
+                <td class="text-slate-800 dark:text-slate-200 font-medium">{{ d.user.email }}</td>
+                <td class="text-slate-700 dark:text-slate-300 font-medium">{{ d.get_doc_type_display }}</td>
+                <td class="text-center">
+                  {% if d.file %}
+                    <a href="{{ d.file.url }}" target="_blank" rel="noopener" class="bp-btn bp-btn-outline px-2 py-1 h-auto text-xs inline-flex items-center justify-center" title="Preview Document">
+                      <i class="fa-solid fa-eye me-1"></i> View
+                    </a>
+                  {% else %}
+                    <span class="text-slate-400">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if d.status == "APPROVED" %}
+                    <span class="bp-badge bp-badge-success">Approved</span>
+                  {% elif d.status == "REJECTED" %}
+                    <div class="flex flex-col gap-1">
+                      <span class="bp-badge bp-badge-error w-fit">Rejected</span>
+                      {% if d.comment %}
+                        <span class="text-xs text-slate-500 max-w-[120px] truncate" title="{{ d.comment }}">{{ d.comment }}</span>
+                      {% endif %}
+                    </div>
+                  {% elif d.status == "EXPIRED" %}
+                    <span class="bp-badge bp-badge-warning">Expired</span>
+                  {% else %}
+                    <span class="bp-badge bp-badge-warning"><i class="fa-solid fa-clock mr-1"></i> Pending</span>
+                  {% endif %}
+                </td>
+                <td class="text-slate-600 dark:text-slate-400">{{ d.uploaded_at|date:"M d, Y" }} <span class="opacity-70 text-xs">{{ d.uploaded_at|date:"H:i" }}</span></td>
+                <td class="align-top min-w-[220px]">
+                  {% if d.status == "PENDING" %}
+                    <div class="flex flex-col gap-2">
+                      <form method="post" action="{% url 'admin-docs-all' %}" onsubmit="return confirm('Approve document #{{ d.id }}?');" class="m-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="doc_id" value="{{ d.id }}" />
+                        <input type="hidden" name="action" value="approve" />
+                        <button type="submit" class="bp-btn bg-emerald-500 hover:bg-emerald-600 text-white border-0 w-full px-3 py-1 text-xs h-auto shadow-sm transition-colors flex items-center justify-center gap-1.5">
+                          <i class="fa-solid fa-check"></i> Approve
+                        </button>
+                      </form>
+                      <form method="post" action="{% url 'admin-docs-all' %}" class="flex flex-col gap-1 m-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="doc_id" value="{{ d.id }}" />
+                        <input type="hidden" name="action" value="reject" />
+                        <label class="sr-only" for="reject-{{ d.id }}">Reject reason</label>
+                        <textarea id="reject-{{ d.id }}" name="reject_comment" rows="1" class="bp-input w-full min-h-[32px] px-2 py-1.5 text-xs resize-none" placeholder="Reason (required)" required></textarea>
+                        <button type="submit" class="bp-btn bg-rose-500 hover:bg-rose-600 text-white border-0 w-full px-3 py-1 text-xs h-auto shadow-sm transition-colors flex items-center justify-center gap-1.5">
+                          <i class="fa-solid fa-xmark"></i> Reject
+                        </button>
+                      </form>
+                    </div>
+                  {% else %}
+                    <div class="flex flex-col items-end gap-1 text-xs">
+                      <span class="text-slate-500 dark:text-slate-400">Reviewed at:</span>
+                      <span class="font-medium text-slate-700 dark:text-slate-300">{{ d.reviewed_at|date:"M d, Y H:i"|default:"—" }}</span>
+                    </div>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="8" class="p-8 text-center text-slate-500">
+                  <i class="fa-solid fa-folder-open text-2xl mb-2 block text-slate-300"></i>
+                  No documents found
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+   
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}MT5 Follow Up List{% endblock %}
+{% block um_body %}
+<div class="bg-white rounded-xl border border-slate-200 p-3 mb-3">
+  <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+    <div class="md:col-span-2">
+      <label class="block text-xs text-slate-600 mb-1">Search</label>
+      <input type="text" name="q" value="{{ filters.q }}" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Name, email, phone, country">
+    </div>
+    <div>
+      <label class="block text-xs text-slate-600 mb-1">Entries</label>
+      <select name="per_page" class="w-full border rounded-lg px-3 py-2 text-sm">
+        <option value="10" {% if filters.per_page == 10 %}selected{% endif %}>10</option>
+        <option value="25" {% if filters.per_page == 25 %}selected{% endif %}>25</option>
+        <option value="50" {% if filters.per_page == 50 %}selected{% endif %}>50</option>
+        <option value="100" {% if filters.per_page == 100 %}selected{% endif %}>100</option>
+      </select>
+    </div>
+    <div class="flex gap-2">
+      <button class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">Apply</button>
+      <a class="px-3 py-2 rounded-lg border text-sm" href="?q={{ filters.q|urlencode }}&per_page={{ filters.per_page }}&sort={{ filters.sort }}&export=excel">Excel</a>
+    </div>
+  </form>
+</div>
+
+<div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="text-left bg-slate-50 text-slate-700">
+        <tr>
+          <th class="px-3 py-2.5 border-b"><a href="?q={{ filters.q|urlencode }}&per_page={{ filters.per_page }}&sort={% if filters.sort == 'id' %}-id{% else %}id{% endif %}">ID</a></th>
+          <th class="px-3 py-2.5 border-b"><a href="?q={{ filters.q|urlencode }}&per_page={{ filters.per_page }}&sort={% if filters.sort == 'first_name' %}-first_name{% else %}first_name{% endif %}">Name</a></th>
+          <th class="px-3 py-2.5 border-b"><a href="?q={{ filters.q|urlencode }}&per_page={{ filters.per_page }}&sort={% if filters.sort == 'email' %}-email{% else %}email{% endif %}">Email</a></th>
+          <th class="px-3 py-2.5 border-b">Phone</th>
+          <th class="px-3 py-2.5 border-b"><a href="?q={{ filters.q|urlencode }}&per_page={{ filters.per_page }}&sort={% if filters.sort == 'country' %}-country{% else %}country{% endif %}">Country</a></th>
+          <th class="px-3 py-2.5 border-b"><a href="?q={{ filters.q|urlencode }}&per_page={{ filters.per_page }}&sort={% if filters.sort == 'date_joined' %}-date_joined{% else %}date_joined{% endif %}">Date</a></th>
+          <th class="px-3 py-2.5 border-b">Marketing Name</th>
+          <th class="px-3 py-2.5 border-b">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in page_obj.object_list %}
+        <tr class="border-t border-slate-100 hover:bg-slate-50/80">
+          <td class="px-3 py-2 border-b">{{ u.id }}</td>
+          <td class="px-3 py-2 border-b">{{ u.display_name }}</td>
+          <td class="px-3 py-2 border-b">{{ u.email }}</td>
+          <td class="px-3 py-2 border-b">{{ u.phone|default:"—" }}</td>
+          <td class="px-3 py-2 border-b">{{ u.country|default:"—" }}</td>
+          <td class="px-3 py-2 border-b">{{ u.date_joined|date:"Y-m-d H:i" }}</td>
+          <td class="px-3 py-2 border-b">{% if u.referred_by_id %}{{ u.referred_by.display_name }}{% else %}—{% endif %}</td>
+          <td class="px-3 py-2 border-b"><a class="text-indigo-700 hover:underline" href="{% url 'admin-user-view' u.id %}">Details</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="px-3 py-8 text-center text-slate-600">No records found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="mt-3 flex items-center gap-2 text-sm">
+  {% if page_obj.has_previous %}<a class="px-3 py-1 border rounded" href="?q={{ filters.q|urlencode }}&per_page={{ filters.per_page }}&sort={{ filters.sort }}&page={{ page_obj.previous_page_number }}">Prev</a>{% endif %}
+  <span class="text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}<a class="px-3 py-1 border rounded" href="?q={{ filters.q|urlencode }}&per_page={{ filters.per_page }}&sort={{ filters.sort }}&page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

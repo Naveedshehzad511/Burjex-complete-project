@@ -1,0 +1,129 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Email Management{% endblock %}
+{% block admin_content %}
+<div class="max-w-5xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-900">Email management</h1>
+    <p class="text-sm text-slate-500 mt-1">SMTP / IMAP integration, automation master switch, and transactional templates.</p>
+  </div>
+
+  <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+    <h2 class="text-lg font-semibold mb-4">1. Email integration</h2>
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_smtp" />
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div><label class="block text-slate-600 mb-1">SMTP host</label><input name="smtp_host" value="{{ smtp.smtp_host }}" class="w-full border rounded-lg px-3 py-2" placeholder="smtp.gmail.com" /></div>
+        <div><label class="block text-slate-600 mb-1">SMTP port</label><input type="number" name="smtp_port" value="{{ smtp.smtp_port }}" class="w-full border rounded-lg px-3 py-2" /></div>
+        <div><label class="block text-slate-600 mb-1">SMTP username</label><input name="smtp_username" value="{{ smtp.smtp_username }}" class="w-full border rounded-lg px-3 py-2" /></div>
+        <div><label class="block text-slate-600 mb-1">SMTP password</label><input type="password" name="smtp_password" value="{{ smtp.smtp_password }}" class="w-full border rounded-lg px-3 py-2" /></div>
+        <div><label class="block text-slate-600 mb-1">Sender email</label><input name="sender_email" value="{{ smtp.sender_email }}" class="w-full border rounded-lg px-3 py-2" /></div>
+        <div><label class="block text-slate-600 mb-1">Sender name</label><input name="sender_name" value="{{ smtp.sender_name }}" class="w-full border rounded-lg px-3 py-2" /></div>
+      </div>
+      <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="use_tls" {% if smtp.use_tls %}checked{% endif %}> TLS</label>
+      <label class="inline-flex items-center gap-2 text-sm ml-4"><input type="checkbox" name="use_ssl" {% if smtp.use_ssl %}checked{% endif %}> SSL</label>
+      <div class="border-t border-slate-100 pt-4 mt-4">
+        <div class="text-sm font-semibold text-slate-700 mb-2">IMAP (inbox fetch)</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div><label class="block text-slate-600 mb-1">IMAP host</label><input name="imap_host" value="{{ smtp.imap_host }}" class="w-full border rounded-lg px-3 py-2" /></div>
+          <div><label class="block text-slate-600 mb-1">IMAP port</label><input type="number" name="imap_port" value="{{ smtp.imap_port }}" class="w-full border rounded-lg px-3 py-2" /></div>
+          <div><label class="block text-slate-600 mb-1">IMAP username</label><input name="imap_username" value="{{ smtp.imap_username }}" class="w-full border rounded-lg px-3 py-2" /></div>
+          <div><label class="block text-slate-600 mb-1">IMAP password</label><input type="password" name="imap_password" value="{{ smtp.imap_password }}" class="w-full border rounded-lg px-3 py-2" /></div>
+        </div>
+      </div>
+      <button type="submit" class="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold">Save integration</button>
+    </form>
+    <form method="post" class="mt-4 flex flex-wrap items-end gap-2">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="test_email" />
+      <div class="flex-1 min-w-[200px]">
+        <label class="block text-xs text-slate-600 mb-1">Test email</label>
+        <input name="test_email" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="you@company.com" />
+      </div>
+      <button type="submit" class="bg-slate-100 border border-slate-200 rounded-lg px-4 py-2 text-sm font-semibold">Send test</button>
+    </form>
+  </div>
+
+  <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+    <h2 class="text-lg font-semibold mb-4">Automation master</h2>
+    <form method="post" class="flex items-center gap-3">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_master" />
+      <label class="inline-flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" name="master_enabled" {% if sys_s.master_enabled %}checked{% endif %}> Enable automated emails (templates below)
+      </label>
+      <button type="submit" class="bg-slate-900 text-white rounded-lg px-4 py-2 text-sm">Save</button>
+    </form>
+  </div>
+
+  <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+    <h2 class="text-lg font-semibold mb-4">2. Email templates</h2>
+    <p class="text-sm text-slate-500 mb-2">Rich editor, layout, and preview: <a href="{% url 'admin-system-email-templates' %}" class="text-indigo-600 font-medium underline">System Management → Email Templates</a></p>
+    <p class="text-sm text-slate-500 mb-4">Variables (double curly braces in body/subject): <code class="text-xs bg-slate-100 px-1 rounded">name, email, amount, reason, company_name, date, account_number</code></p>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50 text-left"><tr><th class="p-2">Event</th><th class="p-2">Name</th><th class="p-2">Send</th><th class="p-2"></th></tr></thead>
+        <tbody>
+          {% for t in templates %}
+          <tr class="border-t">
+            <td class="p-2 font-mono text-xs">{{ t.event_key }}</td>
+            <td class="p-2">{{ t.name }}</td>
+            <td class="p-2">{% if t.send_enabled %}<span class="text-emerald-600">On</span>{% else %}<span class="text-slate-400">Off</span>{% endif %}</td>
+            <td class="p-2"><a href="{% url 'admin-system-email-templates-edit' t.pk %}" class="text-indigo-700 font-medium hover:underline">Edit</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="p-4 text-slate-500">No templates — save SMTP and reload.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+    <h2 class="text-lg font-semibold mb-4">3. Event mapping</h2>
+    <p class="text-sm text-slate-500 mb-4">Keep templates in <strong>Email templates</strong>, and map events here in email settings.</p>
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_event_mapping" />
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% for row in event_rows %}
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">{{ row.label }}</label>
+            <select name="map_{{ row.key }}" class="w-full border rounded-lg px-3 py-2 text-sm">
+              <option value="">Use default template key ({{ row.key }})</option>
+              {% for t in templates %}
+                <option value="{{ t.id }}" {% if row.selected_id == t.id %}selected{% endif %}>{{ t.name }} ({{ t.event_key }})</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% endfor %}
+      </div>
+      <button type="submit" class="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold">Save mapping</button>
+    </form>
+  </div>
+
+  <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+    <h2 class="text-lg font-semibold mb-4">Recent sends</h2>
+    <div class="overflow-x-auto text-sm">
+      <table class="min-w-full">
+        <thead class="bg-slate-50 text-left"><tr><th class="p-2">When</th><th class="p-2">User</th><th class="p-2">Type</th><th class="p-2">Subject</th><th class="p-2">Status</th></tr></thead>
+        <tbody>
+          {% for r in recent_logs %}
+          <tr class="border-t">
+            <td class="p-2 whitespace-nowrap">{{ r.created_at|date:"Y-m-d H:i" }}</td>
+            <td class="p-2">{{ r.email }}</td>
+            <td class="p-2 font-mono text-xs">{{ r.event_key|default:"—" }}</td>
+            <td class="p-2">{{ r.subject|truncatechars:40 }}</td>
+            <td class="p-2">{% if r.status == "SENT" %}<span class="text-emerald-600">Sent</span>{% else %}<span class="text-rose-600">Failed</span>{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="p-4 text-slate-500">No history yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <a href="{% url 'admin-email-history' %}" class="inline-block mt-3 text-sm text-indigo-700 hover:underline">Full email history</a>
+  </div>
+</div>
+{% endblock %}
+

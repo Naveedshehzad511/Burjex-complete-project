@@ -1,0 +1,162 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Payment Requests{% endblock %}
+
+{% block admin_content %}
+<div class="payment-requests-page">
+  <script>
+    function submitRejectWithReason(formEl, label) {
+      const reason = window.prompt("Enter Reject Reason for " + label + ":");
+      if (reason === null) return false;
+      const val = String(reason).trim();
+      if (!val) {
+        alert("Reject reason is required.");
+        return false;
+      }
+      const input = formEl.querySelector('input[name="reject_reason"]');
+      if (input) input.value = val;
+      formEl.submit();
+      return false;
+    }
+  </script>
+  
+  <div class="bp-page-header bp-s-6 flex items-start gap-4">
+    <div>
+      <h1 class="bp-page-title"><i class="fa-solid fa-money-bill-transfer bp-s-140"></i>{% if req_type == "deposit" %}Deposit{% else %}Withdrawal{% endif %} report</h1>
+      <p class="bp-page-subtitle">Real-money requests only (demo ledger excluded). Use tabs to switch approved vs rejected.</p>
+    </div>
+    <a href="{% url 'admin-reports-dashboard' %}" class="bp-btn bp-btn-outline h-9 w-9 p-0 flex items-center justify-center shrink-0 mt-1" title="Back to Reports Dashboard">
+      <i class="fa-solid fa-arrow-left"></i>
+    </a>
+  </div>
+
+  <div class="bp-card mb-4">
+    <div class="bp-card-body p-3 bg-slate-50/50 dark:bg-slate-900/20">
+      <div class="flex flex-wrap gap-2 border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
+        <a href="?type={{ req_type }}&status_group=approved&period={{ filters.period|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}&q={{ filters.q|urlencode }}&method={{ filters.method|urlencode }}"
+           class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if filters.status_group == 'approved' %}bg-indigo-600 text-white shadow-sm{% else %}bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700{% endif %}">Approved / completed</a>
+        <a href="?type={{ req_type }}&status_group=rejected&period={{ filters.period|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}&q={{ filters.q|urlencode }}&method={{ filters.method|urlencode }}"
+           class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if filters.status_group == 'rejected' %}bg-indigo-600 text-white shadow-sm{% else %}bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700{% endif %}">Rejected</a>
+        <a href="?type={{ req_type }}&period={{ filters.period|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}&q={{ filters.q|urlencode }}&method={{ filters.method|urlencode }}"
+           class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if not filters.status_group %}bg-indigo-600 text-white shadow-sm{% else %}bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700{% endif %}">All statuses</a>
+      </div>
+      
+      <form method="get" class="flex flex-wrap items-center gap-3 w-full text-sm" id="paymentRequestsFilterForm">
+        <input type="hidden" name="type" value="{{ req_type }}">
+        {% if filters.status_group %}<input type="hidden" name="status_group" value="{{ filters.status_group }}">{% endif %}
+        {% if filters.period %}<input type="hidden" name="period" value="{{ filters.period }}">{% endif %}
+        
+        <div class="flex-1 min-w-[200px]">
+          <input name="q" value="{{ filters.q }}" class="w-full sm:w-[300px] h-10 px-4 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors text-slate-900 dark:text-white placeholder:text-slate-400" placeholder="Search by MT5 ID, note, email..." oninput="debounceSubmit()">
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0 ml-auto sm:ml-0">
+          <span class="text-[11px] font-semibold text-slate-400 uppercase">Export:</span>
+          <a href="?type={{ req_type }}&q={{ filters.q|urlencode }}&status={{ filters.status|urlencode }}&status_group={{ filters.status_group|urlencode }}&method={{ filters.method|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}&period={{ filters.period|urlencode }}&export=excel" class="bp-btn bp-btn-outline h-9 px-3 text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40">Excel</a>
+          <a href="?type={{ req_type }}&q={{ filters.q|urlencode }}&status={{ filters.status|urlencode }}&status_group={{ filters.status_group|urlencode }}&method={{ filters.method|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}&period={{ filters.period|urlencode }}&export=csv" class="bp-btn bp-btn-outline h-9 px-3 text-xs bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700">CSV</a>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script>
+    let debounceTimer;
+    function debounceSubmit() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        document.getElementById('paymentRequestsFilterForm').submit();
+      }, 500);
+    }
+  </script>
+
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <span class="bp-card-header-title"><i class="fa-solid fa-list me-2"></i>Requests List</span>
+    </div>
+    <div class="bp-card-body p-0">
+      <div class="overflow-x-auto w-full">
+        <table class="bp-table min-w-full text-sm">
+          <thead>
+            <tr>
+              <th>MT5 ID</th>
+              <th>Amount</th>
+              <th>Payment Method</th>
+              <th>Note</th>
+              <th>Comment</th>
+              {% if req_type == "deposit" %}<th>Deposit Proof</th>{% endif %}
+              <th>Status</th>
+              <th>Date</th>
+              <th>Marketing Name</th>
+              <th>Approved/Rejected By</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in page_obj.object_list %}
+              <tr>
+                <td class="font-medium text-indigo-600 dark:text-indigo-400">{{ t.reference|default:"-" }}</td>
+                <td class="font-bold text-slate-800 dark:text-slate-200">{{ t.amount }} {{ t.currency }}</td>
+                <td>{{ t.payment_gateway.name|default:"-" }}</td>
+                <td class="text-xs text-slate-500">{{ t.notes|default:"-" }}</td>
+                <td class="text-xs text-slate-500 max-w-[200px] truncate" title="{{ t.account_details }}">{{ t.account_details|default:"-"|truncatechars:40 }}</td>
+                {% if req_type == "deposit" %}
+                <td>
+                  {% if t.payment_screenshot %}
+                    <a href="{{ t.payment_screenshot.url }}" class="bp-btn bp-btn-outline h-auto py-1 px-2 text-[10px]" target="_blank"><i class="fa-solid fa-image me-1"></i>View</a>
+                  {% else %}
+                    <span class="text-slate-400">—</span>
+                  {% endif %}
+                </td>
+                {% endif %}
+                <td>
+                  {% if t.status == "APPROVED" or t.status == "COMPLETED" %}
+                    <span class="bp-badge bp-badge-success">Approved</span>
+                  {% elif t.status == "PENDING" %}
+                    <span class="bp-badge bp-badge-warning">Pending</span>
+                  {% else %}
+                    <span class="bp-badge bp-badge-error">Rejected</span>
+                  {% endif %}
+                </td>
+                <td class="whitespace-nowrap text-slate-600 dark:text-slate-400">{{ t.created_at|date:"Y-m-d H:i" }}</td>
+                <td>{% if t.actor.referred_by_id %}{{ t.actor.referred_by.display_name }}{% else %}-{% endif %}</td>
+                <td class="text-slate-500">System</td>
+                <td>
+                  <div class="flex flex-row items-center gap-1.5 flex-nowrap whitespace-nowrap">
+                    {% if t.status == 'PENDING' %}
+                    <form method="post" class="inline m-0">
+                      {% csrf_token %}
+                      <input type="hidden" name="tx_id" value="{{ t.id }}">
+                      <input type="hidden" name="action" value="approve">
+                      <button class="bp-btn bg-emerald-500 hover:bg-emerald-600 text-white border-0 px-3 py-1 text-xs h-auto shadow-sm transition-colors">Approve</button>
+                    </form>
+                    <form method="post" class="inline m-0">
+                      {% csrf_token %}
+                      <input type="hidden" name="tx_id" value="{{ t.id }}">
+                      <input type="hidden" name="action" value="reject">
+                      <input type="hidden" name="reject_reason" value="">
+                      <button type="button" onclick="return submitRejectWithReason(this.form, '{{ req_type|title }} #{{ t.id }}');" class="bp-btn bg-rose-500 hover:bg-rose-600 text-white border-0 px-3 py-1 text-xs h-auto shadow-sm transition-colors">Reject</button>
+                    </form>
+                    {% else %}
+                    <span class="text-slate-400">—</span>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td class="p-8 text-center text-slate-500" colspan="11">No requests found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if page_obj.paginator.num_pages > 1 %}
+      <div class="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-sm">
+        <div class="text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+        <div class="flex gap-2">
+          {% if page_obj.has_previous %}<a class="bp-btn bp-btn-outline h-auto py-1 px-3 text-xs" href="?type={{ req_type }}&page={{ page_obj.previous_page_number }}&q={{ filters.q|urlencode }}&status={{ filters.status|urlencode }}&status_group={{ filters.status_group|urlencode }}&method={{ filters.method|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}&period={{ filters.period|urlencode }}">Previous</a>{% endif %}
+          {% if page_obj.has_next %}<a class="bp-btn bp-btn-outline h-auto py-1 px-3 text-xs" href="?type={{ req_type }}&page={{ page_obj.next_page_number }}&q={{ filters.q|urlencode }}&status={{ filters.status|urlencode }}&status_group={{ filters.status_group|urlencode }}&method={{ filters.method|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}&period={{ filters.period|urlencode }}">Next</a>{% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

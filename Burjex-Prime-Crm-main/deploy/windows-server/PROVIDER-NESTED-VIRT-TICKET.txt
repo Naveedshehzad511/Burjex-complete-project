@@ -1,0 +1,22 @@
+Subject: Enable nested virtualization / VT-x for Windows VPS 5.226.139.8
+
+Hello,
+
+Please enable nested virtualization (Intel VT-x / EPT / “Expose hardware virtualization extensions to the guest”) for our Windows VPS:
+
+  IP:       5.226.139.8
+  Hostname: Forexten
+  OS:       Microsoft Windows Server 2025 Standard (build 26100)
+
+Evidence from inside the guest:
+  - Docker Desktop: “Virtualization support not detected” / Engine stopped
+  - Win32_Processor.VirtualizationFirmwareEnabled = False
+  - SecondLevelAddressTranslationExtensions = False
+  - VMMonitorModeExtensions = False
+  - Hyper-V / VirtualMachinePlatform features are already enabled in Windows,
+    but the CPU virtualization extensions are not visible to the guest.
+
+We need this so Docker Desktop (WSL2 / Hyper-V Linux containers) can run.
+Sign-in / software reinstall will not fix a missing nested-virt flag from the host.
+
+Thank you.

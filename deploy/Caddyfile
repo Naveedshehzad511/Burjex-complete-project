@@ -1,0 +1,176 @@
+# ============================================================================
+#  Burjex Prime — single edge for CRM + B-Trader on one server.
+#
+#  WebSockets: Caddy detects the Upgrade handshake and switches the proxied
+#  connection to a raw bidirectional stream by itself — there is no Nginx-style
+#  `proxy_set_header Upgrade` to write. What DOES have to be set explicitly is
+#  the transport read/write timeout: the default would tear down an idle price
+#  socket, so the ws/chat routes below use `read_timeout 0` (never time out)
+#  plus `flush_interval -1` (flush every frame immediately, no buffering).
+#  Buffering is what turns a "realtime" feed into a laggy one, so it stays off.
+# ============================================================================
+
+{
+	email {$ACME_EMAIL}
+	# Uncomment while testing so you don't burn Let's Encrypt rate limits:
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+# Caddy sets no server-level read/write/idle timeouts by default, which is
+# already what long-lived WebSockets need — so there is no global `timeouts`
+# block here on purpose. The timeouts that do matter are per-upstream, in the
+# transport blocks below.
+
+# ── Reusable snippets ───────────────────────────────────────────────────────
+
+# Plain request/response proxying (REST).
+(api_proxy) {
+	reverse_proxy {args[0]} {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		transport http {
+			dial_timeout 10s
+			read_timeout 120s
+		}
+	}
+}
+
+# Streaming/WebSocket proxying: no read timeout, no response buffering.
+(ws_proxy) {
+	reverse_proxy {args[0]} {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		flush_interval -1
+		transport http {
+			dial_timeout 10s
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# ============================================================================
+#  CRM — Django (ASGI). Serves the admin + client portal + /api/v1 + live chat.
+# ============================================================================
+{$CRM_HOST} {
+	import security_headers
+
+	# Collected static + uploaded media come straight off disk (never Django).
+	handle_path /static/* {
+		root * /srv/crm/static
+		file_server
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+	handle_path /media/* {
+		root * /srv/crm/media
+		file_server
+	}
+
+	# Django Channels (live_chat) — same host, needs the streaming transport.
+	@crm_ws path /ws/*
+	handle @crm_ws {
+		import ws_proxy crm-web:8000
+	}
+
+	handle {
+		reverse_proxy crm-web:8000 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			transport http {
+				dial_timeout 10s
+				read_timeout 120s
+			}
+		}
+	}
+
+	request_body {
+		max_size 25MB
+	}
+	encode zstd gzip
+}
+
+# ============================================================================
+#  B-Trader REST API (gateway-api :4100) — Swagger at /docs.
+# ============================================================================
+{$API_HOST} {
+	import security_headers
+	import api_proxy btrader-gateway:4100
+	request_body {
+		max_size 10MB
+	}
+	encode zstd gzip
+}
+
+# ============================================================================
+#  B-Trader WebSocket (ws-gateway :4101)  →  wss://{$WS_HOST}
+#
+#  The ws-gateway listens on the ROOT path and authenticates via the
+#  `?token=<accessJWT>` query string, so the whole host is proxied as-is.
+#  Clients must use:  wss://{$WS_HOST}   (no path, no trailing slash)
+#
+#  Do NOT enable `encode` here — compressing a socket adds latency and breaks
+#  the per-frame flush that keeps ticks instant.
+# ============================================================================
+{$WS_HOST} {
+	import security_headers
+	import ws_proxy btrader-ws:4101
+}
+
+# ============================================================================
+#  B-Trader admin dashboard (Flutter web, static build).
+# ============================================================================
+{$ADMIN_HOST} {
+	import security_headers
+	root * /srv/btrader-admin
+	encode zstd gzip
+	try_files {path} {path}/ /index.html
+	file_server
+	@immutable path *.js *.css *.woff2 *.png *.svg
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-cache"
+}
+
+# ============================================================================
+#  B-Trader web trader (Flutter web, static build). Optional.
+# ============================================================================
+{$APP_HOST} {
+	import security_headers
+	root * /srv/btrader-trader
+	encode zstd gzip
+	try_files {path} {path}/ /index.html
+	file_server
+	@immutable path *.js *.css *.woff2 *.png *.svg
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-cache"
+}
+
+# ============================================================================
+#  MT5 price ingest (market-data :4200) — the Windows MT5 bridge POSTs ticks
+#  to https://{$FEED_HOST}/ingest with the MT5_FEED_TOKEN.
+#
+#  Set FEED_ALLOWED_IPS in .env.prod to the bridge VPS IP(s) to lock this down
+#  to your own infrastructure; the token is still required either way.
+# ============================================================================
+{$FEED_HOST} {
+	import security_headers
+
+	@blocked not remote_ip {$FEED_ALLOWED_IPS:0.0.0.0/0 ::/0}
+	respond @blocked "forbidden" 403
+
+	import api_proxy btrader-market-data:4200
+}

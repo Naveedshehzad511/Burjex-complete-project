@@ -1,0 +1,5 @@
+keyId=bt_1442d2957faaa4fd00
+secret=159e2d7dae42024b1929383aaec8d0a17ce321447d1c0dbb
+webhookSecret=9d270ee595f80ede990132376a7f9ef0
+gateway=http://btrader_gateway:4100
+tenant=demo

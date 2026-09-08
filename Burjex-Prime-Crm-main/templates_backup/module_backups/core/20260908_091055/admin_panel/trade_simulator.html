@@ -1,0 +1,88 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Trade Simulator{% endblock %}
+{% block admin_content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <h1 class="text-xl font-semibold">IB trade simulator</h1>
+  <p class="text-sm text-slate-500">Estimate IB vs company share using CRM commission settings. IB user defaults to client referrer when left blank.</p>
+  {% if not crm_comm.enable_crm_lot_commission %}
+  <div class="rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-2">Broker per-lot charge in CRM is <strong>off</strong> — company share uses profit-per-lot × lots only. Enable under Broker CRM commission (testing).</div>
+  {% endif %}
+  <form method="post" class="bg-white border rounded-xl p-6 space-y-4 text-sm">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="calculate" />
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-slate-600 mb-1">Client</label>
+        <select name="client_id" class="w-full border rounded-lg px-3 py-2" required>
+          {% for c in clients %}<option value="{{ c.id }}" {% if form.client_id == c.id|stringformat:"s" %}selected{% endif %}>{{ c.email }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-slate-600 mb-1">IB (optional)</label>
+        <select name="ib_user_id" class="w-full border rounded-lg px-3 py-2">
+          <option value="">— Auto from referrer —</option>
+          {% for ib in ib_users %}<option value="{{ ib.id }}" {% if form.ib_user_id == ib.id|stringformat:"s" %}selected{% endif %}>{{ ib.email }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-slate-600 mb-1">Symbol</label>
+        <input name="symbol" list="symopts" value="{{ form.symbol }}" class="w-full border rounded-lg px-3 py-2" placeholder="XAUUSD" />
+        <datalist id="symopts">{% for code in symbol_codes %}<option value="{{ code }}">{% endfor %}</datalist>
+      </div>
+      <div>
+        <label class="block text-slate-600 mb-1">Account type</label>
+        <select name="account_type_id" class="w-full border rounded-lg px-3 py-2">
+          <option value="">— Any —</option>
+          {% for a in account_types %}<option value="{{ a.id }}" {% if form.account_type_id == a.id|stringformat:"s" %}selected{% endif %}>{{ a.account_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-slate-600 mb-1">Lots</label>
+        <input name="lots" type="text" value="{{ form.lots|default:'1' }}" class="w-full border rounded-lg px-3 py-2" />
+      </div>
+      <div>
+        <label class="block text-slate-600 mb-1">Profit per lot (USD)</label>
+        <input name="profit_per_lot" type="text" value="{{ form.profit_per_lot|default:'25' }}" class="w-full border rounded-lg px-3 py-2" />
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-slate-600 mb-1">Commission per lot charged to client (CRM testing)</label>
+        <input name="commission_per_lot" type="text" value="{{ form.commission_per_lot|default:'25' }}" class="w-full border rounded-lg px-3 py-2" />
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" name="action" value="calculate" class="bg-indigo-600 text-white rounded-lg px-4 py-2 font-semibold">Calculate</button>
+      <button type="submit" name="action" value="save" class="bg-emerald-700 text-white rounded-lg px-4 py-2 font-semibold">Save trade</button>
+    </div>
+  </form>
+
+  {% if calc %}
+  <div class="bg-slate-50 border rounded-xl p-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+    <div><div class="text-slate-500">Effective IB %</div><div class="text-xl font-bold">{{ calc.pct }}%</div></div>
+    <div><div class="text-slate-500">Client charge base</div><div class="text-xl font-bold">{{ calc.client_charge }}</div></div>
+    <div><div class="text-slate-500">IB commission</div><div class="text-xl font-bold text-emerald-700">{{ calc.ib_commission }}</div></div>
+    <div><div class="text-slate-500">Company profit</div><div class="text-xl font-bold text-indigo-800">{{ calc.company_profit }}</div></div>
+  </div>
+  {% endif %}
+
+  <div class="bg-white border rounded-xl p-4">
+    <h2 class="font-semibold mb-2">Recent simulations</h2>
+    <table class="min-w-full text-xs">
+      <thead><tr class="text-left border-b"><th class="p-2">When</th><th class="p-2">Client</th><th class="p-2">IB</th><th class="p-2">Sym</th><th class="p-2">Lots</th><th class="p-2">IB $</th><th class="p-2">Co $</th></tr></thead>
+      <tbody>
+        {% for r in recent %}
+        <tr class="border-t">
+          <td class="p-2">{{ r.created_at|date:"m-d H:i" }}</td>
+          <td class="p-2">{{ r.client.email }}</td>
+          <td class="p-2">{{ r.ib_user.email|default:"—" }}</td>
+          <td class="p-2 font-mono">{{ r.symbol }}</td>
+          <td class="p-2">{{ r.lots }}</td>
+          <td class="p-2">{{ r.ib_commission_estimate }}</td>
+          <td class="p-2">{{ r.company_profit_estimate }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="7" class="p-3 text-slate-500">None yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

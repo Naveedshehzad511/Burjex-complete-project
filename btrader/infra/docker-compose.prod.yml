@@ -1,0 +1,152 @@
+# ============================================================================
+#  B-Trader — PRODUCTION compose for CO-HOSTING on the existing Hetzner box
+#  that already runs the Example CRM.
+#
+#  Design:
+#   • B-Trader gets its OWN Postgres + Redis (separate containers/volumes) — it
+#     never shares the CRM's databases.
+#   • No host ports are published, so there is ZERO conflict with the CRM.
+#   • gateway-api + ws-gateway also join the CRM's existing "example_network"
+#     so the CRM's nginx can reverse-proxy to them by container name, and the
+#     CRM API can call B-Trader internally at http://btrader-gateway:4100.
+#
+#  Run:
+#   docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod up -d --build
+# ============================================================================
+
+services:
+  btrader-postgres:
+    image: postgres:16-alpine
+    container_name: btrader_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${BT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${BT_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${BT_POSTGRES_DB}
+    volumes:
+      - btrader_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${BT_POSTGRES_USER} -d ${BT_POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [btrader_internal]
+
+  btrader-redis:
+    image: redis:7-alpine
+    container_name: btrader_redis
+    restart: always
+    command: >
+      redis-server --requirepass ${BT_REDIS_PASSWORD} --appendonly yes
+      --maxmemory 512mb --maxmemory-policy noeviction
+    volumes:
+      - btrader_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${BT_REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [btrader_internal]
+
+  btrader-gateway:
+    build: { context: .., dockerfile: infra/Dockerfile, args: { SERVICE: gateway-api } }
+    container_name: btrader_gateway
+    restart: always
+    expose: ['4100']
+    env_file: .env.prod
+    environment:
+      NODE_ENV: production
+      API_PORT: '4100'
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+    volumes:
+      - btrader_uploads:/app/uploads
+    networks: [btrader_internal, example_network]
+
+  btrader-ws:
+    build: { context: .., dockerfile: infra/Dockerfile, args: { SERVICE: ws-gateway } }
+    container_name: btrader_ws
+    restart: always
+    expose: ['4101']
+    env_file: .env.prod
+    environment:
+      NODE_ENV: production
+      WS_PORT: '4101'
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+    depends_on:
+      btrader-redis: { condition: service_healthy }
+    networks: [btrader_internal, example_network]
+
+  btrader-engine:
+    build: { context: .., dockerfile: infra/Dockerfile, args: { SERVICE: trading-engine } }
+    container_name: btrader_engine
+    restart: always
+    env_file: .env.prod
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+    networks: [btrader_internal]
+
+  btrader-market-data:
+    build: { context: .., dockerfile: infra/Dockerfile, args: { SERVICE: market-data } }
+    container_name: btrader_market_data
+    restart: always
+    env_file: .env.prod
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=5
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+      # MT5 live feed: an Expert Advisor POSTs ticks to the ingest port, which
+      # Caddy publishes at https://feed.example.com/ingest.
+      LP_BRIDGE_DRIVER: ${LP_BRIDGE_DRIVER:-}         # mt5-ingest = live MT5 feed; empty = NO prices (never mock unless explicitly =mock)
+      MT5_INGEST_PORT: '4200'
+      MT5_FEED_TOKEN: ${MT5_FEED_TOKEN:-}             # shared secret; must match the EA's InpToken
+      MT5_SYMBOL_SUFFIX: ${MT5_SYMBOL_SUFFIX:-}       # e.g. ".r" to map EURUSD.r -> EURUSD
+      MT5_MAX_TICK_AGE_MS: ${MT5_MAX_TICK_AGE_MS:-0}
+      CANDLE_FLUSH_SCAN_MS: ${CANDLE_FLUSH_SCAN_MS:-5000}
+      CANDLE_TIP_MIN_MS: ${CANDLE_TIP_MIN_MS:-20000}
+      CANDLE_BATCH_SIZE: ${CANDLE_BATCH_SIZE:-80}
+      CANDLE_MAX_PER_FLUSH: ${CANDLE_MAX_PER_FLUSH:-400}
+    expose: ['4200']
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+    # Joins example_network so Caddy can reverse_proxy feed.btrader.<domain> here.
+    networks: [btrader_internal, example_network]
+
+  # Static host for the Flutter web admin. Serves the prebuilt files from
+  # /root/btrader-admin (rsync'd from your Mac). Joins example_network so Caddy
+  # can reverse_proxy admin.btrader.<domain> → btrader_admin:80.
+  btrader-admin:
+    image: nginx:alpine
+    container_name: btrader_admin
+    restart: always
+    volumes:
+      - /root/btrader-admin:/usr/share/nginx/html:ro
+      - /root/btrader-admin-broker:/usr/share/nginx/html-broker:ro
+      - /root/btrader-trader-broker:/usr/share/nginx/html-broker-trader:ro
+      - ./nginx/btrader-admin.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [example_network]
+
+volumes:
+  btrader_pg:
+  btrader_redis:
+  btrader_uploads:
+
+networks:
+  # Private network for B-Trader's own DB/Redis/services.
+  btrader_internal:
+    name: btrader_internal
+    driver: bridge
+  # The CRM's existing network — declared external so nginx (and the CRM API)
+  # can reach btrader-gateway/btrader-ws. Confirm the real name with:
+  #   docker network ls   (the CRM compose names it "example_network")
+  example_network:
+    external: true

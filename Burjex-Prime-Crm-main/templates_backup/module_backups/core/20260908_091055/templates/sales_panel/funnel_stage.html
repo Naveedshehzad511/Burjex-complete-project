@@ -1,0 +1,187 @@
+{% extends "sales_panel/base.html" %}
+{% load humanize static %}
+
+{% block title %}{{ stage_title }} — Funnel{% endblock %}
+{% block admin_shell_page_title %}{{ stage_title }}{% endblock %}
+
+{% block admin_content %}
+<div class="fs-shell">
+  <div class="fs-inner">
+    <div class="fs-head">
+      <h1>{{ stage_title }}</h1>
+      <a class="fs-back" href="{% url 'sales-funnel' %}"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Funnel overview</a>
+    </div>
+
+    <div class="fs-table-wrap">
+      <table class="fs-table">
+      <thead>
+        <tr>
+          {% if stage_key == "visitors" %}
+            <th>Name</th><th>Email</th><th>Phone</th><th>Visit date</th><th>Assignment &amp; actions</th>
+          {% elif stage_key == "registered" %}
+            <th>Name</th><th>Email</th><th>Registered</th><th>Assignment &amp; actions</th>
+          {% elif stage_key == "verified" %}
+            <th>Name</th><th>KYC status</th><th>Verification</th><th>Assignment &amp; actions</th>
+          {% elif stage_key == "trading" %}
+            <th>Client</th><th>Account #</th><th>Type</th><th>Assignment &amp; actions</th>
+          {% elif stage_key == "deposit" or stage_key == "active" %}
+            <th>Client</th><th>Deposit</th><th>Date</th><th>Assignment &amp; actions</th>
+          {% else %}
+            <th>Lead</th><th>Details</th><th>Actions</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr class="{% if row.tone == 'dropped' %}fs-row--dropped{% elif row.tone == 'complete' %}fs-row--complete{% else %}fs-row--pending{% endif %}">
+            {% if row.kind == "visitor" %}
+              {% with v=row.visitor %}
+                <td><strong>{{ v.full_name }}</strong></td>
+                <td><a class="text-emerald-400" href="mailto:{{ v.email }}">{{ v.email }}</a></td>
+                <td>{% if v.phone %}<a class="text-sky-400" href="tel:{{ v.phone }}">{{ v.phone }}</a>{% else %}—{% endif %}</td>
+                <td>{{ v.created_at|date:"M j, Y H:i" }}</td>
+                <td>
+                  <div class="fs-actions">
+                    {% if v.phone %}<a class="fs-btn" href="tel:{{ v.phone }}">Call</a>{% endif %}
+                    <a class="fs-btn" href="mailto:{{ v.email }}">Email</a>
+                    {% if row.whatsapp_url %}<a class="fs-btn" href="{{ row.whatsapp_url }}" target="_blank" rel="noopener">WhatsApp</a>{% endif %}
+                  </div>
+                  <form method="post" action="{% url 'sales-funnel-action' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                    <input type="hidden" name="visitor_id" value="{{ v.id }}" />
+                    <div class="fs-actions">
+                      <button type="submit" name="action" value="log_call" class="fs-btn">Log call</button>
+                      <button type="submit" name="action" value="log_email" class="fs-btn">Log email</button>
+                      <button type="submit" name="action" value="log_whatsapp" class="fs-btn">Log WhatsApp</button>
+                    </div>
+                  </form>
+                  <input type="text" class="fs-note" placeholder="Note (optional)" id="note-v-{{ v.id }}" />
+                  <form method="post" action="{% url 'sales-funnel-action' %}" onsubmit="this.elements.namedItem('note').value=document.getElementById('note-v-{{ v.id }}').value;">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                    <input type="hidden" name="visitor_id" value="{{ v.id }}" />
+                    <input type="hidden" name="note" value="" />
+                    <button type="submit" name="action" value="save_note" class="fs-btn">Save note</button>
+                  </form>
+                  <form method="post" action="{% url 'sales-funnel-action' %}" class="fs-assign">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                    <input type="hidden" name="visitor_id" value="{{ v.id }}" />
+                    <select name="manager_id" aria-label="Manager">
+                      <option value="">Manager…</option>
+                      {% for s in assignable_staff %}<option value="{{ s.id }}">{{ s.display_name }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" name="action" value="assign_manager" class="fs-btn">Assign Mgr</button>
+                    <select name="agent_id" aria-label="Agent">
+                      <option value="">Agent…</option>
+                      {% for s in assignable_staff %}<option value="{{ s.id }}">{{ s.display_name }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" name="action" value="assign_agent" class="fs-btn">Assign Agt</button>
+                  </form>
+                  {% if v.assigned_manager or v.assigned_agent %}
+                    <div class="fs-mini">Mgr: {{ v.assigned_manager.display_name|default:"—" }} · Agt: {{ v.assigned_agent.display_name|default:"—" }}</div>
+                  {% endif %}
+                  {% if v.last_contact_at %}
+                    <div class="fs-mini">Last contact: {{ v.last_contact_at|date:"M j, Y H:i" }}{% if v.last_contacted_by %} ({{ v.last_contacted_by.display_name }}){% endif %}</div>
+                  {% endif %}
+                  <div class="fs-actions" style="margin-top:0.5rem;">
+                    <form method="post" action="{% url 'sales-funnel-action' %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                      <input type="hidden" name="visitor_id" value="{{ v.id }}" />
+                      <button type="submit" name="action" value="mark_dropped" class="fs-btn fs-btn--red">Mark dropped</button>
+                    </form>
+                    <form method="post" action="{% url 'sales-funnel-action' %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                      <input type="hidden" name="visitor_id" value="{{ v.id }}" />
+                      <button type="submit" name="action" value="clear_dropped" class="fs-btn">Clear dropped</button>
+                    </form>
+                  </div>
+                </td>
+              {% endwith %}
+            {% else %}
+              {% with u=row.user %}
+                <td>
+                  <strong>{{ u.display_name }}</strong>
+                  {% if stage_key != "registered" %}<div class="fs-mini">{{ u.email }}</div>{% endif %}
+                </td>
+                {% if stage_key == "registered" %}
+                  <td><a class="text-emerald-400" href="mailto:{{ u.email }}">{{ u.email }}</a></td>
+                  <td>{{ u.date_joined|date:"M j, Y H:i" }}</td>
+                {% elif stage_key == "verified" %}
+                  <td>{{ u.get_kyc_status_display }}</td>
+                  <td>{% if u.kyc_approved_at %}{{ u.kyc_approved_at|date:"M j, Y H:i" }}{% else %}—{% endif %}</td>
+                {% elif stage_key == "trading" %}
+                  <td>{% if row.mt5_login %}{{ row.mt5_login }}{% else %}—{% endif %}</td>
+                  <td>{{ row.mt5_type|default:"—" }}</td>
+                {% elif stage_key == "deposit" or stage_key == "active" %}
+                  <td>{% if row.deposit_amount %}${{ row.deposit_amount|floatformat:2|intcomma }} {{ row.deposit_currency }}{% else %}—{% endif %}</td>
+                  <td>{% if row.deposit_date %}{{ row.deposit_date|date:"M j, Y H:i" }}{% else %}—{% endif %}</td>
+                {% endif %}
+                <td>
+                  <div class="fs-actions">
+                    {% if u.phone %}<a class="fs-btn" href="tel:{{ u.phone }}">Call</a>{% endif %}
+                    <a class="fs-btn" href="mailto:{{ u.email }}">Email</a>
+                    {% if row.whatsapp_url %}<a class="fs-btn" href="{{ row.whatsapp_url }}" target="_blank" rel="noopener">WhatsApp</a>{% endif %}
+                  </div>
+                  <form method="post" action="{% url 'sales-funnel-action' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                    <input type="hidden" name="user_id" value="{{ u.id }}" />
+                    <div class="fs-actions">
+                      <button type="submit" name="action" value="log_call" class="fs-btn">Log call</button>
+                      <button type="submit" name="action" value="log_email" class="fs-btn">Log email</button>
+                      <button type="submit" name="action" value="log_whatsapp" class="fs-btn">Log WhatsApp</button>
+                    </div>
+                  </form>
+                  <input type="text" class="fs-note" placeholder="Note" id="note-u-{{ u.id }}" />
+                  <form method="post" action="{% url 'sales-funnel-action' %}" onsubmit="this.elements.namedItem('note').value=document.getElementById('note-u-{{ u.id }}').value;">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                    <input type="hidden" name="user_id" value="{{ u.id }}" />
+                    <input type="hidden" name="note" value="" />
+                    <button type="submit" name="action" value="save_note" class="fs-btn">Save note</button>
+                  </form>
+                  <form method="post" action="{% url 'sales-funnel-action' %}" class="fs-assign">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                    <input type="hidden" name="user_id" value="{{ u.id }}" />
+                    <select name="manager_id"><option value="">Manager…</option>{% for s in assignable_staff %}<option value="{{ s.id }}" {% if row.assigned_manager_id == s.id %}selected{% endif %}>{{ s.display_name }}</option>{% endfor %}</select>
+                    <button type="submit" name="action" value="assign_manager" class="fs-btn">Assign Mgr</button>
+                    <select name="agent_id"><option value="">Agent…</option>{% for s in assignable_staff %}<option value="{{ s.id }}" {% if row.assigned_agent_id == s.id %}selected{% endif %}>{{ s.display_name }}</option>{% endfor %}</select>
+                    <button type="submit" name="action" value="assign_agent" class="fs-btn">Assign Agt</button>
+                  </form>
+                  <div class="fs-mini">Notes: {{ row.internal_notes|truncatechars:120|default:"—" }}</div>
+                  {% if row.last_contact_at %}
+                    <div class="fs-mini">Last: {{ row.last_contact_at|date:"M j, Y H:i" }}</div>
+                  {% endif %}
+                  <div class="fs-actions" style="margin-top:0.5rem;">
+                    <form method="post" action="{% url 'sales-funnel-action' %}" onsubmit="this.elements.namedItem('note').value=document.getElementById('note-u-{{ u.id }}').value;">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                      <input type="hidden" name="user_id" value="{{ u.id }}" />
+                      <input type="hidden" name="note" value="" />
+                      <button type="submit" name="action" value="mark_dropped" class="fs-btn fs-btn--red">Mark dropped</button>
+                    </form>
+                    <form method="post" action="{% url 'sales-funnel-action' %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                      <input type="hidden" name="user_id" value="{{ u.id }}" />
+                      <button type="submit" name="action" value="clear_dropped" class="fs-btn">Clear dropped</button>
+                    </form>
+                  </div>
+                </td>
+              {% endwith %}
+            {% endif %}
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-center text-slate-500 py-4">No records in this stage.</td></tr>
+        {% endfor %}
+      </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

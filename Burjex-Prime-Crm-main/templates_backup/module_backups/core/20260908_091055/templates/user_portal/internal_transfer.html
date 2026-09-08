@@ -1,0 +1,136 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Internal Transfer{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">{{ title }}</h1>
+  <p class="portal-page-subtitle">
+    Move funds between your Wallet, trading accounts, and IB Wallet. Withdrawals are only paid from the Wallet — use <strong>Trading → Wallet</strong> or <strong>IB Wallet → Wallet</strong> before requesting a withdrawal.
+  </p>
+
+  {% if transfer_settings.internal_processing_mode == "MANUAL" %}
+    <div class="portal-alert portal-alert--warning">Transfers are reviewed by the operations team before balances are moved.</div>
+  {% endif %}
+
+  {% if not transfer_types %}
+    <div class="portal-alert portal-alert--info">No transfer directions are enabled. Ask your administrator to enable wallet / transfer options under Treasury settings.</div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+    <div class="portal-stat-card portal-stat-card--accent">
+      <div class="portal-stat-label">Wallet Balance</div>
+      <div class="portal-stat-value portal-stat-value--primary">{{ wallet_balance|floatformat:2 }}</div>
+    </div>
+    <div class="portal-stat-card portal-stat-card--accent">
+      <div class="portal-stat-label">IB Wallet Balance</div>
+      <div class="portal-stat-value portal-stat-value--primary">{{ ib_wallet_balance|floatformat:2 }}</div>
+    </div>
+  </div>
+
+  {% if transfer_types %}
+  <div class="portal-card mb-6">
+    <div class="portal-card-header">
+      <div class="portal-card-title">New Transfer</div>
+    </div>
+    <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4" onsubmit="
+      if (this.dataset.submitting) return false;
+      this.dataset.submitting = 'true';
+      const btn = this.querySelector('button[type=submit]');
+      if (btn) {
+          btn.disabled = true;
+          btn.innerText = 'Processing...';
+          btn.classList.add('opacity-75', 'cursor-not-allowed');
+      }
+    ">
+      {% csrf_token %}
+      <input type="hidden" name="request_uid" value="{{ request_uid }}" />
+      <div>
+        <label class="portal-form-label">Transfer Type</label>
+        <select id="transferType" name="transfer_type" class="portal-input" required>
+          {% for t in transfer_types %}
+            <option value="{{ t }}">{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="portal-form-label">Amount</label>
+        <input type="number" step="0.01" min="0.01" name="amount" class="portal-input" required />
+      </div>
+      <div>
+        <label class="portal-form-label">From Account</label>
+        <select id="fromAccount" name="from_account" class="portal-input" required></select>
+      </div>
+      <div>
+        <label class="portal-form-label">To Account</label>
+        <select id="toAccount" name="to_account" class="portal-input" required></select>
+      </div>
+      <div class="md:col-span-2">
+        <button class="portal-btn-primary" type="submit">Transfer</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="portal-card">
+    <div class="portal-card-header">
+      <div class="portal-card-title">Transfer History</div>
+    </div>
+    <div class="portal-table-wrap overflow-x-auto w-full" style="box-shadow:none;border-radius:8px;">
+      <table class="portal-table min-w-full whitespace-nowrap">
+        <thead>
+          <tr>
+            <th>Date</th><th>Type</th><th>From</th><th>To</th><th>Amount</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in history %}
+            <tr>
+              <td style="color:var(--portal-text-muted);">{{ h.created_at|date:"Y-m-d H:i" }}</td>
+              <td>{{ h.transfer_type }}</td>
+              <td>{{ h.from_account }}</td>
+              <td>{{ h.to_account }}</td>
+              <td class="font-semibold">{{ h.amount }} {{ h.currency }}</td>
+              <td>{{ h.status }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" style="text-align:center;color:var(--portal-text-muted);padding:1.5rem 1rem;">No transfers yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if transfer_types %}
+  <script>
+    (function () {
+      const typeEl = document.getElementById("transferType");
+      const fromEl = document.getElementById("fromAccount");
+      const toEl   = document.getElementById("toAccount");
+      const trading = [
+        {% for a in trading_accounts %}
+          { value: "TRADING:{{ a.id }}", label: "Trading {{ a.account_number }} ({{ a.balance|floatformat:2 }})" },
+        {% endfor %}
+      ];
+      function setOptions(el, items) {
+        el.innerHTML = "";
+        items.forEach(i => {
+          const o = document.createElement("option");
+          o.value = i.value; o.textContent = i.label; el.appendChild(o);
+        });
+      }
+      function refresh() {
+        const t = typeEl.value;
+        if (t === "WALLET_TO_TRADING")      { setOptions(fromEl, [{ value:"WALLET", label:"Wallet" }]); setOptions(toEl, trading); }
+        else if (t === "TRADING_TO_WALLET") { setOptions(fromEl, trading); setOptions(toEl, [{ value:"WALLET", label:"Wallet" }]); }
+        else if (t === "TRADING_TO_TRADING"){ setOptions(fromEl, trading); setOptions(toEl, trading); }
+        else if (t === "IB_TO_TRADING")     { setOptions(fromEl, [{ value:"IB_WALLET", label:"IB Wallet" }]); setOptions(toEl, trading); }
+        else                                { setOptions(fromEl, [{ value:"IB_WALLET", label:"IB Wallet" }]); setOptions(toEl, [{ value:"WALLET", label:"Wallet" }]); }
+      }
+      typeEl.addEventListener("change", refresh);
+      refresh();
+      var preselectFrom = "{{ preselect_from|default:'' }}";
+      if (preselectFrom) fromEl.value = preselectFrom;
+    })();
+  </script>
+  {% endif %}
+{% endblock %}

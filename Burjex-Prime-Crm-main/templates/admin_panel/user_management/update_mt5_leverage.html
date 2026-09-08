@@ -1,0 +1,27 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}Update MT5 Leverage{% endblock %}
+{% block um_body %}
+  <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 max-w-xl">
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Select MT5 ID</label>
+        <select name="mt5_account_id" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" required>
+          <option value="">—</option>
+          {% for acc in accounts %}
+            <option value="{{ acc.id }}">{{ acc.login_id }} — {{ acc.user.email }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Select Leverage</label>
+        <select name="leverage" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" required>
+          {% for l in leverages %}
+            <option value="{{ l }}">{% if l == 0 %}1:Unlimited{% else %}1:{{ l }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="bg-indigo-600 text-white rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-indigo-700">Submit</button>
+    </form>
+  </div>
+{% endblock %}

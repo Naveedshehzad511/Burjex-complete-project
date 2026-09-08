@@ -1,0 +1,741 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}{{ title }} — Integration{% endblock %}
+{% block admin_content %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+
+<div class="{% if match_trader_page %}max-w-lg mx-auto bg-white border border-slate-200/90 shadow-sm rounded-xl px-6 sm:px-10 py-10 pb-12{% else %}max-w-5xl mx-auto px-4 pb-10{% endif %}">
+  {% if match_trader_page %}
+  <div class="mb-6">
+    <a href="{% url 'admin-integrations-trading-platforms-hub' %}"
+       class="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-[#072A42] border border-slate-200 rounded-lg px-3 py-2 bg-white">
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back
+    </a>
+  </div>
+  {% else %}
+  <div class="flex flex-wrap items-center gap-3 mb-6">
+    <a href="{% url 'admin-integrations-trading-platforms-hub' %}"
+       class="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-[#072A42] border border-slate-200 rounded-xl px-3 py-2 bg-white shadow-sm">
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back
+    </a>
+    <div class="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+      <h1 class="text-xl font-semibold text-slate-900 truncate">{{ title }}</h1>
+      {% if badge == "active" %}
+      <span class="text-[11px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">Active</span>
+      {% elif badge == "configurable" %}
+      <span class="text-[11px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-amber-100 text-amber-900">Configurable</span>
+      {% else %}
+      <span class="text-[11px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">Inactive</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if platform_key == "MT5" or platform_key == "CTRADER" or platform_key == "BTRADER" %}
+  <div class="tp-card p-5 mb-5">
+    <div class="flex flex-wrap gap-4 items-start">
+      <div class="w-12 h-12 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0">
+        <i class="{{ meta.icon }} text-xl" aria-hidden="true"></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <div class="font-semibold text-slate-900">{{ title }}</div>
+        <p class="text-sm text-slate-500 mt-1">{{ meta.hint }}</p>
+        {% if platform_key == "BTRADER" %}
+        <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+          Enter the BTrader <strong>gateway base URL</strong> (deployable on another server later), the CRM
+          <strong>keyId</strong> and <strong>HMAC secret</strong> from BTrader Admin → CRM / Integrations.
+          Tenant is resolved from the key (optional X-BT-Tenant only for platform-scope keys).
+          After enabling, map groups under Trading → Group Management, then link Account Types.
+        </p>
+        <p class="text-xs text-slate-600 mt-2 leading-relaxed bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+          <strong>Outbound webhook (balance sync):</strong> In BTrader Admin → CRM / Integrations, set webhook URL to
+          <code class="text-[11px]">http://CRM_HOST/api/btrader/webhook/</code>
+          (use your real CRM host / HTTPS). Paste the same signing secret into <em>Webhook secret</em> below.
+        </p>
+        {% endif %}
+        {% if row.last_test_at %}
+        <p class="text-xs text-slate-500 mt-3">
+          Last test:
+          {% if row.last_test_ok %}<span class="text-emerald-700 font-medium">OK</span>{% else %}<span class="text-red-600 font-medium">Failed</span>{% endif %}
+          <span class="text-slate-400">— {{ row.last_test_detail|truncatechars:100 }}</span>
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% elif not match_trader_page %}
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+    <div class="tp-card p-5">
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">Integration overview</h2>
+      <div class="flex gap-4">
+        <div class="w-14 h-14 rounded-2xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0">
+          <i class="{{ meta.icon }} text-2xl" aria-hidden="true"></i>
+        </div>
+        <div>
+          <div class="font-semibold text-lg text-slate-900">{{ title }}</div>
+          <div class="text-sm text-slate-500 mt-1">Category: Trading Platform</div>
+          <p class="text-xs text-slate-400 mt-3 leading-relaxed">{{ meta.hint }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="tp-card p-5">
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">Quick notes</h2>
+      <div class="space-y-4 text-sm">
+        <div>
+          <div class="text-xs font-medium text-slate-500 mb-1">Quick notes</div>
+          <p class="text-slate-700 whitespace-pre-wrap leading-relaxed">{{ row.quick_notes|default:"—" }}</p>
+        </div>
+        <div>
+          <div class="text-xs font-medium text-slate-500 mb-1">Status message</div>
+          <p class="text-slate-800 min-h-[2.5rem]">{{ row.status_message|default:"—" }}</p>
+        </div>
+        <div>
+          <div class="text-xs font-medium text-slate-500 mb-1">Admin notes</div>
+          <p class="text-slate-600 whitespace-pre-wrap text-sm leading-relaxed">{{ row.admin_notes|default:"—" }}</p>
+        </div>
+        {% if row.last_test_at %}
+        <div class="text-xs text-slate-500 pt-2 border-t border-slate-100">
+          Last connection test:
+          {% if row.last_test_ok %}<span class="text-emerald-700 font-medium">OK</span>{% else %}<span class="text-red-600 font-medium">Failed</span>{% endif %}
+          — {{ row.last_test_detail|truncatechars:120 }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <form method="post" id="tp-main-form" class="space-y-5" {% if match_trader_page %}novalidate{% endif %}>
+    {% csrf_token %}
+    {% if match_trader_page %}
+    <div class="text-center space-y-5 mb-6">
+      <h1 class="text-xl font-semibold text-slate-900 tracking-tight">Match Trader</h1>
+      <div>
+        {% if match_trader_integration_active %}
+        <span class="text-[11px] font-bold uppercase tracking-wide px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80">Active</span>
+        {% else %}
+        <span class="text-[11px] font-bold uppercase tracking-wide px-3 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200/80">Inactive</span>
+        {% endif %}
+      </div>
+      <div class="flex flex-col items-center gap-2 pt-1">
+        <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Integration</span>
+        <div class="flex items-center justify-center gap-3 relative">
+          <input type="checkbox" id="mt-live-toggle" class="tp-toggle" autocomplete="off" role="switch" aria-checked="{% if match_trader_integration_active %}true{% else %}false{% endif %}"
+            {% if match_trader_integration_active %}checked{% endif %}
+            {% if match_trader_toggle_disabled %}disabled{% endif %} />
+          <label for="mt-live-toggle" class="cursor-pointer flex items-center gap-2 select-none {% if match_trader_toggle_disabled %}opacity-50 cursor-not-allowed pointer-events-none{% endif %}">
+            <span class="tp-switch" aria-hidden="true"></span>
+            <span class="text-sm font-medium text-slate-700" id="mt-toggle-label">{% if match_trader_integration_active %}Deactivate{% else %}Activate{% endif %}</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="tp-card p-7 bg-white shadow-sm border-slate-200/90 mb-5">
+      <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 text-center mb-5">Integration status</h2>
+      <div class="space-y-3 text-sm max-w-sm mx-auto">
+        <div class="flex justify-between gap-4 border-b border-slate-100 pb-3">
+          <span class="text-slate-500">Status</span>
+          <span id="mt-conn-status" class="font-medium text-slate-900 text-right">{{ match_trader_connection_label }}</span>
+        </div>
+        <div class="flex justify-between gap-4">
+          <span class="text-slate-500">Live</span>
+          <span id="mt-live-label" class="font-medium text-slate-900 text-right">{{ match_trader_live_label }}</span>
+        </div>
+        <div id="mt-catalog-banner" class="hidden pt-2 text-xs text-slate-600 text-left border-t border-slate-100 leading-relaxed whitespace-pre-wrap break-words"></div>
+      </div>
+    </div>
+    {% else %}
+    <div class="tp-card p-5">
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">Configuration</h2>
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div class="font-medium text-slate-900">Enable integration</div>
+          <p class="text-sm text-slate-500 mt-1 max-w-xl">Disable to pause this integration without removing configuration.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <input type="checkbox" name="enabled" id="id_enabled" class="tp-toggle" {% if row.enabled %}checked{% endif %} />
+          <label for="id_enabled" class="cursor-pointer flex items-center gap-2 select-none">
+            <span class="tp-switch" aria-hidden="true"></span>
+            <span class="text-sm text-slate-600">{% if row.enabled %}On{% else %}Off{% endif %}</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="tp-card {% if match_trader_page %}p-7 bg-white shadow-sm border-slate-200/90{% else %}p-5{% endif %}">
+      {% if not match_trader_page %}
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">Credentials</h2>
+      {% else %}
+      <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 text-center mb-5">Credentials</h2>
+      {% endif %}
+      <div class="space-y-5">
+        {% if platform_key == "CTRADER" %}
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_live_manager_token">Live Manager Token</label>
+          <input type="text" name="live_manager_token" id="id_live_manager_token" value="{{ row.live_manager_token }}"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" autocomplete="off" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_demo_manager_token">Demo manager token</label>
+          <input type="text" name="demo_manager_token" id="id_demo_manager_token" value="{{ row.demo_manager_token }}"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" autocomplete="off" />
+        </div>
+        {% elif match_trader_page %}
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5 text-left" for="id_base_url">Base URL (HTTPS)</label>
+          <input type="url" name="base_url" id="id_base_url" value=""
+            placeholder=""
+            class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 outline-none" autocomplete="off" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5 text-left" for="id_rest_base_url">REST Base URL</label>
+          <input type="url" name="rest_base_url" id="id_rest_base_url" value=""
+            placeholder="https://broker-api-demo.match-trader.com"
+            class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 outline-none" autocomplete="off" />
+          <p class="text-xs text-slate-400 mt-1 text-left">REST root for group endpoints; leave blank to use Base URL.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5 text-left" for="id_grpc_address">gRPC Address</label>
+          <input type="text" name="grpc_address" id="id_grpc_address" value=""
+            placeholder=""
+            class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 outline-none" autocomplete="off" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5 text-left" for="id_mt_api_key">API Key</label>
+          <input type="password" name="api_key" id="id_mt_api_key" value=""
+            class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 outline-none"
+            placeholder="" autocomplete="new-password" />
+        </div>
+        {% elif platform_key == "MT5" %}
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_api_key">Login ID (Manager Login)</label>
+          <input type="text" name="api_key" id="id_api_key" value="{{ row.api_key }}"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" autocomplete="off" />
+          <p class="mt-1 text-xs text-slate-500">Enter the manager login ID (numeric) used for MT5 authentication.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_secret_key">API Password (Manager Password)</label>
+          <input type="password" name="secret_key" id="id_secret_key" value="{{ row.secret_key }}"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" autocomplete="new-password" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_port">Port</label>
+          <input type="number" name="port" id="id_port" value="{{ row.extended_config.port|default:'443' }}"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" autocomplete="off" />
+        </div>
+        <div class="flex items-center gap-3 mt-2">
+          <input type="checkbox" name="encrypt" id="id_encrypt" class="tp-toggle" {% if row.extended_config.encrypt %}checked{% endif %} />
+          <label for="id_encrypt" class="cursor-pointer flex items-center gap-2 select-none">
+            <span class="tp-switch" aria-hidden="true"></span>
+            <span class="text-sm text-slate-600">Use AES Encryption (AES-256-OFB)</span>
+          </label>
+        </div>
+        {% elif platform_key == "BTRADER" %}
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_api_key">API Key ID (X-BT-Key)</label>
+          <input type="text" name="api_key" id="id_api_key" value="{{ row.api_key }}"
+            placeholder="bt_…"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" autocomplete="off" />
+          <p class="mt-1 text-xs text-slate-500">Minted in BTrader Admin (port 4200 locally) under CRM / Integrations. Tenant is bound to this key.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_secret_key">HMAC Secret</label>
+          <input type="password" name="secret_key" id="id_secret_key" value="{{ row.secret_key }}"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" autocomplete="new-password" />
+          <p class="mt-1 text-xs text-slate-500">Shown once when the key is created — paste it here immediately. Used to sign every CRM → BTrader request.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_tenant_header">X-BT-Tenant <span class="text-slate-400 font-normal">(optional)</span></label>
+          <input type="text" name="tenant_header" id="id_tenant_header" value="{{ row.extended_config.tenant_header|default:'' }}"
+            placeholder="Only for platform-scope keys"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" autocomplete="off" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_webhook_secret">Webhook secret <span class="text-slate-400 font-normal">(BTrader → CRM)</span></label>
+          <input type="password" name="webhook_secret" id="id_webhook_secret" value=""
+            placeholder="{% if row.extended_config.webhook_secret %}•••••••• (saved — enter to replace){% else %}Same secret set in BTrader outbound webhook{% endif %}"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" autocomplete="new-password" />
+          <p class="mt-1 text-xs text-slate-500">Used to verify <code>X-BT-Signature</code> on <code>/api/btrader/webhook/</code>. Leave blank to keep the saved value; if never set, CRM falls back to the inbound HMAC secret.</p>
+        </div>
+        {% else %}
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_api_key">API key</label>
+          <input type="text" name="api_key" id="id_api_key" value="{{ row.api_key }}"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" autocomplete="off" />
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if not match_trader_page %}
+    <div class="tp-card p-5">
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">Endpoints &amp; URLs</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_server_name">Server Name</label>
+          <input type="text" name="server_name" id="id_server_name" value="{{ row.server_name }}"
+            placeholder="e.g. BluVox Server"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" />
+        </div>
+        {% if platform_key == "CTRADER" %}
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_broker_name">Broker Name</label>
+          <input type="text" name="broker_name" id="id_broker_name" value="{{ row.broker_name }}"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_live_network_address">Live Network Address</label>
+          <input type="url" name="live_network_address" id="id_live_network_address" value="{{ row.live_network_address }}"
+            placeholder="https://live.yourserver.com"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_demo_network_address">Demo Network Address</label>
+          <input type="url" name="demo_network_address" id="id_demo_network_address" value="{{ row.demo_network_address }}"
+            placeholder="https://demo.yourserver.com"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" />
+        </div>
+        {% elif platform_key == "MT5" %}
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_api_server_url">Server Address / Host</label>
+          <input type="text" name="api_server_url" id="id_api_server_url" value="{{ row.api_server_url }}"
+            placeholder="e.g. 192.168.1.10 or mt5.broker.com"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" />
+        </div>
+        {% elif platform_key == "BTRADER" %}
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_api_server_url">Gateway base URL</label>
+          <input type="url" name="api_server_url" id="id_api_server_url" value="{{ row.api_server_url }}"
+            placeholder="http://localhost:4100"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" />
+          <p class="mt-1 text-xs text-slate-500">BTrader gateway-api root (local default <code>http://localhost:4100</code>). CRM calls <code>/v1/crm/*</code> on this host — change when trading admin runs on another server.</p>
+        </div>
+        {% else %}
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_api_server_url">API server URL</label>
+          <input type="url" name="api_server_url" id="id_api_server_url" value="{{ row.api_server_url }}"
+            placeholder="https://api.yourserver.com"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" />
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if platform_key != "MT5" and not match_trader_page and platform_key != "CTRADER" and platform_key != "BTRADER" %}
+    <div class="tp-card p-5">
+      <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">Notes <span class="text-slate-400 font-normal">(overview card)</span></h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_quick_notes">Quick notes</label>
+          <textarea name="quick_notes" id="id_quick_notes" rows="3"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none">{{ row.quick_notes }}</textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_status_message">Status message</label>
+          <input type="text" name="status_message" id="id_status_message" value="{{ row.status_message }}"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="id_admin_notes">Admin notes</label>
+          <textarea name="admin_notes" id="id_admin_notes" rows="3"
+            class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none">{{ row.admin_notes }}</textarea>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if not match_trader_page %}
+    <div id="tp-test-banner" class="hidden rounded-xl px-4 py-3 text-sm font-medium"></div>
+    {% endif %}
+
+    <div class="flex flex-wrap gap-3 pt-2 {% if match_trader_page %}justify-center{% endif %}">
+      {% if match_trader_page %}
+      <button type="button" id="mt-btn-save"
+        class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white font-medium px-5 py-2.5 text-sm hover:bg-indigo-700 transition-colors">
+        Save Configuration
+      </button>
+      <button type="button" id="tp-btn-test"
+        class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-800 font-medium px-5 py-2.5 text-sm hover:bg-slate-50 transition-colors">
+        Test Connection
+      </button>
+      <button type="button" id="mt-btn-sync-catalog"
+        class="inline-flex items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900 font-medium px-5 py-2.5 text-sm hover:bg-emerald-100 transition-colors"
+        title="Fetch trading/account/server groups from Match-Trader REST API into the CRM catalog">
+        Sync group catalog
+      </button>
+      <button type="button" id="mt-btn-test-groups"
+        class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-800 font-medium px-5 py-2.5 text-sm hover:bg-slate-100 transition-colors"
+        title="Tries broker/groups, api/broker/groups, broker/group, groups/list, then groups — same token; each response logged at INFO">
+        Test group endpoints
+      </button>
+      {% else %}
+      <button type="button" id="tp-btn-test"
+        class="inline-flex items-center justify-center rounded-xl border-2 border-indigo-600 text-indigo-600 font-semibold px-6 py-3 text-sm hover:bg-indigo-600/5 transition-colors">
+        Test connection
+      </button>
+      <button type="submit" name="action" value="save"
+        class="inline-flex items-center justify-center rounded-xl bg-indigo-600 text-white font-semibold px-6 py-3 text-sm hover:bg-indigo-700 transition-colors shadow-sm">
+        Save configuration
+      </button>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  var enabled = document.getElementById("id_enabled");
+  var enabledLabel = enabled && enabled.nextElementSibling && enabled.nextElementSibling.querySelector("span:last-child");
+  function syncToggleLabel() {
+    if (enabledLabel && enabled) enabledLabel.textContent = enabled.checked ? "On" : "Off";
+  }
+  if (enabled) {
+    enabled.addEventListener("change", syncToggleLabel);
+    syncToggleLabel();
+  }
+  var btn = document.getElementById("tp-btn-test");
+  var btnMtSave = document.getElementById("mt-btn-save");
+  var banner = document.getElementById("tp-test-banner");
+  var tokenInput = document.querySelector("#tp-main-form input[name=csrfmiddlewaretoken]");
+  var isMatchTrader = {% if match_trader_page %}true{% else %}false{% endif %};
+  var mtUrlSave = "{% url 'admin-integrations-match-trader-save' %}";
+  var mtUrlTest = "{% url 'admin-integrations-match-trader-test' %}";
+  var mtUrlSyncCatalog = "{% url 'admin-integrations-match-trader-sync-catalog' %}";
+  var mtUrlTestGroups = "{% url 'admin-integrations-match-trader-test-groups-sync' %}";
+  var mtUrlActivate = "{% url 'admin-integrations-match-trader-activate' %}";
+  var mtUrlDeactivate = "{% url 'admin-integrations-match-trader-deactivate' %}";
+  function mtFetchJson(url, bodyFormData) {
+    var csrf = tokenInput ? tokenInput.value : "";
+    return fetch(url, {
+      method: "POST",
+      body: bodyFormData,
+      credentials: "same-origin",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-CSRFToken": csrf,
+      },
+    }).then(function (r) {
+      return r.text().then(function (text) {
+        var data = {};
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch (e) {
+          throw new Error((text || "").slice(0, 200) || ("HTTP " + r.status));
+        }
+        if (!r.ok) throw new Error(data.status || ("HTTP " + r.status));
+        return data;
+      });
+    });
+  }
+  function mtBuildForm(extra) {
+    var fd = new FormData();
+    if (tokenInput) fd.append("csrfmiddlewaretoken", tokenInput.value);
+    if (extra) {
+      Object.keys(extra).forEach(function (k) {
+        fd.append(k, extra[k] == null ? "" : extra[k]);
+      });
+    }
+    return fd;
+  }
+  var mtToggle = document.getElementById("mt-live-toggle");
+  if (mtToggle && isMatchTrader) {
+    mtToggle.addEventListener("change", function () {
+      var tg = this;
+      var wantOn = !!tg.checked;
+      if (!tokenInput) return;
+      if (wantOn) {
+        console.log("Activation started");
+        mtFetchJson(mtUrlActivate, mtBuildForm(null))
+          .then(function (data) {
+            if (data.status === "activated") window.location.reload();
+            else throw new Error("unexpected");
+          })
+          .catch(function () {
+            tg.checked = false;
+          });
+      } else {
+        mtFetchJson(mtUrlDeactivate, mtBuildForm(null))
+          .then(function (data) {
+            if (data.status === "deactivated") window.location.reload();
+            else throw new Error("unexpected");
+          })
+          .catch(function () {
+            tg.checked = true;
+          });
+      }
+    });
+  }
+  function mtShowCatalogBanner(msg, isErr) {
+    var el = document.getElementById("mt-catalog-banner");
+    if (!el) return;
+    el.classList.remove("hidden", "text-emerald-800", "text-rose-700", "text-slate-600");
+    el.classList.add(isErr ? "text-rose-700" : "text-emerald-800");
+    el.textContent = msg || "";
+  }
+  var btnMtTestGroups = document.getElementById("mt-btn-test-groups");
+  if (btnMtTestGroups && isMatchTrader) {
+    btnMtTestGroups.addEventListener("click", function () {
+      if (!tokenInput) return;
+      btnMtTestGroups.disabled = true;
+      var fd = mtBuildForm({
+        base_url: (document.getElementById("id_base_url") && document.getElementById("id_base_url").value) || "",
+        rest_base_url: (document.getElementById("id_rest_base_url") && document.getElementById("id_rest_base_url").value) || "",
+        api_key: (document.getElementById("id_mt_api_key") && document.getElementById("id_mt_api_key").value) || "",
+      });
+      fetch(mtUrlTestGroups, {
+        method: "POST",
+        body: fd,
+        credentials: "same-origin",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRFToken": tokenInput.value,
+        },
+      })
+        .then(function (r) { return r.json().then(function (j) { return { okHttp: r.ok, data: j }; }); })
+        .then(function (res) {
+          var d = res.data || {};
+          if (d.message && !d.diagnosis) {
+            mtShowCatalogBanner(d.message, true);
+            return;
+          }
+          var parts = [];
+          if (d.rest_base_normalized) parts.push("REST base (normalized): " + d.rest_base_normalized);
+          if (d.paths_tried && d.paths_tried.length) parts.push("Paths tried: " + d.paths_tried.join(", "));
+          if (d.winning_path) parts.push("Winner: " + d.winning_path);
+          if (d.request_url) parts.push("Last/final GET: " + d.request_url);
+          if (d.http_status != null) parts.push("HTTP " + d.http_status);
+          parts.push(d.diagnosis || d.message || "No diagnosis.");
+          if (d.diagnosis_code) parts.push("Code: " + d.diagnosis_code);
+          if (d.groups_extracted_count != null) parts.push("Group names extracted: " + d.groups_extracted_count);
+          if (d.hint) parts.push(d.hint);
+          if (d.full_response_length != null) parts.push("Final body length: " + d.full_response_length + " chars (every try logged at INFO).");
+          if (d.response_raw) parts.push("Final body preview:\n" + String(d.response_raw).slice(0, 1200));
+          if (d.parsed_json_omitted) parts.push("parsed_json omitted from response (large); check logs.");
+          if (d.attempts && d.attempts.length) {
+            parts.push("— Per-endpoint previews (full bodies in server logs) —");
+            d.attempts.forEach(function (a, i) {
+              parts.push((i + 1) + ". " + (a.path || "") + " → HTTP " + a.http_status + ", names=" + (a.groups_extracted_count != null ? a.groups_extracted_count : "?"));
+            });
+          }
+          mtShowCatalogBanner(parts.join("\n"), !d.ok);
+        })
+        .catch(function () {
+          mtShowCatalogBanner("Request failed (network or non-JSON response).", true);
+        })
+        .finally(function () { btnMtTestGroups.disabled = false; });
+    });
+  }
+  var btnMtSync = document.getElementById("mt-btn-sync-catalog");
+  if (btnMtSync && isMatchTrader) {
+    btnMtSync.addEventListener("click", function () {
+      if (!tokenInput) return;
+      btnMtSync.disabled = true;
+      fetch(mtUrlSyncCatalog, {
+        method: "POST",
+        body: mtBuildForm(null),
+        credentials: "same-origin",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRFToken": tokenInput.value,
+        },
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+        .then(function (res) {
+          var d = res.data || {};
+          if (res.ok && d.ok) {
+            var c = d.catalog_sync || {};
+            var t = (c.total != null ? c.total : ((c.trading || 0) + (c.account || 0) + (c.servers || 0)));
+            mtShowCatalogBanner("Catalog synced: " + t + " group row(s) (trading/account/servers). Open Group Management to pick groups.", false);
+          } else {
+            mtShowCatalogBanner((d.message || "Sync failed") + "", true);
+          }
+        })
+        .catch(function () {
+          mtShowCatalogBanner("Could not sync catalog (network or server error).", true);
+        })
+        .finally(function () { btnMtSync.disabled = false; });
+    });
+  }
+  if (btnMtSave && isMatchTrader) {
+    btnMtSave.addEventListener("click", function () {
+      if (!tokenInput) return;
+      btnMtSave.disabled = true;
+      var extra = {
+        base_url: (document.getElementById("id_base_url") && document.getElementById("id_base_url").value) || "",
+        rest_base_url: (document.getElementById("id_rest_base_url") && document.getElementById("id_rest_base_url").value) || "",
+        grpc_address: (document.getElementById("id_grpc_address") && document.getElementById("id_grpc_address").value) || "",
+        api_key: (document.getElementById("id_mt_api_key") && document.getElementById("id_mt_api_key").value) || "",
+      };
+      console.log("Saving Match Trader configuration");
+      mtFetchJson(mtUrlSave, mtBuildForm(extra))
+        .then(function (data) {
+          if (data.status === "saved") window.location.reload();
+          else throw new Error("unexpected");
+        })
+        .catch(function () {})
+        .finally(function () { btnMtSave.disabled = false; });
+    });
+  }
+  if (btn) btn.addEventListener("click", function () {
+    if (!tokenInput) {
+      console.error("Match-Trader test: CSRF token not found in form.");
+      return;
+    }
+    if (banner) banner.classList.add("hidden");
+    btn.disabled = true;
+    var fd = new FormData();
+    var csrf = tokenInput.value;
+    fd.append("csrfmiddlewaretoken", csrf);
+    if (document.getElementById("id_api_server_url")) fd.append("api_server_url", document.getElementById("id_api_server_url").value || "");
+    if (document.getElementById("id_live_network_address")) fd.append("live_network_address", document.getElementById("id_live_network_address").value || "");
+    if (document.getElementById("id_demo_network_address")) fd.append("demo_network_address", document.getElementById("id_demo_network_address").value || "");
+    if (document.getElementById("id_network_address")) fd.append("network_address", document.getElementById("id_network_address").value || "");
+    if (document.getElementById("id_base_url")) fd.append("base_url", document.getElementById("id_base_url").value || "");
+    if (document.getElementById("id_rest_base_url")) fd.append("rest_base_url", document.getElementById("id_rest_base_url").value || "");
+    if (document.getElementById("id_grpc_address")) fd.append("grpc_address", document.getElementById("id_grpc_address").value || "");
+    if (document.getElementById("id_mt_api_key")) fd.append("api_key", document.getElementById("id_mt_api_key").value || "");
+    if (document.getElementById("id_api_key")) fd.append("api_key", document.getElementById("id_api_key").value || "");
+    if (document.getElementById("id_secret_key")) fd.append("secret_key", document.getElementById("id_secret_key").value || "");
+    if (document.getElementById("id_port")) fd.append("port", document.getElementById("id_port").value || "");
+    if (document.getElementById("id_encrypt")) fd.append("encrypt", document.getElementById("id_encrypt").checked ? "on" : "");
+    var tpForm = document.getElementById("tp-main-form");
+    if (tpForm) {
+      tpForm.querySelectorAll("[name^='ext_']").forEach(function (el) {
+        fd.append(el.name, el.value || "");
+      });
+    }
+    var testUrl = isMatchTrader ? mtUrlTest : "{% url 'admin-trading-platform-test' slug=url_slug %}";
+    var fetchHeaders = {
+      "X-Requested-With": "XMLHttpRequest",
+      "X-CSRFToken": csrf,
+    };
+    if (isMatchTrader) console.log("Testing Match Trader connection");
+    fetch(testUrl, {
+      method: "POST",
+      body: fd,
+      credentials: "same-origin",
+      headers: fetchHeaders,
+    })
+      .then(function (r) {
+        return r.text().then(function (text) {
+          var data = {};
+          try {
+            data = text ? JSON.parse(text) : {};
+          } catch (e) {
+            data = { _parse_error: true, _raw: (text || "").slice(0, 300) };
+          }
+          return { httpOk: r.ok, status: r.status, data: data };
+        });
+      })
+      .then(function (res) {
+        var data = res.data || {};
+        if (isMatchTrader) {
+          var cs = document.getElementById("mt-conn-status");
+          var tg = document.getElementById("mt-live-toggle");
+          var wrap = document.querySelector("label[for='mt-live-toggle']");
+          var catBn = document.getElementById("mt-catalog-banner");
+          if (!res.httpOk) {
+            var errMsg = data.user_error || data.error_detail || data.error_message || ("HTTP " + res.status);
+            if (cs) cs.textContent = errMsg.length > 80 ? "Connection Failed" : errMsg;
+            if (catBn) {
+              catBn.classList.remove("hidden", "text-emerald-800");
+              catBn.classList.add("text-rose-700");
+              catBn.textContent = errMsg + (data.error_detail && data.error_detail !== errMsg ? "\n" + data.error_detail : "");
+            }
+            if (tg && !tg.checked) {
+              tg.disabled = true;
+              if (wrap) wrap.classList.add("opacity-50", "cursor-not-allowed", "pointer-events-none");
+            }
+            return;
+          }
+          var connected = data.ok === true && data.status === "connected";
+          if (cs) {
+            cs.textContent = connected
+              ? (data.user_message || "Connection Successful")
+              : (data.user_error || "Connection Failed");
+          }
+          if (connected && data.catalog_sync) {
+            var cx = data.catalog_sync;
+            var tot = (cx.total != null ? cx.total : ((cx.trading || 0) + (cx.account || 0) + (cx.servers || 0)));
+            if (catBn) {
+              catBn.classList.remove("hidden");
+              catBn.classList.remove("text-rose-700");
+              catBn.classList.add("text-emerald-800");
+              var restLine = data.rest_verified_url ? "\nREST verified: " + data.rest_verified_url + (data.rest_http_status != null ? " (HTTP " + data.rest_http_status + ")" : "") : "";
+              catBn.textContent = "Group catalog updated: " + tot + " row(s)." + restLine;
+            }
+          } else if (catBn) {
+            if (connected && data.rest_verified_url) {
+              catBn.classList.remove("hidden", "text-rose-700");
+              catBn.classList.add("text-emerald-800");
+              catBn.textContent = (data.user_message || "Connection Successful") + "\nREST: " + data.rest_verified_url + (data.rest_http_status != null ? " HTTP " + data.rest_http_status : "");
+            } else if (!connected) {
+              catBn.classList.remove("hidden", "text-emerald-800");
+              catBn.classList.add("text-rose-700");
+              catBn.textContent = (data.user_error || "Connection Failed") + (data.error_detail ? "\n" + data.error_detail : "");
+            } else {
+              catBn.classList.add("hidden");
+              catBn.textContent = "";
+            }
+          }
+          if (tg && !tg.checked) {
+            tg.disabled = !connected;
+            if (wrap) {
+              if (connected) {
+                wrap.classList.remove("opacity-50", "cursor-not-allowed", "pointer-events-none");
+              } else {
+                wrap.classList.add("opacity-50", "cursor-not-allowed", "pointer-events-none");
+              }
+            }
+          }
+          return;
+        }
+        if (data._parse_error) {
+          throw new Error(data._raw || "Invalid JSON");
+        }
+        if (!res.httpOk) {
+          if (!banner) return;
+          banner.classList.remove("hidden");
+          banner.className = "rounded-xl px-4 py-3 text-sm font-medium bg-red-50 text-red-900 border border-red-200";
+          banner.textContent = "Error: " + (data.message || data.user_error || ("HTTP " + res.status));
+          return;
+        }
+        if (!banner) return;
+        banner.classList.remove("hidden");
+        if (data.ok) {
+          banner.className = "rounded-xl px-4 py-3 text-sm font-medium bg-emerald-50 text-emerald-900 border border-emerald-200";
+          banner.textContent = "";
+          var okLine = document.createElement("div");
+          okLine.textContent = "Success: " + (data.message || "OK");
+          banner.appendChild(okLine);
+        } else {
+          banner.className = "rounded-xl px-4 py-3 text-sm font-medium bg-red-50 text-red-900 border border-red-200";
+          banner.textContent = "";
+          var errLine = document.createElement("div");
+          errLine.textContent = "Error: " + (data.message || "Request failed");
+          banner.appendChild(errLine);
+        }
+      })
+      .catch(function () {
+        if (isMatchTrader) {
+          var cs3 = document.getElementById("mt-conn-status");
+          if (cs3) cs3.textContent = "Failed";
+          var tg3 = document.getElementById("mt-live-toggle");
+          if (tg3 && !tg3.checked) {
+            tg3.disabled = true;
+            var wrap3 = document.querySelector("label[for='mt-live-toggle']");
+            if (wrap3) wrap3.classList.add("opacity-50", "cursor-not-allowed", "pointer-events-none");
+          }
+          return;
+        }
+        if (!banner) return;
+        banner.classList.remove("hidden");
+        banner.className = "rounded-xl px-4 py-3 text-sm font-medium bg-red-50 text-red-900 border border-red-200";
+        banner.textContent = "Error: Could not complete request.";
+      })
+      .finally(function () { btn.disabled = false; });
+  });
+})();
+</script>
+{% endblock %}

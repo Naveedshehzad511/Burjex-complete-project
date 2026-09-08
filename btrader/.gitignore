@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.next/
+*.log
+.env
+.env.local
+.env.*.local
+coverage/
+.DS_Store
+packages/db/node_modules/
+**/generated/
+*.tsbuildinfo
+bridges/mt5-manager-python/config.json

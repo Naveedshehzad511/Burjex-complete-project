@@ -1,0 +1,174 @@
+{% extends "sales_panel/base.html" %}
+{% load humanize static %}
+
+{% block title %}Clients — Sales CRM{% endblock %}
+{% block admin_shell_page_title %}Clients{% endblock %}
+
+{% block admin_content %}
+
+{# ── Page header ──────────────────────────────────────────────────── #}
+<div class="bp-page-header">
+  <div>
+    <h1 class="bp-page-title">
+      <i class="fa-solid fa-users" style="margin-right:0.5rem;color:var(--bp-primary);"></i>
+      Client List
+    </h1>
+    <p class="bp-page-subtitle">
+      All clients visible to your sales scope — up to 200 most recently joined.
+    </p>
+  </div>
+  <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+    <a href="{% url 'sales-dashboard' %}" class="bp-btn bp-btn-secondary bp-btn-sm">
+      <i class="fa-solid fa-gauge-high" style="margin-right:0.35rem;"></i>Dashboard
+    </a>
+    <a href="{% url 'sales-funnel' %}" class="bp-btn bp-btn-outline bp-btn-sm">
+      <i class="fa-solid fa-filter" style="margin-right:0.35rem;"></i>Funnel
+    </a>
+  </div>
+</div>
+
+{# ── Summary KPI strip ─────────────────────────────────────────────── #}
+<div class="bp-grid-3" style="margin-bottom:1.5rem;">
+
+  <div class="bp-kpi-card bp-kpi-card--success">
+    <div class="bp-kpi-icon-wrap" style="background:rgba(16,185,129,0.12);color:#10b981;">
+      <i class="fa-solid fa-users"></i>
+    </div>
+    <span class="bp-kpi-value">{{ clients|length }}</span>
+    <span class="bp-kpi-label">Total shown</span>
+  </div>
+
+  <div class="bp-kpi-card bp-kpi-card--success">
+    <div class="bp-kpi-icon-wrap" style="background:rgba(16,185,129,0.12);color:#10b981;">
+      <i class="fa-solid fa-circle-check"></i>
+    </div>
+    <span class="bp-kpi-value">
+      {% with active_count=0 %}
+        {{ clients|length }}
+      {% endwith %}
+    </span>
+    <span class="bp-kpi-label">Registered clients</span>
+    <span class="bp-kpi-footer">Within your scope</span>
+  </div>
+
+  <div class="bp-kpi-card bp-kpi-card--info">
+    <div class="bp-kpi-icon-wrap" style="background:rgba(56,189,248,0.12);color:#38bdf8;">
+      <i class="fa-solid fa-calendar-day"></i>
+    </div>
+    <span class="bp-kpi-value">200</span>
+    <span class="bp-kpi-label">Max displayed</span>
+    <span class="bp-kpi-footer">Ordered by latest joined</span>
+  </div>
+
+</div>
+
+{# ── Clients table ─────────────────────────────────────────────────── #}
+<div class="bp-card">
+  <div class="bp-card-header">
+    <h2 class="bp-card-header-title">
+      <i class="fa-solid fa-table-list" style="margin-right:0.5rem;"></i>
+      Clients
+    </h2>
+    <span class="bp-badge bp-badge-info">
+      {{ clients|length }} record{% if clients|length != 1 %}s{% endif %}
+    </span>
+  </div>
+  <div class="bp-card-body" style="padding:0;">
+
+    {% if clients %}
+    <div class="bp-table -wrap">
+      <table class="bp-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th><i class="fa-solid fa-user" style="margin-right:0.35rem;opacity:0.6;"></i>Name</th>
+            <th><i class="fa-solid fa-envelope" style="margin-right:0.35rem;opacity:0.6;"></i>Email</th>
+            <th><i class="fa-solid fa-circle-dot" style="margin-right:0.35rem;opacity:0.6;"></i>Status</th>
+            <th><i class="fa-solid fa-shield-halved" style="margin-right:0.35rem;opacity:0.6;"></i>Account</th>
+            <th><i class="fa-solid fa-calendar" style="margin-right:0.35rem;opacity:0.6;"></i>Joined</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for client in clients %}
+          <tr>
+            <td class="bp-caption" style="color:var(--bp-text-muted);">{{ forloop.counter }}</td>
+
+            <td>
+              <div style="display:flex;align-items:center;gap:0.6rem;">
+                <div style="width:32px;height:32px;border-radius:50%;background:rgba(11,60,93,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                  <i class="fa-solid fa-user" style="font-size:0.75rem;color:var(--bp-primary);"></i>
+                </div>
+                <span style="font-weight:500;">
+                  {% if client.first_name or client.last_name %}
+                    {{ client.first_name }} {{ client.last_name }}
+                  {% else %}
+                    <span style="color:var(--bp-text-muted);font-style:italic;">No name</span>
+                  {% endif %}
+                </span>
+              </div>
+            </td>
+
+            <td>
+              <span style="font-family:monospace;font-size:0.875rem;">{{ client.email }}</span>
+            </td>
+
+            <td>
+              {% if client.is_active %}
+                <span class="bp-badge bp-badge-success">
+                  <i class="fa-solid fa-circle" style="font-size:0.5rem;margin-right:0.3rem;"></i>Active
+                </span>
+              {% else %}
+                <span class="bp-badge bp-badge-neutral">
+                  <i class="fa-solid fa-circle" style="font-size:0.5rem;margin-right:0.3rem;"></i>Inactive
+                </span>
+              {% endif %}
+            </td>
+
+            <td>
+              {% if client.account_status == "APPROVED" %}
+                <span class="bp-badge bp-badge-success">Approved</span>
+              {% elif client.account_status == "PENDING" %}
+                <span class="bp-badge bp-badge-warning">Pending</span>
+              {% elif client.account_status == "SUSPENDED" %}
+                <span class="bp-badge bp-badge-error">Suspended</span>
+              {% elif client.account_status == "BLOCKED" %}
+                <span class="bp-badge bp-badge-error">Blocked</span>
+              {% else %}
+                <span class="bp-badge bp-badge-neutral">{{ client.account_status }}</span>
+              {% endif %}
+            </td>
+
+            <td class="bp-caption" style="color:var(--bp-text-muted);white-space:nowrap;">
+              {{ client.date_joined|date:"d M Y" }}
+            </td>
+
+            <td>
+              <a href="{% url 'admin-user-detail' client.id %}"
+                 class="bp-btn bp-btn-ghost bp-btn-xs"
+                 title="View client profile">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% else %}
+    <div style="padding:3rem 2rem;text-align:center;">
+      <div style="width:56px;height:56px;border-radius:50%;background:rgba(11,60,93,0.07);display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;">
+        <i class="fa-solid fa-users" style="font-size:1.5rem;color:var(--bp-primary);opacity:0.4;"></i>
+      </div>
+      <p class="bp-caption" style="color:var(--bp-text-muted);margin:0;">No clients found within your scope.</p>
+      <a href="{% url 'sales-funnel' %}" class="bp-btn bp-btn-primary bp-btn-sm" style="margin-top:1rem;">
+        <i class="fa-solid fa-filter" style="margin-right:0.35rem;"></i>View Funnel
+      </a>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}

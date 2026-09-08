@@ -1,0 +1,5 @@
+@import "tailwindcss";
+@custom-variant dark (&:where([data-theme="burjex-admin-dark"], [data-theme="burjex-admin-dark"] *));
+@source "../../templates/**/*.html";
+@source "../../admin_panel/**/*.py";
+@source "../../user_portal/**/*.py";

@@ -1,0 +1,271 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Group Management{% endblock %}
+{% block admin_content %}
+<div class="bp-page-header bp-s-6">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-server bp-s-140"></i>Group Management</h1>
+    <p class="bp-page-subtitle">Map a CRM group name to a live platform group. Only groups returned from connected integrations appear in the tree.</p>
+  </div>
+</div>
+
+<details class="bp-card mb-6" {% if edit_obj %}open{% endif %}>
+  <summary class="cursor-pointer select-none px-5 py-4 font-semibold text-indigo-600 dark:text-indigo-400 border-b border-slate-100 dark:border-slate-800 list-none">
+    <i class="fa-solid fa-plus me-1"></i> {% if edit_obj %}Edit Group{% else %}Add Group{% endif %}
+  </summary>
+  <div class="bp-card-body">
+    <form method="post" class="space-y-4" id="crm-group-form">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save">
+      {% if edit_obj %}<input type="hidden" name="id" value="{{ edit_obj.id }}">{% endif %}
+      <input type="hidden" name="platform" id="id_platform" value="{{ edit_obj.platform|default:'MT5' }}" required>
+      <input type="hidden" name="platform_group_name" id="id_platform_group_name" value="{{ edit_obj.platform_group_name|default:'' }}" required>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="bp-form-label">CRM Group Name</label>
+          <input name="crm_group_name" value="{{ edit_obj.crm_group_name|default:'' }}" required class="bp-input w-full" placeholder="Standard, ECN, Pro">
+        </div>
+        <div class="relative">
+          <label class="bp-form-label">Platform Group</label>
+          <p class="text-[11px] text-slate-500 mb-1">Choose from the tree — manual typing is disabled.</p>
+          <button type="button" id="pg-dropdown-btn" class="bp-input w-full text-left flex items-center justify-between gap-2">
+            <span id="pg-dropdown-label" class="text-sm truncate">{% if edit_obj.platform and edit_obj.platform_group_name %}{{ edit_obj.get_platform_display }} — {{ edit_obj.platform_group_name }}{% else %}Click to select platform &amp; group…{% endif %}</span>
+            <span class="text-slate-400 text-xs shrink-0" aria-hidden="true">▾</span>
+          </button>
+          <div id="pg-dropdown-panel" class="hidden absolute z-30 mt-1 w-full max-h-72 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-2 text-sm" role="listbox">
+            <p id="pg-tree-loading" class="text-slate-500 px-2 py-3 text-xs">Loading platforms…</p>
+            <div id="pg-tree-root" class="hidden space-y-1"></div>
+            <p id="pg-tree-empty" class="hidden text-amber-700 px-2 py-2 text-xs">No enabled trading platforms. Enable MT5, Match-Trader, or BTrader under Integrations → Trading Platforms.</p>
+            <p id="pg-tree-error" class="hidden text-rose-600 px-2 py-2 text-xs"></p>
+          </div>
+        </div>
+        <div class="md:col-span-2">
+          <label class="bp-form-label">Description <span class="text-slate-400 font-normal">(optional)</span></label>
+          <textarea name="description" rows="2" class="bp-input w-full min-h-[80px]" placeholder="Internal notes">{{ edit_obj.description|default:'' }}</textarea>
+        </div>
+        <div>
+          <label class="bp-form-label">Status</label>
+          <select name="status_value" class="bp-input w-full">
+            <option value="active" {% if not edit_obj or edit_obj.is_active %}selected{% endif %}>Active</option>
+            <option value="disabled" {% if edit_obj and not edit_obj.is_active %}selected{% endif %}>Disabled</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 pt-2">
+        <button type="submit" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all">Save group</button>
+        {% if edit_obj %}
+          <a href="{% url 'admin-group-list' %}" class="bp-btn bp-btn-outline">Cancel edit</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</details>
+
+<div class="overflow-x-auto w-full">
+      <table class="bp-table min-w-full">
+        <thead>
+          <tr>
+            <th>CRM group</th>
+            <th>Platform</th>
+            <th>Platform group</th>
+            <th>Linked account types</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in groups %}
+            <tr>
+              <td><span class="font-semibold">{{ g.crm_group_name|default:g.name }}</span></td>
+              <td><span class="bp-badge bp-badge-neutral">{{ g.get_platform_display }}</span></td>
+              <td><span class="text-xs font-semibold text-slate-700 dark:text-slate-300">{{ g.name }}</span></td>
+              <td>
+                {% if g.linked_account_types %}
+                  <div class="flex flex-wrap gap-1">
+                    {% for at in g.linked_account_types %}
+                      <span class="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded text-[11px]">{{ at.account_name }}</span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="text-slate-400">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if g.is_active %}
+                  <span class="bp-badge bp-badge-success">Active</span>
+                {% else %}
+                  <span class="bp-badge bp-badge-error">Disabled</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="flex items-center gap-2">
+                  <a href="{% url 'admin-group-edit' %}?edit={{ g.id }}" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all px-3 py-1 text-xs h-auto"><i class="fa-solid fa-pen"></i> Edit</a>
+                  <form method="post" class="inline m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="toggle">
+                    <input type="hidden" name="id" value="{{ g.id }}">
+                    <button type="submit" class="bp-btn bg-slate-600 hover:bg-slate-700 text-white border-0 px-3 py-1 text-xs h-auto shadow-sm">{% if g.is_active %}<i class="fa-solid fa-ban"></i> Disable{% else %}<i class="fa-solid fa-check"></i> Enable{% endif %}</button>
+                  </form>
+                  <form method="post" action="{% url 'admin-group-delete' g.id %}" class="inline m-0" onsubmit="return confirm('Delete this group?');">
+                    {% csrf_token %}
+                    <button type="submit" class="bp-btn bg-rose-500 hover:bg-rose-600 text-white border-0 px-3 py-1 text-xs h-auto shadow-sm"><i class="fa-solid fa-trash"></i> Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="p-8 text-center text-slate-500">No groups configured.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+<script>
+(function () {
+  var jsonUrl = "{{ platform_groups_json_url|escapejs }}";
+  var btn = document.getElementById("pg-dropdown-btn");
+  var panel = document.getElementById("pg-dropdown-panel");
+  var label = document.getElementById("pg-dropdown-label");
+  var root = document.getElementById("pg-tree-root");
+  var loading = document.getElementById("pg-tree-loading");
+  var empty = document.getElementById("pg-tree-empty");
+  var errEl = document.getElementById("pg-tree-error");
+  var inpPlat = document.getElementById("id_platform");
+  var inpGrp = document.getElementById("id_platform_group_name");
+  var form = document.getElementById("crm-group-form");
+  if (!btn || !panel || !root || !loading || !form) return;
+
+  function closePanel() {
+    panel.classList.add("hidden");
+  }
+  function openPanel() {
+    panel.classList.remove("hidden");
+  }
+  btn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (panel.classList.contains("hidden")) openPanel();
+    else closePanel();
+  });
+  document.addEventListener("click", function () { closePanel(); });
+  panel.addEventListener("click", function (e) { e.stopPropagation(); });
+
+  function setSelection(platformCode, platformLabel, groupName) {
+    inpPlat.value = platformCode;
+    inpGrp.value = groupName;
+    label.textContent = platformLabel + " — " + groupName;
+    closePanel();
+  }
+
+  function emptyMessageFor(p) {
+    if (p.code === "BTRADER") {
+      return p.live_ok
+        ? "No trading groups yet — create groups in BTrader Admin (Groups), then refresh this page."
+        : "BTrader catalog offline — check gateway URL (:4100), API key, and HMAC secret under Trading Platforms → BTrader.";
+    }
+    if (p.code === "MATCH_TRADER") {
+      return p.live_ok
+        ? "No groups returned from API — use “Sync group catalog” on Match-Trader or check broker REST paths."
+        : "Catalog offline: enable Match-Trader and ensure API key is saved.";
+    }
+    if (p.code === "MT5") {
+      return p.live_ok
+        ? "No groups returned from the MT5 server."
+        : "MT5 catalog offline — check Manager API host/port and credentials.";
+    }
+    return p.live_ok ? "No groups returned from API." : "Catalog offline.";
+  }
+
+  function showError(msg) {
+    loading.classList.add("hidden");
+    root.classList.add("hidden");
+    if (empty) empty.classList.add("hidden");
+    if (errEl) {
+      errEl.textContent = msg;
+      errEl.classList.remove("hidden");
+    }
+  }
+
+  function renderTree(platforms) {
+    loading.classList.add("hidden");
+    if (errEl) errEl.classList.add("hidden");
+    root.innerHTML = "";
+    if (!platforms || !platforms.length) {
+      if (empty) empty.classList.remove("hidden");
+      return;
+    }
+    if (empty) empty.classList.add("hidden");
+    root.classList.remove("hidden");
+    platforms.forEach(function (p) {
+      var det = document.createElement("details");
+      det.open = true;
+      det.className = "border border-slate-100 rounded-md";
+      var sum = document.createElement("summary");
+      sum.className = "cursor-pointer select-none px-2 py-2 font-medium text-slate-800 bg-slate-50/80 hover:bg-slate-100 rounded-md";
+      var live = p.live_ok ? "" : " (catalog offline)";
+      sum.textContent = p.label + live;
+      det.appendChild(sum);
+      var ul = document.createElement("ul");
+      ul.className = "pl-3 pr-2 pb-2 space-y-0.5";
+      var groups = p.groups || [];
+      if (!groups.length) {
+        var li0 = document.createElement("li");
+        li0.className = "text-xs text-slate-400 py-1";
+        li0.textContent = emptyMessageFor(p);
+        ul.appendChild(li0);
+      } else {
+        groups.forEach(function (gname) {
+          var li = document.createElement("li");
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "text-left w-full py-1 px-1 rounded text-indigo-600 hover:bg-slate-100 text-xs font-mono";
+          b.textContent = gname;
+          b.addEventListener("click", function () {
+            setSelection(p.code, p.label, gname);
+          });
+          li.appendChild(b);
+          ul.appendChild(li);
+        });
+      }
+      det.appendChild(ul);
+      root.appendChild(det);
+    });
+  }
+
+  var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  var timedOut = false;
+  var timer = setTimeout(function () {
+    timedOut = true;
+    if (ctrl) ctrl.abort();
+    showError("Timed out loading platform groups. Refresh the page — if this persists, check MT5/BTrader connectivity.");
+  }, 25000);
+
+  fetch(jsonUrl, {
+    credentials: "same-origin",
+    headers: { "Accept": "application/json" },
+    signal: ctrl ? ctrl.signal : undefined
+  })
+    .then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    })
+    .then(function (data) {
+      clearTimeout(timer);
+      if (timedOut) return;
+      renderTree((data && data.platforms) || []);
+    })
+    .catch(function (err) {
+      clearTimeout(timer);
+      if (timedOut) return;
+      showError("Could not load platform groups." + (err && err.message ? " (" + err.message + ")" : ""));
+    });
+
+  form.addEventListener("submit", function (e) {
+    if (!inpPlat.value.trim() || !inpGrp.value.trim()) {
+      e.preventDefault();
+      alert("Please select a platform group from the tree.");
+    }
+  });
+})();
+</script>
+{% endblock %}
+

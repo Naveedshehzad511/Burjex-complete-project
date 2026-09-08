@@ -1,0 +1,16 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Referral Link - User Portal{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">Referral Link</h1>
+  <p class="portal-page-subtitle">Share your referral URL with clients.</p>
+
+  <div class="portal-card max-w-lg">
+    <div class="portal-form-label mb-2">Your Referral URL</div>
+    <div class="flex flex-col sm:flex-row gap-2">
+      <input type="text" id="referralUrlInput" readonly class="portal-input flex-1 font-mono text-sm" value="{{ referral_url }}" />
+      <button type="button" onclick="(function(){var el=document.getElementById('referralUrlInput');if(!el)return;if(navigator.clipboard)navigator.clipboard.writeText(el.value);else{el.select();try{document.execCommand('copy');}catch(e){}}})()" class="portal-btn-primary shrink-0">Copy</button>
+    </div>
+  </div>
+{% endblock %}

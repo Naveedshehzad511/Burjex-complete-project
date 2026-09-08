@@ -1,0 +1,151 @@
+<!doctype html>
+<!-- template-refresh: base-v2 -->
+{% load static %}
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Force browser refresh during development -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>{% block title %}Forex CRM{% endblock %}</title>
+  {% if crm_active_favicon_url %}
+  <link rel="icon" href="{{ crm_active_favicon_url }}" sizes="any" />
+  {% endif %}
+  {% block head_extra %}{% endblock %}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/crm-theme.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/tailwind-output.css' %}" />
+  <style>
+    html,
+    body {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+
+    :root {
+      --crm-navy: #0B3C5D;
+      --crm-navy-dark: #072A42;
+      --crm-navy-hover: #124A73;
+      --crm-accent-soft: #E7EEF4;
+      --crm-bg: #FFFFFF;
+      --crm-soft: #F3F4F6;
+    }
+
+    /* Primary / action fills → navy */
+    .bg-indigo-600,
+    .bg-indigo-500,
+    .bg-blue-600,
+    .bg-blue-500,
+    .bg-sky-600,
+    .bg-sky-500,
+    .bg-violet-600,
+    .bg-violet-500,
+    .bg-purple-600,
+    .bg-purple-500 {
+      background-color: var(--crm-navy) !important;
+    }
+
+    .hover\:bg-indigo-700:hover,
+    .hover\:bg-indigo-600:hover,
+    .hover\:bg-blue-700:hover,
+    .hover\:bg-blue-600:hover,
+    .hover\:bg-sky-700:hover,
+    .hover\:bg-sky-600:hover,
+    .hover\:bg-violet-700:hover,
+    .hover\:bg-purple-700:hover {
+      background-color: var(--crm-navy-dark) !important;
+    }
+
+    /* Text accents */
+    .text-indigo-700,
+    .text-indigo-800,
+    .text-blue-700,
+    .text-blue-800,
+    .text-sky-700 {
+      color: var(--crm-navy) !important;
+    }
+
+    /* Soft surfaces / badges */
+    .bg-indigo-100,
+    .bg-indigo-50,
+    .bg-blue-100,
+    .bg-blue-50,
+    .bg-sky-100,
+    .bg-sky-50,
+    .bg-amber-100,
+    .bg-amber-50 {
+      background-color: var(--crm-soft) !important;
+    }
+
+    .border-indigo-100,
+    .border-indigo-200,
+    .border-indigo-300,
+    .border-blue-100,
+    .border-blue-200,
+    .border-sky-200 {
+      border-color: rgba(11, 60, 93, 0.18) !important;
+    }
+
+    .text-amber-700,
+    .text-amber-800 {
+      color: #6b7280 !important;
+    }
+
+    /* Focus rings (Tailwind) */
+    .focus\:border-indigo-500:focus,
+    .focus\:border-blue-500:focus,
+    .focus\:ring-indigo-500:focus,
+    .focus\:ring-blue-500:focus {
+      --tw-ring-color: rgba(11, 60, 93, 0.35) !important;
+      border-color: var(--crm-navy) !important;
+    }
+
+    .ring-indigo-500,
+    .ring-blue-500 {
+      --tw-ring-color: rgba(11, 60, 93, 0.35) !important;
+    }
+
+    .bg-indigo-600\/10,
+    .bg-blue-600\/10 {
+      background-color: rgba(11, 60, 93, 0.08) !important;
+    }
+
+    /* Fallback Utility Classes for dynamic buttons */
+    .bg-rose-600 { background-color: #e11d48 !important; }
+    .hover\:bg-rose-700:hover { background-color: #be123c !important; }
+    
+    .bg-slate-600 { background-color: #475569 !important; }
+    .hover\:bg-slate-700:hover { background-color: #334155 !important; }
+    
+    .bg-slate-500 { background-color: #64748b !important; }
+    .hover\:bg-slate-600:hover { background-color: #475569 !important; }
+    
+    .bg-emerald-600 { background-color: #059669 !important; }
+    .hover\:bg-emerald-700:hover { background-color: #047857 !important; }
+    
+    .bg-amber-500 { background-color: #f59e0b !important; }
+    .hover\:bg-amber-600:hover { background-color: #d97706 !important; }
+  </style>
+  <link rel="stylesheet" href="{% static 'css/crm-enterprise-ui.css' %}" />
+</head>
+
+<body class="crm-app bg-[#FFFFFF] text-[#0B3C5D]{% block body_extra_class %}{% endblock %}"
+  style="font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; overflow-x:hidden;">
+  <div class="min-h-screen flex flex-col">
+    <main class="flex-1">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+
+
+</body>
+
+</html>

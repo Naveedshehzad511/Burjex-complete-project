@@ -1,0 +1,64 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Documents - Burjex Prime{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">Documents</h1>
+  <p class="portal-page-subtitle">All uploaded KYC files synced from CRM.</p>
+
+  <div class="portal-stat-grid mb-5">
+    <a href="?status=pending"
+       class="portal-stat-card{% if list_status == 'pending' %} portal-stat-card--accent{% endif %}"
+       style="{% if list_status == 'pending' %}background:var(--portal-brand-primary);color:#fff;border-color:var(--portal-brand-primary);{% endif %}text-decoration:none;">
+      <div class="portal-stat-label" {% if list_status == 'pending' %}style="color:rgba(255,255,255,0.8);"{% endif %}>Pending</div>
+      <div class="portal-stat-value" {% if list_status == 'pending' %}style="color:#fff;"{% endif %}>{{ status_counts.pending|default:0 }}</div>
+    </a>
+    <a href="?status=approved"
+       class="portal-stat-card{% if list_status == 'approved' %} portal-stat-card--accent{% endif %}"
+       style="{% if list_status == 'approved' %}background:var(--portal-brand-primary);color:#fff;border-color:var(--portal-brand-primary);{% endif %}text-decoration:none;">
+      <div class="portal-stat-label" {% if list_status == 'approved' %}style="color:rgba(255,255,255,0.8);"{% endif %}>Approved</div>
+      <div class="portal-stat-value" {% if list_status == 'approved' %}style="color:#fff;"{% endif %}>{{ status_counts.approved|default:0 }}</div>
+    </a>
+    <a href="?status=rejected"
+       class="portal-stat-card{% if list_status == 'rejected' %} portal-stat-card--accent{% endif %}"
+       style="{% if list_status == 'rejected' %}background:var(--portal-brand-primary);color:#fff;border-color:var(--portal-brand-primary);{% endif %}text-decoration:none;">
+      <div class="portal-stat-label" {% if list_status == 'rejected' %}style="color:rgba(255,255,255,0.8);"{% endif %}>Rejected</div>
+      <div class="portal-stat-value" {% if list_status == 'rejected' %}style="color:#fff;"{% endif %}>{{ status_counts.rejected|default:0 }}</div>
+    </a>
+  </div>
+
+  <div class="portal-table-wrap overflow-x-auto w-full">
+    <table class="portal-table min-w-full whitespace-nowrap">
+      <thead>
+        <tr>
+          <th>Type</th><th>Status</th><th>Comment</th><th>Date</th><th>File</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in documents %}
+          <tr>
+            <td>{{ d.doc_type }}</td>
+            <td>
+              {% if d.status == 'APPROVED' %}
+                <span class="portal-badge portal-badge--green">Approved</span>
+              {% elif d.status == 'REJECTED' %}
+                <span class="portal-badge portal-badge--red">Rejected</span>
+              {% else %}
+                <span class="portal-badge portal-badge--amber">Pending</span>
+              {% endif %}
+            </td>
+            <td style="color:var(--portal-text-muted);">{{ d.comment|default:"-" }}</td>
+            <td style="color:var(--portal-text-muted);">{{ d.uploaded_at|date:"Y-m-d H:i" }}</td>
+            <td>
+              {% if d.file %}
+                <a href="{{ d.file.url }}" class="text-sm font-medium hover:underline" style="color:var(--portal-brand-primary);" target="_blank" rel="noopener">View</a>
+              {% else %}-{% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" style="text-align:center;color:var(--portal-text-muted);padding:1.5rem 1rem;">No documents yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

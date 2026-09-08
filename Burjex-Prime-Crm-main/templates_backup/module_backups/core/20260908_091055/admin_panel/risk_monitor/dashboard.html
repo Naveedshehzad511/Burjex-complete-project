@@ -1,0 +1,249 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Risk Monitor{% endblock %}
+{% block admin_content %}
+<div class="max-w-7xl mx-auto space-y-8 pb-12">
+  
+  <!-- Header Section -->
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-gradient-to-r from-slate-900 to-indigo-900 rounded-2xl p-8 text-white shadow-lg">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight">Trade Risk Monitor</h1>
+      <p class="text-indigo-200 mt-2 text-sm max-w-xl leading-relaxed">
+        Real-time risk metrics and suspicious trade behavior monitoring powered by live MT5 deal history analysis.
+      </p>
+    </div>
+    <a href="{% url 'admin-risk-monitor-positions' %}" class="inline-flex items-center px-6 py-3 rounded-xl bg-white text-indigo-900 text-sm font-bold shadow hover:bg-indigo-50 transition-all hover:-translate-y-0.5">
+      <i class="fa-solid fa-list-ul mr-2"></i> View All Deals
+    </a>
+  </div>
+
+  <!-- Summary Cards Grid -->
+  <div>
+    <h2 class="text-lg font-bold text-slate-800 mb-4 px-1 flex items-center">
+      <i class="fa-solid fa-chart-line text-indigo-500 mr-2"></i> Active Risk Alerts
+    </h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      
+      <!-- Card 1 -->
+      <a href="{% url 'admin-risk-monitor-positions' %}?rule=short_duration" class="group relative overflow-hidden bg-white border border-slate-200 hover:border-rose-300 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all hover:-translate-y-1">
+          <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <i class="fa-solid fa-stopwatch text-6xl text-rose-500"></i>
+          </div>
+          <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-600">
+              <i class="fa-solid fa-bolt text-sm"></i>
+            </div>
+            <div class="text-sm font-semibold text-slate-700">Short Duration</div>
+          </div>
+          <div class="text-3xl font-bold text-slate-900 mt-3">{{ metrics.short_duration|default:"0" }}</div>
+          <div class="text-xs font-medium text-rose-500 mt-2 bg-rose-50 inline-block px-2 py-1 rounded-md">Trades &lt; {{ settings_obj.short_duration_max_seconds }}s</div>
+      </a>
+
+      <!-- Card 2 -->
+      <a href="{% url 'admin-risk-monitor-positions' %}?rule=high_profit" class="group relative overflow-hidden bg-white border border-slate-200 hover:border-emerald-300 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all hover:-translate-y-1">
+          <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <i class="fa-solid fa-money-bill-trend-up text-6xl text-emerald-500"></i>
+          </div>
+          <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+              <i class="fa-solid fa-sack-dollar text-sm"></i>
+            </div>
+            <div class="text-sm font-semibold text-slate-700">High Profit</div>
+          </div>
+          <div class="text-3xl font-bold text-slate-900 mt-3">{{ metrics.high_profit|default:"0" }}</div>
+          <div class="text-xs font-medium text-emerald-600 mt-2 bg-emerald-50 inline-block px-2 py-1 rounded-md">Trades &ge; ${{ settings_obj.high_profit_threshold }}</div>
+      </a>
+
+      <!-- Card 3 -->
+      <a href="{% url 'admin-risk-monitor-positions' %}?rule=large_lot" class="group relative overflow-hidden bg-white border border-slate-200 hover:border-amber-300 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all hover:-translate-y-1">
+          <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <i class="fa-solid fa-layer-group text-6xl text-amber-500"></i>
+          </div>
+          <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+              <i class="fa-solid fa-cubes-stacked text-sm"></i>
+            </div>
+            <div class="text-sm font-semibold text-slate-700">Large Lot Size</div>
+          </div>
+          <div class="text-3xl font-bold text-slate-900 mt-3">{{ metrics.large_lot|default:"0" }}</div>
+          <div class="text-xs font-medium text-amber-600 mt-2 bg-amber-50 inline-block px-2 py-1 rounded-md">Lots &gt; {{ settings_obj.large_lot_threshold }}</div>
+      </a>
+
+      <!-- Card 4 -->
+      <a href="{% url 'admin-risk-monitor-positions' %}?rule=hft" class="group relative overflow-hidden bg-white border border-slate-200 hover:border-purple-300 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all hover:-translate-y-1">
+          <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <i class="fa-solid fa-robot text-6xl text-purple-500"></i>
+          </div>
+          <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
+              <i class="fa-solid fa-microchip text-sm"></i>
+            </div>
+            <div class="text-sm font-semibold text-slate-700">HFT Accounts</div>
+          </div>
+          <div class="text-3xl font-bold text-slate-900 mt-3">{{ metrics.hft_accounts|default:"0" }}</div>
+          <div class="text-xs font-medium text-purple-600 mt-2 bg-purple-50 inline-block px-2 py-1 rounded-md">&gt; {{ settings_obj.hft_trades_per_minute }} trades/min</div>
+      </a>
+      
+      <!-- Card 5 -->
+      <a href="{% url 'admin-risk-monitor-positions' %}?rule=single_symbol" class="group relative overflow-hidden bg-white border border-slate-200 hover:border-cyan-300 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all hover:-translate-y-1">
+          <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <i class="fa-solid fa-crosshairs text-6xl text-cyan-500"></i>
+          </div>
+          <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-600">
+              <i class="fa-solid fa-bullseye text-sm"></i>
+            </div>
+            <div class="text-sm font-semibold text-slate-700">Single Symbol</div>
+          </div>
+          <div class="text-3xl font-bold text-slate-900 mt-3">{{ metrics.single_symbol|default:"0" }}</div>
+          <div class="text-xs font-medium text-cyan-600 mt-2 bg-cyan-50 inline-block px-2 py-1 rounded-md">Past {{ settings_obj.single_symbol_monitoring_days }} days</div>
+      </a>
+
+      <!-- Card 6 -->
+      <a href="{% url 'admin-risk-monitor-positions' %}?rule=hedge" class="group relative overflow-hidden bg-white border border-slate-200 hover:border-orange-300 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all hover:-translate-y-1">
+          <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <i class="fa-solid fa-code-compare text-6xl text-orange-500"></i>
+          </div>
+          <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
+              <i class="fa-solid fa-shuffle text-sm"></i>
+            </div>
+            <div class="text-sm font-semibold text-slate-700">Same IP Hedging</div>
+          </div>
+          <div class="text-3xl font-bold text-slate-900 mt-3">{{ metrics.same_ip_hedge|default:"0" }}</div>
+          <div class="text-xs font-medium text-orange-600 mt-2 bg-orange-50 inline-block px-2 py-1 rounded-md">Within {{ settings_obj.hedging_time_window_minutes }} mins</div>
+      </a>
+
+      <!-- Card 7 -->
+      <a href="{% url 'admin-risk-monitor-positions' %}?rule=multi_ip" class="group relative overflow-hidden bg-white border border-slate-200 hover:border-indigo-300 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all hover:-translate-y-1">
+          <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <i class="fa-solid fa-users-viewfinder text-6xl text-indigo-500"></i>
+          </div>
+          <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+              <i class="fa-solid fa-network-wired text-sm"></i>
+            </div>
+            <div class="text-sm font-semibold text-slate-700">Multiple IPs</div>
+          </div>
+          <div class="text-3xl font-bold text-slate-900 mt-3">{{ metrics.multiple_ip|default:"0" }}</div>
+          <div class="text-xs font-medium text-indigo-600 mt-2 bg-indigo-50 inline-block px-2 py-1 rounded-md">Past {{ settings_obj.multiple_ip_monitoring_days }} days</div>
+      </a>
+
+      <!-- Card 8 -->
+      <a href="{% url 'admin-risk-monitor-positions' %}?rule=country_mismatch" class="group relative overflow-hidden bg-white border border-slate-200 hover:border-red-300 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all hover:-translate-y-1">
+          <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <i class="fa-solid fa-earth-americas text-6xl text-red-500"></i>
+          </div>
+          <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+              <i class="fa-solid fa-plane-slash text-sm"></i>
+            </div>
+            <div class="text-sm font-semibold text-slate-700">Country Mismatch</div>
+          </div>
+          <div class="text-3xl font-bold text-slate-900 mt-3">{{ metrics.country_mismatch|default:"0" }}</div>
+          <div class="text-xs font-medium text-red-600 mt-2 bg-red-50 inline-block px-2 py-1 rounded-md">{% if settings_obj.enable_country_mismatch %}Active{% else %}Disabled{% endif %}</div>
+      </a>
+
+    </div>
+  </div>
+
+  <!-- Settings Configuration Form -->
+  <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+    <div class="border-b border-slate-100 bg-slate-50 px-6 py-4 flex items-center justify-between">
+      <h2 class="text-base font-bold text-slate-800 flex items-center">
+        <i class="fa-solid fa-sliders text-indigo-500 mr-2"></i> Configuration Thresholds
+      </h2>
+    </div>
+    
+    <form method="post" class="p-6">
+      {% csrf_token %}
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        
+        <div class="space-y-1">
+          <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Short Duration (s)</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <i class="fa-regular fa-clock"></i>
+            </div>
+            <input type="text" inputmode="decimal" step="any" min="1" name="short_duration_max_seconds" value="{{ settings_obj.short_duration_max_seconds|stringformat:'s' }}" class="pl-10 w-full border border-slate-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">High Profit ($)</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <i class="fa-solid fa-dollar-sign"></i>
+            </div>
+            <input type="text" inputmode="decimal" step="any" min="0" name="high_profit_threshold" value="{{ settings_obj.high_profit_threshold|stringformat:'s' }}" class="pl-10 w-full border border-slate-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Large Lot Size</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <i class="fa-solid fa-layer-group"></i>
+            </div>
+            <input type="text" inputmode="decimal" step="any" min="0" name="large_lot_threshold" value="{{ settings_obj.large_lot_threshold|stringformat:'s' }}" class="pl-10 w-full border border-slate-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">HFT (Trades/Min)</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <i class="fa-solid fa-fire"></i>
+            </div>
+            <input type="text" inputmode="decimal" step="any" min="1" name="hft_trades_per_minute" value="{{ settings_obj.hft_trades_per_minute|stringformat:'s' }}" class="pl-10 w-full border border-slate-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+          </div>
+        </div>
+        
+        <div class="space-y-1">
+          <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Single Symbol (Days)</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <i class="fa-regular fa-calendar-days"></i>
+            </div>
+            <input type="text" inputmode="decimal" step="any" min="1" name="single_symbol_monitoring_days" value="{{ settings_obj.single_symbol_monitoring_days|stringformat:'s' }}" class="pl-10 w-full border border-slate-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Hedging Window (Mins)</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <i class="fa-solid fa-code-compare"></i>
+            </div>
+            <input type="text" inputmode="decimal" step="any" min="1" name="hedging_time_window_minutes" value="{{ settings_obj.hedging_time_window_minutes|stringformat:'s' }}" class="pl-10 w-full border border-slate-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Multi-IP Window (Days)</label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <i class="fa-solid fa-network-wired"></i>
+            </div>
+            <input type="text" inputmode="decimal" step="any" min="1" name="multiple_ip_monitoring_days" value="{{ settings_obj.multiple_ip_monitoring_days|stringformat:'s' }}" class="pl-10 w-full border border-slate-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+          </div>
+        </div>
+        
+        <div class="space-y-3 flex flex-col justify-end">
+          <label class="flex items-center text-sm cursor-pointer p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+            <input type="checkbox" name="enable_country_mismatch" {% if settings_obj.enable_country_mismatch %}checked{% endif %} class="w-5 h-5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500" />
+            <span class="ml-3 font-medium text-slate-700">Check Country Mismatch</span>
+          </label>
+        </div>
+
+      </div>
+
+      <div class="mt-8 pt-6 border-t border-slate-100 flex justify-end">
+        <button type="submit" class="inline-flex items-center px-6 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold shadow hover:bg-indigo-700 transition-colors">
+          <i class="fa-solid fa-check mr-2"></i> Save Configuration
+        </button>
+      </div>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

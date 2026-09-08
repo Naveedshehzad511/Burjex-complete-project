@@ -1,0 +1,1289 @@
+{% extends "base.html" %}
+{% load static %}
+{% load nav_urls %}
+
+{% block head_extra %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'css/admin-elite-hybrid.css' %}" />
+{% endblock %}
+
+{% block body_extra_class %} admin-elite-hybrid{% endblock %}
+
+{% block title %}Admin Panel - Forex Broker CRM{% endblock %}
+
+{% block content %}
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <style>
+    /* Lock document scroll; sidebar fixed; only main content column scrolls */
+    :root {
+      --crm-sidebar-w: 260px;
+    }
+    html:has(.app-layout),
+    body:has(.app-layout) {
+      height: 100%;
+      max-height: 100vh;
+      overflow: hidden !important;
+    }
+    body:has(.app-layout) .min-h-screen {
+      min-height: 0 !important;
+      height: 100%;
+      max-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    body:has(.app-layout) main.flex-1 {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .app-layout.layout {
+      display: block;
+      position: relative;
+      width: 100%;
+      max-width: 100vw;
+      min-height: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+    /* Fixed sidebar: does not scroll with page; nav scrolls inside only if needed */
+    .crm-shell-sidebar.sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      height: 100vh;
+      height: 100dvh;
+      width: var(--crm-sidebar-w);
+      max-width: min(var(--crm-sidebar-w), 85vw);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 4px 0 24px rgba(2, 6, 23, 0.18);
+      transform: translateX(-100%);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      scrollbar-width: thin;
+    }
+    .crm-shell-sidebar .sidebar-brand-row {
+      flex-shrink: 0;
+    }
+    .crm-sidebar-nav {
+      flex: 1;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+    }
+    .crm-sidebar-nav::-webkit-scrollbar {
+      width: 6px;
+    }
+    .crm-sidebar-nav::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+    }
+    @media (min-width: 768px) {
+      .crm-shell-sidebar.sidebar {
+        transform: translateX(0);
+      }
+      .crm-shell-sidebar.sidebar.closed {
+        transform: translateX(-100%);
+        pointer-events: none;
+        box-shadow: none;
+      }
+    }
+    @media (max-width: 767.98px) {
+      .crm-shell-sidebar.sidebar.crm-shell-sidebar--open {
+        transform: translateX(0);
+      }
+    }
+    .main-content {
+      margin-left: 0;
+      width: 100%;
+      min-height: 0;
+      height: 100vh;
+      height: 100dvh;
+      max-height: 100vh;
+      max-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #f5f7fb;
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+      transition: margin-left 0.3s ease, width 0.3s ease, max-width 0.3s ease;
+    }
+    @media (min-width: 768px) {
+      .main-content {
+        margin-left: var(--crm-sidebar-w);
+        width: calc(100% - var(--crm-sidebar-w));
+        max-width: calc(100vw - var(--crm-sidebar-w));
+      }
+      .main-content.full {
+        margin-left: 0;
+        width: 100%;
+        max-width: 100vw;
+      }
+    }
+    .sidebar-toggle {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.08);
+      color: #f1f5f9;
+      font-size: 18px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .sidebar-toggle:hover {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255, 255, 255, 0.32);
+    }
+    .profile-img {
+      width: 35px;
+      height: 35px;
+      border-radius: 50%;
+    }
+    .admin-info { display: flex; flex-direction: column; font-size: 12px; }
+    .admin-name { font-weight: 600; line-height: 1.1; }
+    .admin-email { color: #888; line-height: 1.1; }
+    .admin-profile summary { list-style: none; }
+    .admin-profile summary::-webkit-details-marker { display:none; }
+    /* Main menu row */
+    .admin-main-toggle, .sidebar-parent {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 3px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s ease;
+      border: none;
+      width: 100%;
+      text-align: left;
+    }
+    .admin-main-toggle:hover, .sidebar-parent:hover {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.32), rgba(212, 175, 55, 0.22));
+      box-shadow:
+        inset 0 0 0 1px rgba(56, 189, 248, 0.45),
+        0 0 20px rgba(56, 189, 248, 0.12);
+      color: #f8fafc;
+    }
+    .admin-main-toggle .arrow, .sidebar-parent span:last-child {
+      color: rgba(255,255,255,.55);
+      font-size: 11px;
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+    .admin-main-toggle.active .arrow { transform: rotate(90deg); }
+    .sidebar-parent.active span:last-child { transform: rotate(180deg); }
+    .admin-main-toggle .nav-icon {
+      width: 1.1em;
+      text-align: center;
+      opacity: 0.9;
+      font-size: 13px;
+    }
+
+    /* Level-1 submenu: compact vertical list */
+    .admin-submenu, .sidebar-child, .sidebar-submenu {
+      background: transparent;
+      margin-top: 2px;
+      margin-bottom: 8px;
+      padding: 4px 0 8px 0;
+      padding-left: 0;
+      display: none;
+      flex-direction: column;
+      border-left: 1px solid rgba(255, 255, 255, 0.08);
+      margin-left: 10px;
+      padding-left: 8px;
+    }
+    .submenu-link {
+      display: block;
+      padding: 5px 8px 5px 6px;
+      margin-bottom: 2px;
+      font-size: 11.5px;
+      font-weight: 400;
+      line-height: 1.45;
+      color: rgba(255, 255, 255, 0.68);
+      text-decoration: none;
+      border-radius: 8px;
+      transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .submenu-link::before {
+      content: '·';
+      display: inline-block;
+      width: 0.65em;
+      margin-right: 4px;
+      color: rgba(255, 255, 255, 0.35);
+      font-weight: 700;
+    }
+    .submenu-link:hover {
+      background: rgba(56, 189, 248, 0.22);
+      color: #f0f9ff;
+      box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.85);
+    }
+    .submenu-link.active {
+      background: linear-gradient(90deg, rgba(212, 175, 55, 0.38), rgba(212, 175, 55, 0.12));
+      color: #fef3c7;
+      font-weight: 600;
+      box-shadow: inset 3px 0 0 rgba(250, 204, 21, 0.9);
+    }
+
+    /* System Management: second-level compact toggles */
+    .admin-sys-section {
+      margin-bottom: 2px;
+    }
+    .admin-sub-toggle {
+      width: 100%;
+      text-align: left;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.78);
+      background: transparent;
+      border: none;
+      padding: 5px 6px 5px 4px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      border-radius: 4px;
+      transition: background 0.15s ease;
+    }
+    .admin-sub-toggle:hover {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(212, 175, 55, 0.12));
+      color: #f8fafc;
+    }
+    .admin-sub-toggle .arrow-sm {
+      font-size: 9px;
+      color: rgba(255, 255, 255, 0.45);
+      transition: transform 0.2s ease;
+    }
+    .admin-sub-toggle.active .arrow-sm { transform: rotate(90deg); }
+    .admin-submenu-inner {
+      display: none;
+      padding: 0 0 4px 0;
+      margin-left: 6px;
+      border-left: 1px solid rgba(255, 255, 255, 0.06);
+      padding-left: 8px;
+    }
+    .admin-submenu-inner .submenu-link {
+      font-size: 11.5px;
+      padding: 3px 6px;
+      color: rgba(255, 255, 255, 0.58);
+    }
+    .admin-submenu-inner .submenu-link::before {
+      color: rgba(255, 255, 255, 0.28);
+    }
+    .admin-submenu-inner .submenu-link:hover {
+      background: rgba(56, 189, 248, 0.18);
+      color: #f0f9ff;
+      box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.75);
+    }
+    .admin-submenu-inner .submenu-link.active {
+      background: linear-gradient(90deg, rgba(212, 175, 55, 0.32), rgba(212, 175, 55, 0.1));
+      color: #fef3c7;
+      box-shadow: inset 3px 0 0 rgba(250, 204, 21, 0.85);
+    }
+    .submenu-link--leaf {
+      margin-top: 4px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .content-wrapper {
+      flex: 1;
+      min-height: 0;
+      margin-top: 0 !important;
+      padding-top: 0 !important;
+      position: relative;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+      overscroll-behavior-y: contain;
+      max-width: 100%;
+    }
+    .content-wrapper::-webkit-scrollbar {
+      width: 8px;
+    }
+    .content-wrapper::-webkit-scrollbar-thumb {
+      background: rgba(15, 23, 42, 0.2);
+      border-radius: 8px;
+    }
+    .admin-profile-bar {
+      position: absolute;
+      top: 6px;
+      right: 16px;
+      z-index: 20;
+    }
+    /* Minimal strip when full topbar is hidden (non-dashboard pages): keeps sidebar toggle without the 70px header bar */
+    .crm-shell-compact-menu {
+      flex-shrink: 0;
+      min-height: 48px;
+      padding: 8px 12px 8px 16px;
+      display: flex;
+      align-items: center;
+      box-sizing: border-box;
+      background: #f5f7fb;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+      z-index: 30;
+    }
+    .crm-shell-compact-menu .sidebar-toggle {
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #0f172a;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+    .crm-shell-compact-menu .sidebar-toggle:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+      color: #0b3c5d;
+    }
+    .admin-global-topbar.header {
+      position: relative;
+      z-index: 30;
+      flex-shrink: 0;
+      height: 70px;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      box-sizing: border-box;
+      background: #0f2a44;
+      color: #fff;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 2px 12px rgba(2, 6, 23, 0.12);
+    }
+    .admin-global-topbar-inner.header-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+      max-width: 100%;
+      justify-content: space-between;
+      padding: 0;
+    }
+    .admin-topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      flex: 1;
+    }
+    .admin-topbar-title-cluster {
+      min-width: 0;
+      flex: 1;
+    }
+    .admin-dash-top-greeting .admin-topbar-page-title--greeting {
+      white-space: normal;
+      line-height: 1.2;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .admin-topbar-greeting-welcome {
+      margin: 4px 0 0;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: rgba(248, 250, 252, 0.92);
+      line-height: 1.35;
+    }
+    .admin-topbar-greeting-sub {
+      margin: 2px 0 0;
+      font-size: 0.75rem;
+      color: rgba(226, 232, 240, 0.78);
+      line-height: 1.35;
+      max-width: 28rem;
+    }
+    .header-subtitle {
+      display: none !important;
+    }
+    .admin-global-topbar .header-title {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+    .admin-topbar-page-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: #fff;
+      line-height: 1.25;
+    }
+    .admin-topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .admin-global-topbar .admin-topbar-notify {
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.1);
+      color: #e2e8f0;
+    }
+    .admin-global-topbar .admin-topbar-notify:hover {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.35);
+      color: #fff;
+    }
+    .admin-global-topbar .admin-notify-badge {
+      border-color: #0f2a44;
+    }
+    .admin-global-topbar .admin-user-trigger {
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.1);
+      color: #f1f5f9;
+    }
+    .admin-global-topbar .admin-user-trigger:hover {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    .admin-global-topbar .admin-user-avatar {
+      background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 55%, #0ea5e9 100%);
+      color: #0f172a;
+    }
+    .admin-global-topbar .admin-user-trigger .fa-chevron-down {
+      color: rgba(226, 232, 240, 0.8) !important;
+    }
+    .admin-dropdown-feature {
+      font-weight: 600;
+      color: #0b3c5d !important;
+    }
+    .admin-dropdown-feature:hover {
+      background: rgba(14, 42, 71, 0.08) !important;
+    }
+    .admin-topbar-notify {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      border: 1px solid #dbe2ea;
+      background: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #0b3c5d;
+      text-decoration: none;
+      transition: all .2s ease;
+      cursor: pointer;
+      z-index: 2;
+    }
+    .admin-topbar-notify:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .admin-notify-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      min-width: 18px;
+      height: 18px;
+      border-radius: 9999px;
+      background: #dc2626;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+      border: 2px solid #fff;
+    }
+    .admin-notify-wrap {
+      position: relative;
+      z-index: 10070;
+    }
+    .admin-notify-panel {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 340px;
+      max-height: min(520px, 78vh);
+      overflow: hidden;
+      display: none;
+      flex-direction: column;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      box-shadow: 0 20px 50px rgba(2, 6, 23, 0.14);
+      z-index: 10080;
+      padding: 0;
+    }
+    .admin-notify-wrap.open .admin-notify-panel { display: flex; }
+    .admin-notify-panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px 14px;
+      border-bottom: 1px solid #f1f5f9;
+      background: #fafbfc;
+      border-radius: 12px 12px 0 0;
+    }
+    .admin-notify-panel-head span {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .admin-notify-markall {
+      font-size: 12px;
+      font-weight: 600;
+      color: #0b3c5d;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .admin-notify-markall:hover { background: #e7eef4; }
+    .admin-notify-list {
+      overflow-y: auto;
+      max-height: 320px;
+      padding: 6px;
+    }
+    .admin-notify-item {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: #fff;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      color: #0f172a;
+      cursor: pointer;
+      border: 1px solid transparent;
+      margin-bottom: 4px;
+    }
+    .admin-notify-item:hover {
+      background: #f8fafc;
+      border-color: #e2e8f0;
+    }
+    .admin-notify-item-title { font-weight: 600; color: #0f172a; margin-bottom: 4px; }
+    .admin-notify-item-body { font-size: 12px; color: #64748b; line-height: 1.4; }
+    .admin-notify-empty { padding: 16px; font-size: 13px; color: #64748b; text-align: center; }
+    .admin-notify-pending-block {
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+    }
+    .admin-notify-subhead {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      padding: 8px 14px 4px;
+    }
+    .admin-notify-pending-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 12px;
+      margin: 2px 6px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 13px;
+      color: #0f172a;
+      border: 1px solid transparent;
+    }
+    .admin-notify-pending-row:hover {
+      background: #f8fafc;
+      border-color: #e2e8f0;
+    }
+    .admin-notify-pending-badge {
+      font-size: 12px;
+      font-weight: 700;
+      min-width: 1.75rem;
+      text-align: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: #0b3c5d;
+    }
+    .admin-user-menu { position: relative; z-index: 10060; }
+    .admin-user-trigger {
+      border: 1px solid #dbe2ea;
+      background: #fff;
+      border-radius: 12px;
+      padding: 6px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #0f172a;
+      cursor: pointer;
+      transition: all .2s ease;
+    }
+    .admin-user-trigger:hover { background: #f8fafc; }
+    .admin-user-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 9999px;
+      background: #0b3c5d;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .admin-user-dropdown,
+    .admin-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 210px;
+      min-width: 180px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      box-shadow: 0 16px 40px rgba(2, 6, 23, .12);
+      padding: 6px;
+      z-index: 9999;
+      height: auto;
+      overflow: visible;
+      opacity: 0;
+      transform: translateY(-6px);
+      pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease;
+    }
+    .admin-user-menu.open .admin-user-dropdown {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .admin-user-dropdown a {
+      display: block;
+      text-decoration: none;
+      color: #0f172a;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 8px;
+      padding: 9px 10px;
+    }
+    .admin-user-dropdown a:hover { background: #f8fafc; color: #0b3c5d; }
+    .admin-user-divider { border-top: 1px solid #e2e8f0; margin: 6px 2px; }
+    .admin-main-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: rgba(255,255,255,.08);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: background 0.2s ease;
+    }
+    .admin-main-link:hover { background: rgba(255,255,255,0.14); color: #fff; }
+    .admin-main-link.admin-main-link--active {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.38), rgba(212, 175, 55, 0.22));
+      box-shadow:
+        inset 0 0 0 1px rgba(56, 189, 248, 0.5),
+        0 0 18px rgba(56, 189, 248, 0.1);
+      color: #f8fafc;
+    }
+    .admin-main-link .nav-icon { font-size: 13px; opacity: 0.9; width: 1.1em; text-align: center; }
+    .admin-section { margin-bottom: 4px; }
+    .sidebar-brand-row .brand-logo-wrap {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+    }
+    .sidebar-brand-row .brand-title { font-size: 15px; }
+    .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+    .overflow-x-auto table { min-width: 640px; }
+    @media (max-width: 480px) {
+      .main-content .content-wrapper,
+      .main-content .px-4.pb-4.pt-0.content-wrapper {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+      }
+    }
+  </style>
+  <div class="app-layout layout bg-white">
+    <!-- Sidebar (off-canvas on small screens; collapsible on md+) -->
+    <aside id="sidebar" class="sidebar crm-shell-sidebar bg-[#0B3C5D] text-white">
+      <div class="px-2.5 py-2.5 border-b border-white/10 sidebar-brand-row">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="brand-logo-wrap flex-shrink-0 bg-white/10 flex items-center justify-center border border-white/10">
+            {% if crm_admin_sidebar_logo_url %}
+              <img src="{{ crm_admin_sidebar_logo_url }}" alt="logo" class="w-7 h-7 object-contain" onerror="this.onerror=null;this.src='{% static 'images/default-logo.png' %}';">
+            {% else %}
+              <img src="{% static 'images/default-logo.png' %}" alt="logo" class="w-7 h-7 object-contain" onerror="this.style.display='none';this.insertAdjacentText('afterend','LOGO');">
+            {% endif %}
+          </div>
+          <div class="min-w-0">
+            <div class="brand-title font-bold leading-tight truncate">{{ crm_company_name }}</div>
+            {% block crm_sidebar_brand_extra %}{% endblock %}
+          </div>
+        </div>
+      </div>
+
+      <div class="px-2 py-2 crm-sidebar-nav submenu">
+        {% if crm_sales_manager_minimal_admin_nav %}
+        <a href="{% url 'sales-dashboard' %}" class="admin-main-link">
+          <i class="fa-solid fa-arrow-left nav-icon" aria-hidden="true"></i>
+          <span>Back to Sales</span>
+        </a>
+        <div class="mt-2 pt-2 border-t border-white/10 text-[10px] uppercase tracking-wider text-slate-400 px-2 font-semibold">CRM directory</div>
+        <a href="{% url 'admin-crm-departments' %}" class="admin-main-link">
+          <i class="fa-solid fa-building nav-icon" aria-hidden="true"></i>
+          <span>Departments</span>
+        </a>
+        <a href="{% url 'admin-crm-sales-managers' %}" class="admin-main-link">
+          <i class="fa-solid fa-user-tie nav-icon" aria-hidden="true"></i>
+          <span>Sales managers</span>
+        </a>
+        {% else %}
+        {% block crm_sidebar_nav %}
+        <a href="{% url 'admin-dashboard' %}" class="admin-main-link">
+          <i class="fa-solid fa-gauge-high nav-icon" aria-hidden="true"></i>
+          <span>Dashboard</span>
+        </a>
+
+        <div class="admin-section">
+          <button type="button" class="admin-main-toggle" data-toggle="user_mgmt">
+            <span class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-users nav-icon" aria-hidden="true"></i>
+              <span>User Management</span>
+            </span>
+            <span class="arrow" aria-hidden="true">▸</span>
+          </button>
+          <div id="user_mgmt" class="admin-submenu" data-display="block">
+            <a href="{% url 'admin-user-list' %}" class="submenu-link">User List</a>
+            {# Follow Up List page disabled; User List now includes the follow-up filters. #}
+            {# <a href="{% url 'admin-follow-up' %}" class="submenu-link">Follow Up List</a> #}
+            <a href="{% url 'admin-user-add-existing-client' %}" class="submenu-link">Add Existing Client</a>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <button type="button" class="admin-main-toggle" data-toggle="transactions">
+            <span class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-right-left nav-icon" aria-hidden="true"></i>
+              <span>Transactions</span>
+            </span>
+            <span class="arrow" aria-hidden="true">▸</span>
+          </button>
+          <div id="transactions" class="admin-submenu" data-display="block">
+            <a href="{% url 'admin-ib-withdraw' %}" class="submenu-link">IB Withdraw</a>
+            <a href="{% url 'admin-transfers' %}" class="submenu-link">Internal Transfer</a>
+            <a href="{% url 'admin-pending-deposit' %}" class="submenu-link">Pending Deposit</a>
+            <a href="{% url 'admin-pending-withdraw' %}" class="submenu-link">Pending Withdraw</a>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <button type="button" class="admin-main-toggle" data-toggle="payment_management">
+            <span class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-money-bill-wave nav-icon" aria-hidden="true"></i>
+              <span>Payment Management</span>
+            </span>
+            <span class="arrow" aria-hidden="true">▸</span>
+          </button>
+          <div id="payment_management" class="admin-submenu" data-display="block">
+            <a href="{% url 'admin-treasury-hub' %}" class="submenu-link">Treasury Settings (Hub)</a>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <button type="button" class="admin-main-toggle" data-toggle="ib">
+            <span class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-user-tie nav-icon" aria-hidden="true"></i>
+              <span>IB Management</span>
+            </span>
+            <span class="arrow" aria-hidden="true">▸</span>
+          </button>
+          <div id="ib" class="admin-submenu" data-display="block">
+            <a href="{% url 'admin-ib-dashboard' %}" class="submenu-link">IB Dashboard</a>
+            <a href="{% url 'admin-ib-levels' %}" class="submenu-link">IB Levels</a>
+            <a href="{% url 'admin-ib-level-approval' %}" class="submenu-link">Level Approval</a>
+            <a href="{% url 'admin-ib-commission-matrix' %}" class="submenu-link">IB Commission Structure</a>
+            <a href="{% url 'admin-ib-users' %}" class="submenu-link">IB Users</a>
+            <a href="{% url 'admin-ib-application-form' %}" class="submenu-link">IB Application Form</a>
+            <a href="{% url 'admin-ib-plan' %}" class="submenu-link">IB Plan</a>
+            <a href="{% url 'admin-ib-commission-group' %}" class="submenu-link">Commission Group</a>
+            <a href="{% url 'admin-ib-set-commission' %}" class="submenu-link">Set IB Commission</a>
+            <a href="{% url 'admin-ib-trade-simulator' %}" class="submenu-link">Trade simulator</a>
+            <a href="{% url 'admin-ib-move-client' %}" class="submenu-link">Move Client to IB</a>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <button type="button" class="admin-main-toggle" data-toggle="reports">
+            <span class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-file-lines nav-icon" aria-hidden="true"></i>
+              <span>Reports</span>
+            </span>
+            <span class="arrow" aria-hidden="true">▸</span>
+          </button>
+          <div id="reports" class="admin-submenu" data-display="block">
+            <a href="{% url 'admin-reports-dashboard' %}" class="submenu-link">Reports Dashboard</a>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <button type="button" class="admin-main-toggle" data-toggle="analytics">
+            <span class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-chart-line nav-icon" aria-hidden="true"></i>
+              <span>Analytics</span>
+            </span>
+            <span class="arrow" aria-hidden="true">▸</span>
+          </button>
+          <div id="analytics" class="admin-submenu" data-display="block">
+            <a href="{% url 'admin-analytics-dashboard' %}" class="submenu-link">Analytics Dashboard</a>
+            <a href="{% url 'admin-risk-monitor' %}" class="submenu-link">Risk Monitor</a>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <button type="button" class="admin-main-toggle" data-toggle="compliance">
+            <span class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-file nav-icon" aria-hidden="true"></i>
+              <span>Compliance</span>
+            </span>
+            <span class="arrow" aria-hidden="true">▸</span>
+          </button>
+          <div id="compliance" class="admin-submenu" data-display="block">
+            <a href="{% url 'admin-compliance-desk' %}" class="submenu-link">Compliance Desk Dashboard</a>
+            <a href="{% url 'admin-docs-pending' %}" class="submenu-link">KYC Verification</a>
+            <a href="{% url 'admin-compliance-reviews' %}" class="submenu-link">Compliance Review</a>
+            <a href="{% url 'admin-docs-approved' %}" class="submenu-link">Approved Documents</a>
+            <a href="{% url 'admin-docs-all' %}?status=REJECTED" class="submenu-link">Rejected Documents</a>
+            <a href="{% url 'admin-support-integrations' %}" class="submenu-link">Customer Support Integrations</a>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <button type="button" class="admin-main-toggle" data-toggle="enterprise_ops">
+            <span class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-server nav-icon" aria-hidden="true"></i>
+              <span>Enterprise &amp; Security</span>
+            </span>
+            <span class="arrow" aria-hidden="true">▸</span>
+          </button>
+          <div id="enterprise_ops" class="admin-submenu" data-display="block">
+            <a href="{% url 'admin-enterprise-health' %}" class="submenu-link">System health</a>
+            <a href="{% url 'admin-enterprise-audit' %}" class="submenu-link">Audit log</a>
+            <a href="{% url 'admin-enterprise-risk' %}" class="submenu-link">Risk desk</a>
+            <a href="{% url 'admin-enterprise-security-settings' %}" class="submenu-link">Security settings</a>
+            <a href="{% url 'admin-maintenance-settings' %}" class="submenu-link">Maintenance mode</a>
+            <a href="{% url 'admin-enterprise-login-events' %}" class="submenu-link">Login events</a>
+            {# Name must match admin_panel.urls (admin-enterprise-staff-notifications). safe_url avoids NoReverseMatch if renamed/removed. #}
+            <a href="{% safe_url 'admin-enterprise-staff-notifications' %}" class="submenu-link">Staff alerts</a>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <button type="button" class="admin-main-toggle" data-toggle="bonus_management">
+            <span class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-gift nav-icon" aria-hidden="true"></i>
+              <span>Bonus Management</span>
+            </span>
+            <span class="arrow" aria-hidden="true">▸</span>
+          </button>
+          <div id="bonus_management" class="admin-submenu" data-display="block">
+            <a href="{% url 'admin-bonus-give' %}?mode=give" class="submenu-link">Give Bonus</a>
+            <a href="{% url 'admin-bonus-remove' %}?mode=remove" class="submenu-link">Remove Bonus</a>
+            <a href="{% url 'admin-bonus-list' %}" class="submenu-link">Bonus List</a>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <button type="button" class="admin-main-toggle" data-toggle="marketing_management">
+            <span class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-bullhorn nav-icon" aria-hidden="true"></i>
+              <span>Marketing Management</span>
+            </span>
+            <span class="arrow" aria-hidden="true">▸</span>
+          </button>
+          <div id="marketing_management" class="admin-submenu" data-display="block">
+            <a href="{% url 'admin-marketing-add' %}" class="submenu-link">Add Marketing</a>
+            <a href="{% url 'admin-marketing-list' %}" class="submenu-link">Marketing List</a>
+            <a href="{% url 'admin-incentive-report' %}" class="submenu-link">Incentive Report</a>
+            <a href="{% url 'admin-marketing-withdraw-report' %}" class="submenu-link">Marketing Withdraw Report</a>
+            <a href="{% url 'admin-bulk-lead-upload' %}" class="submenu-link">Bulk Lead Upload</a>
+            <a href="{% url 'admin-lead-list' %}" class="submenu-link">Lead List</a>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <button type="button" class="admin-main-toggle" data-toggle="system_management_section">
+            <span class="flex items-center gap-2 min-w-0">
+              <i class="fa-solid fa-server nav-icon" aria-hidden="true"></i>
+              <span>System Management</span>
+            </span>
+            <span class="arrow" aria-hidden="true">▸</span>
+          </button>
+          <div id="system_management_section" class="admin-submenu" data-display="block">
+            <a href="{% url 'admin-system-management-dashboard' %}" class="submenu-link">Dashboard</a>
+          </div>
+        </div>
+        {% endblock crm_sidebar_nav %}
+        {% endif %}
+      </div>
+    </aside>
+
+    <div id="crmShellSidebarOverlay" class="md:hidden fixed inset-0 z-[45] bg-black/40 hidden" aria-hidden="true"></div>
+
+    <!-- Main admin column -->
+    <div class="main-content" id="mainContent">
+      {% block admin_shell_topbar %}
+      {% if crm_show_shell_topbar %}
+      <header class="admin-global-topbar header" role="banner">
+        <div class="admin-global-topbar-inner header-content">
+          <div class="admin-topbar-left">
+            <button
+              type="button"
+              id="sidebarToggle"
+              class="sidebar-toggle"
+              aria-label="Open sidebar"
+              aria-expanded="true"
+            >
+              ☰
+            </button>
+            <div class="admin-topbar-title-cluster">
+              {% block admin_shell_header_title %}
+              <h1 class="admin-topbar-page-title header-title truncate">{% block admin_shell_page_title %}Admin Control Center{% endblock %}</h1>
+              {% endblock %}
+            </div>
+          </div>
+          <div class="admin-topbar-actions">
+            <div class="admin-notify-wrap js-admin-notify-root" id="adminNotifyWrap" data-notify-root>
+              <button type="button" id="adminNotifyBtn" class="admin-topbar-notify js-admin-notify-btn" title="Notifications" aria-label="Notifications" aria-expanded="false">
+                <i class="fa-solid fa-bell"></i>
+                <span id="adminNotifyBadge" class="admin-notify-badge js-admin-notify-badge">0</span>
+              </button>
+              <div id="adminNotifyPanel" class="admin-notify-panel js-admin-notify-panel">
+                <div class="admin-notify-list"><div class="admin-notify-empty">No unread notifications.</div></div>
+              </div>
+            </div>
+            <div class="admin-user-menu" id="adminUserMenu">
+              <button type="button" class="admin-user-trigger" id="adminUserTrigger" aria-expanded="false">
+                <span class="admin-user-avatar">
+                  {% if request.user.first_name %}{{ request.user.first_name|first|upper }}{% elif request.user.email %}{{ request.user.email|first|upper }}{% else %}A{% endif %}
+                </span>
+                <span class="text-sm font-semibold hidden sm:inline">{% if request.user.first_name %}{{ request.user.first_name }}{% else %}Admin{% endif %}</span>
+                <i class="fa-solid fa-chevron-down text-[11px] text-slate-500"></i>
+              </button>
+              <div class="admin-user-dropdown admin-dropdown" id="adminUserDropdown">
+                {% block crm_topbar_dropdown %}
+                <a href="{% url 'admin-dashboard' %}"><i class="fa-solid fa-gauge-high mr-2 opacity-70" aria-hidden="true"></i>Admin Dashboard</a>
+                <a href="{% url 'sales-dashboard' %}"><i class="fa-solid fa-chart-pie mr-2 opacity-70" aria-hidden="true"></i>Main Sales Dashboard</a>
+                <a href="{% url 'admin-profile' %}"><i class="fa-solid fa-user-gear mr-2 opacity-70" aria-hidden="true"></i>Profile Settings</a>
+                <a href="{% url 'admin-profile-password-change' %}"><i class="fa-solid fa-key mr-2 opacity-70" aria-hidden="true"></i>Change Password</a>
+                <div class="admin-user-divider"></div>
+                <a href="{% url 'admin_logout' %}">Logout</a>
+                {% endblock %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+      {% else %}
+      <div class="crm-shell-compact-menu" role="toolbar" aria-label="Sidebar">
+        <button
+          type="button"
+          id="sidebarToggle"
+          class="sidebar-toggle"
+          aria-label="Open sidebar"
+          aria-expanded="true"
+        >
+          ☰
+        </button>
+      </div>
+      {% endif %}
+      {% endblock %}
+      <div class="px-4 pb-4 pt-0 content-wrapper">
+        {% if messages %}
+        <ul class="mb-4 space-y-2 list-none p-0 m-0" role="status">
+          {% for message in messages %}
+          <li class="rounded-lg px-4 py-2.5 text-sm border {% if message.tags == 'success' %}bg-emerald-50 text-emerald-900 border-emerald-200{% elif message.tags == 'error' %}bg-red-50 text-red-900 border-red-200{% elif message.tags == 'warning' %}bg-amber-50 text-amber-900 border-amber-200{% else %}bg-slate-50 text-slate-800 border-slate-200{% endif %}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% block admin_content %}{% endblock %}
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Simple collapsible sidebar sub-menus.
+    (function () {
+      window.toggleMenu = function toggleMenu(menuId) {
+        const menu = document.getElementById(menuId);
+        if (!menu) return;
+        const displayMode = menu.dataset.display || "block";
+        menu.style.display = menu.style.display === displayMode ? "none" : displayMode;
+      };
+
+      document.querySelectorAll("[data-toggle]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          const target = btn.getAttribute("data-toggle");
+          window.toggleMenu(target);
+          btn.classList.toggle("active");
+        });
+      });
+
+      // Mobile sidebar open/close (viewport under 768px)
+      const sidebar = document.getElementById("sidebar");
+      const mainContent = document.getElementById("mainContent");
+      const overlay = document.getElementById("crmShellSidebarOverlay");
+      const sidebarToggle = document.getElementById("sidebarToggle");
+
+      function isDesktopSidebar() {
+        return window.matchMedia("(min-width: 768px)").matches;
+      }
+
+      function openSidebar() {
+        if (!sidebar || !overlay) return;
+        sidebar.classList.add("crm-shell-sidebar--open");
+        overlay.classList.remove("hidden");
+      }
+
+      function closeSidebar() {
+        if (!sidebar || !overlay) return;
+        sidebar.classList.remove("crm-shell-sidebar--open");
+        overlay.classList.add("hidden");
+      }
+
+      function resetDesktopCollapseForMobile() {
+        if (isDesktopSidebar() && sidebar) {
+          sidebar.classList.remove("crm-shell-sidebar--open");
+          if (overlay) overlay.classList.add("hidden");
+        }
+        if (!isDesktopSidebar() && sidebar && mainContent) {
+          sidebar.classList.remove("closed");
+          mainContent.classList.remove("full");
+          if (sidebarToggle) {
+            sidebarToggle.setAttribute("aria-expanded", "true");
+            sidebarToggle.setAttribute("aria-label", "Collapse sidebar");
+          }
+        }
+      }
+
+      if (overlay) overlay.addEventListener("click", closeSidebar);
+      if (sidebar) {
+        sidebar.querySelectorAll("a").forEach(function (a) {
+          a.addEventListener("click", function () {
+            if (!isDesktopSidebar()) closeSidebar();
+          });
+        });
+      }
+
+      if (sidebarToggle && sidebar && mainContent) {
+        sidebarToggle.addEventListener("click", function () {
+          if (!isDesktopSidebar()) {
+            if (sidebar.classList.contains("crm-shell-sidebar--open")) {
+              closeSidebar();
+              sidebarToggle.setAttribute("aria-expanded", "false");
+              sidebarToggle.setAttribute("aria-label", "Open sidebar");
+            } else {
+              openSidebar();
+              sidebarToggle.setAttribute("aria-expanded", "true");
+              sidebarToggle.setAttribute("aria-label", "Close sidebar");
+            }
+            return;
+          }
+          sidebar.classList.toggle("closed");
+          mainContent.classList.toggle("full");
+          var collapsed = sidebar.classList.contains("closed");
+          sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+          sidebarToggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+        });
+      }
+
+      window.addEventListener("resize", function () {
+        resetDesktopCollapseForMobile();
+      });
+
+      // Top bar: profile dropdown and notifications (all admin pages).
+      const userMenu = document.getElementById("adminUserMenu");
+      const userTrigger = document.getElementById("adminUserTrigger");
+      if (userMenu && userTrigger) {
+        userTrigger.addEventListener("click", function (e) {
+          e.stopPropagation();
+          const open = userMenu.classList.toggle("open");
+          userTrigger.setAttribute("aria-expanded", open ? "true" : "false");
+        });
+        document.addEventListener("click", function (e) {
+          if (!userMenu.contains(e.target)) {
+            userMenu.classList.remove("open");
+            userTrigger.setAttribute("aria-expanded", "false");
+          }
+        });
+      }
+
+      const notifyRoots = document.querySelectorAll("[data-notify-root]");
+      var markReadTemplate = "{% url 'admin-staff-notification-mark-read-api' 888888888 %}";
+      function staffNotifyMarkReadUrl(id) {
+        return markReadTemplate.replace("888888888", String(id));
+      }
+      const markAllUrl = "{% url 'admin-staff-notifications-mark-all-read' %}";
+      const adminDashFallback = "{% url 'admin-dashboard' %}";
+      const csrfToken = "{{ csrf_token }}";
+
+      function renderNotify(data) {
+        const br = data.pending_breakdown || {};
+        Object.keys(br).forEach(function (k) {
+          document.querySelectorAll('[data-pending-count-key="' + k + '"]').forEach(function (el) {
+            var n = Number(br[k] || 0);
+            el.textContent = n.toLocaleString();
+          });
+        });
+
+        const total = Number(data.notify_total || 0);
+        document.querySelectorAll(".js-admin-notify-badge").forEach(function (badge) {
+          if (total > 0) {
+            badge.style.display = "inline-flex";
+            badge.textContent = String(total > 99 ? "99+" : total);
+          } else {
+            badge.style.display = "none";
+          }
+        });
+        const items = Array.isArray(data.staff_items) ? data.staff_items : [];
+        const pitems = Array.isArray(data.pending_items) ? data.pending_items : [];
+        function esc(s) {
+          return String(s || "").replace(/</g, "&lt;");
+        }
+        let pendingBlock = "";
+        if (pitems.length) {
+          const rows = pitems
+            .map(function (it) {
+              const url = String(it.url || adminDashFallback).replace(/"/g, "");
+              const cnt = Number(it.count || 0);
+              return (
+                '<a class="admin-notify-pending-row" href="' +
+                url +
+                '"><span>' +
+                esc(it.title) +
+                '</span><span class="admin-notify-pending-badge">' +
+                cnt +
+                "</span></a>"
+              );
+            })
+            .join("");
+          pendingBlock =
+            '<div class="admin-notify-pending-block"><div class="admin-notify-subhead">Pending overview</div>' +
+            rows +
+            "</div>";
+        }
+        const headHtml = items.length
+          ? '<div class="admin-notify-panel-head"><span>Notifications</span><button type="button" class="admin-notify-markall" data-mark-all-read>Mark all read</button></div>'
+          : "";
+        let listInner = "";
+        if (items.length) {
+          listInner = items.map(function (it) {
+            const title = (it.title || "Notification").replace(/</g, "&lt;");
+            const body = (it.body || "").replace(/</g, "&lt;");
+            const next = (it.next || adminDashFallback).replace(/"/g, "");
+            return (
+              '<button type="button" class="admin-notify-item" data-nid="' + it.id + '" data-next="' + next + '">' +
+              '<div class="admin-notify-item-title">' + title + "</div>" +
+              (body ? '<div class="admin-notify-item-body">' + body + "</div>" : "") +
+              "</button>"
+            );
+          }).join("");
+        }
+        const panelHtml =
+          pendingBlock +
+          headHtml +
+          '<div class="admin-notify-list">' +
+          (items.length ? listInner : '<div class="admin-notify-empty">No unread notifications.</div>') +
+          "</div>";
+        document.querySelectorAll(".js-admin-notify-panel").forEach(function (panel) {
+          panel.innerHTML = panelHtml;
+        });
+        document.querySelectorAll("[data-mark-all-read]").forEach(function (btn) {
+          btn.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            fetch(markAllUrl, {
+              method: "POST",
+              headers: {
+                "X-CSRFToken": csrfToken,
+                "X-Requested-With": "XMLHttpRequest",
+              },
+              credentials: "same-origin",
+            })
+              .then(function () { return loadNotifications(); })
+              .then(function () {
+                notifyRoots.forEach(function (w) { w.classList.remove("open"); });
+                document.querySelectorAll(".js-admin-notify-btn").forEach(function (b) { b.setAttribute("aria-expanded", "false"); });
+              });
+          });
+        });
+        document.querySelectorAll(".admin-notify-item[data-nid]").forEach(function (btn) {
+          btn.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = btn.getAttribute("data-nid");
+            const next = btn.getAttribute("data-next") || adminDashFallback;
+            const url = staffNotifyMarkReadUrl(id);
+            fetch(url, {
+              method: "POST",
+              headers: {
+                "X-CSRFToken": csrfToken,
+                "X-Requested-With": "XMLHttpRequest",
+              },
+              credentials: "same-origin",
+            })
+              .then(function () { return loadNotifications(); })
+              .then(function () {
+                window.location.href = next;
+              });
+          });
+        });
+      }
+
+      function loadNotifications() {
+        return fetch("{% url 'admin-dashboard-notifications-api' %}", { headers: { "X-Requested-With": "XMLHttpRequest" }, credentials: "same-origin" })
+          .then(function (r) { return r.json(); })
+          .then(renderNotify)
+          .catch(function () {});
+      }
+
+      notifyRoots.forEach(function (notifyWrap) {
+        const notifyBtn = notifyWrap.querySelector(".js-admin-notify-btn");
+        if (!notifyBtn) return;
+        notifyBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          const open = !notifyWrap.classList.contains("open");
+          notifyRoots.forEach(function (w) { w.classList.remove("open"); });
+          document.querySelectorAll(".js-admin-notify-btn").forEach(function (b) { b.setAttribute("aria-expanded", "false"); });
+          if (open) {
+            notifyWrap.classList.add("open");
+            notifyBtn.setAttribute("aria-expanded", "true");
+            loadNotifications();
+          }
+        });
+      });
+      document.addEventListener("click", function (e) {
+        var t = e.target;
+        if (t && t.closest && t.closest("[data-notify-root]")) return;
+        notifyRoots.forEach(function (w) { w.classList.remove("open"); });
+        document.querySelectorAll(".js-admin-notify-btn").forEach(function (b) { b.setAttribute("aria-expanded", "false"); });
+      });
+      loadNotifications();
+      setInterval(loadNotifications, 25000);
+    })();
+  </script>
+{% endblock %}
+

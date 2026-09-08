@@ -1,0 +1,22 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Reoon Email Verifier{% endblock %}
+{% block admin_content %}
+<div class="max-w-xl mx-auto space-y-6 pb-10 px-2">
+  <a href="{% url 'admin-integrations-email-sms' %}" class="text-sm text-indigo-600 hover:underline">← Email &amp; SMS</a>
+  <h1 class="text-xl font-semibold text-slate-900">Reoon Email Verifier</h1>
+  <form method="post" action="{% url 'admin-integrations-email-provider' provider_key=provider_key %}" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-6">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save" />
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="enable_integration" {% if row.enable_integration %}checked{% endif %} class="rounded border-slate-300" />
+      <span class="text-sm font-medium">Enable integration</span>
+    </label>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">API key</label>
+      <input type="password" name="api_key" value="" placeholder="{% if row.api_key %}•••• (leave blank to keep current key){% else %}Enter your Reoon API key{% endif %}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+    </div>
+    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium">Save configuration</button>
+  </form>
+</div>
+{% endblock %}
+

@@ -1,0 +1,36 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Send Email{% endblock %}
+{% block admin_content %}
+<div class="max-w-4xl bg-[#FFFFFF] border border-[#E7DCCF] rounded-xl p-6 shadow-sm">
+  <h1 class="text-xl font-semibold mb-4 text-[#6A4B34]">Send Email</h1>
+  <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {% csrf_token %}
+    <div>
+      <label class="block text-sm mb-1">Select User (Optional)</label>
+      <select name="user_id" class="w-full border rounded px-3 py-2 text-sm">
+        <option value="">-- Select user --</option>
+        {% for u in users %}
+        <option value="{{ u.id }}">{{ u.email }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Email (Direct)</label>
+      <input name="email" type="email" class="w-full border rounded px-3 py-2 text-sm" />
+    </div>
+    <div class="md:col-span-2">
+      <label class="block text-sm mb-1">Subject</label>
+      <input name="subject" class="w-full border rounded px-3 py-2 text-sm" required />
+    </div>
+    <div class="md:col-span-2">
+      <label class="block text-sm mb-1">Message</label>
+      <textarea name="body" rows="8" class="w-full border rounded px-3 py-2 text-sm"></textarea>
+    </div>
+    <div class="md:col-span-2">
+      <button class="bg-[#6A4B34] text-white px-4 py-2 rounded">Send Email</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+

@@ -1,0 +1,140 @@
+{% extends "manager_panel/base.html" %}
+{% block title %}Manager dashboard{% endblock %}
+
+{% block admin_shell_header_title %}
+<div class="dashboard-header">
+  <h1 class="admin-topbar-page-title text-slate-900">Manager dashboard</h1>
+  <p class="admin-topbar-page-subtitle text-slate-600">Assigned clients only. Data visibility follows your permissions.</p>
+</div>
+{% endblock %}
+
+{% block admin_content %}
+<div class="max-w-6xl mx-auto space-y-6 px-2 pb-10">
+  {% if target_progress.has_target %}
+  <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+    <h2 class="text-sm font-semibold text-slate-900 mb-2">Target progress</h2>
+    <p class="text-xs text-slate-500 mb-3">{{ target_progress.period_label }} · {{ target_progress.period_range }}</p>
+    <div class="flex items-center gap-3 mb-2">
+      <div class="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden">
+        <div class="h-full rounded-full {% if target_progress.bar_tier == 'green' %}bg-emerald-500{% elif target_progress.bar_tier == 'orange' %}bg-amber-500{% else %}bg-rose-500{% endif %}" style="width: {{ target_progress.percent }}%"></div>
+      </div>
+      <span class="text-sm font-semibold text-slate-800">{{ target_progress.percent }}%</span>
+    </div>
+    <p class="text-sm text-slate-700">{{ target_progress.line_summary }}</p>
+  </div>
+  {% endif %}
+
+  {% if not perm %}
+  <div class="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 text-sm">
+    Your portal permissions are not configured yet. Please contact an administrator.
+  </div>
+  {% else %}
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    {% if perm.view_deposit and total_deposit is not None %}
+    <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+      <p class="text-xs font-semibold uppercase text-slate-500">Total deposits</p>
+      <p class="text-2xl font-bold text-emerald-700 mt-1">{{ total_deposit|floatformat:2 }}</p>
+      <p class="text-xs text-slate-500 mt-1">Assigned clients, approved</p>
+    </div>
+    {% endif %}
+    {% if perm.view_withdrawal and total_withdrawal is not None %}
+    <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+      <p class="text-xs font-semibold uppercase text-slate-500">Total withdrawals</p>
+      <p class="text-2xl font-bold text-rose-700 mt-1">{{ total_withdrawal|floatformat:2 }}</p>
+    </div>
+    {% endif %}
+    {% if perm.view_volume and total_volume_lots is not None %}
+    <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+      <p class="text-xs font-semibold uppercase text-slate-500">Trading volume (lots)</p>
+      <p class="text-2xl font-bold text-[#0B3C5D] mt-1">{{ total_volume_lots|floatformat:4 }}</p>
+      <p class="text-xs text-slate-500 mt-1">CRM trade history / simulated</p>
+    </div>
+    {% endif %}
+    {% if perm.view_balance and total_wallet is not None %}
+    <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+      <p class="text-xs font-semibold uppercase text-slate-500">Wallet balance (sum)</p>
+      <p class="text-2xl font-bold text-slate-800 mt-1">{{ total_wallet|floatformat:2 }}</p>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if perm.view_clients and client_rows %}
+  <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-5 py-3 border-b border-slate-100">
+      <h2 class="text-sm font-semibold text-slate-900">Assigned clients ({{ client_rows|length }})</h2>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50 text-left">
+          <tr>
+            <th class="p-3">Client</th>
+            {% if perm.view_personal_info %}
+            <th class="p-3">Email</th>
+            {% endif %}
+            {% if perm.view_deposit %}<th class="p-3">Deposits</th>{% endif %}
+            {% if perm.view_withdrawal %}<th class="p-3">Withdrawals</th>{% endif %}
+            {% if perm.view_volume %}<th class="p-3">Volume (lots)</th>{% endif %}
+            {% if perm.view_balance %}<th class="p-3">Wallet</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in client_rows %}
+          <tr class="border-t border-slate-100 hover:bg-slate-50/80">
+            <td class="p-3">
+              {% if row.show_personal %}
+                {{ row.user.display_name }}
+              {% else %}
+                <span class="text-slate-500">Client #{{ row.user.pk }}</span>
+              {% endif %}
+            </td>
+            {% if perm.view_personal_info %}
+            <td class="p-3">{{ row.user.email }}</td>
+            {% endif %}
+            {% if perm.view_deposit %}<td class="p-3">{% if row.deposit is not None %}{{ row.deposit|floatformat:2 }}{% else %}—{% endif %}</td>{% endif %}
+            {% if perm.view_withdrawal %}<td class="p-3">{% if row.withdrawal is not None %}{{ row.withdrawal|floatformat:2 }}{% else %}—{% endif %}</td>{% endif %}
+            {% if perm.view_volume %}<td class="p-3">{% if row.volume is not None %}{{ row.volume|floatformat:4 }}{% else %}—{% endif %}</td>{% endif %}
+            {% if perm.view_balance %}<td class="p-3">{% if row.balance is not None %}{{ row.balance|floatformat:2 }}{% else %}—{% endif %}</td>{% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% elif perm.view_clients %}
+  <div class="bg-slate-50 border border-slate-200 rounded-xl p-6 text-sm text-slate-600">No clients assigned to you yet.</div>
+  {% endif %}
+
+  {% if perm.view_trades and recent_trades %}
+  <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-5 py-3 border-b border-slate-100">
+      <h2 class="text-sm font-semibold text-slate-900">Recent trades (assigned clients)</h2>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50 text-left">
+          <tr>
+            <th class="p-3">Date</th>
+            {% if perm.view_personal_info %}<th class="p-3">Client</th>{% endif %}
+            <th class="p-3">Symbol</th>
+            <th class="p-3">Lots</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in recent_trades %}
+          <tr class="border-t border-slate-100">
+            <td class="p-3 whitespace-nowrap">{{ t.created_at|date:"Y-m-d H:i" }}</td>
+            {% if perm.view_personal_info %}<td class="p-3">{{ t.client.display_name }}</td>{% endif %}
+            <td class="p-3">{{ t.symbol }}</td>
+            <td class="p-3">{{ t.lots }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {% endif %}
+</div>
+{% endblock %}

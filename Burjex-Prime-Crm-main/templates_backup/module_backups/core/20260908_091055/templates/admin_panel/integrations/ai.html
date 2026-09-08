@@ -1,0 +1,86 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}AI Integrations{% endblock %}
+{% block admin_content %}
+<div class="max-w-4xl mx-auto space-y-6 pb-10 px-2">
+  <a href="{% url 'admin-integrations-hub' %}" class="text-sm text-indigo-600 hover:underline">← Integrations</a>
+  <h1 class="text-xl font-semibold text-slate-900">AI &amp; Machine Learning</h1>
+  {% for row in rows %}
+  <form method="post" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+    {% csrf_token %}
+    <input type="hidden" name="slug" value="{{ row.slug }}" />
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="font-semibold text-slate-900">{{ row.get_slug_display }}</h2>
+        <p class="text-xs text-slate-500 mt-1">Category: {{ row.category|default:"AI_ML" }} · Status: {{ row.status }}</p>
+      </div>
+      <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+        <input type="checkbox" name="enabled" class="rounded border-slate-300" {% if row.enabled %}checked{% endif %} />
+        <span class="text-sm text-slate-700">Enable</span>
+      </label>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div>
+        <label class="block text-slate-600 mb-1">Integration name</label>
+        <input type="text" name="integration_name" value="{{ row.integration_name }}"
+          class="w-full border border-slate-200 rounded-lg px-3 py-2" />
+      </div>
+      <div>
+        <label class="block text-slate-600 mb-1">Category</label>
+        <input type="text" name="category" value="{{ row.category }}"
+          class="w-full border border-slate-200 rounded-lg px-3 py-2" />
+      </div>
+      <div>
+        <label class="block text-slate-600 mb-1">API key</label>
+        <input type="password" name="api_key" value="" placeholder="{% if row.api_key %}•••• (leave blank to keep){% endif %}"
+          class="w-full border border-slate-200 rounded-lg px-3 py-2" autocomplete="off" />
+      </div>
+      <div>
+        <label class="block text-slate-600 mb-1">API secret</label>
+        <input type="password" name="api_secret" value="" placeholder="{% if row.api_secret %}•••• (leave blank to keep){% endif %}"
+          class="w-full border border-slate-200 rounded-lg px-3 py-2" autocomplete="off" />
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-slate-600 mb-1">Base URL</label>
+        <input type="url" name="base_url" value="{{ row.base_url }}"
+          class="w-full border border-slate-200 rounded-lg px-3 py-2" />
+      </div>
+      <div>
+        <label class="block text-slate-600 mb-1">Model name</label>
+        <input type="text" name="model_name" value="{{ row.model_name }}"
+          class="w-full border border-slate-200 rounded-lg px-3 py-2" />
+      </div>
+    </div>
+    {% if row.last_test_at %}
+    <p class="text-xs text-slate-500">Last test: {% if row.last_test_ok %}<span class="text-emerald-700">OK</span>{% else %}<span class="text-red-600">Failed</span>{% endif %} — {{ row.last_test_detail|truncatechars:160 }} ({{ row.last_test_at }})</p>
+    {% endif %}
+    <div class="flex flex-wrap gap-2">
+      <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium">Save</button>
+      <button type="button" class="ai-test-btn rounded-lg border border-slate-300 px-4 py-2 text-sm" data-slug="{% if row.slug == 'BROKERET_AI' %}brokeret-ai{% elif row.slug == 'BUILTIN_AI' %}builtin-ai{% elif row.slug == 'CHATGPT' %}chatgpt{% elif row.slug == 'GEMINI' %}gemini{% elif row.slug == 'GROK' %}grok{% else %}{{ row.slug|lower }}{% endif %}">Test connection</button>
+    </div>
+  </form>
+  {% endfor %}
+</div>
+<script>
+(function () {
+  document.querySelectorAll(".ai-test-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var slug = btn.getAttribute("data-slug");
+      var form = btn.closest("form");
+      var token = form.querySelector("[name=csrfmiddlewaretoken]");
+      if (!token) return;
+      var fd = new FormData();
+      fd.append("csrfmiddlewaretoken", token.value);
+      var bu = form.querySelector("[name=base_url]");
+      if (bu) fd.append("base_url", bu.value || "");
+      btn.disabled = true;
+      fetch("{% url 'admin-integrations-ai-test' slug='__SLUG__' %}".replace("__SLUG__", slug), { method: "POST", body: fd, headers: { "X-Requested-With": "XMLHttpRequest" } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { alert(d.ok ? d.message : ("Failed: " + (d.message || ""))); })
+        .catch(function () { alert("Request failed."); })
+        .finally(function () { btn.disabled = false; });
+    });
+  });
+})();
+</script>
+{% endblock %}
+

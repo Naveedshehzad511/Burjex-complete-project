@@ -1,0 +1,140 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}Edit User{% endblock %}
+{% block um_body %}
+<div class="max-w-4xl">
+  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+    <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+          <i class="fa-solid fa-user-pen"></i>
+        </div>
+        <div>
+          <h2 class="text-sm font-bold text-slate-900 dark:text-white">Edit User Profile</h2>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Update personal details, roles, and verification status.</p>
+        </div>
+      </div>
+      
+      <div class="hidden sm:block">
+        <span class="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+          ID: {{ u.id }}
+        </span>
+      </div>
+    </div>
+    
+    <form method="post" class="p-5">
+      {% csrf_token %}
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-6" style="column-gap: 1rem; row-gap: 1.5rem;">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">First Name</label>
+          <input name="name" value="{{ u.first_name }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        </div>
+        
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Last Name</label>
+          <input name="last_name" value="{{ u.last_name }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        </div>
+        
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Email</label>
+          <input type="email" name="email" value="{{ u.email }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        </div>
+        
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Phone</label>
+          <input name="phone" value="{{ u.phone }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        </div>
+        
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Country</label>
+          <input name="country" value="{{ u.country }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        </div>
+        
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Marketing Name <span class="text-slate-400 dark:text-slate-500 normal-case font-normal ml-1">(Optional)</span></label>
+          <input name="marketing_name" value="{{ u.marketing_name }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        </div>
+        
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Account Status</label>
+          <select name="account_status" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+            {% for val,label in account_status_choices %}
+              <option value="{{ val }}" {% if u.account_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">User Role</label>
+          <select name="role" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+            {% for r in role_choices %}
+              <option value="{{ r }}" {% if u.role == r %}selected{% endif %}>{{ r }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Assign IB (Referrer)</label>
+          <select name="ib_user_id" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+            <option value="">— None —</option>
+            {% for ib in ib_users %}
+              <option value="{{ ib.id }}" {% if u.referred_by_id == ib.id %}selected{% endif %}>{{ ib.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        
+        <!-- <div>
+          <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Assign MT5 Group</label>
+          <select name="mt5_group_id" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+            <option value="">— Keep current —</option>
+            {% for g in groups %}
+              <option value="{{ g.id }}">{{ g.name }}</option>
+            {% endfor %}
+          </select>
+        </div> -->
+      </div>
+      
+      <div class="bg-slate-50 dark:bg-slate-800/30 rounded-xl p-5 border border-slate-100 dark:border-slate-800 mb-6">
+        <h3 class="text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-wide">Verification Status</h3>
+        <div class="flex flex-col sm:flex-row gap-4">
+          <label class="relative flex items-start cursor-pointer group">
+            <div class="flex items-center h-5">
+              <input type="checkbox" name="email_verified" {% if u.email_verified %}checked{% endif %} class="w-4 h-4 text-indigo-600 bg-white border-slate-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600 cursor-pointer" />
+            </div>
+            <div class="ml-2 text-sm">
+              <span class="font-medium text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">Email Verified</span>
+            </div>
+          </label>
+          
+          <label class="relative flex items-start cursor-pointer group">
+            <div class="flex items-center h-5">
+              <input type="checkbox" name="phone_verified" {% if u.phone_verified %}checked{% endif %} class="w-4 h-4 text-indigo-600 bg-white border-slate-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600 cursor-pointer" />
+            </div>
+            <div class="ml-2 text-sm">
+              <span class="font-medium text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">Phone Verified</span>
+            </div>
+          </label>
+          
+          <label class="relative flex items-start cursor-pointer group">
+            <div class="flex items-center h-5">
+              <input type="checkbox" name="kyc_verified" {% if u.kyc_status == "APPROVED" %}checked{% endif %} class="w-4 h-4 text-emerald-600 bg-white border-slate-300 rounded focus:ring-emerald-500 dark:focus:ring-emerald-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600 cursor-pointer" />
+            </div>
+            <div class="ml-2 text-sm">
+              <span class="font-medium text-emerald-600 dark:text-emerald-400 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">Set KYC Approved <span class="opacity-70 text-xs ml-1">(Manual)</span></span>
+            </div>
+          </label>
+        </div>
+      </div>
+      
+      <div class="flex flex-col sm:flex-row gap-3 pt-2">
+        <button type="submit" class="h-10 px-5 rounded-lg btn-gradient border-0 text-white text-sm font-semibold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-2">
+          <i class="fa-solid fa-floppy-disk"></i> Save Changes
+        </button>
+        <a href="{% url 'admin-user-list' %}" class="h-10 px-5 rounded-lg btn-cancel text-sm font-semibold transition-colors flex items-center justify-center">
+          Cancel
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

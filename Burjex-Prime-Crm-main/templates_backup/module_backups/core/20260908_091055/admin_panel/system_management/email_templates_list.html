@@ -1,0 +1,172 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Email Templates{% endblock %}
+{% block admin_content %}
+<div class="max-w-6xl mx-auto pb-12 px-3 sm:px-4">
+  <nav class="text-sm text-slate-500 mb-4" aria-label="Breadcrumb">
+    <a href="{% url 'admin-system-management-dashboard' %}" class="text-indigo-600 hover:underline">System
+      Management</a>
+    <span class="mx-2 text-slate-300" aria-hidden="true">/</span>
+    <span class="text-slate-700 font-medium">Email Templates</span>
+  </nav>
+
+  <header class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 mb-8">
+    <div class="space-y-2 max-w-2xl">
+      <h1 class="text-xl sm:text-3xl font-semibold text-slate-900 tracking-tight">Email templates</h1>
+      <div class="flex flex-wrap gap-2 pt-1">
+        <span
+          class="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 shadow-sm">
+          <span class="size-1.5 rounded-full bg-emerald-500" aria-hidden="true"></span>
+          {{ stats.active }} active
+        </span>
+        <span
+          class="inline-flex items-center rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600">
+          {{ stats.total }} total
+        </span>
+      </div>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-3 shrink-0 items-center">
+      <a href="{% url 'admin-system-email-layout' %}" class="inline-flex justify-center items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 transition shrink-0">
+        <span aria-hidden="true">◇</span> Global layout
+      </a>
+      <a href="{% url 'admin-system-email-purposes' %}" class="inline-flex justify-center items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 transition shrink-0">
+        <i class="fa-solid fa-tags" aria-hidden="true"></i> Setup Variables
+      </a>
+      <a href="{% url 'admin-system-email-templates-create' %}" class="inline-flex justify-center items-center gap-2 rounded-xl border border-transparent bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition shrink-0">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i> New template
+      </a>
+      <div class="hidden sm:block w-px h-8 bg-slate-200 mx-1"></div>
+      <a href="{% url 'admin-system-management-dashboard' %}" class="bp-btn bp-btn-outline h-10 w-10 p-0 flex items-center justify-center shrink-0" title="Back to System Management">
+        <i class="fa-solid fa-arrow-left"></i>
+      </a>
+    </div>
+  </header>
+
+  <details
+    class="group rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/80 shadow-sm mb-8 open:shadow-md transition-shadow">
+    <summary
+      class="cursor-pointer list-none flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5 sm:py-4 text-sm font-semibold text-slate-800 hover:text-indigo-600">
+      <span class="flex items-center gap-2">
+        <span
+          class="flex size-8 items-center justify-center rounded-lg bg-indigo-600/10 text-indigo-600 text-xs font-bold"
+          aria-hidden="true">{ }</span>
+        Personalization variables
+      </span>
+      <span class="text-slate-400 text-xs font-normal group-open:hidden">Show</span>
+      <span class="text-slate-400 text-xs font-normal hidden group-open:inline">Hide</span>
+    </summary>
+    <div class="px-4 pb-4 sm:px-5 sm:pb-5 border-t border-slate-100 pt-4">
+      <p class="text-xs text-slate-600 mb-3 leading-relaxed">Paste these into the <strong>subject</strong> or
+        <strong>body</strong> (with double curly braces). They are replaced when the email is sent.</p>
+      <div class="flex flex-wrap gap-1.5">
+        {% verbatim %}
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{client_name}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{client_email}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{account_number}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{login_id}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{password}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{reset_link}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{verification_link}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{company_name}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{company_logo}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{support_email}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{website_url}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700">{{current_date}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-600">{{user.name}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-600">{{amount}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-600">{{reason}}</code>
+        <code
+          class="text-[11px] sm:text-xs px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-600">{{verify_url}}</code>
+        {% endverbatim %}
+      </div>
+    </div>
+  </details>
+
+  {% if templates %}
+  <div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-full table-fixed text-sm">
+        <colgroup>
+          <col class="w-[56%]">
+          <col class="w-[18%]">
+          <col class="w-[26%]">
+        </colgroup>
+        <thead class="bg-slate-50 border-b border-slate-200">
+          <tr class="text-left text-slate-600">
+            <th class="px-4 py-3 font-semibold">Template Name</th>
+            <th class="px-4 py-3 font-semibold">Status</th>
+            <th class="px-4 py-3 font-semibold text-right">Edit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in templates %}
+          <tr class="border-b border-slate-100 last:border-b-0">
+            <td class="px-4 py-3 align-top">
+              <div class="truncate font-medium text-slate-900" title="{{ t.name }}">{{ t.name }}</div>
+              <div class="mt-1 truncate text-xs text-slate-500">
+                {{ t.get_template_type_display }} · <code
+                  class="bg-slate-100 px-1 py-0.5 rounded">{{ t.event_key }}</code>
+              </div>
+            </td>
+            <td class="px-4 py-3 align-top">
+              <form method="post" action="{% url 'admin-system-email-templates-toggle-status' t.pk %}"
+                class="flex items-center gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="status"
+                  value="{% if t.status == 'active' %}inactive{% else %}active{% endif %}" />
+                <button type="submit"
+                  class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold border {% if t.status == 'active' %}bg-emerald-50 border-emerald-200 text-emerald-800{% else %}bg-slate-100 border-slate-300 text-slate-600{% endif %}">
+                  {% if t.status == 'active' %}Active{% else %}Inactive{% endif %}
+                </button>
+              </form>
+            </td>
+            <td class="px-4 py-3 align-top">
+              <div class="flex items-center justify-end gap-2">
+                <a href="{% url 'admin-system-email-templates-edit' t.pk %}"
+                  class="inline-flex items-center justify-center rounded-lg bg-indigo-600 text-white px-3 py-2 text-xs font-semibold hover:bg-[#094a72] transition">Edit</a>
+                <a href="{% url 'admin-system-email-templates-preview' t.pk %}" target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">Preview</a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-6 py-16 text-center">
+    <p class="text-slate-600 font-medium mb-1">No templates yet</p>
+    <p class="text-sm text-slate-500 mb-6 max-w-md mx-auto">Create your first template or check that migrations ran
+      successfully.</p>
+    <a href="{% url 'admin-system-email-templates-create' %}"
+      class="inline-flex items-center rounded-xl bg-indigo-600 text-white px-5 py-2.5 text-sm font-semibold hover:bg-[#094a72]">Create
+      template</a>
+  </div>
+  {% endif %}
+
+  <footer class="mt-10 pt-6 border-t border-slate-200">
+    <p class="text-sm text-slate-500">
+      <strong class="text-slate-700">SMTP &amp; event mapping:</strong>
+      configure delivery and optional overrides in
+      <a href="{% url 'admin-email-management' %}"
+        class="text-indigo-600 font-medium underline underline-offset-2">Email management</a>.
+    </p>
+  </footer>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Summary Report - Burjex Prime{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">Summary Report</h1>
+
+  <div class="portal-stat-grid mb-5">
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Net Profit</div>
+      <div class="portal-stat-value" style="color:{% if summary.net_profit > 0 %}#10b981{% elif summary.net_profit < 0 %}#ef4444{% endif %};">
+        {{ summary.net_profit }}
+      </div>
+    </div>
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Total Volume (Lots)</div>
+      <div class="portal-stat-value">{{ summary.total_volume }}</div>
+    </div>
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Total Orders</div>
+      <div class="portal-stat-value">{{ summary.total_orders }}</div>
+    </div>
+  </div>
+
+  <div class="portal-stat-grid mb-5">
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Total Deposits (MT5)</div>
+      <div class="portal-stat-value" style="color:#10b981;">{{ summary.total_deposits }}</div>
+    </div>
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Total Withdrawals (MT5)</div>
+      <div class="portal-stat-value" style="color:#ef4444;">{{ summary.total_withdrawals }}</div>
+    </div>
+  </div>
+{% endblock %}

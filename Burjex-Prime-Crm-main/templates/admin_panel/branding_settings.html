@@ -1,0 +1,98 @@
+{% extends "admin_panel/base.html" %}
+{% load static %}
+
+{% block title %}Settings — Branding{% endblock %}
+
+{% block admin_content %}
+  <div class="pb-10 bp-s-16 max-w-3xl">
+
+    <div class="bp-page-header bp-s-6 flex items-start justify-between gap-4">
+      <div>
+        <h1 class="bp-page-title"><i class="fa-solid fa-building bp-s-17"></i>Branding</h1>
+        <p class="bp-page-subtitle">Separate uploads for app icon, login logo, and sidebar logo. Mobile app uses these for splash, sign-in, and drawer.</p>
+      </div>
+      <a href="{% url 'admin-system-management-dashboard' %}" class="bp-btn bp-btn-outline h-9 w-9 p-0 flex items-center justify-center shrink-0 mt-1" title="Back to System Management">
+        <i class="fa-solid fa-arrow-left"></i>
+      </a>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="space-y-6">
+      {% csrf_token %}
+
+      <div class="bp-card">
+        <div class="bp-card-header">
+          <span class="bp-card-header-title"><i class="fa-solid fa-font bp-s-17"></i>Company name</span>
+        </div>
+        <div class="bp-card-body">
+          <div class="bp-form-group">
+            <label class="bp-form-label" for="company_name">Company name</label>
+            <input type="text" id="company_name" name="company_name" value="{{ org.company_name|default:'Burjex Prime' }}" placeholder="Your company name" class="bp-input" required maxlength="160" />
+            <p class="bp-caption bp-s-10">Displayed in the sidebar, navbar, login pages, and emails.</p>
+          </div>
+        </div>
+      </div>
+
+      {% for slot in branding_slots %}
+      <div class="bp-card">
+        <div class="bp-card-header">
+          <span class="bp-card-header-title"><i class="fa-solid {{ slot.icon }} bp-s-17"></i>{{ slot.label }}</span>
+        </div>
+        <div class="bp-card-body space-y-4">
+          <p class="bp-caption">{{ slot.help }} Upload PNG, JPG, JPEG, SVG, or WEBP (max 2MB).</p>
+          <div class="flex flex-wrap items-start gap-6" data-branding-slot>
+            <div class="shrink-0 {{ slot.preview_box }} rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden p-0">
+              {% if slot.url %}
+                <img id="{{ slot.preview_id }}" src="{{ slot.url }}" alt="{{ slot.label }} preview" class="w-full h-full object-cover" />
+              {% else %}
+                <img id="{{ slot.preview_id }}" src="" alt="" class="w-full h-full object-cover hidden" />
+                <span class="no-preview-label text-xs font-semibold text-slate-400 uppercase tracking-wide px-2">No file</span>
+              {% endif %}
+            </div>
+            <div class="flex-1 min-w-[200px] space-y-3">
+              <div class="bp-form-group">
+                <label class="bp-form-label" for="{{ slot.input_name }}">Upload {{ slot.label|lower }}</label>
+                <input type="file" id="{{ slot.input_name }}" name="{{ slot.input_name }}" accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp" class="bp-input" data-branding-input data-preview-id="{{ slot.preview_id }}" />
+              </div>
+              {% if slot.url %}
+              <label class="inline-flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                <input type="checkbox" name="remove_{{ slot.input_name }}" class="rounded border-slate-300" />
+                Remove current {{ slot.label|lower }}
+              </label>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+
+      <div class="bp-card">
+        <div class="bp-card-footer">
+          <button type="submit" class="bp-btn bp-btn-primary">
+            <i class="fa-solid fa-floppy-disk bp-s-17"></i>Save branding
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    (function () {
+      document.querySelectorAll("[data-branding-input]").forEach(function (input) {
+        var target = document.getElementById(input.getAttribute("data-preview-id"));
+        if (!target) return;
+        var slot = input.closest("[data-branding-slot]");
+        input.addEventListener("change", function () {
+          var f = input.files && input.files[0];
+          if (!f) return;
+          var url = URL.createObjectURL(f);
+          target.src = url;
+          target.classList.remove("hidden");
+          if (slot) {
+            var lbl = slot.querySelector(".no-preview-label");
+            if (lbl) lbl.classList.add("hidden");
+          }
+        });
+      });
+    })();
+  </script>
+{% endblock %}

@@ -1,0 +1,194 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}IB User Commission List{% endblock %}
+{% block admin_content %}
+
+<div class="bp-page-header">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-chart-line me-2"></i>IB User Commission List</h1>
+    <p class="bp-page-subtitle">View and filter IB commission records by user, date range, and keyword.</p>
+  </div>
+  <div class="flex items-center gap-2">
+    <a href="javascript:history.back()" class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center gap-2 text-sm font-medium transition-colors shadow-sm shrink-0">
+      <i class="fa-solid fa-arrow-left"></i> Back
+    </a>
+  </div>
+</div>
+
+<div class="bp-grid-4 bp-s-6">
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important; transition: border-color 0.2s, transform 0.2s;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important;  font-weight: 500 !important; margin: 0 !important; white-space: normal !important; text-transform: none !important; line-height: 1.1;">
+        Total Commission
+      </div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important;  margin: 0 !important; line-height: 1.2 !important;">
+        {{ total_commission|floatformat:2 }}
+      </div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; min-width: 38px !important; border-radius: 50% !important; background: #10b98126 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #10b981 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-coins" aria-hidden="true"></i>
+    </div>
+  </div>
+
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important; transition: border-color 0.2s, transform 0.2s;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important;  font-weight: 500 !important; margin: 0 !important; white-space: normal !important; text-transform: none !important; line-height: 1.1;">
+        Total Volume
+      </div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important;  margin: 0 !important; line-height: 1.2 !important;">
+        {{ total_volume }}
+      </div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; min-width: 38px !important; border-radius: 50% !important; background: #0ea5e926 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #0ea5e9 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-arrow-trend-up" aria-hidden="true"></i>
+    </div>
+  </div>
+
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important; transition: border-color 0.2s, transform 0.2s;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important;  font-weight: 500 !important; margin: 0 !important; white-space: normal !important; text-transform: none !important; line-height: 1.1;">
+        Total Trades
+      </div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important;  margin: 0 !important; line-height: 1.2 !important;">
+        {{ total_trades }}
+      </div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; min-width: 38px !important; border-radius: 50% !important; background: #8b5cf626 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #8b5cf6 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+    </div>
+  </div>
+
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important; transition: border-color 0.2s, transform 0.2s;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important;  font-weight: 500 !important; margin: 0 !important; white-space: normal !important; text-transform: none !important; line-height: 1.1;">
+        Total Profit
+      </div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important;  margin: 0 !important; line-height: 1.2 !important;">
+        {{ total_profit|floatformat:2 }}
+      </div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; min-width: 38px !important; border-radius: 50% !important; background: #10b98126 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #10b981 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-circle-dollar-to-slot" aria-hidden="true"></i>
+    </div>
+  </div>
+</div>
+
+<div class="bp-card bp-s-6">
+  <div class="bp-card-body">
+    <form class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 items-end w-full">
+      <div class="w-full min-w-0 col-span-1 md:col-span-2 lg:col-span-2">
+        <label class="bp-form-label">Select IB User</label>
+        <select name="ib_user" class="bp-input w-full">
+          <option value="">All</option>
+          {% for i in ib_users %}
+          <option value="{{ i.id }}" {% if filters.ib_user == i.id|stringformat:"s" %}selected{% endif %}>{{ i.email }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="w-full min-w-0 col-span-1 md:col-span-2 lg:col-span-1">
+        <label class="bp-form-label">Search</label>
+        <input name="q" value="{{ filters.q }}" class="bp-input w-full" placeholder="Search client / order…">
+      </div>
+      
+      <div class="grid grid-cols-2 gap-4 col-span-2 md:col-span-4 lg:col-span-2 w-full">
+        <div class="w-full min-w-0">
+          <label class="bp-form-label">From</label>
+          <input type="date" name="from" value="{{ filters.from }}" class="bp-input w-full">
+        </div>
+        <div class="w-full min-w-0">
+          <label class="bp-form-label">To</label>
+          <input type="date" name="to" value="{{ filters.to }}" class="bp-input w-full">
+        </div>
+      </div>
+
+      <div class="w-full col-span-2 md:col-span-4 lg:col-span-5 flex flex-row items-center gap-2 mt-2 h-[38px]">
+        <button type="submit" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all w-1/2 md:w-auto flex justify-center items-center">
+          <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+        </button>
+        <a href="?ib_user={{ filters.ib_user|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}&q={{ filters.q|urlencode }}&export=excel"
+           class="bp-btn bp-btn-outline w-1/2 md:w-auto flex justify-center items-center">
+          <i class="fa-solid fa-file-excel me-1"></i>Excel
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="bp-card">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title"><i class="fa-solid fa-table me-2"></i>Commission Records</span>
+  </div>
+  <div class="bp-card-body bp-s-48">
+    <div class="overflow-x-auto w-full">
+      <table class="bp-table min-w-full whitespace-nowrap">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>MT5 ID</th>
+            <th>Date</th>
+            <th>Order</th>
+            <th>Symbol</th>
+            <th>Price</th>
+            <th>Profit</th>
+            <th>Volume</th>
+            <th>My Commission</th>
+            <th>Commission Type</th>
+            <th>Level</th>
+            <th>Client Name</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in page_obj.object_list %}
+          <tr>
+            <td>{{ t.id }}</td>
+            <td>{{ t.reference|default:"-" }}</td>
+            <td>{{ t.created_at|date:"Y-m-d H:i" }}</td>
+            <td>{{ t.id }}</td>
+            <td>-</td>
+            <td>{{ t.amount|floatformat:2 }}</td>
+            <td>
+              {% if t.amount >= 0 %}
+                <span class="bp-badge bp-badge-success">{{ t.amount|floatformat:2 }}</span>
+              {% else %}
+                <span class="bp-badge bp-badge-error">{{ t.amount|floatformat:2 }}</span>
+              {% endif %}
+            </td>
+            <td>1</td>
+            <td>{{ t.amount|floatformat:2 }}</td>
+            <td><span class="bp-badge bp-badge-info">IB</span></td>
+            <td><span class="bp-badge bp-badge-neutral">{{ t.actor.ib_profile.ib_level.name|default:"-" }}</span></td>
+            <td>{{ t.actor.display_name|default:"-" }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td class="bp-s-122" colspan="12">
+              <i class="fa-solid fa-inbox me-2 bp-s-123"></i>
+              <span class="bp-s-124">No commission records found.</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="bp-card-footer">
+    <nav class="bp-pagination">
+      {% if page_obj.has_previous %}
+      <a class="bp-page-btn" href="?page={{ page_obj.previous_page_number }}&ib_user={{ filters.ib_user|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}&q={{ filters.q|urlencode }}">
+        <i class="fa-solid fa-chevron-left"></i> Previous
+      </a>
+      {% endif %}
+      <span class="bp-page-btn bp-page-btn--active">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+      <a class="bp-page-btn" href="?page={{ page_obj.next_page_number }}&ib_user={{ filters.ib_user|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}&q={{ filters.q|urlencode }}">
+        Next <i class="fa-solid fa-chevron-right"></i>
+      </a>
+      {% endif %}
+    </nav>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "sales_panel/base.html" %}
+{% block title %}Sales team{% endblock %}
+{% block admin_shell_page_title %}Sales team{% endblock %}
+{% block admin_content %}
+<div class="p-4 max-w-5xl overflow-x-auto">
+  <h1 class="text-xl font-semibold mb-4">Manager performance</h1>
+  <table class="min-w-full text-sm border">
+    <thead class="bg-slate-50"><tr><th class="p-2 text-left">Name</th><th class="p-2">Clients</th><th class="p-2">Deposits</th><th class="p-2">Withdrawals</th><th class="p-2">Net</th></tr></thead>
+    <tbody>
+      {% for m in manager_performance %}
+      <tr class="border-t">
+        <td class="p-2">{{ m.name }}</td>
+        <td class="p-2 text-right">{{ m.total_clients }}</td>
+        <td class="p-2 text-right">{{ m.total_deposits }}</td>
+        <td class="p-2 text-right">{{ m.total_withdrawals }}</td>
+        <td class="p-2 text-right">{{ m.net_pnl }}</td>
+      </tr>
+      {% empty %}
+      <tr><td class="p-4 text-slate-500" colspan="5">No data.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

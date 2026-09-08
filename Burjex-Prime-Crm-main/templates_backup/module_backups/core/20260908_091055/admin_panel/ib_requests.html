@@ -1,0 +1,151 @@
+{% extends "admin_panel/base.html" %}
+{% load dict_tools %}
+{% block title %}IB Request User List{% endblock %}
+{% block admin_content %}
+
+<div class="bp-page-header bp-s-6">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-handshake bp-s-140"></i>IB Request User List</h1>
+    <p class="bp-page-subtitle">Review and manage Introducing Broker applications</p>
+  </div>
+</div>
+
+{% include "admin_panel/includes/status_filter_boxes.html" with url_name="admin-ib-requests" list_status=list_status status_counts=status_counts query_ex_status=query_ex_status %}
+
+<div class="bp-card bp-s-156">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title"><i class="fa-solid fa-list-ul bp-s-17"></i>IB Applications</span>
+  </div>
+  <div class="bp-card-body">
+
+    <form class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4" method="get">
+      <input type="hidden" name="status" value="{{ list_status }}" />
+      <div class="flex items-center gap-2 w-full sm:w-auto">
+        <select name="per_page" class="bp-input w-20">
+          <option value="10" {% if filters.per_page == 10 %}selected{% endif %}>10</option>
+          <option value="25" {% if filters.per_page == 25 %}selected{% endif %}>25</option>
+          <option value="50" {% if filters.per_page == 50 %}selected{% endif %}>50</option>
+          <option value="100" {% if filters.per_page == 100 %}selected{% endif %}>100</option>
+        </select>
+        <a href="?q={{ filters.q|urlencode }}&per_page={{ filters.per_page }}&sort={{ filters.sort }}&status={{ filters.status }}&export=excel" class="bp-btn bp-btn-outline bp-btn-sm whitespace-nowrap">
+          <i class="fa-solid fa-file-excel bp-s-160"></i>Export Excel
+        </a>
+      </div>
+      <div class="flex items-center gap-2 w-full sm:w-auto">
+        <input name="q" value="{{ filters.q }}" class="bp-input flex-1" placeholder="Search by name, email, phone...">
+        <button type="submit" class="bp-btn bp-btn-primary bp-btn-sm whitespace-nowrap">
+          <i class="fa-solid fa-magnifying-glass bp-s-162"></i>Search
+        </button>
+      </div>
+    </form>
+
+    <div class="overflow-x-auto w-full">
+      <table class="bp-table min-w-full whitespace-nowrap">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Country</th>
+            <th>Registration Date</th>
+            <th>Application</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in page_obj.object_list %}
+          <tr>
+            <td><span class="bp-caption bp-s-105">{{ r.id }}</span></td>
+            <td>
+              <div class="bp-s-163">
+                <div class="bp-s-164">
+                  {{ r.client_user.display_name|first|upper }}
+                </div>
+                <span class="bp-s-116">{{ r.client_user.display_name }}</span>
+              </div>
+            </td>
+            <td>{{ r.client_user.email }}</td>
+            <td>{{ r.client_user.phone|default:"-" }}</td>
+            <td>{{ r.client_user.country|default:"-" }}</td>
+            <td><span class="bp-caption">{{ r.client_user.date_joined|date:"Y-m-d H:i" }}</span></td>
+            <td class="bp-s-165">
+              {% if r.application_data %}
+              <details class="bp-s-166">
+                <summary class="bp-s-167">
+                  <i class="fa-solid fa-chevron-right bp-s-168"></i> View answers
+                </summary>
+                <dl class="bp-s-169">
+                  {% for k, v in r.application_data.items %}
+                  <dt class="bp-s-170">{{ ib_question_labels|dict_get:k|default:k }}</dt>
+                  <dd class="bp-s-171">{{ v|format_ib_answer }}</dd>
+                  {% endfor %}
+                </dl>
+              </details>
+              {% else %}
+              <span class="bp-caption bp-s-172">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if list_status == "pending" and r.status == "PENDING" %}
+                <form class="bp-s-173" method="post" style="display: flex; flex-direction: column; gap: 8px; align-items: stretch; max-width: 200px;">
+                  {% csrf_token %}
+                  <input type="hidden" name="request_id" value="{{ r.id }}">
+
+                  <select name="ib_level_id" class="bp-input" style="font-size: 11px; padding: 4px; height: 28px;">
+                    <option value="">Default (Starter) Level</option>
+                    {% for lvl in all_ib_levels %}
+                      <option value="{{ lvl.id }}">{{ lvl.name }}</option>
+                    {% endfor %}
+                  </select>
+
+                  <div style="display: flex; gap: 4px;">
+                    <button name="action" value="approve" class="bp-btn bp-btn-success bp-btn-xs" style="flex: 1; font-size: 11px; padding: 4px 8px;">
+                      <i class="fa-solid fa-check"></i> Approve
+                    </button>
+                    <button name="action" value="reject" class="bp-btn bp-btn-danger bp-btn-xs" style="flex: 1; font-size: 11px; padding: 4px 8px;" formnovalidate>
+                      <i class="fa-solid fa-xmark"></i> Reject
+                    </button>
+                  </div>
+                </form>
+              {% else %}
+                {% if r.status == 'APPROVED' %}
+                  <span class="bp-badge bp-badge-success"><i class="fa-solid fa-circle-check bp-s-174"></i>{{ r.status }}</span>
+                {% else %}
+                  <span class="bp-badge bp-badge-error"><i class="fa-solid fa-circle-xmark bp-s-174"></i>{{ r.status }}</span>
+                {% endif %}
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td class="bp-s-175" colspan="8">
+              <i class="fa-solid fa-inbox bp-s-176"></i>
+              No IB requests found.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="bp-pagination bp-s-177">
+      {% if page_obj.has_previous %}
+        <a class="bp-page-btn" href="?page={{ page_obj.previous_page_number }}&q={{ filters.q|urlencode }}&per_page={{ filters.per_page }}&sort={{ filters.sort }}&status={{ filters.status }}">
+          <i class="fa-solid fa-chevron-left"></i> Previous
+        </a>
+      {% endif %}
+      <span class="bp-page-btn bp-page-btn--active">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+        <a class="bp-page-btn" href="?page={{ page_obj.next_page_number }}&q={{ filters.q|urlencode }}&per_page={{ filters.per_page }}&sort={{ filters.sort }}&status={{ filters.status }}">
+          Next <i class="fa-solid fa-chevron-right"></i>
+        </a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}

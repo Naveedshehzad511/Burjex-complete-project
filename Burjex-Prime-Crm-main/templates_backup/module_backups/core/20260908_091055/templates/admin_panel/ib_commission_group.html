@@ -1,0 +1,167 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Commission Group{% endblock %}
+{% block admin_content %}
+
+<div class="bp-page-header">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-layer-group bp-s-8"></i>IB Commission Rules</h1>
+    <p class="bp-page-subtitle">Manage CRM group commission rules for IB partners</p>
+  </div>
+</div>
+
+<div class="w-full">
+  <!-- Rules List (full width) -->
+  <div class="bp-card w-full">
+    <div class="bp-card-header flex justify-between items-center">
+      <span class="bp-card-header-title">
+        <i class="fa-solid fa-table-list bp-s-80"></i>Commission Rules
+      </span>
+      <button type="button" onclick="document.getElementById('addRuleModal').classList.remove('hidden')" class="bp-btn bp-btn-primary bp-btn-sm">
+        <i class="fa-solid fa-plus"></i> Add Rule
+      </button>
+    </div>
+    <div class="bp-card-body bp-s-48">
+      <div class="overflow-x-auto w-full">
+        <table class="bp-table min-w-full whitespace-nowrap">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Plan Name</th>
+              <th>CRM Group</th>
+              <th>Master IB (%)</th>
+              <th>Sub IB (%)</th>
+              <th>Commission Type</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for r in rows %}
+          <tr>
+            <td><span class="bp-badge bp-badge-neutral">#{{ r.id }}</span></td>
+            <td>{{ r.plan.name|default:"-" }}</td>
+            <td>
+              <span class="bp-badge bp-badge-info">{{ r.commission_group.name }}</span>
+            </td>
+            <td><strong>{{ r.level1 }}</strong></td>
+            <td><strong>{{ r.level2 }}</strong></td>
+            <td>
+              <span class="bp-badge bp-badge-primary">{{ settings_obj.get_commission_type_display }}</span>
+            </td>
+            <td>
+              <div class="bp-s-90">
+                <a href="{% url 'admin-ib-commission-group' %}?edit={{ r.id }}" class="bp-btn bp-btn-outline bp-btn-xs">
+                  <i class="fa-solid fa-pen-to-square"></i> Edit
+                </a>
+                <form method="post" class="inline" onsubmit="return confirm('Delete this commission rule?');">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="id" value="{{ r.id }}">
+                  <button type="submit" class="bp-btn bp-btn-danger bp-btn-xs">
+                    <i class="fa-solid fa-trash"></i> Delete
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td class="bp-s-91" colspan="7">
+              <i class="fa-solid fa-inbox bp-s-92"></i>
+              No commission rules found. Add your first rule using the form.
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Form -->
+<div id="addRuleModal" class="fixed inset-0 z-[100] flex items-center justify-center {% if not edit_obj %}hidden{% endif %} bg-black/50 backdrop-blur-sm">
+  <div class="bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+    <div class="border-b dark:border-slate-800 px-5 py-4 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+      <h3 class="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+        <i class="fa-solid fa-{% if edit_obj %}pen-to-square{% else %}circle-plus{% endif %} text-indigo-600"></i>
+        {% if edit_obj %}Edit Commission Rule{% else %}Add Commission Rule{% endif %}
+      </h3>
+      <a href="{% url 'admin-ib-commission-group' %}" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xl transition-colors">&times;</a>
+    </div>
+    
+    <div class="p-5 max-h-[80vh] overflow-y-auto">
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Commission groups follow CRM account types. Pick the CRM group below; the system links the matching IB commission group automatically.</p>
+
+      {% if not crm_account_types %}
+      <div class="bp-alert bp-alert-warning mb-4 text-xs">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        Create at least one CRM account type before adding IB rules.
+      </div>
+      {% endif %}
+
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="{% if edit_obj %}edit{% else %}add{% endif %}">
+        {% if edit_obj %}<input type="hidden" name="id" value="{{ edit_obj.id }}">{% endif %}
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Plan</label>
+          <select name="plan_id" class="bp-input w-full" required>
+            <option value="">Select Plan</option>
+            {% for p in plans %}
+              <option value="{{ p.id }}" {% if edit_obj and edit_obj.plan_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">CRM Account Type (Group)</label>
+          <select name="crm_account_type_id" class="bp-input w-full" required>
+            <option value="">Select CRM account type</option>
+            {% for t in crm_account_types %}
+              <option value="{{ t.id }}" {% if edit_obj and edit_obj.commission_group.name == t.account_name %}selected{% endif %}>{{ t.account_name }} ({{ t.account_code }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Commission Type</label>
+          <select name="commission_type" class="bp-input w-full">
+            <option value="SPREAD_ONLY" {% if settings_obj.commission_type == "SPREAD_ONLY" %}selected{% endif %}>Spread Only</option>
+            <option value="COMMISSION_ONLY" {% if settings_obj.commission_type == "COMMISSION_ONLY" %}selected{% endif %}>Commission Only</option>
+            <option value="SPREAD_AND_COMMISSION" {% if settings_obj.commission_type == "SPREAD_AND_COMMISSION" %}selected{% endif %}>Both (Spread + Commission)</option>
+          </select>
+        </div>
+
+        <input type="hidden" name="level_count" value="2">
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Master IB (%)</label>
+            <input name="master_pct" value="{% if edit_obj %}{{ edit_obj.level1 }}{% endif %}" class="bp-input w-full" placeholder="e.g. 10" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Sub IB (%)</label>
+            <input name="sub_pct" value="{% if edit_obj %}{{ edit_obj.level2 }}{% endif %}" class="bp-input w-full" placeholder="e.g. 5" required>
+          </div>
+        </div>
+
+        <div>
+          <label class="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+            <input type="checkbox" name="is_active" {% if not edit_obj or edit_obj.is_active %}checked{% endif %} class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-600">
+            Active
+          </label>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-4 border-t dark:border-slate-800 mt-2">
+          <a href="{% url 'admin-ib-commission-group' %}" class="px-4 py-2 text-sm rounded-lg font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">Cancel</a>
+          <button type="submit" class="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm">
+            <i class="fa-solid fa-{% if edit_obj %}floppy-disk{% else %}check{% endif %}"></i>
+            {% if edit_obj %}Update{% else %}Submit{% endif %}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

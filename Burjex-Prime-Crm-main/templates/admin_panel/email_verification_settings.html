@@ -1,0 +1,44 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Email Verification Settings{% endblock %}
+
+{% block admin_content %}
+  <div class="max-w-5xl bg-[#FFFFFF] border border-[#E7DCCF] rounded-xl p-6 shadow-sm">
+    <h1 class="text-xl font-semibold mb-5">Settings -> Email Verification</h1>
+    <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      {% csrf_token %}
+      <label><input type="checkbox" name="enabled" {% if ev.enabled %}checked{% endif %}> Enable Email Verification</label>
+      <label><input type="checkbox" name="required" {% if ev.required %}checked{% endif %}> Email Verification Required</label>
+      <label><input type="checkbox" name="allow_resend" {% if ev.allow_resend %}checked{% endif %}> Allow Resend Email</label>
+      <div>
+        <label class="block mb-1 font-medium">Token Expiry (Hours)</label>
+        <input type="number" min="1" name="token_expiry_hours" value="{{ ev.token_expiry_hours }}" class="w-full border rounded px-3 py-2" />
+      </div>
+
+      <div class="md:col-span-2">
+        <label class="block mb-1 font-medium">Email Template</label>
+        <textarea name="email_template" rows="6" class="w-full border rounded px-3 py-2">{{ ev.email_template }}</textarea>
+      </div>
+
+      <div class="md:col-span-2 pt-2 text-[#6A4B34] font-semibold">SMTP Settings</div>
+      <div><label class="block mb-1">SMTP Host</label><input name="smtp_host" value="{{ smtp.smtp_host }}" class="w-full border rounded px-3 py-2" /></div>
+      <div><label class="block mb-1">SMTP Port</label><input type="number" name="smtp_port" value="{{ smtp.smtp_port }}" class="w-full border rounded px-3 py-2" /></div>
+      <div><label class="block mb-1">SMTP Username</label><input name="smtp_username" value="{{ smtp.smtp_username }}" class="w-full border rounded px-3 py-2" /></div>
+      <div><label class="block mb-1">SMTP Password</label><input type="password" name="smtp_password" value="{{ smtp.smtp_password }}" class="w-full border rounded px-3 py-2" /></div>
+      <div><label class="block mb-1">Sender Email</label><input name="sender_email" value="{{ smtp.sender_email }}" class="w-full border rounded px-3 py-2" /></div>
+      <div><label class="block mb-1">Sender Name</label><input name="sender_name" value="{{ smtp.sender_name }}" class="w-full border rounded px-3 py-2" /></div>
+      <label class="md:col-span-2"><input type="checkbox" name="use_tls" {% if smtp.use_tls %}checked{% endif %}> Use TLS</label>
+      <label class="md:col-span-2"><input type="checkbox" name="use_ssl" {% if smtp.use_ssl %}checked{% endif %}> Use SSL</label>
+      <div class="md:col-span-2 pt-2 text-[#6A4B34] font-semibold">IMAP Settings</div>
+      <div><label class="block mb-1">IMAP Host</label><input name="imap_host" value="{{ smtp.imap_host }}" class="w-full border rounded px-3 py-2" /></div>
+      <div><label class="block mb-1">IMAP Port</label><input type="number" name="imap_port" value="{{ smtp.imap_port }}" class="w-full border rounded px-3 py-2" /></div>
+      <div><label class="block mb-1">IMAP Username</label><input name="imap_username" value="{{ smtp.imap_username }}" class="w-full border rounded px-3 py-2" /></div>
+      <div><label class="block mb-1">IMAP Password</label><input type="password" name="imap_password" value="{{ smtp.imap_password }}" class="w-full border rounded px-3 py-2" /></div>
+      <div class="md:col-span-2">
+        <button class="bg-[#6A4B34] text-white px-4 py-2 rounded hover:bg-[#533B2A]">Save Email Settings</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+
+

@@ -1,0 +1,81 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Trading Monitor — Match-Trader{% endblock %}
+{% block admin_content %}
+<div class="max-w-5xl mx-auto px-2 pb-12">
+  <div class="mb-4 flex flex-wrap gap-3 items-center justify-between">
+    <a href="{% url 'admin-integrations-hub' %}" class="text-sm text-indigo-600 hover:underline font-medium">← Integrations</a>
+    <a href="{% url 'admin-integrations-match-trader-enterprise' %}" class="text-sm font-medium text-slate-600 hover:text-indigo-600">Open Match-Trader setup</a>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-slate-200 shadow-lg shadow-slate-200/40 p-6 mb-8">
+    <h1 class="text-xl font-semibold text-slate-900">Match-Trader Status</h1>
+    <p class="text-sm text-slate-500 mt-1">Connection logs, sync telemetry, and trading activity summary.</p>
+
+    <dl class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+      <div class="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+        <dt class="text-xs font-semibold uppercase text-slate-500">Broker link</dt>
+        <dd class="mt-1 font-medium text-slate-900">
+          {% if mt.connection_status == 'Connected' and mt.is_active %}
+            <span class="text-emerald-700">Connected</span>
+          {% else %}
+            <span class="text-rose-700">Disconnected</span>
+          {% endif %}
+        </dd>
+      </div>
+      <div class="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+        <dt class="text-xs font-semibold uppercase text-slate-500">Last sync</dt>
+        <dd class="mt-1 font-medium text-slate-900">{{ mt.last_sync_at|default:"—" }}</dd>
+      </div>
+      <div class="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+        <dt class="text-xs font-semibold uppercase text-slate-500">Accounts connected</dt>
+        <dd class="mt-1 font-medium text-slate-900">{{ mt.accounts_connected_count }}</dd>
+      </div>
+      <div class="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+        <dt class="text-xs font-semibold uppercase text-slate-500">Trades running</dt>
+        <dd class="mt-1 font-medium text-slate-900">{{ mt.open_trades_running_count }}</dd>
+      </div>
+      <div class="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+        <dt class="text-xs font-semibold uppercase text-slate-500">Pending orders (aggregate)</dt>
+        <dd class="mt-1 font-medium text-slate-900">{{ mt.pending_orders_display_count }}</dd>
+      </div>
+      <div class="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+        <dt class="text-xs font-semibold uppercase text-slate-500">Environment</dt>
+        <dd class="mt-1 font-medium text-slate-900">{{ mt.get_environment_display }}</dd>
+      </div>
+    </dl>
+    {% if mt.last_connection_error %}
+      <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        Last error: {{ mt.last_connection_error|truncatechars:400 }}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="rounded-2xl bg-white border border-slate-200 shadow-md p-6">
+    <h2 class="text-lg font-semibold text-slate-900 mb-4">Integration logs</h2>
+    <div class="overflow-x-auto max-h-[480px] overflow-y-auto rounded-xl border border-slate-100">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50 text-left text-xs uppercase text-slate-500 sticky top-0">
+          <tr>
+            <th class="px-3 py-2">Time</th>
+            <th class="px-3 py-2">Kind</th>
+            <th class="px-3 py-2">OK</th>
+            <th class="px-3 py-2">Message</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for log in logs %}
+          <tr class="hover:bg-slate-50/80">
+            <td class="px-3 py-2 whitespace-nowrap text-slate-600">{{ log.created_at }}</td>
+            <td class="px-3 py-2 font-medium text-slate-800">{{ log.get_kind_display }}</td>
+            <td class="px-3 py-2">{% if log.success %}<span class="text-emerald-600">Yes</span>{% else %}<span class="text-rose-600">No</span>{% endif %}</td>
+            <td class="px-3 py-2 text-slate-700 max-w-md break-words">{{ log.message|truncatechars:240 }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="px-3 py-8 text-center text-slate-500">No logs yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

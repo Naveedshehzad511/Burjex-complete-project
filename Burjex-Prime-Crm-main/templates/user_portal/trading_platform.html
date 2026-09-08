@@ -1,0 +1,58 @@
+{% extends "user_portal/base.html" %}
+{% block title %}Trading Platform{% endblock %}
+{% block user_content %}
+  <h1 class="portal-page-heading">Trading Platforms</h1>
+  <p class="portal-page-subtitle">Download or launch your trading platform below.</p>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    {% for platform in platforms %}
+    <div class="portal-card">
+      <div class="flex items-center gap-4 mb-5">
+        {% if platform.icon %}
+          <img src="{{ platform.icon.url }}" alt="{{ platform.name }}"
+               class="h-14 w-14 object-contain rounded-xl p-2"
+               style="border:1px solid var(--portal-border);background:var(--portal-muted-bg);">
+        {% else %}
+          <div class="h-14 w-14 rounded-xl flex items-center justify-center text-xs font-bold"
+               style="border:1px solid var(--portal-border);background:var(--portal-muted-bg);color:var(--portal-text-muted);">ICON</div>
+        {% endif %}
+        <div>
+          <h2 class="text-lg font-bold" style="color:var(--portal-text-main);">{{ platform.name }}</h2>
+          {% if platform.tagline %}<p class="text-sm" style="color:var(--portal-text-muted);">{{ platform.tagline }}</p>{% endif %}
+        </div>
+      </div>
+      <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 mt-2">
+        {% if platform.web_terminal_link %}
+          <a href="{{ platform.web_terminal_link }}" target="_blank" rel="noopener" class="portal-btn-primary flex items-center gap-2">
+            <i class="fa-solid fa-globe"></i> Web Terminal
+          </a>
+        {% endif %}
+        {% if platform.windows_link %}
+          <a href="{{ platform.windows_link }}" target="_blank" rel="noopener" class="portal-btn-secondary flex items-center gap-2">
+            <i class="fa-brands fa-windows"></i> Windows
+          </a>
+        {% endif %}
+        {% if platform.mac_link %}
+          <a href="{{ platform.mac_link }}" target="_blank" rel="noopener" class="portal-btn-secondary flex items-center gap-2">
+            <i class="fa-brands fa-apple"></i> macOS
+          </a>
+        {% endif %}
+        {% if platform.ios_link %}
+          <a href="{{ platform.ios_link }}" target="_blank" rel="noopener" class="portal-btn-secondary flex items-center gap-2">
+            <i class="fa-brands fa-apple"></i> iOS
+          </a>
+        {% endif %}
+        {% if platform.android_link %}
+          <a href="{{ platform.android_link }}" target="_blank" rel="noopener" class="portal-btn-secondary flex items-center gap-2">
+            <i class="fa-brands fa-android"></i> Android
+          </a>
+        {% endif %}
+      </div>
+    </div>
+    {% empty %}
+    <div class="portal-card lg:col-span-2 text-center" style="color:var(--portal-text-muted);border-style:dashed;">
+      No platform available.
+    </div>
+    {% endfor %}
+  </div>
+{% endblock %}

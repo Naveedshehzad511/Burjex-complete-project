@@ -1,0 +1,322 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}{% if tpl %}Edit{% else %}New{% endif %} email template{% endblock %}
+{% block admin_content %}
+<div class="max-w-6xl mx-auto pb-12 px-3 sm:px-4">
+  <nav class="text-sm text-slate-500 mb-4">
+    <a href="{% url 'admin-system-email-templates' %}" class="text-indigo-600 hover:underline">Email Templates</a>
+    <span class="mx-2 text-slate-300">/</span>
+    <span class="text-slate-700 font-medium">{% if tpl %}Edit{% else %}New{% endif %}</span>
+  </nav>
+
+  <div class="lg:grid lg:grid-cols-12 lg:gap-8 lg:items-start">
+    <div class="lg:col-span-8 space-y-6">
+      <header>
+        <h1 class="text-xl sm:text-3xl font-semibold text-slate-900 tracking-tight">{% if tpl %}Edit template{% else %}New template{% endif %}</h1>
+        <p class="text-slate-600 text-sm mt-2 leading-relaxed">
+          {% if tpl %}
+          Changes apply to live emails as soon as you save (if the template is <strong>on</strong> and automation is enabled).
+          {% else %}
+          Pick a <strong>type</strong> so the system knows when to use this email. Only one built-in type of each kind is allowed—use <strong>Custom</strong> for extra messages.
+          {% endif %}
+        </p>
+      </header>
+
+      <form id="tpl-form" method="post" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div class="p-5 sm:p-6 space-y-6">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save" />
+
+          <section aria-labelledby="sec-basics">
+            <h2 id="sec-basics" class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">Basics</h2>
+            <div class="space-y-4">
+              <div>
+                <label for="id_name" class="block text-sm font-semibold text-slate-800 mb-1.5">Template name</label>
+                <p class="text-xs text-slate-500 mb-2">Internal label—recipients do not see this.</p>
+                <input id="id_name" type="text" name="name" value="{{ tpl.name|default:'' }}" required
+                  class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 outline-none transition" placeholder="e.g. Welcome email" />
+              </div>
+              <div>
+                <label for="template_type" class="block text-sm font-semibold text-slate-800 mb-1.5">Template type</label>
+                <p class="text-xs text-slate-500 mb-2">Links this design to a system event (password reset, deposit, etc.).</p>
+                <select name="template_type" id="template_type" {% if tpl %}disabled{% endif %}
+                  class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 outline-none">
+                  {% for val, label in type_choices %}
+                  <option value="{{ val }}" {% if tpl and tpl.template_type == val %}selected{% elif not tpl and val == 'custom' %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                {% if tpl %}<input type="hidden" name="template_type" value="{{ tpl.template_type }}" />{% endif %}
+              </div>
+              <div id="custom-slug-wrap" class="{% if tpl and tpl.template_type != 'custom' %}hidden{% endif %}">
+                <label for="id_custom_slug" class="block text-sm font-semibold text-slate-800 mb-1.5">Custom slug</label>
+                <p class="text-xs text-slate-500 mb-2">Becomes <code class="text-[11px] bg-slate-100 px-1 rounded">custom_your-slug</code>—letters, numbers, and hyphens only.</p>
+                <input id="id_custom_slug" type="text" name="custom_slug" value="{{ custom_slug|default:'' }}"
+                  class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-mono focus:ring-2 focus:ring-indigo-600/20 outline-none" placeholder="monthly-newsletter" />
+              </div>
+              <div>
+                <label for="id_status" class="block text-sm font-semibold text-slate-800 mb-1.5">Status Toggle</label>
+                <select name="status" id="id_status" class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 outline-none">
+                  <option value="active" {% if not tpl or tpl.status == 'active' %}selected{% endif %}>Active</option>
+                  <option value="inactive" {% if tpl and tpl.status == 'inactive' %}selected{% endif %}>Inactive</option>
+                </select>
+                <p class="text-xs text-slate-500 mt-2">If set to Inactive, automated sends skip this template without raising system errors.</p>
+              </div>
+            </div>
+          </section>
+
+          <section aria-labelledby="sec-content" class="pt-2 border-t border-slate-100">
+            <h2 id="sec-content" class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">Email content</h2>
+            <div class="space-y-4">
+              <div>
+                <label for="id_subject" class="block text-sm font-semibold text-slate-800 mb-1.5">Subject line</label>
+                <p class="text-xs text-slate-500 mb-2">Keep it short; you can use variables here too.</p>
+                <input type="text" name="subject" id="id_subject" value="{{ tpl.subject|default:'' }}"
+                  class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/20 outline-none" placeholder="e.g. Verify your email — {{company_name}}" />
+              </div>
+              <div>
+                <label for="email_body_editor" class="block text-sm font-semibold text-slate-800 mb-1.5">Message body</label>
+                <p class="text-xs text-slate-500 mb-2">Rich text (HTML). Logo and legal footer are added automatically by the <a href="{% url 'admin-system-email-layout' %}" class="text-indigo-600 underline">global layout</a>.</p>
+                <textarea id="email_body_editor" name="body" rows="14" class="w-full border border-slate-200 rounded-xl text-sm">{% if tpl %}{{ tpl.body }}{% else %}{% verbatim %}<p>Hi {{user.name}},</p><p>Your message here.</p><p>Thanks,<br/>{{company_name}}</p>{% endverbatim %}{% endif %}</textarea>
+              </div>
+            </div>
+          </section>
+
+          <div class="flex flex-wrap items-center gap-2 pt-2">
+            <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-indigo-600 text-white px-5 py-2.5 text-sm font-semibold shadow-md shadow-[#0B3C5D]/15 hover:bg-[#094a72] transition">Save template</button>
+            <button type="button" id="btn-preview" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">Preview</button>
+            {% if tpl %}
+            <a href="{% url 'admin-system-email-templates-preview' tpl.pk %}" target="_blank" rel="noopener" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Open saved preview</a>
+            {% endif %}
+          </div>
+        </div>
+      </form>
+
+      <section class="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 sm:p-6 shadow-sm" aria-labelledby="sec-test">
+        <h2 id="sec-test" class="text-sm font-semibold text-slate-900 mb-1">Send a test</h2>
+        <p class="text-xs text-slate-600 mb-4">
+          {% if tpl %}
+          Delivers a real message with sample data to any inbox you choose—useful before going live.
+          {% else %}
+          Save this template first, then you can send a live test email from the edit page.
+          {% endif %}
+        </p>
+        <form method="post" class="flex flex-col sm:flex-row gap-3 sm:items-end">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="send_test" />
+          <div class="flex-1 min-w-0">
+            <label for="id_test_email" class="block text-xs font-medium text-slate-600 mb-1.5">Recipient email</label>
+            <input id="id_test_email" type="email" name="test_email" required
+              class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/20 outline-none" placeholder="you@company.com" autocomplete="email" {% if not tpl %}disabled{% endif %} />
+          </div>
+          <button type="submit" class="inline-flex justify-center items-center rounded-xl bg-slate-900 text-white px-5 py-2.5 text-sm font-semibold hover:bg-slate-800 transition shrink-0 disabled:opacity-50 disabled:cursor-not-allowed" {% if not tpl %}disabled{% endif %}>Send Test Email</button>
+        </form>
+      </section>
+
+      <section class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm" aria-labelledby="sec-live-preview">
+        <h2 id="sec-live-preview" class="text-sm font-semibold text-slate-900 mb-1">Live preview</h2>
+        <p class="text-xs text-slate-600 mb-3">Subject/body changes refresh automatically.</p>
+        <div class="rounded-xl border border-slate-200 overflow-hidden">
+          <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-100 text-xs text-slate-500">
+            Subject: <span id="live-preview-subject" class="font-medium text-slate-700">—</span>
+          </div>
+          <iframe id="live-preview-frame" class="w-full min-h-[320px] border-0 bg-white" title="Live email preview"></iframe>
+        </div>
+      </section>
+    </div>
+
+    <aside class="lg:col-span-4 mt-8 lg:mt-0 space-y-4">
+      <div class="lg:sticky lg:top-4 space-y-4">
+        <div class="rounded-2xl border border-indigo-600/15 bg-indigo-600/[0.03] p-4 sm:p-5">
+          <h3 class="text-sm font-semibold text-indigo-600 mb-2">Quick tips</h3>
+          <ul class="text-xs text-slate-600 space-y-2.5 list-disc pl-4 leading-relaxed">
+            <li>Use <strong>Preview</strong> before saving to check layout and variables.</li>
+            <li>Built-in types map to automation events automatically when you save.</li>
+            <li>For a branded header/footer, upload a logo under <strong>Global layout</strong>.</li>
+          </ul>
+        </div>
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Common variables</h3>
+          <p class="text-[11px] text-slate-500 mb-3">Tap to select, then copy from your editor if needed.</p>
+          <div class="flex flex-wrap gap-1.5">
+            {% verbatim %}
+            <code class="text-[10px] px-2 py-1 rounded-md bg-slate-50 border border-slate-100 text-slate-700 select-all">{{client_name}}</code>
+            <code class="text-[10px] px-2 py-1 rounded-md bg-slate-50 border border-slate-100 text-slate-700 select-all">{{company_name}}</code>
+            <code class="text-[10px] px-2 py-1 rounded-md bg-slate-50 border border-slate-100 text-slate-700 select-all">{{verify_url}}</code>
+            <code class="text-[10px] px-2 py-1 rounded-md bg-slate-50 border border-slate-100 text-slate-700 select-all">{{reset_link}}</code>
+            {% endverbatim %}
+          </div>
+        </div>
+        <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-xs text-slate-600 leading-relaxed">
+          <strong class="text-slate-800">Preview data:</strong> sample names and links use the first user in your database when available; URLs point to this site.
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div id="preview-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-[2px] p-4" role="dialog" aria-modal="true" aria-labelledby="preview-dialog-title">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden ring-1 ring-black/5">
+    <div class="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-slate-100 bg-slate-50/80">
+      <div class="min-w-0">
+        <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400" id="preview-dialog-title">Preview</p>
+        <h3 id="preview-subject" class="text-sm font-semibold text-slate-900 truncate">Subject</h3>
+      </div>
+      <button type="button" id="preview-close" class="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Close</button>
+    </div>
+    <div id="preview-loading" class="hidden flex-1 flex items-center justify-center min-h-[320px] text-sm text-slate-500">Loading preview…</div>
+    <iframe id="preview-frame" class="flex-1 min-h-[360px] w-full border-0 bg-white" title="Email preview"></iframe>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.4/tinymce.min.js" referrerpolicy="origin"></script>
+<script>
+(function () {
+  const typeSel = document.getElementById("template_type");
+  const customWrap = document.getElementById("custom-slug-wrap");
+  function syncCustom() {
+    if (!typeSel || !customWrap) return;
+    customWrap.classList.toggle("hidden", typeSel.value !== "custom");
+  }
+  if (typeSel) {
+    typeSel.addEventListener("change", syncCustom);
+    syncCustom();
+  }
+
+  if (window.tinymce) {
+    tinymce.init({
+      selector: "#email_body_editor",
+      height: 440,
+      menubar: false,
+      plugins: "lists link table image code autoresize",
+      toolbar: "undo redo | blocks | bold italic underline strikethrough | forecolor | alignleft aligncenter alignright | bullist numlist | table link image | code removeformat",
+      content_style: "body { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 15px; line-height: 1.6; color: #1e293b; margin: 12px; }",
+      branding: false,
+      promotion: false,
+      resize: true,
+    });
+  }
+
+  function getCookie(name) {
+    const v = document.cookie.match("(^|;) ?" + name + "=([^;]*)(;|$)");
+    return v ? decodeURIComponent(v[2]) : "";
+  }
+  function csrfHeader() {
+    return getCookie("csrftoken") || (document.querySelector("[name=csrfmiddlewaretoken]") || {}).value || "";
+  }
+
+  const modal = document.getElementById("preview-modal");
+  const frame = document.getElementById("preview-frame");
+  const loading = document.getElementById("preview-loading");
+  const subjEl = document.getElementById("preview-subject");
+
+  function closeModal() {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+    frame.classList.remove("hidden");
+    loading.classList.add("hidden");
+  }
+
+  document.getElementById("preview-close").addEventListener("click", closeModal);
+  modal.addEventListener("click", function (e) {
+    if (e.target === modal) closeModal();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) closeModal();
+  });
+
+  document.getElementById("btn-preview").addEventListener("click", async function () {
+    const btn = this;
+    btn.disabled = true;
+    loading.classList.remove("hidden");
+    frame.classList.add("hidden");
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+    subjEl.textContent = "Loading…";
+
+    const fd = new FormData();
+    fd.append("subject", document.getElementById("id_subject").value || "");
+    const editor = window.tinymce ? tinymce.get("email_body_editor") : null;
+    const bodyValue = editor ? editor.getContent() : (document.getElementById("email_body_editor").value || "");
+    fd.append("body", bodyValue);
+    {% if tpl %}
+    fd.append("action", "preview_ajax");
+    const url = "{% url 'admin-system-email-templates-edit' tpl.pk %}";
+    {% else %}
+    const url = "{% url 'admin-system-email-templates-preview-draft' %}";
+    {% endif %}
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "X-CSRFToken": csrfHeader() },
+        body: fd,
+        credentials: "same-origin",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Preview failed");
+      subjEl.textContent = data.subject || "Preview";
+      frame.srcdoc = data.html || "";
+      frame.classList.remove("hidden");
+    } catch (err) {
+      subjEl.textContent = "Preview failed";
+      frame.srcdoc = "<p style='font-family:sans-serif;padding:24px;color:#b91c1c'>Could not load preview. Save the form and try again, or check your connection.</p>";
+      frame.classList.remove("hidden");
+    } finally {
+      loading.classList.add("hidden");
+      btn.disabled = false;
+    }
+  });
+
+  let _liveTimer = null;
+  async function refreshLivePreview() {
+    const fd = new FormData();
+    fd.append("subject", document.getElementById("id_subject").value || "");
+    const editor = window.tinymce ? tinymce.get("email_body_editor") : null;
+    const bodyValue = editor ? editor.getContent() : (document.getElementById("email_body_editor").value || "");
+    fd.append("body", bodyValue);
+    {% if tpl %}
+    fd.append("action", "preview_ajax");
+    const url = "{% url 'admin-system-email-templates-edit' tpl.pk %}";
+    {% else %}
+    const url = "{% url 'admin-system-email-templates-preview-draft' %}";
+    {% endif %}
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "X-CSRFToken": csrfHeader() },
+        body: fd,
+        credentials: "same-origin",
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+      const frame = document.getElementById("live-preview-frame");
+      const subj = document.getElementById("live-preview-subject");
+      if (subj) subj.textContent = data.subject || "Preview";
+      if (frame) frame.srcdoc = data.html || "";
+    } catch (e) {
+      // Keep editor responsive even if preview fails.
+    }
+  }
+
+  function queueLivePreview() {
+    if (_liveTimer) window.clearTimeout(_liveTimer);
+    _liveTimer = window.setTimeout(refreshLivePreview, 550);
+  }
+
+  const subjIn = document.getElementById("id_subject");
+  if (subjIn) subjIn.addEventListener("input", queueLivePreview);
+  const ta = document.getElementById("email_body_editor");
+  if (ta) ta.addEventListener("input", queueLivePreview);
+  if (window.tinymce) {
+    const waitForEditor = setInterval(function () {
+      const ed = tinymce.get("email_body_editor");
+      if (!ed) return;
+      clearInterval(waitForEditor);
+      ed.on("input change keyup undo redo", queueLivePreview);
+      queueLivePreview();
+    }, 250);
+  } else {
+    queueLivePreview();
+  }
+})();
+</script>
+{% endblock %}
+

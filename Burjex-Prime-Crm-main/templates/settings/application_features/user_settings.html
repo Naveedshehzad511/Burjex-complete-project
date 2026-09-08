@@ -1,0 +1,25 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}User Settings{% endblock %}
+{% block admin_content %}
+<div class="max-w-3xl space-y-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-slate-900">User Settings</h1>
+    <p class="text-sm text-slate-600 mt-1">Active-user window and minimum live account balance (user list and dashboard stats).</p>
+  </div>
+  <form method="post" class="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+    {% csrf_token %}
+    <div>
+      <label class="text-sm font-medium text-slate-700" for="id_active_days">Active period (days)</label>
+      <p class="text-xs text-slate-500 mt-0.5">Users count as active if they logged in within this many days and have at least the minimum balance on a live MT5 account.</p>
+      <input type="number" min="1" name="active_days" id="id_active_days" value="{{ s.active_days }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2">
+    </div>
+    <div>
+      <label class="text-sm font-medium text-slate-700" for="id_min_balance">Minimum live balance (USD)</label>
+      <input type="number" min="0" step="0.01" name="min_balance" id="id_min_balance" value="{{ s.min_balance }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2">
+    </div>
+    <div class="flex justify-end">
+      <button class="px-4 py-2 rounded-lg bg-[#0B3C5D] text-white font-semibold">Save Changes</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

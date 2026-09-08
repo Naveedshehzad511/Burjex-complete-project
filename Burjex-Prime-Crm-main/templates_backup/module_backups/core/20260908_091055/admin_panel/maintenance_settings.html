@@ -1,0 +1,66 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Maintenance Mode{% endblock %}
+{% block admin_content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-900">Security Controls - Maintenance</h1>
+    <p class="text-sm text-slate-500 mt-1">Enable maintenance mode for safe system upgrades while keeping admin access available.</p>
+  </div>
+
+  <form method="post" class="space-y-5">
+    {% csrf_token %}
+    <div class="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+      <h2 class="text-lg font-semibold">Maintenance Configuration</h2>
+      <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+        <input type="checkbox" name="enabled" {% if settings_obj.enabled %}checked{% endif %} class="h-4 w-4 rounded border-slate-300">
+        Enable Maintenance Mode
+      </label>
+      <p class="text-xs text-slate-500">When enabled, client routes are redirected to <code>/maintenance</code>. Admin routes remain accessible.</p>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+      <h2 class="text-lg font-semibold">Secret Bypass Key (Optional)</h2>
+      <input name="secret_bypass_key" value="{{ settings_obj.secret_bypass_key }}" placeholder="Secret Key" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+      <p class="text-xs text-slate-500">Example: <code>/login?bypass=secretkey</code></p>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+      <h2 class="text-lg font-semibold">Maintenance Page UI</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Title</label>
+          <input name="title" value="{{ settings_obj.title }}" placeholder="System Under Maintenance" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Estimated Time (Optional)</label>
+          <input name="estimated_time" value="{{ settings_obj.estimated_time }}" placeholder="e.g. 30 minutes" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Maintenance Message</label>
+        <textarea name="message" rows="4" class="w-full border border-slate-300 rounded-lg px-3 py-2">{{ settings_obj.message }}</textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Support Email (Optional)</label>
+        <input type="email" name="support_email" value="{{ settings_obj.support_email }}" placeholder="support@example.com" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+      <h2 class="text-lg font-semibold">Advanced Option</h2>
+      <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+        <input type="checkbox" name="allow_whitelist_ip" {% if settings_obj.allow_whitelist_ip %}checked{% endif %} class="h-4 w-4 rounded border-slate-300">
+        Allow Whitelist IP
+      </label>
+      <textarea name="whitelist_ips" rows="3" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="127.0.0.1, 203.0.113.10">{{ settings_obj.whitelist_ips }}</textarea>
+      <p class="text-xs text-slate-500">Add admin IP addresses separated by commas.</p>
+    </div>
+
+    <div class="flex justify-end">
+      <button class="rounded-lg bg-indigo-600 px-5 py-2.5 text-white font-semibold hover:bg-indigo-700">Save Changes</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+

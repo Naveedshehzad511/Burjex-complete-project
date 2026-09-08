@@ -1,0 +1,63 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Email Purposes{% endblock %}
+{% block admin_content %}
+<div class="max-w-5xl mx-auto pb-12 px-3 sm:px-4">
+  <nav class="text-sm text-slate-500 mb-4">
+    <a href="{% url 'admin-system-management-dashboard' %}" class="text-indigo-600 hover:underline">System Management</a>
+    <span class="mx-2 text-slate-300">/</span>
+    <span class="text-slate-700 font-medium">Email Purposes</span>
+  </nav>
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-slate-900">Email Purposes</h1>
+    <a href="{% url 'admin-system-email-templates' %}" class="rounded-lg border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50">Back to Templates</a>
+  </div>
+
+  <form method="post" class="rounded-xl border border-slate-200 bg-white p-4 mb-6 flex flex-col sm:flex-row gap-3">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create" />
+    <input type="text" name="purpose_name" required maxlength="120" placeholder="Create new purpose (e.g. Verify Email)"
+      class="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm" />
+    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2.5 text-sm font-semibold hover:bg-[#094a72]">Create Purpose</button>
+  </form>
+
+  <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50">
+        <tr>
+          <th class="px-4 py-3 text-left">Purpose Name</th>
+          <th class="px-4 py-3 text-left">Purpose Key</th>
+          <th class="px-4 py-3 text-left">Mapped Template</th>
+          <th class="px-4 py-3 text-left">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in purposes %}
+        <tr class="border-t border-slate-100">
+          <td class="px-4 py-3 font-medium">{{ p.purpose_name }}</td>
+          <td class="px-4 py-3 font-mono text-xs">{{ p.purpose_key }}</td>
+          <td class="px-4 py-3">
+            {% if p.template_mapping and p.template_mapping.template %}
+              {{ p.template_mapping.template.name }}
+            {% else %}
+              <span class="text-slate-400">Not assigned</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3">
+            <form method="post" onsubmit="return confirm('Delete purpose {{ p.purpose_name|escapejs }}?');">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="delete" />
+              <input type="hidden" name="purpose_id" value="{{ p.id }}" />
+              <button type="submit" class="rounded bg-rose-600 text-white px-3 py-1 text-xs font-semibold hover:bg-rose-700">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="px-4 py-8 text-center text-slate-500">No purposes found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

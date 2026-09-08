@@ -1,0 +1,69 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Transfer Settings{% endblock %}
+{% block admin_content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold text-slate-900">Transfer Settings</h1>
+      <p class="text-sm text-slate-600 mt-1">Controls client internal transfers and P2P-style IB moves.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="javascript:history.back()" class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center gap-2 text-sm font-medium transition-colors">
+        <i class="fa-solid fa-arrow-left"></i> Back
+      </a>
+    </div>
+  </div>
+  <form method="post" class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-8">
+    {% csrf_token %}
+    <section>
+      <h2 class="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-3">Internal transfers</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" name="internal_transfers_enabled" {% if obj.internal_transfers_enabled %}checked{% endif %}> Enable internal transfers</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="internal_maintenance_mode" {% if obj.internal_maintenance_mode %}checked{% endif %}> Maintenance mode (option visible, action blocked)</label>
+        <div><label class="text-xs text-slate-600">Min amount</label><input name="internal_min_amount" value="{{ obj.internal_min_amount }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-xs text-slate-600">Max amount (0 = no cap)</label><input name="internal_max_amount" value="{{ obj.internal_max_amount }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div>
+          <label class="text-xs text-slate-600">Fee type</label>
+          <select name="internal_fee_type" class="mt-1 w-full border rounded-lg px-3 py-2">
+            {% for v,l in obj.FeeType.choices %}<option value="{{ v }}" {% if obj.internal_fee_type == v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+          </select>
+        </div>
+        <div><label class="text-xs text-slate-600">Fee value</label><input name="internal_fee_value" value="{{ obj.internal_fee_value }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-xs text-slate-600">Daily limit (0 = off)</label><input name="internal_daily_limit" value="{{ obj.internal_daily_limit }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-xs text-slate-600">Cooldown (minutes)</label><input name="internal_cooldown_minutes" value="{{ obj.internal_cooldown_minutes }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div>
+          <label class="text-xs text-slate-600">Processing mode</label>
+          <select name="internal_processing_mode" class="mt-1 w-full border rounded-lg px-3 py-2">
+            <option value="INSTANT" {% if obj.internal_processing_mode == "INSTANT" %}selected{% endif %}>Instant</option>
+            <option value="MANUAL" {% if obj.internal_processing_mode == "MANUAL" %}selected{% endif %}>Manual</option>
+          </select>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-2">Manual mode creates pending transfers for admin approval under Transactions → Internal Transfer.</p>
+    </section>
+    <section>
+      <h2 class="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-3">P2P / IB paths</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" name="p2p_enabled" {% if obj.p2p_enabled %}checked{% endif %}> Enable P2P-style transfers (IB wallet)</label>
+        <div><label class="text-xs text-slate-600">P2P min</label><input name="p2p_min_amount" value="{{ obj.p2p_min_amount }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-xs text-slate-600">P2P max</label><input name="p2p_max_amount" value="{{ obj.p2p_max_amount }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-xs text-slate-600">P2P fee value</label><input name="p2p_fee_value" value="{{ obj.p2p_fee_value }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-xs text-slate-600">P2P daily limit</label><input name="p2p_daily_limit" value="{{ obj.p2p_daily_limit }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-xs text-slate-600">P2P cooldown (minutes)</label><input name="p2p_cooldown_minutes" value="{{ obj.p2p_cooldown_minutes }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+      </div>
+    </section>
+    <section>
+      <h2 class="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-3">Security</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" name="transfer_require_kyc" {% if obj.transfer_require_kyc %}checked{% endif %}> Require KYC</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="transfer_require_2fa" {% if obj.transfer_require_2fa %}checked{% endif %}> Require 2FA (extend with OTP flow)</label>
+        <div><label class="text-xs text-slate-600">Max pending transfers (0 = off)</label><input name="transfer_max_pending" value="{{ obj.transfer_max_pending }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+      </div>
+    </section>
+    <div class="pt-2">
+      <button type="submit" class="bg-indigo-600 text-white rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-indigo-700">Save transfer settings</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+

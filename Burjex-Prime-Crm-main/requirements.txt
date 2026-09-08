@@ -1,0 +1,16 @@
+# Django 6.1 dropped django.utils.cache.cc_delim_re, which djangorestframework
+# still imports — keep the CRM on the 6.0 line until DRF ships a 6.1-safe release.
+Django>=6.0,<6.1
+Pillow>=10,<13
+psycopg2-binary
+cryptography
+django-solo
+django-ckeditor-5
+celery
+redis
+pyotp
+django-celery-results
+djangorestframework
+django-cors-headers
+# Imported by config/asgi.py (ProtocolTypeRouter + live_chat websockets).
+channels

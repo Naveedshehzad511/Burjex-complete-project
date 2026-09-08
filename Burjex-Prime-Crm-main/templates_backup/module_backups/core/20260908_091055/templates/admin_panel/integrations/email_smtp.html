@@ -1,0 +1,73 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}SMTP Universal{% endblock %}
+{% block admin_content %}
+<div class="max-w-xl mx-auto space-y-6 pb-10 px-2">
+  <a href="{% url 'admin-integrations-email-sms' %}" class="text-sm text-indigo-600 hover:underline">← Email &amp; SMS</a>
+  <h1 class="text-xl font-semibold text-slate-900">SMTP Universal</h1>
+  <form method="post" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-6">
+    {% csrf_token %}
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="enabled" {% if row.enabled %}checked{% endif %} class="rounded border-slate-300" />
+      <span class="text-sm font-medium">Enable integration</span>
+    </label>
+    <div>
+      <h2 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Credentials</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Username</label>
+          <input type="text" name="username" value="{{ row.username }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Password</label>
+          <input type="password" name="password" value="" placeholder="{% if row.password %}•••• (leave blank to keep){% endif %}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+        </div>
+      </div>
+    </div>
+    <div>
+      <h2 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Server</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Host</label>
+          <input type="text" name="smtp_host" value="{{ row.smtp_host }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Port</label>
+          <input type="number" name="smtp_port" value="{{ row.smtp_port }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+      </div>
+    </div>
+    <div>
+      <h2 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Sender</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">From name</label>
+          <input type="text" name="sender_name" value="{{ row.sender_name }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">From email</label>
+          <input type="email" name="sender_email" value="{{ row.sender_email }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+      </div>
+    </div>
+    <div>
+      <h2 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Security</h2>
+      <div>
+        <label class="block text-sm text-slate-600 mb-1">Encryption</label>
+        <select name="encryption" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="TLS" {% if row.encryption == "TLS" %}selected{% endif %}>TLS</option>
+          <option value="SSL" {% if row.encryption == "SSL" %}selected{% endif %}>SSL</option>
+          <option value="NONE" {% if row.encryption == "NONE" %}selected{% endif %}>None</option>
+        </select>
+      </div>
+    </div>
+    {% if row.last_test_at %}
+    <p class="text-xs text-slate-500">Last test: {% if row.last_test_ok %}OK{% else %}Failed{% endif %} — {{ row.last_test_detail|truncatechars:160 }}</p>
+    {% endif %}
+    <div class="flex flex-wrap gap-2">
+      <button type="submit" name="action" value="test" class="rounded-lg border border-slate-300 px-4 py-2 text-sm">Test connection</button>
+      <button type="submit" name="action" value="save" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium">Save configuration</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+

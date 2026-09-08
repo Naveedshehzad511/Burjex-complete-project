@@ -1,0 +1,10 @@
+{% extends "sales_panel/base.html" %}
+{% block title %}IB detail{% endblock %}
+{% block admin_shell_page_title %}IB detail{% endblock %}
+{% block admin_content %}
+<div class="p-4 max-w-3xl space-y-2">
+  <p class="text-sm text-slate-600"><a href="{% url 'sales-ib-analytics' %}">← IB analytics</a></p>
+  <h1 class="text-xl font-semibold">{{ user.email }}</h1>
+  <p class="text-sm">Code: <strong>{{ ib_profile.ib_code }}</strong></p>
+</div>
+{% endblock %}

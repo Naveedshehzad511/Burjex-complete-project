@@ -1,0 +1,88 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}All Positions{% endblock %}
+{% block admin_content %}
+<div class="max-w-7xl mx-auto space-y-5 pb-8">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-xl font-semibold text-slate-900">{{ title }}</h1>
+      <p class="text-sm text-slate-600 mt-1">Live deals and positions list.</p>
+    </div>
+    <a href="{% url 'admin-risk-monitor' %}" class="text-sm font-semibold text-indigo-600 hover:underline">Back to Risk Monitor</a>
+  </div>
+
+  <form method="get" class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    {% if rule %}
+    <input type="hidden" name="rule" value="{{ rule }}" />
+    {% endif %}
+    <input type="text" name="account" value="{{ filters.account }}" placeholder="Account Number" class="border rounded-lg px-3 py-2" />
+    <input type="text" name="user" value="{{ filters.user }}" placeholder="User Name" class="border rounded-lg px-3 py-2" />
+    <input type="text" name="symbol" value="{{ filters.symbol }}" placeholder="Symbol" class="border rounded-lg px-3 py-2" />
+    <select name="status" class="border rounded-lg px-3 py-2">
+      <option value="closed" {% if filters.status == "closed" %}selected{% endif %}>Closed Deals</option>
+      <option value="open" {% if filters.status == "open" %}selected{% endif %}>Live Open Positions</option>
+    </select>
+    <button type="submit" class="inline-flex justify-center items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors">
+      <i class="fa-solid fa-filter mr-2"></i> Filter
+    </button>
+  </form>
+
+  <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left text-slate-500">
+          <th class="py-2">Account</th>
+          <th class="py-2">User</th>
+          <th class="py-2">Symbol</th>
+          <th class="py-2">Type</th>
+          <th class="py-2">Lot</th>
+          <th class="py-2">Price</th>
+          <th class="py-2">Profit</th>
+          <th class="py-2">Time</th>
+          <th class="py-2">Duration / Ticket</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in page_obj %}
+          <tr class="border-t">
+            {% if row.is_live_open %}
+              <td class="py-2">{{ row.account_number|default:"-" }}</td>
+              <td class="py-2">{{ row.client.get_full_name|default:row.client.email }}</td>
+              <td class="py-2">{{ row.symbol }}</td>
+              <td class="py-2">{{ row.type }}</td>
+              <td class="py-2">{{ row.lots }}</td>
+              <td class="py-2">{{ row.open_price|default:"-" }}</td>
+              <td class="py-2">{{ row.profit_display }}</td>
+              <td class="py-2">{{ row.created_at|date:"Y-m-d H:i:s" }}</td>
+              <td class="py-2">{{ row.duration|default:"-" }}</td>
+            {% else %}
+              <td class="py-2">{{ row.login|default:"-" }}</td>
+              <td class="py-2">{{ row.client.get_full_name|default:row.client.email }}</td>
+              <td class="py-2">{{ row.symbol }}</td>
+              <td class="py-2">{% if row.action == 0 %}Buy{% else %}Sell{% endif %} ({% if row.entry_type == 0 %}In{% else %}Out{% endif %})</td>
+              <td class="py-2">{{ row.lots|floatformat:2 }}</td>
+              <td class="py-2">{{ row.price|default:"-" }}</td>
+              <td class="py-2">{{ row.profit }}</td>
+              <td class="py-2">{{ row.time|date:"Y-m-d H:i:s" }}</td>
+              <td class="py-2">{{ row.deal_ticket }}</td>
+            {% endif %}
+          </tr>
+        {% empty %}
+          <tr><td colspan="9" class="py-4 text-slate-500">No matching trades found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="flex items-center gap-2 text-sm mt-4">
+    {% if page_obj.has_previous %}
+      <a class="px-3 py-1 border rounded" href="?page={{ page_obj.previous_page_number }}&rule={{ rule }}&account={{ filters.account }}&user={{ filters.user }}&symbol={{ filters.symbol }}&status={{ filters.status }}">Previous</a>
+    {% endif %}
+    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a class="px-3 py-1 border rounded" href="?page={{ page_obj.next_page_number }}&rule={{ rule }}&account={{ filters.account }}&user={{ filters.user }}&symbol={{ filters.symbol }}&status={{ filters.status }}">Next</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

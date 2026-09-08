@@ -1,0 +1,74 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}{% if question %}Edit{% else %}Add{% endif %} IB question{% endblock %}
+{% block admin_content %}
+<style>
+  .django-form-styled input[type="text"],
+  .django-form-styled input[type="number"],
+  .django-form-styled select,
+  .django-form-styled textarea {
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    outline: none;
+    transition: all 0.2s;
+    background-color: #ffffff;
+  }
+  .dark .django-form-styled input[type="text"],
+  .dark .django-form-styled input[type="number"],
+  .dark .django-form-styled select,
+  .dark .django-form-styled textarea {
+    border-color: #334155;
+    background-color: #1e293b;
+    color: #f8fafc;
+  }
+  .django-form-styled input:focus,
+  .django-form-styled select:focus,
+  .django-form-styled textarea:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  }
+  .django-form-styled textarea {
+    min-height: 100px;
+  }
+  .django-form-styled input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: #6366f1;
+    cursor: pointer;
+  }
+</style>
+
+<div class="bp-page-header bp-s-6">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-pen-to-square bp-s-140"></i>{% if question %}Edit question{% else %}New question{% endif %}</h1>
+    <p class="bp-page-subtitle">Configure application form fields for prospective IBs.</p>
+  </div>
+</div>
+
+<div class="bp-card max-w-3xl">
+  <div class="bp-card-body">
+    <form method="post" class="space-y-5 django-form-styled">
+      {% csrf_token %}
+      {% for field in form %}
+      <div>
+        <label class="bp-form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+        
+        <div class="mt-1">
+          {{ field }}
+        </div>
+        
+        {% if field.help_text %}<p class="text-xs text-slate-500 mt-1.5">{{ field.help_text }}</p>{% endif %}
+        {% for e in field.errors %}<p class="text-xs text-rose-600 mt-1.5"><i class="fa-solid fa-triangle-exclamation me-1"></i>{{ e }}</p>{% endfor %}
+      </div>
+      {% endfor %}
+      
+      <div class="flex gap-3 pt-4 border-t dark:border-slate-800 mt-6">
+        <button type="submit" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all px-6">Save</button>
+        <a href="{% url 'admin-ib-application-form' %}" class="bp-btn bp-btn-outline px-6">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

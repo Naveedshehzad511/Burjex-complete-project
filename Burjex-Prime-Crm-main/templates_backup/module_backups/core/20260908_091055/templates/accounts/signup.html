@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Create account - {{ crm_company_name|default:branding.company_name|default:"Burjex Prime" }}{% endblock %}
+
+{% block head_extra %}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@23/build/css/intlTelInput.css" />
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/login.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}" />
+  <style>
+    .signup-market-auth {
+      --auth-brand: {{ crm_portal_theme.light_primary_color|default:crm_primary_color|default:branding.primary_color|default:'#0B3C5D' }};
+      --auth-button: {{ crm_portal_theme.button_color|default:branding.button_color|default:branding.primary_color|default:crm_primary_color|default:'#0B3C5D' }};
+      --auth-muted: {{ crm_portal_theme.light_primary_color|default:crm_primary_color|default:branding.primary_color|default:'#49667c' }};
+      --bp-primary: var(--auth-button);
+      --bp-primary-hover: var(--auth-button);
+      --bp-border-focus: var(--auth-brand);
+      min-height: 100dvh;
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(420px, 540px);
+      align-items: center;
+      gap: clamp(2rem, 6vw, 5rem);
+      padding: clamp(1.25rem, 4vw, 4rem);
+      background: linear-gradient(180deg, #f8fbfd 0%, #e8f0f6 100%);
+      background-size: cover;
+      background-position: center;
+      font-family: {{ branding.font_style|default:'var(--bp-font)' }};
+    }
+
+    .signup-market-brand,
+    .signup-market-card {
+      position: relative;
+      z-index: 1;
+    }
+
+    .signup-market-brand {
+      justify-self: center;
+      width: min(100%, 560px);
+      text-align: center;
+      color: var(--auth-brand);
+    }
+
+    .signup-market-logo-mark {
+      max-width: 220px;
+      height: auto;
+      margin: 0 auto 1.45rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: transparent;
+    }
+
+    .signup-market-logo-mark img {
+      max-width: 100%;
+      max-height: 80px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      padding: 0;
+      border-radius: 12px;
+    }
+
+    .signup-market-logo-fallback {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .signup-market-title {
+      margin: 0;
+      font-size: clamp(1.85rem, 3.4vw, 2.55rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: 0;
+      color: var(--auth-brand);
+    }
+
+    .signup-market-subtitle {
+      margin: 1rem auto 0;
+      max-width: 520px;
+      color: var(--auth-muted);
+      opacity: 0.78;
+      font-size: clamp(0.98rem, 1.5vw, 1.14rem);
+      line-height: 1.65;
+    }
+
+    .signup-market-card {
+      width: 100%;
+      max-width: 34rem;
+      justify-self: center;
+    }
+
+    .signup-auth-card {
+      background: var(--bp-surface);
+      border: 1px solid var(--bp-border);
+      border-radius: var(--bp-radius-xl);
+      box-shadow: var(--bp-shadow-md);
+      padding: 2rem 1.75rem;
+      max-height: calc(100dvh - 3rem);
+      overflow-y: auto;
+    }
+
+    .signup-form {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .signup-form input,
+    .signup-form select,
+    .signup-form textarea {
+      min-height: 44px;
+      border-radius: var(--bp-radius-lg);
+    }
+
+    .signup-captcha-wrap {
+      border: 1px solid var(--bp-border);
+      border-radius: var(--bp-radius);
+      background: var(--bp-surface-2);
+      padding: 0.75rem;
+    }
+
+    .signup-market-auth .signup-submit-btn {
+      width: 100%;
+      height: 52px;
+      font-size: 0.9375rem;
+      letter-spacing: 0;
+      background: var(--auth-button) !important;
+      border-color: var(--auth-button) !important;
+      color: {{ crm_portal_theme.button_text_color|default:'#ffffff' }} !important;
+      box-shadow: var(--bp-shadow-primary);
+    }
+
+    .signup-market-auth .signup-secondary-btn {
+      width: 100%;
+      height: 48px;
+      font-size: var(--bp-text-sm);
+      color: var(--auth-brand) !important;
+      border-color: var(--auth-brand) !important;
+      background: var(--bp-surface) !important;
+    }
+
+    .signup-market-auth .bp-input:focus,
+    .signup-market-auth input:focus,
+    .signup-market-auth textarea:focus,
+    .signup-market-auth select:focus {
+      border-color: var(--auth-brand) !important;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--auth-brand) 18%, transparent), var(--bp-shadow-xs) !important;
+    }
+
+    @supports not (color: color-mix(in srgb, #000, transparent)) {
+      .signup-market-auth .bp-input:focus,
+      .signup-market-auth input:focus,
+      .signup-market-auth textarea:focus,
+      .signup-market-auth select:focus {
+        box-shadow: 0 0 0 3px rgba(11, 60, 93, 0.12), var(--bp-shadow-xs) !important;
+      }
+    }
+
+    .iti {
+      width: 100%;
+    }
+
+    @media (max-width: 860px) {
+      .signup-market-auth {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: 1.35rem;
+        padding: 2rem 1rem;
+        background: linear-gradient(180deg, #f8fbfd 0%, #eef4f8 100%);
+      }
+
+      .signup-market-brand {
+        padding-top: 0.35rem;
+      }
+
+      .signup-market-logo-mark {
+        max-width: 180px;
+        margin-bottom: 1rem;
+      }
+      
+      .signup-market-logo-mark img {
+        max-height: 65px;
+      }
+
+      .signup-market-title {
+        font-size: clamp(1.55rem, 6.8vw, 2rem);
+      }
+
+      .signup-market-card {
+        max-width: 24rem;
+      }
+
+      .signup-auth-card {
+        max-height: none;
+      }
+    }
+
+    @media (max-width: 390px) {
+      .signup-market-auth {
+        padding: 1.25rem 0.75rem;
+      }
+
+      .signup-auth-card {
+        padding: 1.4rem 1.1rem;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="signup-market-auth">
+  <section class="signup-market-brand" aria-label="Create account welcome">
+    <div class="signup-market-logo-mark">
+      {% if crm_user_login_logo_url %}
+        <img src="{{ crm_user_login_logo_url }}{% if '?' in crm_user_login_logo_url %}&{% else %}?{% endif %}v={{ branding_v }}" alt="{{ crm_company_name|default:branding.company_name|default:'Company' }} logo" />
+      {% elif brand_logo_url %}
+        <img src="{{ brand_logo_url }}{% if '?' in brand_logo_url %}&{% else %}?{% endif %}v={{ branding_v }}" alt="{{ crm_company_name|default:branding.company_name|default:'Company' }} logo" />
+      {% elif branding.logo %}
+        <img src="{{ branding.logo.url }}?v={{ branding_v }}" alt="{{ crm_company_name|default:branding.company_name|default:'Company' }} logo" />
+      {% else %}
+        <span class="signup-market-logo-fallback"></span>
+      {% endif %}
+    </div>
+    <h1 class="signup-market-title">
+      Welcome to<br />{{ crm_company_name|default:branding.company_name|default:"Burjex Prime" }}!
+    </h1>
+
+  </section>
+
+  <main class="signup-market-card">
+    <div class="signup-auth-card">
+      <div style="text-align: center; margin-bottom: 1.75rem;">
+        <h2 style="font-size: 1.5rem; font-weight: 700; color: var(--bp-text); letter-spacing: 0; line-height: 1.2; margin: 0;">Create Account</h2>
+      </div>
+
+      {% if messages %}
+        <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem;">
+          {% for message in messages %}
+            <div class="bp-alert bp-alert-info" role="alert">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="POST" action="" class="signup-form" id="signupForm" novalidate>
+        {% csrf_token %}
+        {% if signup_ref %}<input type="hidden" name="signup_ref" value="{{ signup_ref }}" />{% endif %}
+        {% if signup_ib_legacy %}<input type="hidden" name="signup_ib_legacy" value="{{ signup_ib_legacy }}" />{% endif %}
+        {% if signup_manager_slug %}<input type="hidden" name="signup_manager_slug" value="{{ signup_manager_slug }}" />{% endif %}
+
+        {% if form.non_field_errors %}
+          <div class="bp-alert bp-alert-error" role="alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        {% if signup_settings.full_name_mode != "HIDDEN" %}
+          <div class="bp-form-group" style="margin-bottom:0;">
+            <label class="bp-form-label" for="id_full_name">Full name</label>
+            {{ form.full_name }}
+            {% if form.full_name.errors %}<div class="bp-form-error">{{ form.full_name.errors }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if signup_settings.first_name_mode != "HIDDEN" %}
+          <div class="bp-form-group" style="margin-bottom:0;">
+            <label class="bp-form-label" for="id_first_name">First name</label>
+            {{ form.first_name }}
+            {% if form.first_name.errors %}<div class="bp-form-error">{{ form.first_name.errors }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if signup_settings.last_name_mode != "HIDDEN" %}
+          <div class="bp-form-group" style="margin-bottom:0;">
+            <label class="bp-form-label" for="id_last_name">Last name</label>
+            {{ form.last_name }}
+            {% if form.last_name.errors %}<div class="bp-form-error">{{ form.last_name.errors }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if signup_settings.email_mode != "HIDDEN" %}
+          <div class="bp-form-group" style="margin-bottom:0;">
+            <label class="bp-form-label" for="id_email">Email</label>
+            {{ form.email }}
+            {% if form.email.errors %}<div class="bp-form-error">{{ form.email.errors }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if signup_settings.phone_mode != "HIDDEN" %}
+          <div class="bp-form-group" style="margin-bottom:0;">
+            <label class="bp-form-label" for="id_phone">Phone</label>
+            {{ form.phone }}
+            {% if form.phone.errors %}<div class="bp-form-error">{{ form.phone.errors }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if signup_settings.country_mode != "HIDDEN" %}
+          <div class="bp-form-group" style="margin-bottom:0;">
+            <label class="bp-form-label" for="id_country">Country</label>
+            {{ form.country }}
+            {% if form.country.errors %}<div class="bp-form-error">{{ form.country.errors }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if signup_settings.address_mode != "HIDDEN" %}
+          <div class="bp-form-group" style="margin-bottom:0;">
+            <label class="bp-form-label" for="id_address">Address</label>
+            {{ form.address }}
+            {% if form.address.errors %}<div class="bp-form-error">{{ form.address.errors }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if signup_settings.password_mode != "HIDDEN" %}
+          <div class="bp-form-group" style="margin-bottom:0;">
+            <label class="bp-form-label" for="id_password">Password</label>
+            {{ form.password }}
+            {% if form.password.errors %}<div class="bp-form-error">{{ form.password.errors }}</div>{% endif %}
+          </div>
+          <div class="bp-form-group" style="margin-bottom:0;">
+            <label class="bp-form-label" for="id_confirm_password">Confirm password</label>
+            {{ form.confirm_password }}
+            {% if form.confirm_password.errors %}<div class="bp-form-error">{{ form.confirm_password.errors }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if signup_settings.captcha_enabled %}
+          <div class="bp-form-group" style="margin-bottom:0;">
+            <label for="id_captcha" style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; background: #fafafa; border: 1px solid #eee; padding: 0.875rem 1rem; border-radius: 10px; transition: background 0.2s ease, border-color 0.2s ease; user-select: none;">
+              <input type="checkbox" name="captcha" id="id_captcha" value="on" style="width: 1.25rem; height: 1.25rem; accent-color: var(--bp-primary); cursor: pointer; margin: 0; flex-shrink: 0;" {% if form.captcha.value == 'on' or form.captcha.value == True %}checked{% endif %}>
+              <span style="font-weight: 500; color: var(--bp-text-primary); font-size: 0.9375rem;">I am not a robot</span>
+            </label>
+            {% if form.captcha.errors %}<div class="bp-form-error" style="margin-top: 0.35rem; color: #dc2626;">{{ form.captcha.errors }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        <button type="submit" class="bp-btn bp-btn-primary bp-btn-lg signup-submit-btn">Register Account</button>
+      </form>
+
+      <div style="display: flex; align-items: center; gap: 0.75rem; margin: 1.25rem 0;">
+        <div style="flex: 1; height: 1px; background: var(--bp-border);"></div>
+        <span style="font-size: 0.6875rem; font-weight: 500; color: var(--bp-text-faint); letter-spacing: 0.06em; text-transform: uppercase;">already registered?</span>
+        <div style="flex: 1; height: 1px; background: var(--bp-border);"></div>
+      </div>
+
+      <a href="/user/login/" class="bp-btn bp-btn-secondary signup-secondary-btn">Sign In</a>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/intl-tel-input@23/build/js/intlTelInput.min.js"></script>
+<script>
+  (function () {
+    var phone = document.getElementById("id_phone");
+    var iti = null;
+    if (phone && typeof window.intlTelInput === "function") {
+      iti = window.intlTelInput(phone, {
+        initialCountry: "gb",
+        separateDialCode: true,
+        nationalMode: false,
+        utilsScript: "https://cdn.jsdelivr.net/npm/intl-tel-input@23/build/js/utils.js",
+      });
+    }
+    var countryField = document.getElementById("id_country");
+    if (countryField) {
+      countryField.className = "form-control";
+    }
+    function fallbackCountryList() {
+      return [
+        "Pakistan","United Arab Emirates","Saudi Arabia","United Kingdom","United States","Canada","India","Turkey","Qatar","Kuwait","Bahrain","Australia",
+        "Afghanistan","Albania","Algeria","Andorra","Angola","Argentina","Armenia","Austria","Azerbaijan","Bangladesh","Belgium","Bhutan","Brazil","Bulgaria",
+        "Cambodia","Cameroon","Chile","China","Colombia","Croatia","Cyprus","Czech Republic","Denmark","Egypt","Estonia","Ethiopia","Finland","France",
+        "Georgia","Germany","Ghana","Greece","Hong Kong","Hungary","Indonesia","Iran","Iraq","Ireland","Israel","Italy","Japan","Jordan","Kazakhstan","Kenya",
+        "Lebanon","Libya","Lithuania","Luxembourg","Malaysia","Maldives","Malta","Mexico","Moldova","Monaco","Morocco","Myanmar","Nepal","Netherlands",
+        "New Zealand","Nigeria","Norway","Oman","Philippines","Poland","Portugal","Romania","Russia","Singapore","South Africa","South Korea","Spain",
+        "Sri Lanka","Sweden","Switzerland","Taiwan","Tanzania","Thailand","Tunisia","Ukraine","Uruguay","Uzbekistan","Vietnam","Yemen"
+      ];
+    }
+    function populateCountrySelect() {
+      if (!countryField) return;
+      var selected = countryField.value || "";
+      var countries = [];
+      if (window.intlTelInputGlobals && typeof window.intlTelInputGlobals.getCountryData === "function") {
+        countries = (window.intlTelInputGlobals.getCountryData() || []).map(function (c) {
+          return { name: c.name || "", iso2: (c.iso2 || "").toUpperCase() };
+        });
+      }
+      if (!countries.length) {
+        countries = fallbackCountryList().map(function (name) { return { name: name, iso2: "" }; });
+      }
+      countries = countries.filter(function (c) { return c.name; }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+      countryField.innerHTML = "";
+      var defaultOpt = document.createElement("option");
+      defaultOpt.value = "";
+      defaultOpt.textContent = "Select Country";
+      countryField.appendChild(defaultOpt);
+      countries.forEach(function (country) {
+        var opt = document.createElement("option");
+        var iso = country.iso2 || "";
+        var flag = iso ? iso.replace(/./g, function (ch) { return String.fromCodePoint(127397 + ch.charCodeAt(0)); }) : "";
+        opt.value = country.name;
+        opt.textContent = (flag ? flag + " " : "") + country.name;
+        if (iso) opt.setAttribute("data-iso2", iso.toLowerCase());
+        countryField.appendChild(opt);
+      });
+      if (selected) countryField.value = selected;
+    }
+    function syncCountry() {
+      if (!countryField || !iti) return;
+      try {
+        var d = iti.getSelectedCountryData();
+        if (d && d.name) countryField.value = d.name;
+      } catch (e) {}
+    }
+    if (countryField) {
+      countryField.addEventListener("change", function () {
+        var selected = countryField.options[countryField.selectedIndex];
+        if (!selected) return;
+        var iso2 = selected.getAttribute("data-iso2");
+        if (iso2 && iti) iti.setCountry(iso2);
+      });
+    }
+    populateCountrySelect();
+    if (phone) phone.addEventListener("countrychange", syncCountry);
+    syncCountry();
+    var form = document.getElementById("signupForm");
+    if (form) {
+      form.addEventListener("submit", function () {
+        try {
+          if (!iti) return;
+          var num = iti.getNumber();
+          if (num) phone.value = num;
+        } catch (e) {}
+      });
+    }
+  })();
+</script>
+{% endblock %}

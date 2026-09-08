@@ -1,0 +1,125 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}IB Commission Withdrawals{% endblock %}
+
+{% block admin_content %}
+<div class="bp-page-header bp-s-6">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-money-bill-transfer bp-s-140"></i>IB Commission Withdrawals</h1>
+  </div>
+</div>
+
+<div class="bp-card bp-s-156">
+  <div class="bp-card-header flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <span class="bp-card-header-title"><i class="fa-solid fa-list-ul bp-s-17"></i>Withdrawal Requests</span>
+    <div class="flex flex-wrap sm:flex-nowrap gap-2 w-full sm:w-auto">
+      <a href="?status=pending" class="bp-btn {% if status_filter == 'PENDING' %}bp-btn-primary{% else %}bp-btn-outline{% endif %} bp-btn-sm flex-1 sm:flex-none justify-center">
+        Pending
+      </a>
+      <a href="?status=approved" class="bp-btn {% if status_filter == 'APPROVED' or status_filter == 'COMPLETED' %}bp-btn-primary{% else %}bp-btn-outline{% endif %} bp-btn-sm flex-1 sm:flex-none justify-center">
+        Approved / Completed
+      </a>
+      <a href="?status=rejected" class="bp-btn {% if status_filter == 'REJECTED' %}bp-btn-primary{% else %}bp-btn-outline{% endif %} bp-btn-sm flex-1 sm:flex-none justify-center">
+        Rejected
+      </a>
+    </div>
+  </div>
+  <div class="bp-card-body">
+    <div class="overflow-x-auto w-full">
+      <table class="bp-table min-w-full whitespace-nowrap">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>IB Email</th>
+            <th>Amount</th>
+            <th>Method</th>
+            <th>Requested Date</th>
+            <th>Payout Details</th>
+            <th>User Notes</th>
+            <th>Action / Info</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in page_obj.object_list %}
+            <tr>
+              <td><span class="bp-caption bp-s-105">{{ r.id }}</span></td>
+              <td><strong>{{ r.actor.email }}</strong></td>
+              <td><strong style="color: var(--bp-brand-primary);">${{ r.amount|floatformat:2 }}</strong></td>
+              <td><span class="bp-badge bp-badge-neutral">{{ r.reference }}</span></td>
+              <td><span class="bp-caption">{{ r.created_at|date:"Y-m-d H:i" }}</span></td>
+              <td>
+                <div style="font-family: monospace; font-size: 11px; white-space: pre-wrap; background: var(--bp-muted-bg); padding: 6px; border-radius: 4px; border: 1px solid var(--bp-border);">{{ r.account_details }}</div>
+              </td>
+              <td>{{ r.notes|default:"—" }}</td>
+              <td>
+                {% if r.status == "PENDING" %}
+                  <div class="flex flex-col gap-2 min-w-[150px] w-full">
+                    <!-- Approve Button -->
+                    <form method="post" style="display:inline;">
+                      {% csrf_token %}
+                      <input type="hidden" name="tx_id" value="{{ r.id }}">
+                      <input type="hidden" name="action" value="approve">
+                      <button type="submit" class="bp-btn bp-btn-success bp-btn-xs" style="width: 100%;" onclick="return confirm('Are you sure you want to approve this withdrawal?');">
+                        <i class="fa-solid fa-check"></i> Approve &amp; Pay
+                      </button>
+                    </form>
+
+                    <!-- Reject Form Trigger / Modal Mock -->
+                    <details style="position: relative;">
+                      <summary class="bp-btn bp-btn-danger bp-btn-xs" style="width: 100%; text-align: center; cursor: pointer; list-style: none;">
+                        <i class="fa-solid fa-xmark"></i> Reject Request
+                      </summary>
+                      <div style="margin-top: 8px; border: 1px solid var(--bp-border); padding: 8px; border-radius: 6px; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); z-index: 10;">
+                        <form method="post">
+                          {% csrf_token %}
+                          <input type="hidden" name="tx_id" value="{{ r.id }}">
+                          <input type="hidden" name="action" value="reject">
+                          <label class="bp-form-label" style="font-size: 10px; margin-bottom: 4px; display:block;">Rejection Reason:</label>
+                          <input name="reject_reason" class="bp-input" style="height: 28px; font-size: 11px; margin-bottom: 8px;" placeholder="Optional reason..." required>
+                          <button type="submit" class="bp-btn bp-btn-danger bp-btn-xs" style="width: 100%;">
+                            Confirm Reject
+                          </button>
+                        </form>
+                      </div>
+                    </details>
+                  </div>
+                {% elif r.status == "COMPLETED" or r.status == "APPROVED" %}
+                  <span class="bp-badge bp-badge-success"><i class="fa-solid fa-circle-check"></i> Completed</span>
+                  <div class="bp-caption mt-1">Processed by: {{ r.processed_by.email }}</div>
+                {% elif r.status == "REJECTED" %}
+                  <span class="bp-badge bp-badge-error"><i class="fa-solid fa-circle-xmark"></i> Rejected</span>
+                  <div class="bp-caption mt-1" style="color:#e11d48;">Reason: {{ r.reject_reason|default:"—" }}</div>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8" style="text-align: center; padding: 24px; color: var(--bp-text-muted);">
+                <i class="fa-solid fa-inbox" style="font-size: 24px; display: block; margin-bottom: 8px;"></i>
+                No withdrawal requests found.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="bp-pagination bp-s-177">
+      {% if page_obj.has_previous %}
+        <a class="bp-page-btn" href="?page={{ page_obj.previous_page_number }}&status={{ status_filter|lower }}">
+          <i class="fa-solid fa-chevron-left"></i> Previous
+        </a>
+      {% endif %}
+      <span class="bp-page-btn bp-page-btn--active">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+        <a class="bp-page-btn" href="?page={{ page_obj.next_page_number }}&status={{ status_filter|lower }}">
+          Next <i class="fa-solid fa-chevron-right"></i>
+        </a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

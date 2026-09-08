@@ -1,0 +1,175 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}History Report{% endblock %}
+{% block admin_content %}
+
+<div class="bp-page-header bp-s-6 flex items-start justify-between gap-4">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-clock-rotate-left bp-s-17"></i>History Report</h1>
+    <p class="bp-page-subtitle">Transaction and trade history log with filters</p>
+  </div>
+  <a href="{% url 'admin-reports-dashboard' %}" class="bp-btn bp-btn-outline h-9 w-9 p-0 flex items-center justify-center shrink-0 mt-1" title="Back to Reports Dashboard">
+    <i class="fa-solid fa-arrow-left"></i>
+  </a>
+</div>
+
+<!-- Filters -->
+<div
+  class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-3 sm:p-4 mb-4 shadow-sm overflow-hidden">
+  <form method="get" class="flex flex-wrap items-center gap-3 w-full text-sm">
+    <input name="account" value="{{ filters.account }}"
+      class="w-[180px] sm:w-[220px] h-10 px-4 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors text-slate-900 dark:text-white placeholder:text-slate-400"
+      placeholder="Enter MT5 ID">
+
+    <input type="date" name="from" value="{{ filters.from }}"
+      class="w-[140px] h-10 px-3 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors text-slate-700 dark:text-slate-300"
+      title="From Date">
+    <span class="text-slate-400 text-xs font-semibold uppercase">To</span>
+    <input type="date" name="to" value="{{ filters.to }}"
+      class="w-[140px] h-10 px-3 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors text-slate-700 dark:text-slate-300"
+      title="To Date">
+
+    <input name="q" value="{{ filters.q }}"
+      class="w-[180px] sm:w-[220px] h-10 px-4 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors text-slate-900 dark:text-white placeholder:text-slate-400"
+      placeholder="Search...">
+
+    <div class="flex items-center gap-2">
+      <button type="submit"
+        class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all h-[38px] px-6 font-semibold">
+        Search & Apply
+      </button>
+      <a href="?type={{ req_type }}"
+        class="bp-btn bp-btn-outline text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 h-[38px] px-6 font-semibold transition-colors">
+        Reset
+      </a>
+    </div>
+  </form>
+</div>
+
+<!-- Summary KPIs -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <div
+    class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+    <div class="w-12 h-12 rounded-lg flex items-center justify-center shrink-0"
+      style="background: #f0fdf4; color: #22c55e;">
+      <i class="fa-solid fa-arrow-down text-xl"></i>
+    </div>
+    <div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ summary.deposit }}</div>
+      <div class="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">Deposit</div>
+    </div>
+  </div>
+
+  <div
+    class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+    <div class="w-12 h-12 rounded-lg flex items-center justify-center shrink-0"
+      style="background: #fff1f2; color: #f43f5e;">
+      <i class="fa-solid fa-arrow-up text-xl"></i>
+    </div>
+    <div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ summary.withdrawal }}</div>
+      <div class="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">Withdrawal</div>
+    </div>
+  </div>
+
+  <div
+    class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+    <div class="w-12 h-12 rounded-lg flex items-center justify-center shrink-0"
+      style="background: #fffbeb; color: #f59e0b;">
+      <i class="fa-solid fa-arrows-rotate text-xl"></i>
+    </div>
+    <div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ summary.swap }}</div>
+      <div class="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">Swap</div>
+    </div>
+  </div>
+
+  <div
+    class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+    <div class="w-12 h-12 rounded-lg flex items-center justify-center shrink-0"
+      style="background: #eff6ff; color: #3b82f6;">
+      <i class="fa-solid fa-percent text-xl"></i>
+    </div>
+    <div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ summary.commission|floatformat:2 }}</div>
+      <div class="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">Commission</div>
+    </div>
+  </div>
+</div>
+
+<!-- History Table -->
+<div
+  class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden mb-6">
+  <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+    <h2 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+      <i class="fa-solid fa-table-list"></i> Transaction History
+    </h2>
+  </div>
+  <div class="overflow-x-auto w-full">
+    <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+      <thead>
+        <tr
+          class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+          <th class="py-3 px-4 font-semibold">Login</th>
+          <th class="py-3 px-4 font-semibold">Date</th>
+          <th class="py-3 px-4 font-semibold">Ticket</th>
+          <th class="py-3 px-4 font-semibold">Symbol</th>
+          <th class="py-3 px-4 font-semibold">Price</th>
+          <th class="py-3 px-4 font-semibold">Profit</th>
+          <th class="py-3 px-4 font-semibold">Volume</th>
+          <th class="py-3 px-4 font-semibold">Commission</th>
+          <th class="py-3 px-4 font-semibold">Expert Position ID</th>
+          <th class="py-3 px-4 font-semibold">Entry</th>
+          <th class="py-3 px-4 font-semibold">Action</th>
+          <th class="py-3 px-4 font-semibold">Comment</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in page_obj.object_list %}
+        <tr
+          class="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+          <td class="py-3 px-4">{{ t.reference|default:"-" }}</td>
+          <td class="py-3 px-4">{{ t.created_at|date:"Y-m-d H:i" }}</td>
+          <td class="py-3 px-4">{{ t.id }}</td>
+          <td class="py-3 px-4">-</td>
+          <td class="py-3 px-4">{{ t.amount }}</td>
+          <td class="py-3 px-4">
+            {% if t.amount >= 0 %}
+            <span class="text-emerald-500 font-bold">{{ t.amount }}</span>
+            {% else %}
+            <span class="text-rose-500 font-bold">{{ t.amount }}</span>
+            {% endif %}
+          </td>
+          <td class="py-3 px-4">1.00</td>
+          <td class="py-3 px-4">0.00</td>
+          <td class="py-3 px-4">-</td>
+          <td class="py-3 px-4">-</td>
+          <td class="py-3 px-4">
+            {% if t.tx_type == "CLIENT_DEPOSIT" %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">{{ t.get_tx_type_display|default:t.tx_type }}</span>
+            {% elif t.tx_type == "CLIENT_WITHDRAW" %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800/50">{{ t.get_tx_type_display|default:t.tx_type }}</span>
+            {% else %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50">{{ t.get_tx_type_display|default:t.tx_type }}</span>
+            {% endif %}
+          </td>
+          <td class="py-3 px-4">{{ t.notes|default:"-" }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td class="py-12 text-center text-slate-500 dark:text-slate-400" colspan="12">
+            <div class="flex flex-col items-center justify-center gap-2">
+              <div
+                class="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                <i class="fa-solid fa-inbox text-xl"></i>
+              </div>
+              <p>No history records found.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

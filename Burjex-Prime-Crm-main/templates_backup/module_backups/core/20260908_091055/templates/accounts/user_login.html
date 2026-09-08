@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sign in - {{ crm_company_name|default:branding.company_name|default:"Burjex Prime" }}{% endblock %}
+
+{% block head_extra %}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/login.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}" />
+  <style>
+    .user-market-auth {
+      --auth-brand: {{ crm_portal_theme.light_primary_color|default:crm_primary_color|default:branding.primary_color|default:'#0B3C5D' }};
+      --auth-brand-dark: {{ crm_portal_theme.dark_primary_color|default:crm_secondary_color|default:branding.secondary_color|default:'#072A42' }};
+      --auth-button: {{ crm_portal_theme.button_color|default:login_button_color|default:branding.button_color|default:crm_primary_color|default:'#0B3C5D' }};
+      --auth-muted: {{ crm_portal_theme.light_primary_color|default:crm_primary_color|default:branding.primary_color|default:'#49667c' }};
+      --bp-primary: var(--auth-button);
+      --bp-primary-hover: var(--auth-button);
+      --bp-border-focus: var(--auth-brand);
+      min-height: 100dvh;
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(380px, 480px);
+      align-items: center;
+      gap: clamp(2rem, 6vw, 5rem);
+      padding: clamp(1.25rem, 4vw, 4rem);
+      background: linear-gradient(180deg, #f8fbfd 0%, #e8f0f6 100%);
+      background-size: cover;
+      background-position: center;
+      font-family: {{ branding.font_style|default:'var(--bp-font)' }};
+    }
+
+    .user-market-brand,
+    .user-market-card {
+      position: relative;
+      z-index: 1;
+    }
+
+    .user-market-brand {
+      justify-self: center;
+      width: min(100%, 560px);
+      text-align: center;
+      color: var(--auth-brand);
+    }
+
+    .user-market-logo-mark {
+      max-width: 220px;
+      height: auto;
+      margin: 0 auto 1.45rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: transparent;
+    }
+
+    .user-market-logo-mark img {
+      max-width: 100%;
+      max-height: 80px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      padding: 0;
+      border-radius: 12px;
+    }
+
+    .user-market-logo-fallback {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .user-market-title {
+      margin: 0;
+      font-size: clamp(1.85rem, 3.4vw, 2.55rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: 0;
+      color: var(--auth-brand);
+    }
+
+    .user-market-subtitle {
+      margin: 1rem auto 0;
+      max-width: 520px;
+      color: var(--auth-muted);
+      opacity: 0.78;
+      font-size: clamp(0.98rem, 1.5vw, 1.14rem);
+      line-height: 1.65;
+    }
+
+    .user-market-card {
+      width: 100%;
+      max-width: 30rem;
+      justify-self: center;
+    }
+
+    .user-auth-card {
+      background: var(--bp-surface);
+      border: 1px solid var(--bp-border);
+      border-radius: var(--bp-radius-xl);
+      box-shadow: var(--bp-shadow-md);
+      padding: 2rem 1.75rem;
+    }
+
+    .user-market-auth .user-auth-link {
+      font-size: var(--bp-text-xs);
+      font-weight: 500;
+      color: var(--auth-brand);
+      text-decoration: none;
+    }
+
+    .user-market-auth .user-auth-link:hover {
+      text-decoration: underline;
+    }
+
+    .user-market-auth .user-auth-submit {
+      width: 100%;
+      height: 52px;
+      font-size: 0.9375rem;
+      letter-spacing: 0;
+      background: var(--auth-button) !important;
+      border-color: var(--auth-button) !important;
+      color: {{ crm_portal_theme.button_text_color|default:'#ffffff' }} !important;
+      box-shadow: var(--bp-shadow-primary);
+    }
+
+    .user-market-auth .user-auth-secondary {
+      width: 100%;
+      height: 48px;
+      font-size: var(--bp-text-sm);
+      color: var(--auth-brand) !important;
+      border-color: var(--auth-brand) !important;
+      background: var(--bp-surface) !important;
+    }
+
+    .user-market-auth .bp-input:focus,
+    .user-market-auth input:focus,
+    .user-market-auth textarea:focus,
+    .user-market-auth select:focus {
+      border-color: var(--auth-brand) !important;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--auth-brand) 18%, transparent), var(--bp-shadow-xs) !important;
+    }
+
+    @supports not (color: color-mix(in srgb, #000, transparent)) {
+      .user-market-auth .bp-input:focus,
+      .user-market-auth input:focus,
+      .user-market-auth textarea:focus,
+      .user-market-auth select:focus {
+        box-shadow: 0 0 0 3px rgba(11, 60, 93, 0.12), var(--bp-shadow-xs) !important;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .user-market-auth {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: 1.35rem;
+        padding: 2rem 1rem;
+        background: linear-gradient(180deg, #f8fbfd 0%, #eef4f8 100%);
+      }
+
+      .user-market-brand {
+        padding-top: 0.35rem;
+      }
+
+      .user-market-logo-mark {
+        max-width: 180px;
+        margin-bottom: 1rem;
+      }
+      
+      .user-market-logo-mark img {
+        max-height: 65px;
+      }
+
+      .user-market-title {
+        font-size: clamp(1.55rem, 6.8vw, 2rem);
+      }
+
+      .user-market-subtitle {
+        margin-top: 0.65rem;
+        font-size: 0.94rem;
+        line-height: 1.5;
+      }
+
+      .user-market-card {
+        max-width: 24rem;
+      }
+    }
+
+    @media (max-width: 390px) {
+      .user-market-auth {
+        padding: 1.25rem 0.75rem;
+      }
+
+      .user-auth-card {
+        padding: 1.4rem 1.1rem;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="user-market-auth">
+  <section class="user-market-brand" aria-label="Login welcome">
+    <div class="user-market-logo-mark">
+      {% if login_logo_url %}
+        <img src="{{ login_logo_url }}" alt="{{ crm_company_name|default:branding.company_name|default:'Company' }} logo" />
+      {% elif crm_user_login_logo_url %}
+        <img src="{{ crm_user_login_logo_url }}" alt="{{ crm_company_name|default:branding.company_name|default:'Company' }} logo" />
+      {% elif brand_logo_url %}
+        <img src="{{ brand_logo_url }}" alt="{{ crm_company_name|default:branding.company_name|default:'Company' }} logo" />
+      {% else %}
+        <span class="user-market-logo-fallback"></span>
+      {% endif %}
+    </div>
+    <h1 class="user-market-title">
+      Welcome to<br />{{ crm_company_name|default:branding.company_name|default:"Burjex Prime" }}!
+    </h1>
+
+  </section>
+
+  <main class="user-market-card">
+    <div class="user-auth-card">
+      <div style="text-align: center; margin-bottom: 1.75rem;">
+        <h2 style="font-size: 1.5rem; font-weight: 700; color: var(--bp-text); letter-spacing: 0; line-height: 1.2; margin: 0 0 0.375rem;">Sign In</h2>
+      </div>
+
+      {% if messages %}
+        <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem;">
+          {% for message in messages %}
+            <div class="bp-alert bp-alert-info" role="alert">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="post" style="display: flex; flex-direction: column; gap: 1rem;">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+          <div class="bp-alert bp-alert-error" role="alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="bp-form-group" style="margin-bottom: 0;">
+          <label class="bp-form-label" for="id_username">Email</label>
+          <input id="id_username" name="username" type="text" class="bp-input" style="height: 44px; border-radius: var(--bp-radius-lg);" placeholder="m@example.com" required autocomplete="username" autofocus />
+          {% if form.username.errors %}
+            <div class="bp-form-error">{{ form.username.errors }}</div>
+          {% endif %}
+        </div>
+
+        <div class="bp-form-group" style="margin-bottom: 0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.35rem;">
+            <label class="bp-form-label" for="id_password" style="margin-bottom:0;">Password</label>
+            <a href="/forgot-password" class="user-auth-link">Forgot password?</a>
+          </div>
+          <div style="position: relative;">
+            <input id="id_password" name="password" type="password" class="bp-input" style="height: 44px; border-radius: var(--bp-radius-lg); padding-right: 3.5rem;" placeholder="Password" required autocomplete="current-password" />
+            <button type="button" onclick="togglePass()" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); font-size: 0.75rem; font-weight: 600; color: var(--bp-text-muted); background: none; border: none; cursor: pointer; padding: 0.25rem;">Show</button>
+          </div>
+          {% if form.password.errors %}
+            <div class="bp-form-error">{{ form.password.errors }}</div>
+          {% endif %}
+        </div>
+
+        {% if form.captcha %}
+          <div class="bp-form-group" style="margin-bottom:0;">
+            <label class="bp-form-label" style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; background: #fafafa; border: 1px solid #eee; padding: 0.875rem 1rem; border-radius: 10px; transition: background 0.2s ease, border-color 0.2s ease;">
+              <input type="checkbox" name="captcha" id="id_captcha" style="width: 1.25rem; height: 1.25rem; accent-color: var(--bp-primary); cursor: pointer; margin: 0;" {% if form.captcha.value %}checked{% endif %} required>
+              <span style="font-weight: 500; color: var(--bp-text-primary); font-size: 0.9375rem; user-select: none;">I am not a robot</span>
+            </label>
+            {% if form.captcha.errors %}<div class="bp-form-error" style="margin-top: 0.35rem;">{{ form.captcha.errors }}</div>{% endif %}
+          </div>
+        {% endif %}
+
+        <button type="submit" class="bp-btn bp-btn-primary bp-btn-lg user-auth-submit">Login</button>
+      </form>
+
+      <div style="display: flex; align-items: center; gap: 0.75rem; margin: 1.25rem 0;">
+        <div style="flex: 1; height: 1px; background: var(--bp-border);"></div>
+        <span style="font-size: 0.6875rem; font-weight: 500; color: var(--bp-text-faint); letter-spacing: 0.06em; text-transform: uppercase;">new here?</span>
+        <div style="flex: 1; height: 1px; background: var(--bp-border);"></div>
+      </div>
+
+      <a href="/signup" class="bp-btn bp-btn-secondary user-auth-secondary">Create Account</a>
+
+      {% if email_verification_enabled and pending_verify_email %}
+        <form method="post" action="/resend-verification/" style="margin-top:0.75rem;">
+          {% csrf_token %}
+          <input type="hidden" name="email" value="{{ pending_verify_email }}" />
+          <button type="submit" class="bp-btn bp-btn-ghost" style="width:100%;height:38px;font-size:var(--bp-text-xs);">Resend verification email</button>
+        </form>
+      {% endif %}
+    </div>
+  </main>
+</div>
+
+<script>
+function togglePass() {
+  var el = document.getElementById("id_password");
+  var btn = el ? el.parentNode.querySelector("button[type='button']") : null;
+  if (!el) return;
+  var isHidden = el.type === "password";
+  el.type = isHidden ? "text" : "password";
+  if (btn) btn.textContent = isHidden ? "Hide" : "Show";
+}
+
+document.querySelectorAll("form").forEach(function (f) {
+  f.addEventListener("submit", function () {
+    var btn = f.querySelector("button[type='submit']");
+    if (!btn) return;
+    btn.disabled = true;
+    btn.dataset.originalText = btn.textContent;
+    btn.textContent = "Please wait...";
+    btn.style.opacity = "0.7";
+    btn.style.cursor = "not-allowed";
+  });
+});
+</script>
+{% endblock %}

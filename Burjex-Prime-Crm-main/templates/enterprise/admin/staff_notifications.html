@@ -1,0 +1,57 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Staff Alerts{% endblock %}
+{% block admin_content %}
+<div class="staff-alerts-page">
+
+<div class="bp-page-header">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-bell me-2"></i>Staff Alerts</h1>
+    <p class="bp-page-subtitle">Internal notifications and system alerts for staff members</p>
+  </div>
+</div>
+
+<div class="bp-card">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title"><i class="fa-solid fa-inbox me-2"></i>Notifications</span>
+  </div>
+  <div class="bp-card-body" style="padding:0;">
+    {% for n in notes %}
+    <div style="padding:1.25rem 1.5rem; border-bottom:1px solid var(--bp-border); display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:1rem;">
+      <div style="flex:1; min-width:0;">
+        <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.25rem;">
+          <span style="font-weight:600; color:var(--bp-text); font-size:0.95rem;">{{ n.title }}</span>
+          {% if not n.read_at %}
+          <span class="bp-badge bp-badge-info">Unread</span>
+          {% else %}
+          <span class="bp-badge bp-badge-neutral">Read</span>
+          {% endif %}
+        </div>
+        <div style="color:var(--bp-text); opacity:0.75; font-size:0.875rem; margin-bottom:0.5rem; line-height:1.6;">{{ n.body|linebreaksbr }}</div>
+        <div style="font-size:0.75rem; color:var(--bp-text); opacity:0.5;">
+          <i class="fa-solid fa-clock me-1"></i>{{ n.created_at|date:"Y-m-d H:i" }}
+          {% if n.read_at %}
+          &nbsp;&middot;&nbsp;<i class="fa-solid fa-check-double me-1"></i>Read {{ n.read_at|date:"Y-m-d H:i" }}
+          {% endif %}
+        </div>
+      </div>
+      {% if not n.read_at %}
+      <form method="post" style="flex-shrink:0;">
+        {% csrf_token %}
+        <input type="hidden" name="notification_id" value="{{ n.id }}">
+        <button type="submit" class="bp-btn bp-btn-primary bp-btn-sm">
+          <i class="fa-solid fa-check me-1"></i>Mark Read
+        </button>
+      </form>
+      {% endif %}
+    </div>
+    {% empty %}
+    <div style="padding:3rem 1.5rem; text-align:center; color:var(--bp-text); opacity:0.5;">
+      <i class="fa-solid fa-bell-slash" style="font-size:2rem; margin-bottom:0.75rem; display:block;"></i>
+      <span style="font-size:0.9rem;">No notifications at this time.</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+</div>
+{% endblock %}

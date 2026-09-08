@@ -1,0 +1,462 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit{% else %}New{% endif %} Notification Template
+{% endblock %}
+
+{% block admin_content %}
+
+<div class="max-w-7xl mx-auto space-y-6">
+
+    <!-- Header -->
+    <div class="flex items-start gap-4">
+
+        <a href="{% url 'admin-notification-templates' %}"
+            class="mt-1 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm hover:text-slate-800">
+
+            <i class="fa-solid fa-arrow-left text-sm"></i>
+
+        </a>
+
+        <div>
+            <h1 class="text-xl font-semibold text-slate-900">
+                {% if is_edit %}Edit Template{% else %}New Notification Template{% endif %}
+            </h1>
+
+            <p class="mt-1 text-sm text-slate-500">
+                Create dynamic email templates for CRM notifications.
+            </p>
+        </div>
+
+    </div>
+
+    <!-- Form -->
+    <form method="post" class="space-y-5">
+
+        {% csrf_token %}
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+
+            <!-- Top Fields -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <!-- Template Name -->
+                <div>
+                    <label class="mb-1.5 block text-sm font-medium text-slate-700">
+                        Template Name <span class="text-rose-500">*</span>
+                    </label>
+
+                    <input
+                        type="text"
+                        name="name"
+                        value="{{ tpl.name|default:'' }}"
+                        required
+                        maxlength="120"
+                        placeholder="e.g. Welcome Email"
+                        class="h-11 w-full rounded-xl border border-slate-300 px-4 text-sm focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/20">
+                </div>
+
+                <!-- Event Key -->
+                <div>
+                    <label class="mb-1.5 block text-sm font-medium text-slate-700">
+                        Event Key <span class="text-rose-500">*</span>
+                    </label>
+
+                    <select
+                        name="event_key"
+                        id="event_key"
+                        required
+                        class="h-11 w-full rounded-xl border border-slate-300 px-4 text-sm font-mono focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/20">
+
+                        <option value="" disabled {% if not tpl %}selected{% endif %}>
+                            Select event key
+                        </option>
+
+                        <optgroup label="Authentication Emails">
+                            <option value="welcome_email" {% if tpl.event_key == "welcome_email" %}selected{% endif %}>welcome_email</option>
+                            <option value="email_verification" {% if tpl.event_key == "email_verification" %}selected{% endif %}>email_verification</option>
+                            <option value="otp_verification" {% if tpl.event_key == "otp_verification" %}selected{% endif %}>otp_verification</option>
+                            <option value="forgot_password" {% if tpl.event_key == "forgot_password" %}selected{% endif %}>forgot_password</option>
+                            <option value="password_reset" {% if tpl.event_key == "password_reset" %}selected{% endif %}>password_reset</option>
+                            <option value="login_alert" {% if tpl.event_key == "login_alert" %}selected{% endif %}>login_alert</option>
+                        </optgroup>
+
+                        <optgroup label="CRM & Trading Emails">
+                            <option value="deposit_confirmation" {% if tpl.event_key == "deposit_confirmation" %}selected{% endif %}>deposit_confirmation</option>
+                            <option value="withdrawal_confirmation" {% if tpl.event_key == "withdrawal_confirmation" %}selected{% endif %}>withdrawal_confirmation</option>
+                            <option value="kyc_approved" {% if tpl.event_key == "kyc_approved" %}selected{% endif %}>kyc_approved</option>
+                            <option value="kyc_rejected" {% if tpl.event_key == "kyc_rejected" %}selected{% endif %}>kyc_rejected</option>
+                            <option value="internal_transfer_confirmation" {% if tpl.event_key == "internal_transfer_confirmation" %}selected{% endif %}>internal_transfer_confirmation</option>
+                            <option value="trading_notifications" {% if tpl.event_key == "trading_notifications" %}selected{% endif %}>trading_notifications</option>
+                        </optgroup>
+
+                        <optgroup label="Support Emails">
+                            <option value="ticket_created" {% if tpl.event_key == "ticket_created" %}selected{% endif %}>ticket_created</option>
+                            <option value="ticket_reply" {% if tpl.event_key == "ticket_reply" %}selected{% endif %}>ticket_reply</option>
+                            <option value="ticket_status_updated" {% if tpl.event_key == "ticket_status_updated" %}selected{% endif %}>ticket_status_updated</option>
+                            <option value="ticket_closed" {% if tpl.event_key == "ticket_closed" %}selected{% endif %}>ticket_closed</option>
+                        </optgroup>
+
+                        <optgroup label="IB & Partner Emails">
+                            <option value="ib_registration" {% if tpl.event_key == "ib_registration" %}selected{% endif %}>ib_registration</option>
+                            <option value="ib_request_approved" {% if tpl.event_key == "ib_request_approved" %}selected{% endif %}>ib_request_approved</option>
+                            <option value="ib_request_rejected" {% if tpl.event_key == "ib_request_rejected" %}selected{% endif %}>ib_request_rejected</option>
+                        </optgroup>
+
+                        <optgroup label="Marketing Emails">
+                            <option value="promotion_email" {% if tpl.event_key == "promotion_email" %}selected{% endif %}>promotion_email</option>
+                            <option value="campaign_email" {% if tpl.event_key == "campaign_email" %}selected{% endif %}>campaign_email</option>
+                            <option value="market_update" {% if tpl.event_key == "market_update" %}selected{% endif %}>market_update</option>
+                            <option value="webinar_invitation" {% if tpl.event_key == "webinar_invitation" %}selected{% endif %}>webinar_invitation</option>
+                        </optgroup>
+
+                    </select>
+                </div>
+
+                <!-- Subject -->
+                <div>
+                    <label class="mb-1.5 block text-sm font-medium text-slate-700">
+                        Subject Line
+                    </label>
+
+                    <input
+                        type="text"
+                        name="subject"
+                        value="{{ tpl.subject|default:'' }}"
+                        maxlength="255"
+                        placeholder="Welcome to {% templatetag openvariable %}company_name{% templatetag closevariable %}"
+                        class="h-11 w-full rounded-xl border border-slate-300 px-4 text-sm focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/20">
+                </div>
+
+                <!-- Category -->
+                <div>
+                    <label class="mb-1.5 block text-sm font-medium text-slate-700">
+                        Category
+                    </label>
+
+                    <select
+                        name="category"
+                        class="h-11 w-full rounded-xl border border-slate-300 px-4 text-sm focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/20">
+
+                        {% for value, label in categories %}
+                        <option value="{{ value }}" {% if tpl.category == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+
+                    </select>
+                </div>
+
+            </div>
+
+            <!-- Content Grid -->
+            <div id="contentGrid" class="grid grid-cols-1 gap-5">
+
+                <!-- HTML Content -->
+                <div id="htmlBox">
+
+                    <label class="mb-1.5 block text-sm font-medium text-slate-700">
+                        HTML Content
+                    </label>
+
+                    <textarea
+                        name="html_content"
+                        rows="18"
+                        placeholder="<h2>Hello {% templatetag openvariable %}user_name{% templatetag closevariable %}</h2>"
+                        class="w-full rounded-2xl border border-slate-300 px-4 py-4 text-sm font-mono leading-relaxed focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/20">{% if tpl %}{{ tpl.html_content }}{% endif %}</textarea>
+
+                    <p class="mt-1.5 text-xs text-slate-500">
+                        Supports full HTML. Email wrapper layout is applied automatically.
+                    </p>
+
+                </div>
+
+                <!-- Variables -->
+                <div id="variablesBox"
+                    class="hidden rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+
+                    <!-- Header -->
+                    <div class="mb-4 flex items-center justify-between">
+
+                        <div>
+                            <h3 class="text-sm font-semibold text-slate-900">
+                                Available Variables
+                            </h3>
+
+                            <p class="text-xs text-slate-500">
+                                Click icon to copy variable.
+                            </p>
+                        </div>
+
+                        <span id="variableCount"
+                            class="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 shadow-sm">
+                            0
+                        </span>
+
+                    </div>
+
+                    <!-- Variable List -->
+                    <div id="variablesList" class="space-y-2"></div>
+
+                </div>
+
+            </div>
+
+            <!-- Active -->
+            <label class="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+
+                <input
+                    type="checkbox"
+                    name="is_active"
+                    {% if not tpl or tpl.is_active %}checked{% endif %}
+                    class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600">
+
+                Active template
+
+            </label>
+
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex items-center gap-3">
+
+            <button
+                type="submit"
+                class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#082f49]">
+
+                <i class="fa-solid fa-floppy-disk text-xs"></i>
+
+                {% if is_edit %}Save Changes{% else %}Create Template{% endif %}
+
+            </button>
+
+            <a href="{% url 'admin-notification-templates' %}"
+                class="text-sm font-medium text-slate-500 hover:text-slate-800">
+
+                Cancel
+
+            </a>
+
+        </div>
+
+    </form>
+
+</div>
+
+<!-- JS -->
+<script>
+
+    const eventKey = document.getElementById("event_key");
+    const contentGrid = document.getElementById("contentGrid");
+    const variablesBox = document.getElementById("variablesBox");
+    const variablesList = document.getElementById("variablesList");
+    const variableCount = document.getElementById("variableCount");
+
+    const variables = {
+
+        welcome_email: [
+            ["user_name", "Client name"],
+            ["email", "Client email"],
+            ["company_name", "Company name"],
+            ["login_url", "Login URL"]
+        ],
+
+        otp_verification: [
+            ["user_name", "Client name"],
+            ["email", "Client email"],
+            ["otp", "OTP code"]
+        ],
+
+        email_verification: [
+            ["user_name", "Client name"],
+            ["verification_link", "Verification link"]
+        ],
+
+        forgot_password: [
+            ["user_name", "Client name"],
+            ["reset_link", "Reset link"]
+        ],
+
+        password_reset: [
+            ["user_name", "Client name"],
+            ["reset_link", "Reset link"]
+        ],
+
+        login_alert: [
+            ["user_name", "Client name"],
+            ["login_time", "Login time"],
+            ["ip_address", "IP Address"]
+        ],
+
+        deposit_confirmation: [
+            ["user_name", "Client name"],
+            ["amount", "Deposit amount"],
+            ["currency", "Currency"],
+            ["date", "Deposit date"]
+        ],
+
+        withdrawal_confirmation: [
+            ["user_name", "Client name"],
+            ["amount", "Withdrawal amount"],
+            ["currency", "Currency"],
+            ["date", "Withdrawal date"]
+        ],
+
+        ticket_created: [
+            ["ticket_number", "Ticket number"],
+            ["ticket_subject", "Ticket subject"]
+        ],
+
+        ticket_reply: [
+            ["ticket_number", "Ticket number"],
+            ["ticket_subject", "Ticket subject"],
+            ["reply_message", "Reply message"]
+        ],
+
+        ticket_status_updated: [
+            ["ticket_number", "Ticket number"],
+            ["ticket_status", "Ticket status"]
+        ],
+
+        ticket_closed: [
+            ["ticket_number", "Ticket number"],
+            ["ticket_subject", "Ticket subject"]
+        ],
+
+        internal_transfer_confirmation: [
+            ["user_name", "Client name"],
+            ["amount", "Transfer amount"],
+            ["from_account", "From account"],
+            ["to_account", "To account"],
+            ["date", "Date"]
+        ],
+
+        trading_notifications: [
+            ["user_name", "Client name"],
+            ["account_number", "Account number"],
+            ["trading_message", "Trading message"]
+        ],
+
+        ib_registration: [
+            ["user_name", "Client name"],
+            ["ib_status", "IB status"]
+        ],
+
+        ib_request_approved: [
+            ["user_name", "Client name"],
+            ["ib_status", "IB status"],
+            ["ib_reason", "Notes"]
+        ],
+
+        ib_request_rejected: [
+            ["user_name", "Client name"],
+            ["ib_status", "IB status"],
+            ["ib_reason", "Reason"]
+        ],
+
+        promotion_email: [
+            ["user_name", "Client name"],
+            ["promotion_title", "Promotion title"],
+            ["promotion_message", "Message"],
+            ["promotion_link", "Link"]
+        ],
+
+        campaign_email: [
+            ["user_name", "Client name"],
+            ["campaign_name", "Campaign name"],
+            ["campaign_message", "Message"],
+            ["campaign_link", "Link"]
+        ],
+
+        market_update: [
+            ["user_name", "Client name"],
+            ["market_title", "Market title"],
+            ["market_summary", "Summary"]
+        ],
+
+        webinar_invitation: [
+            ["user_name", "Client name"],
+            ["webinar_title", "Webinar title"],
+            ["webinar_date", "Webinar date"],
+            ["webinar_link", "Webinar link"]
+        ]
+    };
+
+    function renderVariables() {
+
+        const items = variables[eventKey.value] || [];
+
+        contentGrid.className = items.length
+            ? "grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-5"
+            : "grid grid-cols-1 gap-5";
+
+        variablesBox.classList.toggle("hidden", !items.length);
+
+        variableCount.innerText = items.length;
+
+        variablesList.innerHTML = items.map(([key, desc]) => `
+{% verbatim %}
+            <div class="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+
+                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600/10 text-indigo-600">
+
+                    <i class="fa-solid fa-code text-xs"></i>
+
+                </div>
+
+                <div class="min-w-0 flex-1">
+
+                    <code class="block truncate text-xs font-semibold text-slate-900">
+                        {{ ${key} }}
+                    </code>
+
+                    <p class="text-[11px] text-slate-500">
+                        ${desc}
+                    </p>
+
+                </div>
+
+                <button
+                    type="button"
+                    data-copy="{{ ${key} }}"
+                    class="copy-btn flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-indigo-600">
+
+                    <i class="fa-regular fa-copy text-xs"></i>
+
+                </button>
+
+            </div>
+{% endverbatim %}
+        `).join("");
+
+        document.querySelectorAll(".copy-btn").forEach((button) => {
+
+            button.onclick = () => {
+
+                navigator.clipboard.writeText(button.dataset.copy);
+
+                button.innerHTML = `
+                    <i class="fa-solid fa-check text-xs text-emerald-600"></i>
+                `;
+
+                setTimeout(() => {
+
+                    button.innerHTML = `
+                        <i class="fa-regular fa-copy text-xs"></i>
+                    `;
+
+                }, 1000);
+
+            };
+
+        });
+
+    }
+
+    eventKey.addEventListener("change", renderVariables);
+
+    renderVariables();
+
+</script>
+
+{% endblock %}

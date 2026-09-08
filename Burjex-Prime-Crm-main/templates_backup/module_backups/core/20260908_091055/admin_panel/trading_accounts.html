@@ -1,0 +1,82 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Trading Accounts{% endblock %}
+
+{% block admin_content %}
+<div class="bp-page-header bp-s-6 flex items-start justify-between gap-4">
+    <div>
+      <h1 class="bp-page-title"><i class="fa-solid fa-users-viewfinder bp-s-140"></i>Trading Accounts</h1>
+      <p class="bp-page-subtitle">Manage client trading accounts, leverage, and currency.</p>
+    </div>
+    <a href="{% url 'admin-reports-dashboard' %}" class="bp-btn bp-btn-outline h-9 w-9 p-0 flex items-center justify-center shrink-0 mt-1" title="Back to Reports Dashboard">
+      <i class="fa-solid fa-arrow-left"></i>
+    </a>
+  </div>
+
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <span class="bp-card-header-title"><i class="fa-solid fa-list me-2"></i>Accounts List</span>
+    </div>
+    <div class="bp-card-body p-0">
+      <div class="overflow-x-auto w-full">
+        <table class="bp-table min-w-full text-sm">
+          <thead>
+            <tr>
+              <th>Account #</th>
+              <th>Client</th>
+              <th>Type</th>
+              <th>Currency</th>
+              <th>Leverage</th>
+              <th>Server</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in rows %}
+              <tr>
+                <td class="font-medium text-indigo-600 dark:text-indigo-400">{{ a.account_number }}</td>
+                <td class="font-bold text-slate-800 dark:text-slate-200">{{ a.user.email }}</td>
+                <td>{{ a.account_type }}</td>
+                <td>{{ a.currency }}</td>
+                <td class="font-mono text-slate-700 dark:text-slate-300">1:{{ a.leverage }}</td>
+                <td>{{ a.server }}</td>
+                <td>
+                  {% if a.status == "ACTIVE" %}
+                    <span class="bp-badge bp-badge-success">Active</span>
+                  {% else %}
+                    <span class="bp-badge bp-badge-error">Disabled</span>
+                  {% endif %}
+                </td>
+                <td class="whitespace-nowrap">
+                  <div class="flex flex-row items-center gap-1.5 flex-nowrap">
+                    <form method="post" class="inline m-0">
+                      {% csrf_token %}
+                      <input type="hidden" name="account_id" value="{{ a.id }}">
+                      <input type="hidden" name="action" value="edit">
+                      <div class="flex flex-row items-center gap-1.5 flex-nowrap">
+                        <input type="text" class="bp-input text-xs" style="width: 64px; min-width: 64px; height: 32px; padding: 4px 8px; flex-shrink: 0;" name="leverage" value="{{ a.leverage }}" placeholder="Lev">
+                        <input type="text" class="bp-input text-xs" style="width: 64px; min-width: 64px; height: 32px; padding: 4px 8px; flex-shrink: 0;" name="currency" value="{{ a.currency }}" placeholder="Curr">
+                        <button type="submit" class="bp-btn bp-btn-outline h-8 px-3 text-sm whitespace-nowrap"><i class="fa-solid fa-pen me-1"></i> Edit</button>
+                      </div>
+                    </form>
+                    <form method="post" class="inline m-0">
+                      {% csrf_token %}
+                      <input type="hidden" name="account_id" value="{{ a.id }}">
+                      <input type="hidden" name="action" value="{% if a.status == 'ACTIVE' %}disable{% else %}enable{% endif %}">
+                      <button type="submit" class="bp-btn bg-slate-600 hover:bg-slate-700 text-white border-0 px-3 py-1 text-xs h-auto shadow-sm">
+                        {% if a.status == "ACTIVE" %}<i class="fa-solid fa-ban me-1"></i> Disable{% else %}<i class="fa-solid fa-check me-1"></i> Enable{% endif %}
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td class="p-8 text-center text-slate-500" colspan="8">No trading accounts found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endblock %}

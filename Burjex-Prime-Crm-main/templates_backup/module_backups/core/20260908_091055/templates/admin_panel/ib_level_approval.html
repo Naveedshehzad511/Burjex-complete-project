@@ -1,0 +1,110 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}IB Level Approval{% endblock %}
+{% block admin_content %}
+<div class="ib-level-approval-page">
+  <div class="bp-page-header bp-s-6">
+    <div>
+      <h1 class="bp-page-title"><i class="fa-solid fa-clipboard-check bp-s-140"></i>Level Upgrade Approval</h1>
+      <p class="bp-page-subtitle">Approve or reject IB progression requests.</p>
+    </div>
+    <a href="{% url 'admin-ib-levels' %}" class="bp-btn bp-btn-outline">
+      <i class="fa-solid fa-layer-group"></i> IB Levels
+    </a>
+  </div>
+
+  <div class="bp-card mb-6">
+    <div class="bp-card-header">
+      <span class="bp-card-header-title"><i class="fa-solid fa-hourglass-half bp-s-17 text-amber-500"></i>Pending Approvals</span>
+    </div>
+    <div class="bp-card-body bp-s-48 p-0">
+      {% if pending %}
+        <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+          {% for r in pending %}
+            <li class="p-5 flex flex-wrap gap-4 justify-between items-start hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+              <div>
+                <div class="font-bold text-slate-900 dark:text-white text-base">{{ r.ib_user.display_name }} <span class="text-slate-500 font-medium text-sm ml-2">{{ r.ib_user.email }}</span></div>
+                <div class="text-sm text-slate-600 dark:text-slate-400 mt-2 flex items-center gap-2">
+                  <span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md font-medium">{% if r.from_level %}{{ r.from_level.name }}{% else %}None{% endif %}</span>
+                  <i class="fa-solid fa-arrow-right text-slate-400"></i> 
+                  <span class="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-md font-bold">{{ r.to_level.name }}</span>
+                </div>
+                <div class="text-xs text-slate-400 mt-2"><i class="fa-regular fa-clock me-1"></i> Requested {{ r.created_at }}</div>
+              </div>
+              <div class="flex flex-wrap gap-3 items-center">
+                <form method="post" class="m-0">{% csrf_token %}
+                  <input type="hidden" name="request_id" value="{{ r.id }}">
+                  <input type="hidden" name="action" value="approve">
+                  <button type="submit" class="bp-btn bp-btn-primary bg-emerald-500 hover:bg-emerald-600 border-0 text-white shadow-sm hover:shadow-md">
+                    <i class="fa-solid fa-check me-1"></i> Approve
+                  </button>
+                </form>
+                <form method="post" class="flex gap-2 items-center m-0">{% csrf_token %}
+                  <input type="hidden" name="request_id" value="{{ r.id }}">
+                  <input type="hidden" name="action" value="reject">
+                  <input name="notes" placeholder="Reason (optional)" class="bp-input w-48 h-[38px]">
+                  <button type="submit" class="bp-btn bp-btn-danger text-white shadow-sm hover:shadow-md">
+                    <i class="fa-solid fa-xmark me-1"></i> Reject
+                  </button>
+                </form>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="p-10 flex flex-col items-center justify-center text-center">
+          <div class="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center text-slate-300 dark:text-slate-600 mb-4">
+            <i class="fa-solid fa-check-double text-2xl"></i>
+          </div>
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-1">All caught up!</h3>
+          <p class="text-xs text-slate-500">No pending approvals at the moment.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <span class="bp-card-header-title"><i class="fa-solid fa-clock-rotate-left bp-s-17"></i>Recent Decisions</span>
+    </div>
+    <div class="bp-card-body bp-s-48">
+      <div class="overflow-x-auto w-full">
+        <table class="bp-table min-w-full whitespace-nowrap">
+          <thead>
+            <tr>
+              <th>IB User</th>
+              <th>Level Change</th>
+              <th>Status</th>
+              <th>Processed At</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in recent %}
+              <tr>
+                <td><strong>{{ r.ib_user.email }}</strong></td>
+                <td>
+                  <span class="text-slate-500">{% if r.from_level %}{{ r.from_level.name }}{% else %}—{% endif %}</span> 
+                  <i class="fa-solid fa-arrow-right mx-1 text-slate-400 text-[10px]"></i> 
+                  <span class="font-bold text-slate-800 dark:text-slate-200">{{ r.to_level.name }}</span>
+                </td>
+                <td>
+                  {% if r.status == 'APPROVED' %}
+                    <span class="bp-badge bp-badge-success">{{ r.status }}</span>
+                  {% elif r.status == 'REJECTED' %}
+                    <span class="bp-badge bp-badge-danger">{{ r.status }}</span>
+                  {% else %}
+                    <span class="bp-badge bp-badge-neutral">{{ r.status }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-slate-500">{{ r.processed_at|default:"—" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-center p-8 text-slate-500 text-sm">No history yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

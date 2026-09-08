@@ -1,0 +1,61 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Withdrawals — {{ crm_company_name|default:"CRM" }}{% endblock %}
+
+{% block admin_shell_header_title %}
+<div>
+  <h1 class="bp-topbar-title">Withdrawals</h1>
+  <p class="bp-topbar-subtitle">Approved and rejected withdrawal requests</p>
+</div>
+{% endblock %}
+
+{% block admin_content %}
+<div class="bp-s-68">
+
+  <!-- Period tabs -->
+  <div class="bp-tabs bp-s-69">
+    <a href="?period=all"   class="bp-tab {% if period == 'all' %}active{% endif %}">All Time</a>
+    <a href="?period=today" class="bp-tab {% if period == 'today' %}active{% endif %}">Today</a>
+    <a href="?period=week"  class="bp-tab {% if period == 'week' %}active{% endif %}">Last 7 Days</a>
+  </div>
+
+  {% if period == 'today' %}
+  <p class="bp-caption bp-s-70">Showing results for: <strong>{{ today }}</strong></p>
+  {% elif period == 'week' %}
+  <p class="bp-caption bp-s-70">Date range: <strong>{{ week_from }}</strong> — <strong>{{ today }}</strong></p>
+  {% endif %}
+
+  <!-- Action cards -->
+  <div class="bp-grid-2">
+    <a href="{{ approved_url }}" class="bp-kpi-card bp-kpi-card--clickable bp-kpi-card--success bp-s-71">
+      <div class="bp-s-72">
+        <div class="bp-kpi-icon-wrap bp-s-73">
+          <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+        </div>
+        <div>
+          <p class="bp-label">Approved / Completed</p>
+          <p class="bp-small bp-s-74">Search, filter, paginate, export</p>
+        </div>
+      </div>
+      <div class="bp-s-75">
+        Open report <i class="fa-solid fa-arrow-right fa-xs" aria-hidden="true"></i>
+      </div>
+    </a>
+
+    <a href="{{ rejected_url }}" class="bp-kpi-card bp-kpi-card--clickable bp-kpi-card--error bp-s-71">
+      <div class="bp-s-72">
+        <div class="bp-kpi-icon-wrap bp-s-76">
+          <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i>
+        </div>
+        <div>
+          <p class="bp-label">Rejected</p>
+          <p class="bp-small bp-s-74">Search, filter, paginate, export</p>
+        </div>
+      </div>
+      <div class="bp-s-77">
+        Open report <i class="fa-solid fa-arrow-right fa-xs" aria-hidden="true"></i>
+      </div>
+    </a>
+  </div>
+
+</div>
+{% endblock %}

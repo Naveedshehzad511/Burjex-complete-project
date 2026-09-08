@@ -1,0 +1,866 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}{{ u.display_name }}{% endblock %}
+{% block um_subtitle %}<p class="text-xs text-slate-500 dark:text-slate-400 mt-1">User Control Panel</p>{% endblock %}
+
+{% block um_breadcrumb_extra %}
+  <span class="mx-2 text-slate-300 dark:text-slate-600">/</span>
+  <span class="text-slate-900 dark:text-white font-medium">{{ u.display_name }}</span>
+{% endblock %}
+
+{% block um_actions %}
+  <a href="{% url 'admin-user-list' %}" class="h-9 px-4 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"><i class="fa-solid fa-arrow-left"></i> Back to list</a>
+{% endblock %}
+
+{% block um_body %}
+
+  <!-- ── Action toolbar ── -->
+  <div class="relative z-10 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3 sm:p-4 flex flex-wrap items-center gap-4 mb-6 rounded-xl shadow-sm">
+    <div class="hidden sm:flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 mr-2">
+      <i class="fa-solid fa-bolt text-lg"></i>
+    </div>
+    <a href="{% url 'admin-change-mt5-password' %}" class="h-10 px-5 rounded-lg text-white text-sm font-semibold shadow-sm transition-all flex items-center gap-2 btn-gradient border-0 whitespace-nowrap cursor-pointer"><i class="fa-solid fa-key"></i> Change MT5 Password</a>
+    <button type="button" onclick="document.getElementById('user-settings-panel').classList.toggle('hidden')" class="relative z-10 h-10 px-5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"><i class="fa-solid fa-gear"></i> User Settings</button>
+    <a href="{% url 'admin-user-edit' u.pk %}" class="h-10 px-5 rounded-lg text-white text-sm font-semibold shadow-sm transition-all flex items-center gap-2 btn-gradient border-0 whitespace-nowrap cursor-pointer"><i class="fa-solid fa-user-pen"></i> Edit Profile</a>
+  </div>
+
+  <!-- ── User Settings Panel (Inline) ── -->
+  <div id="user-settings-panel" class="hidden relative z-10 mb-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+      <h3 class="font-bold text-lg text-slate-900 dark:text-white"><i class="fa-solid fa-gear text-slate-400 mr-2"></i>User Settings &amp; Restrictions</h3>
+    </div>
+    <form class="p-6 space-y-4" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="user_settings_save" />
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable login</span><input type="checkbox" name="disable_login" {% if not u.is_active %}checked{% endif %} /></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable client area message</span><input type="checkbox" name="disable_client_area" {% if restriction.disable_client_area %}checked{% endif %} /></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable deposit</span><input type="checkbox" name="disable_deposit" {% if restriction.disable_deposit %}checked{% endif %} /></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable withdraw</span><input type="checkbox" name="disable_withdraw" {% if restriction.disable_withdraw %}checked{% endif %} /></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable transfer</span><input type="checkbox" name="disable_transfer" {% if restriction.disable_transfer %}checked{% endif %} /></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable internal transfer</span><input type="checkbox" name="disable_internal_transfer" {% if restriction.disable_internal_transfer %}checked{% endif %} /></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable wallet to MT5</span><input type="checkbox" name="disable_wallet_to_mt5" {% if restriction.disable_wallet_to_mt5 %}checked{% endif %} /></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable MT5 to wallet</span><input type="checkbox" name="disable_mt5_to_wallet" {% if restriction.disable_mt5_to_wallet %}checked{% endif %} /></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable IB withdraw</span><input type="checkbox" name="disable_ib_withdraw" {% if restriction.disable_ib_withdraw %}checked{% endif %} /></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable trading</span><input type="checkbox" name="disable_trading" {% if restriction.disable_trading %}checked{% endif %} /></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable create MT5</span><input type="checkbox" name="disable_create_mt5" {% if restriction.disable_create_mt5 %}checked{% endif %} /></div>
+        <div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-medium text-slate-700 dark:text-slate-300"><span>Disable profile access</span><input type="checkbox" name="disable_profile_access" {% if restriction.disable_profile_access %}checked{% endif %} /></div>
+      </div>
+      <div class="flex items-center gap-3 pt-2 mt-4">
+        <button type="submit" class="h-10 px-6 rounded-lg btn-gradient border-0 text-white text-sm font-bold shadow-sm shadow-indigo-600/20">Save Settings</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Two-column: info + IB sidebar ── -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+
+    <!-- Left: personal info -->
+    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+      <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-4">
+        <span class="font-bold text-sm text-slate-900 dark:text-white">User Information</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 {% if u.is_active %}!bg-emerald-50 dark:!bg-emerald-900/30 !text-emerald-600 dark:!text-emerald-400 !border-emerald-200 dark:!border-emerald-800{% else %}!bg-rose-50 dark:!bg-rose-900/30 !text-rose-600 dark:!text-rose-400 !border-rose-200 dark:!border-rose-800{% endif %}">
+          {% if u.is_active %}Active{% else %}Disabled{% endif %}
+        </span>
+      </div>
+      <div class="p-4 flex-1">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">Full name</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ u.display_name }}</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">Email</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ u.email }}</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">Phone</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ u.phone|default:"—" }}</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">Country</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ u.country|default:"—" }}</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">User type</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{% if u.role == 'IB' %}IB{% else %}Client{% endif %} ({{ u.role }})</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">Registered</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ u.date_joined|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">Last login</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ u.last_login|default:"—" }}</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">Status flags</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">
+            <!-- Email verified -->
+            {% if u.email_verified %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">Email Verified</span>
+            {% else %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800">Email Unverified</span>
+            {% endif %}
+            <!-- Dynamic badges from context -->
+            {% with b=badges.kyc %}{% if b.enabled %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 {% if b.bg == '#d1fae5' or b.bg == '#ecfdf5' %}!bg-emerald-50 dark:!bg-emerald-900/30 !text-emerald-600 dark:!text-emerald-400 !border-emerald-200 dark:!border-emerald-800{% elif b.bg == '#fef9c3' or b.bg == '#fef3c7' %}!bg-amber-50 dark:!bg-amber-900/30 !text-amber-600 dark:!text-amber-400 !border-amber-200 dark:!border-amber-800{% else %}!bg-rose-50 dark:!bg-rose-900/30 !text-rose-600 dark:!text-rose-400 !border-rose-200 dark:!border-rose-800{% endif %}">{{ b.label }}</span>
+            {% endif %}{% endwith %}
+            {% with b=badges.account %}{% if b.enabled %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 {% if b.bg == '#d1fae5' or b.bg == '#ecfdf5' %}!bg-emerald-50 dark:!bg-emerald-900/30 !text-emerald-600 dark:!text-emerald-400 !border-emerald-200 dark:!border-emerald-800{% elif b.bg == '#fef9c3' or b.bg == '#fef3c7' %}!bg-amber-50 dark:!bg-amber-900/30 !text-amber-600 dark:!text-amber-400 !border-amber-200 dark:!border-amber-800{% else %}!bg-rose-50 dark:!bg-rose-900/30 !text-rose-600 dark:!text-rose-400 !border-rose-200 dark:!border-rose-800{% endif %}">{{ b.label }}</span>
+            {% endif %}{% endwith %}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: IB management -->
+    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+      <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-4">
+        <span class="font-bold text-sm text-slate-900 dark:text-white">IB Management</span>
+      </div>
+      <div class="p-4 flex-1">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">Current IB</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ ib_name }}</span>
+        </div>
+        {% if u.referred_by %}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">IB ID</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ u.referred_by.id }}</span>
+        </div>
+        {% endif %}
+        {% if ib_profile %}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">Referral</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ ib_profile.referral_link|default:u.referral_code }}</span>
+        </div>
+        {% endif %}
+        {% if u.ib_linked_at %}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">Linked at</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ u.ib_linked_at|date:"Y-m-d H:i" }}</span>
+        </div>
+        {% endif %}
+        {% if u.ib_linked_by %}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+          <span class="text-sm text-slate-500 dark:text-slate-400">Linked by</span>
+          <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ u.ib_linked_by.display_name }}</span>
+        </div>
+        {% endif %}
+      </div>
+      <div class="p-4 flex-1">
+        <div class="flex flex-col sm:flex-row items-center gap-2">
+          <form class="flex items-center gap-2 flex-1" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="link_ib" />
+            <select name="ib_user_id" class="flex-1 h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500">
+              <option value="">Select IB to link…</option>
+              {% for ib in ib_list %}
+                <option value="{{ ib.id }}" {% if u.referred_by_id == ib.id %}selected{% endif %}>{{ ib.email }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="h-10 px-4 rounded-lg btn-gradient border-0 text-white text-xs font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-1.5 whitespace-nowrap">Link to IB</button>
+          </form>
+          <form class="shrink-0" method="post" action="{% url 'admin-user-quick-action' u.pk %}" onsubmit="return confirm('Are you sure you want to unlink this user from IB?');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="unlink_ib" />
+            <button type="submit" class="h-10 px-4 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition-colors shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap">Unlink IB</button>
+          </form>
+        </div>
+        
+        {% if u.role == "IB" %}
+        <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+          <form class="flex items-center gap-2 w-full" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_ib_level" />
+            <span class="text-sm font-medium text-slate-900 dark:text-white shrink-0">IB Level Override:</span>
+            <select name="ib_level_id" class="flex-1 h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500">
+              <option value="">Default (Starter)</option>
+              {% for lvl in all_ib_levels %}
+                <option value="{{ lvl.id }}" {% if ib_profile and ib_profile.ib_level_id == lvl.id %}selected{% endif %}>{{ lvl.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="h-10 px-4 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-bold transition-colors shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap">Update</button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Client Tags ── -->
+  <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+    <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-4">
+      <span class="font-bold text-sm text-slate-900 dark:text-white">Client Tags</span>
+      <button type="button" onclick="openModal('m-add-tag')" class="h-7 px-3 rounded-md btn-gradient border-0 text-white text-[11px] font-bold transition-colors flex items-center justify-center gap-1 whitespace-nowrap">+ Add Tag</button>
+    </div>
+    <div class="p-4 flex-1">
+      <div class="" id="user-tags-list">
+        {% for ut in user_tags %}
+          <span class="ud-tag-pill inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold text-white shadow-sm gap-1.5" style="background:{{ ut.tag.color }};" data-user-tag-id="{{ ut.id }}">
+            {{ ut.tag.name }}
+            <button type="button" class="ud-tag-remove hover:text-white/70 transition-colors" onclick="removeUserTag({{ ut.id }})">&#x2715;</button>
+          </span>
+        {% empty %}
+          <span class="" id="user-tags-empty">No tags assigned.</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ── KPI / Quick-action cards ── -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-800 transition-all cursor-pointer flex items-center gap-4 group" onclick="openModal('m-dep')">
+      <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:scale-110 transition-transform">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v20M17 7l-5-5-5 5"/></svg>
+      </div>
+      <div>
+        <div class="text-xl font-bold text-slate-900 dark:text-white mb-0.5">{{ total_dep|floatformat:2 }}</div>
+        <div class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Deposits</div>
+      </div>
+    </div>
+    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-800 transition-all cursor-pointer flex items-center gap-4 group" onclick="openModal('m-wdr')">
+      <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:scale-110 transition-transform">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22V2M7 17l5 5 5-5"/></svg>
+      </div>
+      <div>
+        <div class="text-xl font-bold text-slate-900 dark:text-white mb-0.5">{{ total_wdr|floatformat:2 }}</div>
+        <div class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Withdrawals</div>
+      </div>
+    </div>
+    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-800 transition-all cursor-pointer flex items-center gap-4 group" onclick="openModal('m-wallet')">
+      <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:scale-110 transition-transform">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 12h2"/></svg>
+      </div>
+      <div>
+        <div class="text-xl font-bold text-slate-900 dark:text-white mb-0.5">{{ wallet_live|floatformat:2 }}</div>
+        <div class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Wallet Balance</div>
+      </div>
+    </div>
+    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-800 transition-all cursor-pointer flex items-center gap-4 group" onclick="openModal('m-mt5')">
+      <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:scale-110 transition-transform">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      </div>
+      <div>
+        <div class="text-xl font-bold text-slate-900 dark:text-white mb-0.5">{{ mt5_accounts|length }}</div>
+        <div class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">MT5 Accounts</div>
+      </div>
+    </div>
+    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-800 transition-all cursor-pointer flex items-center gap-4 group" onclick="openModal('m-bank')">
+      <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:scale-110 transition-transform">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+      </div>
+      <div>
+        <div class="text-xl font-bold text-slate-900 dark:text-white mb-0.5">{{ verified_banks|length }}<span class=""> / {{ max_verified_banks }}</span></div>
+        <div class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Verified Banks</div>
+      </div>
+    </div>
+    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-800 transition-all cursor-pointer flex items-center gap-4 group" onclick="openModal('m-crypto')">
+      <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:scale-110 transition-transform">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 015 0c0 2.5-5 4-5 4"/><path d="M12 17h.01"/></svg>
+      </div>
+      <div>
+        <div class="text-xl font-bold text-slate-900 dark:text-white mb-0.5">{{ verified_cryptos|length }}<span class=""> / {{ max_verified_crypto }}</span></div>
+        <div class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Crypto Wallets</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Admin controls + KYC documents (two-col) ── -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6" style="gap: 1.5rem; margin-bottom: 1.5rem;">
+
+    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+      <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-4">
+        <span class="font-bold text-sm text-slate-900 dark:text-white">Admin Controls</span>
+      </div>
+      <div class="p-4 flex-1">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Change User Password</label>
+        <form class="flex items-center gap-2 mb-4" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="change_main_password" />
+          <input type="text" name="new_password" placeholder="New Password" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 flex-1" required minlength="8" />
+          <button type="submit" class="h-10 px-4 rounded-lg btn-gradient border-0 text-white text-xs font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-1.5 whitespace-nowrap">Change</button>
+        </form>
+        </div>
+        <div class="flex flex-col sm:flex-row items-center gap-2 mt-2 mb-4">
+          <form method="post" action="{% url 'admin-user-quick-action' u.pk %}" onsubmit="return confirm('Approve KYC manually?');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="kyc_approve_manual" />
+            <button type="submit" class="h-10 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-600 shadow-sm text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"><i class="fa-solid fa-check"></i> Mark KYC Approved</button>
+          </form>
+          <button type="button" onclick="document.getElementById('m-reject').classList.remove('hidden')" class="h-10 px-4 rounded-lg bg-rose-500 hover:bg-rose-600 shadow-sm text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap flex-1"><i class="fa-solid fa-xmark"></i> Mark as Rejected</button>
+        </div>
+        <div class="flex flex-col sm:flex-row items-center gap-2 mb-4">
+          <form method="post" action="{% url 'admin-user-quick-action' u.pk %}">{% csrf_token %}<input type="hidden" name="action" value="force_email_verified" /><button type="submit" class="h-10 px-4 rounded-lg btn-cancel text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"><i class="fa-solid fa-envelope-circle-check text-indigo-500"></i> Verify Email</button></form>
+          <form method="post" action="{% url 'admin-user-quick-action' u.pk %}">{% csrf_token %}<input type="hidden" name="action" value="force_phone_verified" /><button type="submit" class="h-10 px-4 rounded-lg btn-cancel text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"><i class="fa-solid fa-phone text-indigo-500"></i> Force Phone Verified</button></form>
+        </div>
+        <hr class="border-slate-100 dark:border-slate-800 mb-4" />
+        <div class="flex items-center gap-2">
+          <form method="post" action="{% url 'admin-user-quick-action' u.pk %}">{% csrf_token %}<input type="hidden" name="action" value="enable_user" /><button type="submit" class="h-10 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-600 shadow-sm text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"><i class="fa-solid fa-user-check"></i> Enable User</button></form>
+          <form method="post" action="{% url 'admin-user-quick-action' u.pk %}">{% csrf_token %}<input type="hidden" name="action" value="disable_user" /><button type="submit" class="h-10 px-4 rounded-lg bg-rose-500 hover:bg-rose-600 shadow-sm text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"><i class="fa-solid fa-user-slash"></i> Disable User</button></form>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+      <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-4">
+        <span class="font-bold text-sm text-slate-900 dark:text-white">KYC Documents</span>
+        <a href="{% url 'admin-docs-all' %}?user_id={{ u.id }}" class="h-7 px-3 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-1 whitespace-nowrap">View all</a>
+      </div>
+      <div class="p-4 flex-1">
+        <form class="flex items-center gap-2 mb-4" method="post" action="{% url 'admin-user-quick-action' u.pk %}" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="upload_document" />
+          <select name="doc_type" class="w-[150px] h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 shrink-0">
+            <option value="PASSPORT">Passport</option>
+            <option value="NATIONAL_ID">National ID</option>
+            <option value="UTILITY_BILL">Utility Bill</option>
+            <option value="PROOF_OF_ADDRESS">Proof of Address</option>
+            <option value="OTHER">Other</option>
+          </select>
+          <input class="flex-1 h-10 px-3 py-2 text-sm text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900/50 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100" type="file" name="file" required />
+          <button type="submit" class="h-10 px-4 rounded-lg btn-gradient border-0 text-white text-xs font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"><i class="fa-solid fa-cloud-arrow-up"></i> Upload Document</button>
+        </form>
+        <ul class="">
+          {% for d in documents %}
+            <li class="" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 0.375rem;">
+              <span class="" style="font-weight: 500;">{{ d.get_doc_type_display }}</span>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide border {% if d.status == 'APPROVED' %}bg-emerald-500 text-white shadow-sm border-0{% elif d.status == 'PENDING' %}bg-amber-500 text-white shadow-sm border-0{% else %}bg-rose-500 text-white shadow-sm border-0{% endif %}">{{ d.status }}</span>
+                {% if d.status == 'APPROVED' %}
+                  <a href="{{ d.file.url }}" target="_blank" class="h-7 px-3 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-1 whitespace-nowrap">View</a>
+                {% else %}
+                  <a href="{{ d.file.url }}" target="_blank" class="h-7 px-3 rounded-md btn-gradient border-0 text-white text-[11px] font-bold transition-colors flex items-center justify-center gap-1 whitespace-nowrap">Review</a>
+                {% endif %}
+              </div>
+            </li>
+          {% empty %}
+            <li class="">No documents uploaded.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Transaction tabs ── -->
+  <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+    <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-4">
+      <div class="flex overflow-x-auto gap-2 p-1 bg-slate-50 dark:bg-slate-800/50 rounded-lg" id="um-tabs">
+        <button type="button" class="bp-tab active px-4 py-2 rounded-md text-sm font-semibold bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm transition-colors whitespace-nowrap" data-tab="t-dep">Deposits</button>
+        <button type="button" class="bp-tab px-4 py-2 rounded-md text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50 transition-colors whitespace-nowrap" data-tab="t-wdr">Withdrawals</button>
+        <button type="button" class="bp-tab px-4 py-2 rounded-md text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50 transition-colors whitespace-nowrap" data-tab="t-mt5">MT5 Accounts</button>
+        <button type="button" class="bp-tab px-4 py-2 rounded-md text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50 transition-colors whitespace-nowrap" data-tab="t-bank">Banks</button>
+        <button type="button" class="bp-tab px-4 py-2 rounded-md text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50 transition-colors whitespace-nowrap" data-tab="t-crypto">Crypto</button>
+        <button type="button" class="bp-tab px-4 py-2 rounded-md text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50 transition-colors whitespace-nowrap" data-tab="t-xfer">
+          <span class="" onclick="openModal('m-xfer');event.stopPropagation();">
+            Transfer <span class="">+</span>
+          </span>
+        </button>
+        <button type="button" class="bp-tab px-4 py-2 rounded-md text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50 transition-colors whitespace-nowrap" data-tab="t-login">Login Activity</button>
+      </div>
+    </div>
+    <div class="p-4 flex-1">
+
+      <div id="t-dep" class="um-tab-panel active">
+        <div class="overflow-x-auto w-full">
+          <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+            <thead><tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800"><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Date</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Amount</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Status</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Type</th></tr></thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+              {% for t in deposits %}
+                <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ t.created_at|date:"Y-m-d H:i" }}</td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ t.amount }} {{ t.currency }}</td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300"><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide border {% if t.status == 'APPROVED' %}bg-emerald-500 text-white shadow-sm border-0{% elif t.status == 'PENDING' %}bg-amber-500 text-white shadow-sm border-0{% else %}bg-rose-500 text-white shadow-sm border-0{% endif %}">{{ t.status }}</span></td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ t.tx_type }}</td>
+                </tr>
+              {% empty %}
+                <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"><td class="" colspan="4">No deposit records.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="t-wdr" class="um-tab-panel hidden">
+        <div class="overflow-x-auto w-full">
+          <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+            <thead><tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800"><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Date</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Amount</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Status</th></tr></thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+              {% for t in withdraws %}
+                <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ t.created_at|date:"Y-m-d H:i" }}</td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ t.amount }} {{ t.currency }}</td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300"><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide border {% if t.status == 'APPROVED' %}bg-emerald-500 text-white shadow-sm border-0{% elif t.status == 'PENDING' %}bg-amber-500 text-white shadow-sm border-0{% else %}bg-rose-500 text-white shadow-sm border-0{% endif %}">{{ t.status }}</span></td>
+                </tr>
+              {% empty %}
+                <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"><td class="" colspan="3">No withdrawal records.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="t-mt5" class="um-tab-panel hidden">
+        <div class="">
+          <button type="button" onclick="openModal('m-mt5')" class="h-9 px-4 rounded-lg btn-gradient border-0 text-white text-xs font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-1.5 whitespace-nowrap">+ Create MT5 Account</button>
+        </div>
+        <div class="overflow-x-auto w-full">
+          <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+            <thead><tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800"><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Login</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Balance</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Credit</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Equity</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Leverage</th></tr></thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+              {% for a in mt5_accounts %}
+                <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
+                  <td class="">{{ a.login_id }}</td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ a.balance }}</td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ a.credit }}</td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ a.equity }}</td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">1:{{ a.leverage }}</td>
+                </tr>
+              {% empty %}
+                <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"><td class="" colspan="5">No MT5 accounts.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="t-bank" class="um-tab-panel hidden">
+        <div class="">
+          <p class="">Withdrawal bank accounts. Max {{ max_verified_banks }} per user.</p>
+          <button type="button" onclick="openModal('m-bank')" class="h-9 px-4 rounded-lg btn-gradient border-0 text-white text-xs font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-1.5 whitespace-nowrap">+ Add Bank</button>
+        </div>
+        <div class="overflow-x-auto w-full">
+          <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+            <thead><tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800"><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Holder</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Bank</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Account / IBAN</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Country</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Status</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Actions</th></tr></thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+              {% for b in verified_banks %}
+              <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ b.account_name }}</td>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ b.bank_name }}</td>
+                <td class="">{{ b.account_number }}{% if b.iban %}<br><span class="">IBAN:</span> {{ b.iban }}{% endif %}</td>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ b.country }}</td>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">
+                  {% if b.status == 'APPROVED' %}<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">Verified</span>
+                  {% elif b.status == 'PENDING' %}<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800">Pending</span>
+                  {% else %}<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">{{ b.status }}</span>{% endif %}
+                </td>
+                <td class="">
+                  {% if b.status != 'APPROVED' %}
+                  <form class="" method="post" action="{% url 'admin-user-quick-action' u.pk %}">{% csrf_token %}<input type="hidden" name="action" value="verified_bank_verify" /><input type="hidden" name="id" value="{{ b.id }}" /><button type="submit" class="h-9 px-4 rounded-lg btn-gradient border-0 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap">Verify</button></form>
+                  {% endif %}
+                  <form class="" method="post" action="{% url 'admin-user-quick-action' u.pk %}" onsubmit="return confirm('Remove this bank account?');">{% csrf_token %}<input type="hidden" name="action" value="verified_bank_delete" /><input type="hidden" name="id" value="{{ b.id }}" /><button type="submit" class="h-7 px-3 rounded-md bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-[11px] font-bold transition-colors flex items-center justify-center gap-1 whitespace-nowrap">Remove</button></form>
+                  <details class="">
+                    <summary class="">Edit</summary>
+                    <form class="" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+                      {% csrf_token %}<input type="hidden" name="action" value="verified_bank_edit" /><input type="hidden" name="id" value="{{ b.id }}" />
+                      <input name="account_holder_name" value="{{ b.account_name }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Account holder" required />
+                      <input name="bank_name" value="{{ b.bank_name }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Bank name" required />
+                      <input name="account_number" value="{{ b.account_number }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Account number" />
+                      <input name="iban" value="{{ b.iban }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="IBAN" />
+                      <input name="swift_code" value="{{ b.swift_code }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="SWIFT" />
+                      <input name="country" value="{{ b.country }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Country" required />
+                      <input name="bank_address" value="{{ b.bank_address }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Bank address (optional)" />
+                      <button type="submit" class="h-9 px-4 rounded-lg btn-gradient border-0 text-white text-xs font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-1.5 whitespace-nowrap">Save Changes</button>
+                    </form>
+                  </details>
+                </td>
+              </tr>
+              {% empty %}
+              <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"><td class="" colspan="6">No verified bank accounts yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="t-crypto" class="um-tab-panel hidden">
+        <div class="">
+          <p class="">Withdrawal crypto destinations. Max {{ max_verified_crypto }} per user.</p>
+          <button type="button" onclick="openModal('m-crypto')" class="h-9 px-4 rounded-lg btn-gradient border-0 text-white text-xs font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-1.5 whitespace-nowrap">+ Add Wallet</button>
+        </div>
+        <div class="overflow-x-auto w-full">
+          <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+            <thead><tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800"><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Name</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Network</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Address</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Status</th><th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Actions</th></tr></thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+              {% for c in verified_cryptos %}
+              <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ c.wallet_name|default:"—" }}</td>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300"><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">{{ c.network }}</span></td>
+                <td class="">{{ c.wallet_address }}</td>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">
+                  {% if c.status == 'APPROVED' %}<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">Verified</span>
+                  {% elif c.status == 'PENDING' %}<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800">Pending</span>
+                  {% else %}<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">{{ c.status }}</span>{% endif %}
+                </td>
+                <td class="">
+                  {% if c.status != 'APPROVED' %}
+                  <form class="" method="post" action="{% url 'admin-user-quick-action' u.pk %}">{% csrf_token %}<input type="hidden" name="action" value="verified_crypto_verify" /><input type="hidden" name="id" value="{{ c.id }}" /><button type="submit" class="h-9 px-4 rounded-lg btn-gradient border-0 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap">Verify</button></form>
+                  {% endif %}
+                  <form class="" method="post" action="{% url 'admin-user-quick-action' u.pk %}" onsubmit="return confirm('Remove this wallet?');">{% csrf_token %}<input type="hidden" name="action" value="verified_crypto_delete" /><input type="hidden" name="id" value="{{ c.id }}" /><button type="submit" class="h-7 px-3 rounded-md bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-[11px] font-bold transition-colors flex items-center justify-center gap-1 whitespace-nowrap">Remove</button></form>
+                  <details class="">
+                    <summary class="">Edit</summary>
+                    <form class="" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+                      {% csrf_token %}<input type="hidden" name="action" value="verified_crypto_edit" /><input type="hidden" name="id" value="{{ c.id }}" />
+                      <input name="wallet_name" value="{{ c.wallet_name }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Wallet name" />
+                      <select name="crypto_network" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500">
+                        {% for n in crypto_network_options %}<option value="{{ n.label }}" {% if n.label == c.network %}selected{% endif %}>{{ n.label }}</option>{% empty %}<option value="{{ c.network }}">{{ c.network }}</option>{% endfor %}
+                      </select>
+                      <input name="wallet_address" value="{{ c.wallet_address }}" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Address" required />
+                      <button type="submit" class="h-9 px-4 rounded-lg btn-gradient border-0 text-white text-xs font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-1.5 whitespace-nowrap">Save Changes</button>
+                    </form>
+                  </details>
+                </td>
+              </tr>
+              {% empty %}
+              <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"><td class="" colspan="5">No crypto wallets yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="t-xfer" class="um-tab-panel hidden">
+        <div class="overflow-x-auto w-full">
+          <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+            <thead><tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"><th>Date</th><th>Type</th><th>Amount</th><th>Status</th></tr></thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+              {% for x in transfers %}
+                <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ x.created_at|date:"Y-m-d H:i" }}</td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ x.transfer_type }}</td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ x.amount }}</td>
+                  <td class="px-4 py-3 text-slate-700 dark:text-slate-300"><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 {% if x.status == 'APPROVED' %}!bg-emerald-50 dark:!bg-emerald-900/30 !text-emerald-600 dark:!text-emerald-400 !border-emerald-200 dark:!border-emerald-800{% elif d.status == 'PENDING' %}!bg-amber-50 dark:!bg-amber-900/30 !text-amber-600 dark:!text-amber-400 !border-amber-200 dark:!border-amber-800{% else %}!bg-rose-50 dark:!bg-rose-900/30 !text-rose-600 dark:!text-rose-400 !border-rose-200 dark:!border-rose-800{% endif %}">{{ x.status }}</span></td>
+                </tr>
+              {% empty %}
+                <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"><td class="" colspan="4">No transfer records.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="t-login" class="um-tab-panel hidden">
+        <div class="">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 py-2 border-b border-slate-100 dark:border-slate-800/50 last:border-0 items-start">
+            <span class="text-sm text-slate-500 dark:text-slate-400">Last login</span>
+            <span class="text-sm font-medium text-slate-900 dark:text-white sm:col-span-2">{{ u.last_login|default:"—" }}</span>
+          </div>
+          <p class="">For full IP / device logs, extend your auth logging. Django stores the last login timestamp only.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       MODALS
+  ════════════════════════════════════════════ -->
+
+  <!-- Deposit -->
+  <div id="m-dep" class="um-modal hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="if(event.target===this)closeModal('m-dep')">
+    <div class="um-modal-box bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"><h3 class="font-bold text-lg text-slate-900 dark:text-white">Record Deposit</h3></div>
+      <form class="p-6 space-y-4" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="wallet_deposit" />
+        
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Destination</label>
+          <select name="destination" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+            <option value="wallet">Wallet</option>
+            {% for acc in mt5_accounts %}
+            <option value="mt5_{{ acc.login_id }}">MT5 - {{ acc.login_id }} ({{ acc.group.platform_group_name }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Amount</label>
+          <input type="number" step="0.01" name="amount" placeholder="Amount" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Comment</label>
+          <input type="text" name="comment" placeholder="Optional comment" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 mt-4">
+          <button type="submit" class="h-10 px-6 rounded-lg btn-gradient border-0 text-white text-sm font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-2 w-full sm:w-auto">Done</button>
+          <button type="button" onclick="closeModal('m-dep')" class="h-10 px-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Reject -->
+  <div id="m-reject" class="um-modal hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="if(event.target===this)closeModal('m-reject')">
+    <div class="um-modal-box bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"><h3 class="font-bold text-lg text-slate-900 dark:text-white">Reject KYC</h3></div>
+      <form class="p-6 space-y-4" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="kyc_reject_manual" />
+        
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Rejection Note</label>
+          <input type="text" name="reason" placeholder="Required reason..." class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 mt-4">
+          <button type="submit" class="h-10 px-6 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto">Reject</button>
+          <button type="button" onclick="closeModal('m-reject')" class="h-10 px-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Withdraw -->
+  <div id="m-wdr" class="um-modal hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="if(event.target===this)closeModal('m-wdr')">
+    <div class="um-modal-box bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"><h3 class="font-bold text-lg text-slate-900 dark:text-white">Record Withdraw</h3></div>
+      <form class="p-6 space-y-4" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="wallet_withdraw" />
+        
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Source</label>
+          <select name="source" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all">
+            <option value="wallet">Wallet</option>
+            {% for acc in mt5_accounts %}
+            <option value="mt5_{{ acc.login_id }}">MT5 - {{ acc.login_id }} ({{ acc.group.platform_group_name }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Amount</label>
+          <input type="number" step="0.01" name="amount" placeholder="Amount" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Comment</label>
+          <input type="text" name="comment" placeholder="Optional comment" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 mt-4">
+          <button type="submit" class="h-10 px-6 rounded-lg btn-gradient border-0 text-white text-sm font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-2 w-full sm:w-auto">Done</button>
+          <button type="button" onclick="closeModal('m-wdr')" class="h-10 px-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Wallet -->
+  <div id="m-wallet" class="um-modal hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="if(event.target===this)closeModal('m-wallet')">
+    <div class="um-modal-box bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"><h3 class="font-bold text-lg text-slate-900 dark:text-white">Wallet</h3><p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Current balance: <strong>{{ wallet_live|floatformat:2 }}</strong></p></div>
+      <div class="p-6 space-y-4"><form class="" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="wallet_deposit" />
+        <input type="number" step="0.01" name="amount" placeholder="Deposit amount" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        <button type="submit" class="h-9 px-4 rounded-lg btn-gradient border-0 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap">Deposit</button>
+      </form>
+      <form class="" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="wallet_withdraw" />
+        <input type="number" step="0.01" name="amount" placeholder="Withdraw amount" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        <button type="submit" class="h-9 px-4 rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap">Withdraw</button>
+      </form>
+      <button type="button" onclick="closeModal('m-wallet')" class="h-10 px-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">Close</button>
+    </div>
+  </div>
+
+  <!-- MT5 Create -->
+  <div id="m-mt5" class="um-modal hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="if(event.target===this)closeModal('m-mt5')">
+    <div class="um-modal-box bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"><h3 class="font-bold text-lg text-slate-900 dark:text-white">Create MT5 Account</h3></div>
+      <form class="p-6 space-y-4" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_mt5" />
+        <select name="group_id" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required>
+          <option value="">Select Group</option>
+          {% for g in groups %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+        </select>
+        <select name="leverage" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500">
+          {% for lv in leverages %}<option value="{{ lv }}" {% if lv == 100 %}selected{% endif %}>1:{{ lv }}</option>{% endfor %}
+        </select>
+        <input type="password" name="mt5_password" placeholder="MT5 password (optional)" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        <div class="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 mt-4"><button type="submit" class="h-10 px-6 rounded-lg btn-gradient border-0 text-white text-sm font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-2 w-full sm:w-auto">Create Account</button>
+<button type="button" onclick="closeModal('m-mt5')" class="h-10 px-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">Cancel</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Bank -->
+  <div id="m-bank" class="um-modal hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="if(event.target===this)closeModal('m-bank')">
+    <div class="um-modal-box bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"><h3 class="font-bold text-lg text-slate-900 dark:text-white">Add Verified Bank</h3><p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Slots remaining: {{ bank_slots_left }}</p></div>
+      <div class="p-6 space-y-4"><form class="" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="bank_add" />
+        <input name="bank_name" placeholder="Bank name" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        <input name="account_holder_name" placeholder="Account holder name" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        <input name="account_number" placeholder="Account number (or leave blank if IBAN only)" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        <input name="iban" placeholder="IBAN (optional if account number set)" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        <input name="swift_code" placeholder="SWIFT (optional)" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        <input name="country" placeholder="Country" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        <input name="bank_address" placeholder="Bank address (optional)" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        <label class=""><input type="checkbox" name="auto_verify" /> Mark as verified immediately</label>
+        <div class="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 mt-4"><button type="submit" class="h-10 px-6 rounded-lg btn-gradient border-0 text-white text-sm font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-2 w-full sm:w-auto" {% if bank_slots_left <= 0 %}disabled{% endif %}>Save Bank</button>
+<button type="button" onclick="closeModal('m-bank')" class="h-10 px-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">Cancel</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Crypto -->
+  <div id="m-crypto" class="um-modal hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="if(event.target===this)closeModal('m-crypto')">
+    <div class="um-modal-box bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"><h3 class="font-bold text-lg text-slate-900 dark:text-white">Add Verified Crypto Wallet</h3><p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Slots remaining: {{ crypto_slots_left }}</p></div>
+      <div class="p-6 space-y-4"><form class="" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="verified_crypto_add" />
+        <input name="wallet_name" placeholder="Wallet name (label)" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        <select name="crypto_network" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required>
+          <option value="">Select Network</option>
+          {% for n in crypto_network_options %}<option value="{{ n.label }}">{{ n.label }}</option>{% empty %}<option value="ERC20">ERC20</option><option value="TRC20">TRC20</option>{% endfor %}
+        </select>
+        <input name="wallet_address" placeholder="Wallet address" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        <label class=""><input type="checkbox" name="auto_verify" /> Mark as verified immediately</label>
+        <div class="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 mt-4"><button type="submit" class="h-10 px-6 rounded-lg btn-gradient border-0 text-white text-sm font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-2 w-full sm:w-auto" {% if crypto_slots_left <= 0 %}disabled{% endif %}>Save Wallet</button>
+<button type="button" onclick="closeModal('m-crypto')" class="h-10 px-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">Cancel</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Internal Transfer -->
+  <div id="m-xfer" class="um-modal hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="if(event.target===this)closeModal('m-xfer')">
+    <div class="um-modal-box bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"><h3 class="font-bold text-lg text-slate-900 dark:text-white">Internal Transfer</h3></div>
+      <form class="p-6 space-y-4" method="post" action="{% url 'admin-user-quick-action' u.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="internal_transfer" />
+        <select name="direction" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500">
+          <option value="wallet_to_mt5">Wallet to MT5</option>
+          <option value="mt5_to_wallet">MT5 to Wallet</option>
+        </select>
+        <select name="mt5_account_id" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required>
+          {% for a in mt5_accounts %}<option value="{{ a.id }}">{{ a.login_id }} (bal {{ a.balance }})</option>{% empty %}<option value="">No MT5 accounts — create one first</option>{% endfor %}
+        </select>
+        <input type="number" step="0.01" name="amount" placeholder="Amount" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required />
+        <div class="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 mt-4"><button type="submit" class="h-10 px-6 rounded-lg btn-gradient border-0 text-white text-sm font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-2 w-full sm:w-auto">Submit Transfer</button>
+<button type="button" onclick="closeModal('m-xfer')" class="h-10 px-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">Cancel</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Removed User Settings Modal since it's now an inline panel -->
+
+  <!-- Assign Tag -->
+  <div id="m-add-tag" class="um-modal hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="if(event.target===this)closeModal('m-add-tag')">
+    <div class="um-modal-box bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200" onclick="event.stopPropagation()">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"><h3 class="font-bold text-lg text-slate-900 dark:text-white">Assign Tag</h3></div>
+      <form class="p-6 space-y-4" id="assign-tag-form">
+        {% csrf_token %}
+        <select id="assign-tag-id" name="tag_id" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" required>
+          <option value="">Select tag</option>
+          {% for t in assignable_tags %}
+            <option value="{{ t.id }}">{{ t.name }} ({{ t.category.name }})</option>
+          {% endfor %}
+        </select>
+        <input type="text" id="assign-tag-notes" name="notes" placeholder="Notes (optional)" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+        <div class="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 mt-4"><button type="submit" class="h-10 px-6 rounded-lg btn-gradient border-0 text-white text-sm font-bold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-2 w-full sm:w-auto">Assign Tag</button>
+<button type="button" onclick="closeModal('m-add-tag')" class="h-10 px-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">Cancel</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       JAVASCRIPT (preserved exactly)
+  ════════════════════════════════════════════ -->
+  <script>
+    function openModal(id) { 
+        var el = document.getElementById(id); 
+        if (el) { 
+            el.classList.remove('hidden'); 
+            el.style.display = 'flex';
+            el.style.zIndex = '999999';
+            el.style.visibility = 'visible';
+            el.style.opacity = '1';
+            document.body.classList.add('overflow-hidden'); 
+        } 
+    }
+    function closeModal(id) { 
+        var el = document.getElementById(id); 
+        if (el) { 
+            el.classList.add('hidden'); 
+            el.style.display = 'none';
+            document.body.classList.remove('overflow-hidden'); 
+        } 
+    }
+    document.querySelectorAll('#um-tabs .bp-tab').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var tab = btn.getAttribute('data-tab');
+        if (!tab) return;
+        document.querySelectorAll('#um-tabs .bp-tab').forEach(function(b) { b.classList.toggle('active', b === btn); b.classList.toggle('bg-white', b === btn); b.classList.toggle('dark:bg-slate-700', b === btn); b.classList.toggle('text-slate-900', b === btn); b.classList.toggle('dark:text-white', b === btn); b.classList.toggle('shadow-sm', b === btn); b.classList.toggle('text-slate-500', b !== btn); b.classList.toggle('dark:text-slate-400', b !== btn); });
+        document.querySelectorAll('.um-tab-panel').forEach(function(p) { p.classList.toggle('active', p.id === tab); p.classList.toggle('hidden', p.id !== tab); });
+      });
+    });
+
+    function removeUserTag(userTagId) {
+      if (!confirm('Remove this tag?')) return;
+      fetch("{% url 'admin-user-tag-remove' u.pk 0 %}".replace('/0/remove/', '/' + userTagId + '/remove/'), {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': '{{ csrf_token }}',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin'
+      }).then(function(r){ return r.json(); }).then(function(data){
+        if (!data.ok) return;
+        var el = document.querySelector('[data-user-tag-id="' + userTagId + '"]');
+        if (el) el.remove();
+        if (!document.querySelector('[data-user-tag-id]')) {
+          var empty = document.getElementById('user-tags-empty');
+          if (!empty) {
+            empty = document.createElement('span');
+            empty.id = 'user-tags-empty';
+            empty.style.cssText = 'font-size:13px;color:#94a3b8;';
+            empty.textContent = 'No tags assigned.';
+            document.getElementById('user-tags-list').appendChild(empty);
+          }
+        }
+      });
+    }
+
+    document.getElementById('assign-tag-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var form = e.target;
+      var formData = new FormData(form);
+      fetch("{% url 'admin-user-tag-assign' u.pk %}", {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': '{{ csrf_token }}',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: formData,
+        credentials: 'same-origin'
+      }).then(function(r){ return r.json(); }).then(function(data){
+        if (!data.ok) return;
+        var empty = document.getElementById('user-tags-empty');
+        if (empty) empty.remove();
+        var existing = document.querySelector('[data-user-tag-id="' + data.user_tag_id + '"]');
+        if (!existing) {
+          var wrap = document.createElement('span');
+          wrap.className = 'ud-tag-pill';
+          wrap.style.background = data.color;
+          wrap.setAttribute('data-user-tag-id', data.user_tag_id);
+          wrap.innerHTML = data.name + ' <button type="button" class="ud-tag-remove hover:text-white/70 transition-colors">&#x2715;</button>';
+          wrap.querySelector('button').addEventListener('click', function(){ removeUserTag(data.user_tag_id); });
+          document.getElementById('user-tags-list').prepend(wrap);
+        }
+        form.reset();
+        closeModal('m-add-tag');
+      });
+    });
+  </script>
+{% endblock %}

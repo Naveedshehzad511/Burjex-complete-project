@@ -1,0 +1,19 @@
+{% comment %}
+  Light / dark mode toggle for the client portal (user side only).
+  Optional: compact=1 for mobile header.
+{% endcomment %}
+<button
+  type="button"
+  class="portal-theme-toggle flex items-center justify-center border transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--portal-brand-primary,#0B3C5D)] focus-visible:ring-offset-2{% if compact %} portal-theme-toggle--compact{% endif %}"
+  id="portalThemeToggle{% if compact %}_m{% endif %}"
+  data-portal-theme-toggle
+  title="Toggle light / dark mode"
+  aria-label="Toggle light and dark mode"
+  aria-pressed="false"
+>
+  <i class="portal-theme-icon portal-theme-icon--moon fa-solid fa-moon" aria-hidden="true"></i>
+  <svg class="portal-theme-icon portal-theme-icon--sun" viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+</button>

@@ -1,0 +1,40 @@
+# Keeps the production image small and prevents local development state from
+# leaking into it. Used by deploy/crm/Dockerfile.
+
+.git
+.gitignore
+.github
+
+# Local virtualenvs
+venv/
+.venv/
+env/
+ENV/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Never ship a developer's database or secrets into the image.
+db.sqlite3
+db.sqlite3-journal
+*.sqlite3
+.env
+.env.*
+!.env.example
+
+# Regenerated in the container by collectstatic; uploads live on a volume.
+staticfiles/
+media/
+logs/
+storage/backups/
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

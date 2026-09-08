@@ -1,0 +1,385 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Match-Trader{% endblock %}
+{% block admin_content %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+<div class="max-w-xl mx-auto px-2 pb-16">
+  <div class="mb-4">
+    <a href="{% url 'admin-integrations-trading-platforms-hub' %}" class="text-sm text-indigo-600 hover:underline font-medium">← Trading Platforms</a>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-slate-200/90 shadow-lg shadow-slate-200/50 overflow-hidden">
+    <div class="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+      <h1 class="text-xl font-semibold text-slate-900 tracking-tight">Match-Trader</h1>
+      <p class="text-sm text-slate-500 mt-1"><strong>Test Connection</strong> runs <strong>TLS gRPC</strong> against the gRPC host, then loads groups over <strong>HTTPS REST</strong> using <strong>REST Base URL</strong> (or Base URL if REST is left blank). Use the broker REST root from Match-Trader docs/Postman (e.g. <code class="text-xs bg-slate-100 px-1 rounded">https://broker-api.match-trader.com</code>). Requires <code class="text-xs bg-slate-100 px-1 rounded">grpcio</code>, a successful groups response, and catalog sync. Saved credentials stay encrypted.</p>
+    </div>
+
+    <div class="p-6 space-y-6 bg-white">
+      {% csrf_token %}
+      <input type="hidden" id="mtCsrf" value="{{ csrf_token }}" />
+      {% if mt.has_credentials %}
+      <p class="text-xs text-slate-500 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2">
+        Configuration exists on the server (encrypted). Inputs stay empty — re-enter <strong>Base URL</strong>, <strong>REST Base URL</strong> (if you use one), <strong>gRPC address</strong>, and <strong>API key</strong> to test or replace stored values.
+      </p>
+      {% endif %}
+
+      <div class="grid gap-5">
+        <label class="block">
+          <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Base URL (HTTPS) <span class="text-rose-600">*</span></span>
+          <input type="url" id="mtBaseUrl" autocomplete="off" value=""
+            placeholder="https://your-broker-api.example.com"
+            class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm shadow-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none transition" />
+          <span class="text-xs text-slate-400 mt-1 block">Used for gRPC / health context.</span>
+        </label>
+
+        <label class="block">
+          <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">REST Base URL</span>
+          <input type="url" id="mtRestBaseUrl" autocomplete="off" value=""
+            placeholder="https://broker-api.match-trader.com"
+            class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm shadow-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none transition" />
+          <span class="text-xs text-slate-400 mt-1 block">HTTPS root for <code class="font-mono text-[11px]">/groups</code>, <code class="font-mono text-[11px]">/accounts</code>, <code class="font-mono text-[11px]">/users</code>, and catalog. Leave blank to use Base URL.</span>
+        </label>
+
+        <label class="block">
+          <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">gRPC address <span class="text-rose-600">*</span></span>
+          <input type="text" id="mtGrpcAddress" autocomplete="off" value=""
+            placeholder="grpc-broker-api.example.com"
+            class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-mono shadow-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none transition" />
+          <span class="text-xs text-slate-400 mt-1 block">Host name or <span class="font-mono">host:port</span> (443 if omitted).</span>
+        </label>
+
+        <label class="block">
+          <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Secret API key <span class="text-rose-600">*</span></span>
+          <input type="password" id="mtApiKey" autocomplete="new-password" value=""
+            placeholder="Paste secret API key"
+            class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm shadow-sm focus:ring-2 focus:ring-indigo-600/25 focus:border-indigo-600 outline-none transition" />
+        </label>
+
+        <div class="block">
+          <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
+          <div class="mt-1.5 flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5">
+            <span id="mtStatusLabel" class="text-sm font-medium text-slate-700">{% if mt.is_active %}Active{% else %}Inactive{% endif %}</span>
+            <button type="button" role="switch" id="mtToggle" aria-checked="{% if mt.is_active %}true{% else %}false{% endif %}"
+              class="relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 {% if mt.is_active %}bg-emerald-500{% else %}bg-slate-300{% endif %}">
+              <span class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 {% if mt.is_active %}translate-x-5{% else %}translate-x-0.5{% endif %}"></span>
+            </button>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Applied on successful <strong>Save &amp; Connect</strong>, or via activate/deactivate after a successful test.</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-3">
+        <button type="button" id="btnMtTest"
+          class="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-100 text-slate-800 px-5 py-2.5 text-sm font-semibold border border-slate-200 hover:bg-slate-200 transition disabled:opacity-50">
+          <i class="fa-solid fa-plug"></i> Test Connection
+        </button>
+        <button type="button" id="btnMtSave"
+          class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 text-white px-5 py-2.5 text-sm font-semibold shadow-md shadow-[#0B3C5D]/20 hover:bg-indigo-700 transition disabled:opacity-50">
+          <i class="fa-solid fa-link"></i> Save &amp; Connect
+        </button>
+        <button type="button" id="btnMtReset"
+          class="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 px-5 py-2.5 text-sm font-semibold hover:bg-rose-100 transition">
+          Reset
+        </button>
+      </div>
+
+      <div id="mtLoading" class="hidden items-center gap-2 text-sm text-slate-500">
+        <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#0B3C5D]"></span>
+        Working…
+      </div>
+
+      <div id="mtSuccess" class="hidden rounded-2xl border border-emerald-200 bg-emerald-50/80 p-5 shadow-sm">
+        <div class="flex items-start gap-3">
+          <span class="text-2xl text-emerald-600" aria-hidden="true">✔</span>
+          <div class="min-w-0 flex-1">
+            <div class="font-semibold text-emerald-900" id="mtSuccessTitle">Connection Successful</div>
+            <p class="mt-1 text-sm text-emerald-900/85" id="mtSuccessDetail"></p>
+            <ul id="mtSuccessSteps" class="hidden mt-3 list-none space-y-1 border-t border-emerald-200/60 pt-3" aria-label="Connection diagnostic steps"></ul>
+          </div>
+        </div>
+      </div>
+
+      <div id="mtError" class="hidden rounded-2xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
+        <div class="flex items-start gap-3">
+          <span class="text-xl text-rose-600" aria-hidden="true">✕</span>
+          <div class="min-w-0 flex-1 text-sm">
+            <pre class="font-sans text-sm font-medium text-rose-900 whitespace-pre-wrap break-words" id="mtErrorText"></pre>
+            <ul id="mtErrorSteps" class="hidden mt-3 list-none space-y-0 border-t border-rose-200/60 pt-3" aria-label="Connection diagnostic steps"></ul>
+          </div>
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-400 pt-2 border-t border-slate-100">
+        <a href="{% url 'admin-match-trader-broker-groups' %}" class="text-indigo-600 font-medium hover:underline">Match-Trader broker groups</a> (synced data)
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var csrf = document.getElementById("mtCsrf").value;
+  var urlTest = "{% url 'api-integrations-match-trader-test' %}";
+  var urlSave = "{% url 'api-integrations-match-trader-save' %}";
+  var urlStatus = "{% url 'api-integrations-match-trader-status' %}";
+  var urlReset = "{% url 'admin-integrations-match-trader-reset' %}";
+  var urlActivate = "{% url 'admin-integrations-match-trader-activate' %}";
+  var urlDeactivate = "{% url 'admin-integrations-match-trader-deactivate' %}";
+
+  function showLoading(on) {
+    var el = document.getElementById("mtLoading");
+    el.classList.toggle("hidden", !on);
+    el.classList.toggle("flex", on);
+  }
+  function hidePanels() {
+    document.getElementById("mtSuccess").classList.add("hidden");
+    document.getElementById("mtError").classList.add("hidden");
+    renderMtSteps("mtSuccessSteps", null);
+    renderMtSteps("mtErrorSteps", null);
+  }
+
+  function renderMtSteps(elId, steps, tone) {
+    var ul = document.getElementById(elId);
+    if (!ul) return;
+    ul.innerHTML = "";
+    if (!steps || !steps.length) {
+      ul.classList.add("hidden");
+      return;
+    }
+    ul.classList.remove("hidden");
+    for (var i = 0; i < steps.length; i++) {
+      var s = steps[i];
+      var li = document.createElement("li");
+      var ok = s.ok;
+      var mark = ok === true ? "✓" : ok === false ? "✕" : "…";
+      var label = (s.label || s.name || "—");
+      var line = (s.step != null ? "Step " + s.step + ": " : "") + label + ": " + (s.message || "");
+      li.className = "text-sm py-1.5 border-b border-slate-200/70 last:border-0";
+      if (tone === "success") {
+        li.className += ok === false ? " text-rose-800" : " text-emerald-900";
+      } else {
+        li.className += ok === true ? " text-emerald-800" : ok === false ? " text-rose-900" : " text-slate-600";
+      }
+      var row = document.createElement("div");
+      row.className = "flex gap-2";
+      var m = document.createElement("span");
+      m.className = "font-mono text-xs flex-shrink-0 w-4";
+      m.textContent = mark;
+      row.appendChild(m);
+      var t = document.createElement("span");
+      t.className = "min-w-0 break-words";
+      t.textContent = line;
+      row.appendChild(t);
+      li.appendChild(row);
+      if (s.detail) {
+        var d = document.createElement("div");
+        d.className = "text-xs mt-0.5 pl-6 opacity-85 whitespace-pre-wrap break-words";
+        d.textContent = s.detail;
+        li.appendChild(d);
+      }
+      ul.appendChild(li);
+    }
+  }
+
+  function showError(text, steps) {
+    document.getElementById("mtErrorText").textContent = text || "Connection failed";
+    renderMtSteps("mtErrorSteps", steps || [], "error");
+    document.getElementById("mtError").classList.remove("hidden");
+  }
+
+  function mtVal(id) {
+    var el = document.getElementById(id);
+    return (el && el.value) ? el.value.trim() : "";
+  }
+
+  function mtPayload() {
+    return {
+      base_url: mtVal("mtBaseUrl"),
+      rest_base_url: mtVal("mtRestBaseUrl"),
+      grpc_address: mtVal("mtGrpcAddress"),
+      api_key: mtVal("mtApiKey")
+    };
+  }
+
+  document.getElementById("btnMtTest").addEventListener("click", function () {
+    hidePanels();
+    var p = mtPayload();
+    if (!p.base_url) {
+      showError("Base URL is required.");
+      return;
+    }
+    if (!p.grpc_address) {
+      showError("gRPC address is required.");
+      return;
+    }
+    if (!p.api_key) {
+      showError("Secret API key is required.");
+      return;
+    }
+    showLoading(true);
+    fetch(urlTest, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrf,
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: JSON.stringify(p)
+    }).then(function (r) {
+      return r.text().then(function (text) {
+        var j = {};
+        try {
+          j = text ? JSON.parse(text) : {};
+        } catch (e) {
+          throw new Error((text || "").slice(0, 300) || ("HTTP " + r.status));
+        }
+        return { ok: r.ok, j: j };
+      });
+    })
+      .then(function (x) {
+        showLoading(false);
+        if (x.j && x.j.ok) {
+          var lat = x.j.latency_ms != null ? x.j.latency_ms + " ms" : "—";
+          var gc = x.j.groups_extracted_count != null ? x.j.groups_extracted_count : "—";
+          var cat = x.j.catalog_sync || {};
+          var ctot = cat.total != null ? cat.total : ((cat.trading || 0) + (cat.account || 0) + (cat.servers || 0));
+          document.getElementById("mtSuccessTitle").textContent = "Connection successful";
+          document.getElementById("mtSuccessDetail").textContent =
+            "gRPC + REST groups OK. Latency: " + lat
+            + ". Groups verified from API: " + gc
+            + ". Catalog rows stored: " + ctot
+            + (x.j.rest_verified_url ? ". REST: " + x.j.rest_verified_url : "")
+            + (x.j.resolved_base ? ". API base: " + x.j.resolved_base : "")
+            + ". Use Group Management to map CRM groups to Match-Trader.";
+          document.getElementById("mtSuccess").classList.remove("hidden");
+        } else {
+          var msg = (x.j && (x.j.error_detail || x.j.user_error || x.j.message)) || "Connection failed.";
+          showError(msg);
+        }
+      }).catch(function () {
+        showLoading(false);
+        showError("Could not reach the CRM server. Check your network and try again.");
+      });
+  });
+
+  document.getElementById("btnMtSave").addEventListener("click", function () {
+    hidePanels();
+    var p = mtPayload();
+    if (!p.base_url) {
+      showError("Base URL is required.");
+      return;
+    }
+    if (!p.grpc_address) {
+      showError("gRPC address is required.");
+      return;
+    }
+    if (!p.api_key) {
+      showError("Secret API key is required.");
+      return;
+    }
+    showLoading(true);
+    p.save_and_connect = "true";
+    p.is_active = document.getElementById("mtToggle").getAttribute("aria-checked") === "true" ? "true" : "false";
+    fetch(urlSave, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrf,
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: JSON.stringify(p)
+    }).then(function (r) {
+      return r.text().then(function (text) {
+        var j = {};
+        try {
+          j = text ? JSON.parse(text) : {};
+        } catch (e) {
+          throw new Error((text || "").slice(0, 300) || ("HTTP " + r.status));
+        }
+        return { ok: r.ok, j: j };
+      });
+    })
+      .then(function (x) {
+        showLoading(false);
+        if (!x.ok) {
+          showError(
+            (x.j && (x.j.error_detail || x.j.user_error || x.j.message)) || "Save & Connect failed.",
+            x.j && x.j.diagnostic_steps
+          );
+          return;
+        }
+        document.getElementById("mtSuccessTitle").textContent = "Saved and connected";
+        var cat = (x.j && x.j.catalog) || {};
+        var ctot = (cat.trading || 0) + (cat.account || 0) + (cat.servers || 0);
+        document.getElementById("mtSuccessDetail").textContent =
+          "Credentials saved. Catalog updated with " + ctot + " group row(s). Open Group Management or Match-Trader broker groups to map.";
+        document.getElementById("mtSuccess").classList.remove("hidden");
+        fetch(urlStatus, { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (s) {
+          if (s && s.is_active) setToggle(true);
+        });
+      }).catch(function (err) {
+        showLoading(false);
+        showError(err && err.message ? err.message : "Could not reach the CRM server.");
+      });
+  });
+
+  document.getElementById("btnMtReset").addEventListener("click", function () {
+    if (!confirm("Clear Match-Trader configuration and deactivate?")) return;
+    hidePanels();
+    showLoading(true);
+    var fd = new FormData();
+    fd.append("csrfmiddlewaretoken", csrf);
+    fetch(urlReset, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "X-CSRFToken": csrf, "X-Requested-With": "XMLHttpRequest" },
+      body: fd
+    }).then(function (r) { return r.json(); }).then(function () {
+      showLoading(false);
+      document.getElementById("mtBaseUrl").value = "";
+      var rEl = document.getElementById("mtRestBaseUrl");
+      if (rEl) rEl.value = "";
+      document.getElementById("mtGrpcAddress").value = "";
+      document.getElementById("mtApiKey").value = "";
+      setToggle(false);
+    }).catch(function () { showLoading(false); });
+  });
+
+  function setToggle(on) {
+    var b = document.getElementById("mtToggle");
+    b.setAttribute("aria-checked", on ? "true" : "false");
+    b.classList.toggle("bg-emerald-500", on);
+    b.classList.toggle("bg-slate-300", !on);
+    var knob = b.querySelector("span");
+    knob.classList.toggle("translate-x-5", on);
+    knob.classList.toggle("translate-x-0.5", !on);
+    document.getElementById("mtStatusLabel").textContent = on ? "Active" : "Inactive";
+  }
+
+  document.getElementById("mtToggle").addEventListener("click", function () {
+    var on = document.getElementById("mtToggle").getAttribute("aria-checked") !== "true";
+    if (on) {
+      fetch(urlActivate, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-CSRFToken": csrf, "X-Requested-With": "XMLHttpRequest" },
+        body: new URLSearchParams({ csrfmiddlewaretoken: csrf })
+      }).then(function (r) {
+        if (r.ok) setToggle(true);
+        else r.json().then(function (j) {
+          showError((j && j.message) || "Save and run a successful connection test first.");
+        });
+      });
+    } else {
+      fetch(urlDeactivate, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-CSRFToken": csrf, "X-Requested-With": "XMLHttpRequest" },
+        body: new URLSearchParams({ csrfmiddlewaretoken: csrf })
+      }).then(function () { setToggle(false); });
+    }
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}IB Users{% endblock %}
+{% block admin_content %}
+
+<div class="bp-page-header bp-s-6 flex items-start justify-between gap-4">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-handshake me-2"></i>Introducing Brokers (IB)</h1>
+    <p class="bp-page-subtitle">Search, filter by country and account status, and manage referral tools.</p>
+  </div>
+  <a href="{% url 'admin-reports-dashboard' %}" class="bp-btn bp-btn-outline h-9 w-9 p-0 flex items-center justify-center shrink-0 mt-1" title="Back to Reports Dashboard">
+    <i class="fa-solid fa-arrow-left"></i>
+  </a>
+</div>
+
+
+<div class="bp-card bp-s-6">
+  <div class="bp-card-body">
+    <form class="grid grid-cols-2 lg:grid-cols-4 gap-3 items-end" method="get">
+      <div class="flex flex-col gap-1 w-full min-w-0">
+        <label class="bp-form-label truncate">Search</label>
+        <input type="text" name="q" value="{{ filters.q }}" placeholder="Search…" class="bp-input w-full min-w-0">
+      </div>
+      <div class="flex flex-col gap-1 w-full min-w-0">
+        <label class="bp-form-label truncate">Country</label>
+        <input type="text" name="country" value="{{ filters.country }}" placeholder="Country" class="bp-input w-full min-w-0">
+      </div>
+      <div class="flex flex-col gap-1 w-full min-w-0">
+        <label class="bp-form-label truncate">IB Status</label>
+        <select name="status" class="bp-input w-full min-w-0">
+          <option value="" {% if not filters.status %}selected{% endif %}>All</option>
+          <option value="active" {% if filters.status == 'active' %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="flex gap-2 col-span-2 lg:col-span-1 h-[38px]">
+        <button type="submit" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all flex-1"><i class="fa-solid fa-filter me-1"></i>Apply</button>
+        <a href="{% url 'admin-ib-users' %}" class="bp-btn bp-btn-outline flex-1 text-center justify-center items-center"><i class="fa-solid fa-rotate-left me-1"></i>Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="bp-card">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title"><i class="fa-solid fa-table me-2"></i>IB Users</span>
+  </div>
+  <div class="bp-card-body bp-s-48">
+    <div class="overflow-x-auto w-full">
+      <table class="bp-table min-w-full whitespace-nowrap">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>IB Level</th>
+            <th>Phone</th>
+            <th>Country</th>
+            <th>Clients</th>
+            <th>Commission</th>
+            <th>Referral</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r.u.id }}</td>
+            <td><span class="bp-s-105">{{ r.u.display_name }}</span></td>
+            <td>{{ r.u.email }}</td>
+
+            <td>{{ r.ib_level_name }}</td>
+            <td>{{ r.u.phone|default:"—" }}</td>
+            <td>{{ r.u.country|default:"—" }}</td>
+            <td>{{ r.total_clients }}</td>
+            <td>{{ r.total_commission|floatformat:2 }}</td>
+            <td class="ib-referral-cell"><span class="bp-small">{{ r.referral_link|default:"—" }}</span></td>
+            <td>
+              {% if r.u.is_active %}
+                <span class="bp-badge bp-badge-success">Active</span>
+              {% else %}
+                <span class="bp-badge bp-badge-error">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="bp-s-137">
+              <div class="flex items-center gap-2">
+                <a class="w-28 justify-center px-2.5 py-1.5 rounded-md text-[13px] font-semibold text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5" href="{% url 'admin-ib-move-client' %}?ib={{ r.u.id }}"><i class="fa-solid fa-arrow-up-down text-blue-500"></i>{{ r.ib_level_name|default:"—" }}</a>
+                <a class="w-28 justify-center px-2.5 py-1.5 rounded-md text-[13px] font-semibold text-emerald-600 dark:text-emerald-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5" href="{% url 'admin-report-ib-commission' %}?ib_user={{ r.u.id }}"><i class="fa-solid fa-coins text-emerald-500"></i>Commission</a>
+                <a class="w-28 justify-center px-2.5 py-1.5 rounded-md text-[13px] font-semibold text-purple-600 dark:text-purple-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5" href="{% url 'admin-ib-tree' ib_id=r.u.id %}"><i class="fa-solid fa-sitemap text-purple-500"></i>Tree</a>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td class="bp-s-150" colspan="12">
+              <i class="fa-solid fa-inbox bp-s-186"></i>
+              No IB users match your filters.
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="bp-card-footer">
+    <div class="bp-pagination">
+      {% if page_obj.has_previous %}
+      <a class="bp-page-btn" href="?page={{ page_obj.previous_page_number }}&q={{ filters.q|urlencode }}&country={{ filters.country|urlencode }}&status={{ filters.status|urlencode }}"><i class="fa-solid fa-chevron-left"></i></a>
+      {% endif %}
+      <span class="bp-page-btn bp-page-btn--active">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+      <a class="bp-page-btn" href="?page={{ page_obj.next_page_number }}&q={{ filters.q|urlencode }}&country={{ filters.country|urlencode }}&status={{ filters.status|urlencode }}"><i class="fa-solid fa-chevron-right"></i></a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

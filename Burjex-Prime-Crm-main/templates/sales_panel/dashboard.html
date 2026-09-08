@@ -1,0 +1,386 @@
+{% extends "sales_panel/base.html" %}
+{% load humanize static %}
+
+{% block title %}Sales Command — Forex CRM{% endblock %}
+{% block admin_shell_page_title %}Sales Command{% endblock %}
+
+{% block admin_content %}
+{# ── Page header ──────────────────────────────────────────────────── #}
+<div class="bp-page-header">
+  <div>
+    <h1 class="bp-page-title">Sales command center</h1>
+    <p class="bp-page-subtitle">
+      Enterprise view of revenue, flow, introducing brokers, and client footprint.
+      <span class="bp-text-success">Green</span> = profit/inflow &nbsp;·&nbsp;
+      <span class="bp-text-error">Red</span> = outflow/loss &nbsp;·&nbsp;
+      <span class="bp-text-info">Blue</span> = neutral volume &nbsp;·&nbsp;
+      <span class="bp-text-warning">Orange</span> = awaiting action.
+    </p>
+  </div>
+</div>
+
+{# ── Manager target banner ─────────────────────────────────────────── #}
+{% include "sales_panel/includes/manager_target_banner.html" %}
+
+{# ── Date-range filter bar ─────────────────────────────────────────── #}
+<div class="bp-card bp-section" style="margin-bottom:1.5rem;">
+  <div class="bp-card-body" style="padding:0.875rem 1.25rem;">
+    <form class="sales-ent__filter" method="get" action="">
+      <label class="bp-form-label" style="margin-bottom:0;">From</label>
+      <input type="date" name="from" value="{{ sales_date_from }}">
+      <label class="bp-form-label" style="margin-bottom:0;">To</label>
+      <input type="date" name="to" value="{{ sales_date_to }}">
+      <button type="submit" class="bp-btn bp-btn-primary bp-btn-sm sales-apply-range-btn">Apply range</button>
+      <a class="bp-btn bp-btn-secondary bp-btn-sm" href="{% url 'sales-ib-analytics' %}">IB analytics</a>
+      <a class="bp-btn bp-btn-secondary bp-btn-sm" href="{% url 'sales-team' %}">Sales team</a>
+      <a class="bp-btn bp-btn-success bp-btn-sm" href="{% url 'sales-funnel' %}">Leads / Funnel</a>
+    </form>
+  </div>
+</div>
+
+{# ── Pending-action alert bar ──────────────────────────────────────── #}
+<div class="bp-alert bp-alert-warning bp-section" role="status" style="margin-bottom:1.5rem;">
+  <span class="bp-alert-icon">&#9888;</span>
+  <div style="display:flex;flex-wrap:wrap;gap:1.25rem;align-items:center;">
+    <span>Pending deposits: <strong>{{ pending_orange.deposits }}</strong></span>
+    <span>Pending withdrawals: <strong>{{ pending_orange.withdrawals }}</strong></span>
+    <span>IB queue: <strong>{{ pending_orange.ib_requests }}</strong></span>
+  </div>
+</div>
+
+{# ── KPI cards ─────────────────────────────────────────────────────── #}
+<section class="bp-section" aria-label="Key performance indicators">
+  <h2 class="bp-section-title">Key performance indicators</h2>
+  <div class="bp-grid-4" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr));">
+
+    <article class="bp-kpi-card bp-kpi-card--success">
+      <div class="bp-kpi-icon bp-kpi-icon--success">&#9650;</div>
+      <span class="bp-kpi-value bp-text-success">${{ kpi_total_revenue|floatformat:2|intcomma }}</span>
+      <span class="bp-kpi-label">Total company revenue</span>
+    </article>
+
+    <article class="bp-kpi-card bp-kpi-card--error">
+      <div class="bp-kpi-icon bp-kpi-icon--error">&#9660;</div>
+      <span class="bp-kpi-value bp-text-error">${{ kpi_total_loss|floatformat:2|intcomma }}</span>
+      <span class="bp-kpi-label">Total loss (withdrawals)</span>
+    </article>
+
+    <article class="bp-kpi-card {% if kpi_net_positive %}bp-kpi-card--success{% else %}bp-kpi-card--error{% endif %}">
+      <div class="bp-kpi-icon {% if kpi_net_positive %}bp-kpi-icon--success{% else %}bp-kpi-icon--error{% endif %}">&#36;</div>
+      <span class="bp-kpi-value {% if kpi_net_positive %}bp-text-success{% else %}bp-text-error{% endif %}">${{ kpi_net_profit|floatformat:2|intcomma }}</span>
+      <span class="bp-kpi-label">Net profit</span>
+    </article>
+
+    <article class="bp-kpi-card bp-kpi-card--info">
+      <div class="bp-kpi-icon bp-kpi-icon--info">&#9700;</div>
+      <span class="bp-kpi-value bp-text-info">${{ kpi_trading_volume|floatformat:2|intcomma }}</span>
+      <span class="bp-kpi-label">Trading volume</span>
+    </article>
+
+    <article class="bp-kpi-card bp-kpi-card--info">
+      <div class="bp-kpi-icon bp-kpi-icon--accent">&#9678;</div>
+      <span class="bp-kpi-value bp-text-info">{{ kpi_active_ibs|intcomma }}</span>
+      <span class="bp-kpi-label">Active IBs</span>
+    </article>
+
+    <article class="bp-kpi-card bp-kpi-card--info">
+      <div class="bp-kpi-icon bp-kpi-icon--primary">&#128101;</div>
+      <span class="bp-kpi-value">{{ kpi_total_clients|intcomma }}</span>
+      <span class="bp-kpi-label">Total clients</span>
+    </article>
+
+  </div>
+</section>
+
+{# ── Sales funnel pipeline ─────────────────────────────────────────── #}
+{% if funnel_cards %}
+<section class="bp-section" aria-label="Sales funnel">
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <h2 class="bp-card-header-title">Sales funnel pipeline</h2>
+      <span class="bp-badge bp-badge-info">Live</span>
+    </div>
+    <div class="bp-card-body">
+      <p class="bp-caption" style="margin-bottom:1rem;">
+        Visitors through active traders — green flow indicates healthy handoff; red signals low conversion to next stage.
+        Click a stage to open the lead list.
+      </p>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:0.75rem;margin-bottom:1.25rem;">
+        {% for c in funnel_cards %}
+          <a href="{% url 'sales-funnel-stage' c.key %}"
+             class="bp-kpi-card bp-kpi-card--clickable"
+             style="text-decoration:none;">
+            <span class="bp-label" style="display:block;margin-bottom:0.35rem;">{{ c.title }}</span>
+            <span class="bp-kpi-value" style="font-size:1.35rem;">{{ c.count|intcomma }}</span>
+            <span class="bp-caption" style="margin-top:0.25rem;">
+              PTL: <span class="bp-text-success">${{ c.profit_potential|floatformat:0|intcomma }}</span>
+            </span>
+            {% if c.conversion_to_next != None %}
+              <span class="bp-caption" style="margin-top:0.15rem;">
+                Next:
+                <span class="{% if c.conversion_to_next < 25 %}bp-text-error{% else %}bp-text-success{% endif %}">
+                  {{ c.conversion_to_next }}%
+                </span>
+              </span>
+            {% endif %}
+          </a>
+        {% endfor %}
+      </div>
+
+      <div style="height:220px;"><canvas id="chartSalesFunnelDash" aria-label="Funnel conversion"></canvas></div>
+    </div>
+  </div>
+</section>
+
+{{ funnel_chart_labels|json_script:"dash-funnel-labels" }}
+{{ funnel_chart_counts|json_script:"dash-funnel-counts" }}
+{{ funnel_stage_conv|json_script:"dash-funnel-conv" }}
+{% endif %}
+
+{# ── Charts grid ───────────────────────────────────────────────────── #}
+<section class="bp-section" aria-label="Charts">
+  <h2 class="bp-section-title">Revenue &amp; performance</h2>
+  <div class="bp-grid-2">
+
+    <div class="bp-card">
+      <div class="bp-card-header">
+        <h3 class="bp-card-header-title">Revenue vs outflow</h3>
+        <span class="bp-badge bp-badge-success">Deposits</span>
+      </div>
+      <div class="bp-card-body">
+        <p class="bp-caption" style="margin-bottom:0.75rem;">Deposits (green) and withdrawals (red) by period.</p>
+        <div style="height:220px;"><canvas id="chartRevenueDw" aria-label="Revenue chart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="bp-card">
+      <div class="bp-card-header">
+        <h3 class="bp-card-header-title">Volume</h3>
+        <span class="bp-badge bp-badge-info">Flow</span>
+      </div>
+      <div class="bp-card-body">
+        <p class="bp-caption" style="margin-bottom:0.75rem;">Combined deposit + withdrawal flow (neutral).</p>
+        <div style="height:220px;"><canvas id="chartVolume" aria-label="Volume chart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="bp-card">
+      <div class="bp-card-header">
+        <h3 class="bp-card-header-title">IB performance</h3>
+        <span class="bp-badge bp-badge-warning">IBs</span>
+      </div>
+      <div class="bp-card-body">
+        <p class="bp-caption" style="margin-bottom:0.75rem;">IB withdrawals vs internal transfers (toggle series).</p>
+        <div style="height:220px;"><canvas id="chartIb" aria-label="IB performance"></canvas></div>
+      </div>
+    </div>
+
+    <div class="bp-card">
+      <div class="bp-card-header">
+        <h3 class="bp-card-header-title">Net profit / loss</h3>
+        <span class="bp-badge bp-badge-neutral">Trend</span>
+      </div>
+      <div class="bp-card-body">
+        <p class="bp-caption" style="margin-bottom:0.75rem;">Net revenue trend — bars green above zero, red below.</p>
+        <div style="height:220px;"><canvas id="chartNet" aria-label="Profit loss chart"></canvas></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+{# ── Pipeline snapshot (legacy) ────────────────────────────────────── #}
+{% if sales_total_leads is not None %}
+<section class="bp-section">
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <h2 class="bp-card-header-title">Pipeline snapshot</h2>
+      <span class="bp-badge bp-badge-neutral">Legacy metrics</span>
+    </div>
+    <div class="bp-card-body">
+      <p class="bp-caption" style="margin-bottom:1rem;">Leads in system and conversion rate (legacy sales metrics).</p>
+      <div style="display:flex;flex-wrap:wrap;gap:2rem;">
+
+        <div class="bp-kpi-card" style="min-width:140px;flex:1;">
+          <span class="bp-kpi-label">Total leads</span>
+          <span class="bp-kpi-value" style="font-size:1.5rem;margin-top:0.35rem;">{{ sales_total_leads|intcomma }}</span>
+        </div>
+
+        <div class="bp-kpi-card bp-kpi-card--info" style="min-width:140px;flex:1;">
+          <span class="bp-kpi-label">Conversion rate</span>
+          <span class="bp-kpi-value bp-text-info" style="font-size:1.5rem;margin-top:0.35rem;">{{ sales_conversion_rate|default:"—" }}</span>
+        </div>
+
+        <div class="bp-kpi-card" style="min-width:140px;flex:1;">
+          <span class="bp-kpi-label">Recent activity</span>
+          <span class="bp-kpi-value" style="font-size:1.5rem;margin-top:0.35rem;">{{ sales_activity|default:"—" }}</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{# ── Chart data payloads ───────────────────────────────────────────── #}
+{{ chart_revenue_dw|json_script:"payload-revenue" }}
+{{ chart_volume|json_script:"payload-volume" }}
+{{ chart_ib|json_script:"payload-ib" }}
+{{ chart_net|json_script:"payload-net" }}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var grid = "rgba(148, 163, 184, 0.12)";
+  var tick = "#94a3b8";
+  function read(id) {
+    var el = document.getElementById(id);
+    try { return JSON.parse(el ? el.textContent : "{}"); } catch (e) { return {}; }
+  }
+  var rev = read("payload-revenue");
+  var vol = read("payload-volume");
+  var ib = read("payload-ib");
+  var net = read("payload-net");
+
+  function mkLabels(a) { return (a && a.length) ? a : ["—"]; }
+
+  if (typeof Chart !== "undefined" && document.getElementById("chartRevenueDw")) {
+    new Chart(document.getElementById("chartRevenueDw"), {
+      type: "bar",
+      data: {
+        labels: mkLabels(rev.labels),
+        datasets: [
+          { label: "Revenue", data: rev.deposits && rev.deposits.length ? rev.deposits : [0], backgroundColor: "rgba(16, 185, 129, 0.55)", borderColor: "#10b981", borderWidth: 1, borderRadius: 4 },
+          { label: "Outflow", data: rev.withdrawals && rev.withdrawals.length ? rev.withdrawals : [0], backgroundColor: "rgba(248, 113, 113, 0.5)", borderColor: "#f87171", borderWidth: 1, borderRadius: 4 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: { legend: { labels: { color: tick } } },
+        scales: {
+          x: { grid: { color: grid }, ticks: { color: tick, maxRotation: 45 } },
+          y: { beginAtZero: true, grid: { color: grid }, ticks: { color: tick } }
+        }
+      }
+    });
+  }
+
+  if (typeof Chart !== "undefined" && document.getElementById("chartVolume")) {
+    new Chart(document.getElementById("chartVolume"), {
+      type: "line",
+      data: {
+        labels: mkLabels(vol.labels),
+        datasets: [{
+          label: "Volume",
+          data: vol.values && vol.values.length ? vol.values : [0],
+          borderColor: "#38bdf8",
+          backgroundColor: "rgba(56, 189, 248, 0.12)",
+          fill: true,
+          tension: 0.35,
+          pointRadius: 0,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: grid }, ticks: { color: tick, maxRotation: 45 } },
+          y: { beginAtZero: true, grid: { color: grid }, ticks: { color: tick } }
+        }
+      }
+    });
+  }
+
+  if (typeof Chart !== "undefined" && document.getElementById("chartIb")) {
+    new Chart(document.getElementById("chartIb"), {
+      type: "line",
+      data: {
+        labels: mkLabels(ib.labels),
+        datasets: [
+          { label: "IB withdrawals", data: ib.withdrawals && ib.withdrawals.length ? ib.withdrawals : [0], borderColor: "#fb923c", backgroundColor: "rgba(251, 146, 60, 0.1)", fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0 },
+          { label: "Transfers", data: ib.transfers && ib.transfers.length ? ib.transfers : [0], borderColor: "#a78bfa", backgroundColor: "rgba(167, 139, 250, 0.08)", fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: tick } } },
+        scales: {
+          x: { grid: { color: grid }, ticks: { color: tick, maxRotation: 45 } },
+          y: { beginAtZero: true, grid: { color: grid }, ticks: { color: tick } }
+        }
+      }
+    });
+  }
+
+  if (typeof Chart !== "undefined" && document.getElementById("chartSalesFunnelDash")) {
+    var fl = read("dash-funnel-labels");
+    var fc = read("dash-funnel-counts");
+    var fcv = read("dash-funnel-conv");
+    if (fl && fl.length && fc && fc.length) {
+      new Chart(document.getElementById("chartSalesFunnelDash"), {
+        type: "bar",
+        data: {
+          labels: fl,
+          datasets: [
+            {
+              label: "Stage count",
+              data: fc,
+              backgroundColor: "rgba(16, 185, 129, 0.45)",
+              borderColor: "#10b981",
+              borderWidth: 1,
+              borderRadius: 5,
+              yAxisID: "y"
+            },
+            {
+              label: "Conv. to next %",
+              data: (fcv || []).map(function (x) { return x === null ? 0 : x; }),
+              type: "line",
+              borderColor: "#f87171",
+              backgroundColor: "rgba(248, 113, 113, 0.1)",
+              tension: 0.35,
+              yAxisID: "y1",
+              pointRadius: 3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: { legend: { labels: { color: tick } } },
+          scales: {
+            x: { grid: { color: grid }, ticks: { color: tick, maxRotation: 35 } },
+            y: { position: "left", beginAtZero: true, grid: { color: grid }, ticks: { color: tick } },
+            y1: { position: "right", beginAtZero: true, max: 100, grid: { drawOnChartArea: false }, ticks: { color: "#f87171" } }
+          }
+        }
+      });
+    }
+  }
+
+  if (typeof Chart !== "undefined" && document.getElementById("chartNet")) {
+    var vals = net.values && net.values.length ? net.values : [0];
+    var bg = vals.map(function (v) { return (Number(v) >= 0) ? "rgba(16, 185, 129, 0.55)" : "rgba(248, 113, 113, 0.5)"; });
+    var border = vals.map(function (v) { return (Number(v) >= 0) ? "#10b981" : "#f87171"; });
+    new Chart(document.getElementById("chartNet"), {
+      type: "bar",
+      data: {
+        labels: mkLabels(net.labels),
+        datasets: [{ label: "Net", data: vals, backgroundColor: bg, borderColor: border, borderWidth: 1, borderRadius: 4 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: grid }, ticks: { color: tick, maxRotation: 45 } },
+          y: { grid: { color: grid }, ticks: { color: tick } }
+        }
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

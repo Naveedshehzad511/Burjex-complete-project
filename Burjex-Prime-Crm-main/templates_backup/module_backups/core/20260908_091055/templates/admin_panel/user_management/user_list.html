@@ -1,0 +1,269 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_body %}
+
+{# Page Header #}
+<div class=" mb-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-user-group me-2 text-indigo-500"></i>User Management</h1>
+  </div>
+  
+  <!-- Mini KPI stat box (Total Users) -->
+  <div class="hidden md:flex flex-col px-4 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50 justify-center items-center h-10 shrink-0">
+    <div class="flex items-center gap-2">
+      <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase">Total Users:</span>
+      <span class="text-sm font-bold text-slate-900 dark:text-white leading-none">{{ page_obj.paginator.count|default:stats.total_users }}</span>
+    </div>
+  </div>
+</div>
+
+{# Toolbar #}
+<div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 w-full">
+  <!-- Left Side: Filters -->
+  <form method="get" class="flex flex-col lg:flex-row items-start lg:items-center gap-4 lg:gap-2 w-full lg:w-auto">
+    {% if filters.list_scope %}<input type="hidden" name="list_scope" value="{{ filters.list_scope }}">{% endif %}
+    
+    <!-- Mobile Row 1 / Desktop Inline -->
+    <div class="flex items-center gap-2 w-full lg:w-auto">
+      <!-- Search Box -->
+      <div class="flex-1 min-w-0 lg:flex-none lg:w-48">
+        <input type="text" name="q" value="{{ filters.q }}" placeholder="Search users..." 
+          class="bp-input h-9 w-full text-sm">
+      </div>
+      
+      <!-- Filters -->
+      <div class="w-32 shrink-0">
+        <select name="account_status" class="bp-input h-9 w-full text-sm">
+          <option value="">Status</option>
+          <option value="ACTIVE" {% if filters.account_status == 'ACTIVE' %}selected{% endif %}>Active</option>
+          <option value="DISABLED" {% if filters.account_status == 'DISABLED' %}selected{% endif %}>Disabled</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Mobile Row 2 / Desktop Inline -->
+    <div class="flex items-center gap-2 w-full lg:w-auto shrink-0">
+      <!-- Action Buttons -->
+      <button type="submit" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all h-9 px-4 text-sm whitespace-nowrap flex-1 lg:flex-none justify-center">
+        Search & Apply
+      </button>
+      <a href="{% url 'admin-user-list' %}" class="bp-btn bp-btn-outline h-9 px-4 text-sm flex items-center justify-center whitespace-nowrap flex-1 lg:flex-none">
+        Reset
+      </a>
+    </div>
+  </form>
+
+  <!-- Right Side: Actions (Mobile Row 3 / Desktop Inline) -->
+  <div class="flex items-center gap-2 w-full lg:w-auto shrink-0">
+    <button type="button" id="openAddUserModal" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all h-9 px-4 text-sm flex items-center justify-center gap-2 whitespace-nowrap flex-1 lg:flex-none">
+      <i class="fa-solid fa-plus"></i>
+      Add User
+    </button>
+    <a href="?{% if request.GET %}{{ request.GET.urlencode }}&{% endif %}export=excel"
+      class="bp-btn bp-btn-outline h-9 px-4 text-sm flex items-center justify-center gap-2 shadow-sm bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 whitespace-nowrap flex-1 lg:flex-none">
+      <i class="fa-solid fa-download"></i>
+      Export
+    </a>
+  </div>
+</div>
+
+{# Main table card #}
+<div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden mb-6">
+  <div class="overflow-x-auto w-full">
+    <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+      <thead>
+        <tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+          <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs capitalize">ID</th>
+          <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs capitalize">Name</th>
+          <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs capitalize">Email</th>
+          <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs capitalize">Phone</th>
+          <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs capitalize">Country</th>
+          <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs capitalize">Wallet</th>
+          <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs capitalize">IB Name</th>
+          <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs capitalize text-center">Status</th>
+          <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs capitalize">Tags</th>
+          <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs capitalize">Registered</th>
+          <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs capitalize text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+        {% for row in rows %}
+        {% with u=row.user %}
+        <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors group">
+          <td class="px-4 py-3 text-slate-500 font-medium">#{{ u.id }}</td>
+          <td class="px-4 py-3">
+            <a href="{% url 'admin-user-view' u.pk %}" class="font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+              {{ u.display_name }}
+            </a>
+          </td>
+          <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ u.email }}</td>
+          <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ u.phone|default:"—" }}</td>
+          <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ u.country|default:"—" }}</td>
+          <td class="px-4 py-3 font-semibold text-slate-900 dark:text-white">${{ row.wallet|floatformat:2 }}</td>
+          <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ row.ib_name }}</td>
+          <td class="px-4 py-3 text-center">
+            <div class="flex flex-nowrap gap-1.5 justify-center items-center">
+              {% with b=row.badges.email %}
+              {% if b.enabled %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border-0 shadow-sm" style="background-color: {{ b.bg }}; color: {{ b.fg }};">Email</span>
+              {% endif %}
+              {% endwith %}
+              {% with b=row.badges.kyc %}
+              {% if b.enabled %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border-0 shadow-sm" style="background-color: {{ b.bg }}; color: {{ b.fg }};">Verified</span>
+              {% endif %}
+              {% endwith %}
+              {% with b=row.badges.account %}
+              {% if b.enabled %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border-0 shadow-sm" style="background-color: {{ b.bg }}; color: {{ b.fg }};">Active</span>
+              {% endif %}
+              {% endwith %}
+            </div>
+          </td>
+          <td class="px-4 py-3">
+            <div class="flex flex-wrap gap-1">
+              {% for ut in row.tags %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold text-white shadow-sm" style="background-color:{{ ut.tag.color }};">{{ ut.tag.name }}</span>
+              {% empty %}
+              <span class="text-slate-400">—</span>
+              {% endfor %}
+            </div>
+          </td>
+          <td class="px-4 py-3 text-slate-500 text-xs">{{ u.date_joined|date:"M d, Y" }} <br><span class="opacity-70">{{ u.date_joined|date:"H:i" }}</span></td>
+          <td class="px-4 py-3 text-right">
+            <div class="flex items-center justify-end gap-2">
+              <a href="{% url 'admin-user-view' u.pk %}" class="w-8 h-8 rounded-full flex items-center justify-center transition-colors action-btn-view" title="View">
+                <i class="fa-solid fa-eye"></i>
+              </a>
+              {% if not row.is_ib %}
+              <form method="post" action="{% url 'admin-user-promote-ib' u.pk %}" onsubmit="return confirm('Promote this user to IB?');" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="w-8 h-8 rounded-full flex items-center justify-center transition-colors action-btn-star" title="Promote as IB">
+                  <i class="fa-solid fa-star"></i>
+                </button>
+              </form>
+              {% endif %}
+              <form method="post" action="{% url 'admin-user-delete' u.pk %}" onsubmit="return confirm('Are you sure you want to delete this user?');" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="w-8 h-8 rounded-full flex items-center justify-center transition-colors action-btn-delete" title="Delete">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endwith %}
+        {% empty %}
+        <tr>
+          <td colspan="11">
+            <div class="flex flex-col items-center justify-center py-12">
+              <div class="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
+                <i class="fa-solid fa-users-slash text-2xl"></i>
+              </div>
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-1">No users found</h3>
+              <p class="text-xs text-slate-500">There are no users matching your current filters.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="px-4 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between">
+    <span class="text-xs font-medium text-slate-500">
+      Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </span>
+    <div class="flex items-center gap-1">
+      {% if page_obj.has_previous %}
+      <a href="?{% if request.GET %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}" class="h-8 px-3 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center transition-colors">
+        <i class="fa-solid fa-chevron-left mr-1.5"></i> Prev
+      </a>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a href="?{% if request.GET %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.next_page_number }}" class="h-8 px-3 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center transition-colors">
+        Next <i class="fa-solid fa-chevron-right ml-1.5"></i>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Add User Modal -->
+<div id="addUserModal" class="admin-modal" aria-hidden="true">
+  <div class="admin-modal__backdrop bg-slate-900/50 backdrop-blur-sm transition-opacity" data-close-add-user></div>
+  <div class="admin-modal__panel bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 max-w-md w-full m-4 overflow-hidden transform transition-all" role="dialog" aria-modal="true" aria-labelledby="addUserModalTitle">
+    <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+      <div>
+        <h3 id="addUserModalTitle" class="text-lg font-bold text-slate-900 dark:text-white">Add User</h3>
+        <p class="text-xs text-slate-500 mt-0.5">Create a new client account</p>
+      </div>
+      <button type="button" class="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-500 hover:border-rose-200 flex items-center justify-center transition-colors" data-close-add-user aria-label="Close">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <form method="post" action="{% url 'admin-user-add' %}" class="p-6 flex flex-col gap-4">
+      {% csrf_token %}
+      <input type="hidden" name="return_to_list" value="1">
+      
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Full Name</label>
+        <input name="name" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" required>
+      </div>
+      
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Country</label>
+        <input name="country" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" required>
+      </div>
+      
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Email Address</label>
+        <input type="email" name="email" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" required>
+      </div>
+      
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Phone Number</label>
+        <input name="phone" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" required>
+      </div>
+      
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Password</label>
+        <input type="password" name="password" class="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" required>
+      </div>
+      
+      <div class="flex items-center gap-3 mt-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <button type="button" class="flex-1 h-10 rounded-lg text-sm font-semibold transition-colors btn-cancel" data-close-add-user>Cancel</button>
+        <button type="submit" class="flex-1 h-10 rounded-lg text-sm font-semibold transition-colors shadow-sm btn-add flex items-center justify-center gap-2">
+          <i class="fa-solid fa-plus"></i> Create User
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  
+
+  (function () {
+    const modal = document.getElementById("addUserModal");
+    const openBtn = document.getElementById("openAddUserModal");
+    const closeBtns = document.querySelectorAll("[data-close-add-user]");
+    function openModal() {
+      modal?.classList.add("open");
+      modal?.setAttribute("aria-hidden", "false");
+      modal?.querySelector("input[name='name']")?.focus();
+    }
+    function closeModal() {
+      modal?.classList.remove("open");
+      modal?.setAttribute("aria-hidden", "true");
+    }
+    openBtn?.addEventListener("click", openModal);
+    closeBtns.forEach(function (btn) { btn.addEventListener("click", closeModal); });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && modal?.classList.contains("open")) closeModal();
+    });
+  })();
+</script>
+
+{% endblock %}

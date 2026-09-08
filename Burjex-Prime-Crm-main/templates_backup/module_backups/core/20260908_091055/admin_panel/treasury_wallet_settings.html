@@ -1,0 +1,75 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Wallet Settings{% endblock %}
+{% block admin_content %}
+<div class="max-w-4xl mx-auto space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold text-slate-900">Wallet Settings</h1>
+      <p class="text-sm text-slate-600 mt-1">Master control for wallet visibility and limits.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="javascript:history.back()" class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center gap-2 text-sm font-medium transition-colors">
+        <i class="fa-solid fa-arrow-left"></i> Back
+      </a>
+    </div>
+  </div>
+  <form method="post" class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-8">
+    {% csrf_token %}
+    <section>
+      <h2 class="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-3">General</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" name="wallet_system_enabled" {% if obj.wallet_system_enabled %}checked{% endif %}> Wallet system enabled</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="auto_create_wallet_on_registration" {% if obj.auto_create_wallet_on_registration %}checked{% endif %}> Auto-create wallet on registration</label>
+      </div>
+    </section>
+    <section>
+      <h2 class="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-3">Deposits</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" name="allow_deposits_to_wallet" {% if obj.allow_deposits_to_wallet %}checked{% endif %}> Allow deposits to wallet</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="wallet_deposit_maintenance" {% if obj.wallet_deposit_maintenance %}checked{% endif %}> Deposit maintenance mode</label>
+        <div><label class="text-xs text-slate-600">Min deposit</label><input name="wallet_min_deposit" value="{{ obj.wallet_min_deposit }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-xs text-slate-600">Max deposit (0 = no cap)</label><input name="wallet_max_deposit" value="{{ obj.wallet_max_deposit }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+      </div>
+    </section>
+    <section>
+      <h2 class="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-3">Withdrawals</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" name="allow_withdrawals_from_wallet" {% if obj.allow_withdrawals_from_wallet %}checked{% endif %}> Allow withdrawals from wallet</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="wallet_withdraw_maintenance" {% if obj.wallet_withdraw_maintenance %}checked{% endif %}> Withdrawal maintenance mode</label>
+        <div><label class="text-xs text-slate-600">Min withdraw</label><input name="wallet_min_withdraw" value="{{ obj.wallet_min_withdraw }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-xs text-slate-600">Max withdraw (0 = no cap)</label><input name="wallet_max_withdraw" value="{{ obj.wallet_max_withdraw }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-xs text-slate-600">Daily withdraw limit (0 = off)</label><input name="wallet_daily_withdraw_limit" value="{{ obj.wallet_daily_withdraw_limit }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+      </div>
+    </section>
+    <section>
+      <h2 class="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-3">Transfers</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" name="allow_wallet_to_trading" {% if obj.allow_wallet_to_trading %}checked{% endif %}> Wallet → Trading</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="allow_trading_to_wallet" {% if obj.allow_trading_to_wallet %}checked{% endif %}> Trading → Wallet</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="allow_p2p_transfers" {% if obj.allow_p2p_transfers %}checked{% endif %}> P2P / IB wallet paths</label>
+      </div>
+    </section>
+    <section>
+      <h2 class="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-3">Security</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" name="require_kyc_wallet_withdraw" {% if obj.require_kyc_wallet_withdraw %}checked{% endif %}> Require KYC for wallet withdraw</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="require_2fa_wallet_withdraw" {% if obj.require_2fa_wallet_withdraw %}checked{% endif %}> Require 2FA for wallet withdraw</label>
+        <div><label class="text-xs text-slate-600">Withdraw cooldown (minutes)</label><input name="wallet_withdraw_cooldown_minutes" value="{{ obj.wallet_withdraw_cooldown_minutes }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-xs text-slate-600">Max pending withdrawals (0 = off)</label><input name="wallet_max_pending_withdrawals" value="{{ obj.wallet_max_pending_withdrawals }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
+      </div>
+    </section>
+    <section>
+      <h2 class="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-3">Display</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" name="show_wallet_dashboard" {% if obj.show_wallet_dashboard %}checked{% endif %}> Show wallet on dashboard</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="wallet_in_total_balance" {% if obj.wallet_in_total_balance %}checked{% endif %}> Include wallet in total balance</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="show_wallet_sidebar" {% if obj.show_wallet_sidebar %}checked{% endif %}> Show wallet in sidebar</label>
+      </div>
+    </section>
+    <div class="pt-2">
+      <button type="submit" class="bg-indigo-600 text-white rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-indigo-700">Save wallet settings</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+

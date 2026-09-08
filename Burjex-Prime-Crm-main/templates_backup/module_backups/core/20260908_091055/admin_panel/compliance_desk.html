@@ -1,0 +1,422 @@
+{% extends "admin_panel/base.html" %}
+{% load static %}
+{% block title %}Compliance Desk{% endblock %}
+{% block admin_content %}
+<div class="compliance-desk-page">
+
+<div class="bp-page-header">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-900 dark:text-white mb-4"><i class="fa-solid fa-shield-halved bp-s-27"></i>Compliance Desk</h1>
+    <div class="bp-page-subtitle">KYC processing, team workload, and verification analytics</div>
+  </div>
+</div>
+
+<!-- Top KPI Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+  <!-- Pending Individual KYC -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Pending Individual KYC</span>
+      <span id="c1" class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ top_cards.pending_individual_kyc }}</span>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #f59e0b20 0%, #f59e0b05 100%); border: 1px solid #f59e0b30; color: #f59e0b; box-shadow: 0 4px 12px #f59e0b15;">
+      <i class="fa-solid fa-user-clock text-[16px]"></i>
+    </div>
+  </div>
+  <!-- Pending Corporate KYC -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Pending Corporate KYC</span>
+      <span id="c2" class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ top_cards.pending_corporate_kyc }}</span>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #f59e0b20 0%, #f59e0b05 100%); border: 1px solid #f59e0b30; color: #f59e0b; box-shadow: 0 4px 12px #f59e0b15;">
+      <i class="fa-solid fa-building-columns text-[16px]"></i>
+    </div>
+  </div>
+  <!-- Partial Approved -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Partial Approved</span>
+      <span id="c3" class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ top_cards.partial_approved }}</span>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #10b98120 0%, #10b98105 100%); border: 1px solid #10b98130; color: #10b981; box-shadow: 0 4px 12px #10b98115;">
+      <i class="fa-solid fa-circle-half-stroke text-[16px]"></i>
+    </div>
+  </div>
+</div>
+
+<!-- Main Stats Row -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <!-- Total KYC -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Total KYC</span>
+      <span id="m1" class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ main_stats.total_kyc }}</span>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #64748b20 0%, #64748b05 100%); border: 1px solid #64748b30; color: #64748b; box-shadow: 0 4px 12px #64748b15;">
+      <i class="fa-solid fa-list-check text-[16px]"></i>
+    </div>
+  </div>
+  <!-- Pending Review -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Pending Review</span>
+      <span id="m2" class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ main_stats.pending_review }}</span>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #f59e0b20 0%, #f59e0b05 100%); border: 1px solid #f59e0b30; color: #f59e0b; box-shadow: 0 4px 12px #f59e0b15;">
+      <i class="fa-solid fa-hourglass-half text-[16px]"></i>
+    </div>
+  </div>
+  <!-- Fully Verified -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Fully Verified</span>
+      <span id="m3" class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ main_stats.fully_verified }}</span>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #10b98120 0%, #10b98105 100%); border: 1px solid #10b98130; color: #10b981; box-shadow: 0 4px 12px #10b98115;">
+      <i class="fa-solid fa-circle-check text-[16px]"></i>
+    </div>
+  </div>
+  <!-- Rejected -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Rejected</span>
+      <span id="m4" class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ main_stats.rejected }}</span>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #ef444420 0%, #ef444405 100%); border: 1px solid #ef444430; color: #ef4444; box-shadow: 0 4px 12px #ef444415;">
+      <i class="fa-solid fa-circle-xmark text-[16px]"></i>
+    </div>
+  </div>
+</div>
+
+<!-- Activity Row -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <!-- Today's Activity -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Today's Activity</span>
+      <span id="a1" class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ activity.today_activity }}</span>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #0ea5e920 0%, #0ea5e905 100%); border: 1px solid #0ea5e930; color: #0ea5e9; box-shadow: 0 4px 12px #0ea5e915;">
+      <i class="fa-solid fa-calendar-day text-[16px]"></i>
+    </div>
+  </div>
+  <!-- Fresh (<24h) -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Fresh (&lt;24h)</span>
+      <span id="a2" class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ activity.fresh_lt_24h }}</span>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #10b98120 0%, #10b98105 100%); border: 1px solid #10b98130; color: #10b981; box-shadow: 0 4px 12px #10b98115;">
+      <i class="fa-solid fa-bolt text-[16px]"></i>
+    </div>
+  </div>
+  <!-- Overdue (>3 days) -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Overdue (&gt;3 days)</span>
+      <span id="a3" class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ activity.overdue_gt_3d }}</span>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #ef444420 0%, #ef444405 100%); border: 1px solid #ef444430; color: #ef4444; box-shadow: 0 4px 12px #ef444415;">
+      <i class="fa-solid fa-triangle-exclamation text-[16px]"></i>
+    </div>
+  </div>
+  <!-- Avg Processing Time -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Avg Processing Time</span>
+      <span class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight"><span id="a4">{{ activity.avg_processing_time }}</span>m</span>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #64748b20 0%, #64748b05 100%); border: 1px solid #64748b30; color: #64748b; box-shadow: 0 4px 12px #64748b15;">
+      <i class="fa-solid fa-gauge-high text-[16px]"></i>
+    </div>
+  </div>
+</div>
+
+<!-- Team Workload -->
+<div class="bp-card mb-6">
+  <div class="bp-card-header flex justify-between items-center w-full">
+    <div class="bp-card-header-title"><i class="fa-solid fa-users me-2"></i>Team Workload</div>
+    <a href="#kyc-mgmt" class="bp-btn bp-btn-primary py-1.5 px-3 text-xs h-auto"><i class="fa-solid fa-arrow-down me-1"></i> Manage Queue</a>
+  </div>
+  <div class="bp-card-body p-4">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800 flex flex-col gap-1 items-center justify-center text-center">
+        <div class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">Enabled Officers</div>
+        <div id="t1" class="text-xl font-extrabold text-slate-900 dark:text-white">{{ team_workload.enabled_officers }}</div>
+      </div>
+      <div class="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800 flex flex-col gap-1 items-center justify-center text-center">
+        <div class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">Unassigned</div>
+        <div id="t2" class="text-xl font-extrabold text-slate-900 dark:text-white">{{ team_workload.unassigned }}</div>
+      </div>
+      <div class="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800 flex flex-col gap-1 items-center justify-center text-center">
+        <div class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">Assigned</div>
+        <div id="t3" class="text-xl font-extrabold text-slate-900 dark:text-white">{{ team_workload.assigned }}</div>
+      </div>
+      <div class="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800 flex flex-col gap-1 items-center justify-center text-center">
+        <div class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">Capacity</div>
+        <div id="t4" class="text-xl font-extrabold text-slate-900 dark:text-white">{{ team_workload.capacity }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row 1 -->
+<div class="bp-grid-2 bp-s-40">
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <div>
+        <div class="bp-card-header-title"><i class="fa-solid fa-chart-line bp-s-17"></i>Submission &amp; Verification Trends</div>
+        <div class="bp-caption bp-s-41">Last 14 days &middot; updates every 30s with live poll</div>
+      </div>
+    </div>
+    <div class="bp-card-body">
+      <div class="relative w-full bp-s-42"><canvas id="trendChart" aria-label="Submission and verification trends"></canvas></div>
+    </div>
+  </div>
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <div>
+        <div class="bp-card-header-title"><i class="fa-solid fa-chart-pie bp-s-17"></i>Status Breakdown</div>
+        <div class="bp-caption bp-s-41">Portfolio mix</div>
+      </div>
+    </div>
+    <div class="bp-card-body">
+      <div class="relative w-full bp-s-42"><canvas id="statusChart" aria-label="KYC status breakdown"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row 2 -->
+<div class="bp-grid-2 bp-s-10">
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <div>
+        <div class="bp-card-header-title"><i class="fa-solid fa-chart-bar bp-s-17"></i>Aging Distribution</div>
+        <div class="bp-caption bp-s-41">Queue age buckets</div>
+      </div>
+    </div>
+    <div class="bp-card-body">
+      <div class="relative w-full bp-s-43"><canvas id="agingChart" aria-label="Aging distribution"></canvas></div>
+    </div>
+  </div>
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <div>
+        <div class="bp-card-header-title"><i class="fa-solid fa-trophy bp-s-17"></i>Top Performers</div>
+        <div class="bp-caption bp-s-41">Review throughput</div>
+      </div>
+    </div>
+    <div class="bp-card-body">
+      {% for p in top_performers %}
+      <div class="bp-s-44">
+        <span class="bp-s-45">{{ p.name }}</span>
+        <span class="bp-small bp-s-46">{{ p.review_volume }} rev &middot; <span class="bp-badge bp-badge-success">{{ p.performance }}%</span></span>
+      </div>
+      {% empty %}
+      <div class="bp-alert bp-alert-neutral bp-s-47"><i class="fa-solid fa-circle-info bp-s-20"></i>No data available</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- KYC Processing Table -->
+<div id="kyc-mgmt" class="bp-card mb-6">
+  <div class="bp-card-header">
+    <div class="bp-card-header-title"><i class="fa-solid fa-id-card-clip me-2"></i>KYC Processing Queue</div>
+  </div>
+  <div class="bp-card-body p-0">
+    <div class="overflow-x-auto w-full">
+      <table class="bp-table min-w-full text-sm">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Priority</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in recent_requests %}
+          <tr>
+            <td class="font-bold text-slate-800 dark:text-slate-200">{{ r.user.email }}</td>
+            <td>{{ r.request_type }}</td>
+            <td>
+              {% if r.status == "approved" or r.status == "verified" %}
+                <span class="bp-badge bp-badge-success">{{ r.status }}</span>
+              {% elif r.status == "rejected" %}
+                <span class="bp-badge bp-badge-error">{{ r.status }}</span>
+              {% elif r.status == "pending" %}
+                <span class="bp-badge bp-badge-warning">{{ r.status }}</span>
+              {% elif r.status == "partial" %}
+                <span class="bp-badge bp-badge-info">{{ r.status }}</span>
+              {% else %}
+                <span class="bp-badge bp-badge-neutral">{{ r.status }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.priority == "high" %}
+                <span class="bp-badge bp-badge-error">{{ r.priority }}</span>
+              {% elif r.priority == "medium" %}
+                <span class="bp-badge bp-badge-warning">{{ r.priority }}</span>
+              {% else %}
+                <span class="bp-badge bp-badge-neutral">{{ r.priority }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="flex flex-row items-center gap-1.5 flex-wrap">
+                <form method="post" class="inline m-0">{% csrf_token %}<input type="hidden" name="request_id" value="{{ r.id }}"><button name="action" value="approve" class="bp-btn bg-emerald-500 hover:bg-emerald-600 text-white border-0 px-3 py-1 text-xs h-auto shadow-sm transition-colors"><i class="fa-solid fa-check me-1"></i> Approve</button></form>
+                <form method="post" class="inline m-0">{% csrf_token %}<input type="hidden" name="request_id" value="{{ r.id }}"><button name="action" value="reject" class="bp-btn bg-rose-500 hover:bg-rose-600 text-white border-0 px-3 py-1 text-xs h-auto shadow-sm transition-colors"><i class="fa-solid fa-xmark me-1"></i> Reject</button></form>
+                <form method="post" class="inline m-0">{% csrf_token %}<input type="hidden" name="request_id" value="{{ r.id }}"><button name="action" value="request_docs" class="bp-btn bp-btn-outline px-3 py-1 text-xs h-auto"><i class="fa-solid fa-file-arrow-up me-1"></i> Request Docs</button></form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td class="p-8 text-center text-slate-500" colspan="5">
+              <i class="fa-solid fa-inbox text-2xl mb-2 block text-slate-300"></i>
+              No KYC requests yet.
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 3rd Party Integrations -->
+<div class="bp-card bp-s-10">
+  <div class="bp-card-header">
+    <div class="bp-card-header-title"><i class="fa-solid fa-plug-circle-check bp-s-17"></i>3rd Party Integrations</div>
+  </div>
+  <div class="bp-card-body">
+    <div class="bp-grid-2">
+      {% for i in integrations %}
+        <div class="bp-card bp-s-53 bg-white dark:bg-slate-900 border dark:border-slate-700">
+          <div class="bp-card-body bp-s-54">
+            <div class="bp-s-55">
+              <span class="bp-s-56 text-slate-900 dark:text-white font-semibold">{{ i.get_provider_display }}</span>
+              {% if i.enabled %}
+                <span class="bp-badge bp-badge-success"><i class="fa-solid fa-circle bp-s-57"></i>Active</span>
+              {% else %}
+                <span class="bp-badge bp-badge-neutral"><i class="fa-solid fa-circle bp-s-57"></i>Inactive</span>
+              {% endif %}
+            </div>
+            <div class="bp-small bp-s-58 text-slate-500 dark:text-slate-400">
+              <i class="fa-solid fa-server bp-s-50"></i>Env: {{ i.environment }}
+            </div>
+            <a href="{% url 'admin-compliance-settings' %}" class="bp-btn bp-btn-outline bp-btn-xs"><i class="fa-solid fa-gear bp-s-50"></i>Configure</a>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{% static 'js/admin-charts.js' %}"></script>
+<script>
+(function () {
+  var AC = window.AdminCharts;
+  var trend = new Chart(document.getElementById("trendChart"), {
+    type: "line",
+    data: {
+      labels: {{ trends.labels|safe }},
+      datasets: [
+        { label: "Submissions", data: {{ trends.submissions|safe }}, borderColor: "#2563EB", backgroundColor: "rgba(37, 99, 235, 0.12)", borderWidth: 2.5, tension: 0.35, fill: true, pointRadius: 2 },
+        { label: "Verified", data: {{ trends.verified|safe }}, borderColor: "#10B981", backgroundColor: "rgba(16, 185, 129, 0.1)", borderWidth: 2.5, tension: 0.35, fill: true, pointRadius: 2 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: { legend: { display: true }, tooltip: AC ? AC.tooltipIntIndex() : {} },
+      scales: AC ? AC.cartesianScalesInt() : { x: { grid: { display: false } }, y: { beginAtZero: true } },
+    },
+  });
+  var status = new Chart(document.getElementById("statusChart"), {
+    type: "doughnut",
+    data: {
+      labels: ["Fully verified", "Rejected", "Pending"],
+      datasets: [{
+        data: [{{ status_breakdown.fully_verified }}, {{ status_breakdown.rejected }}, {{ status_breakdown.pending }}],
+        backgroundColor: ["#10B981", "#EF4444", "#F59E0B"],
+        borderWidth: 2,
+        borderColor: "#fff",
+        hoverOffset: 6,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: "58%",
+      plugins: {
+        legend: { display: true, position: "bottom" },
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              var t = ctx.label || "";
+              var v = ctx.parsed;
+              var sum = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0) || 1;
+              var pct = Math.round((v / sum) * 1000) / 10;
+              return t + ": " + v + " (" + pct + "%)";
+            },
+          },
+        },
+      },
+    },
+  });
+  var aging = new Chart(document.getElementById("agingChart"), {
+    type: "bar",
+    data: {
+      labels: ["< 1 day", "1–3 days", "> 3 days"],
+      datasets: [{
+        label: "Cases",
+        data: [{{ aging_distribution.lt_1d }}, {{ aging_distribution.d1_3 }}, {{ aging_distribution.gt_3d }}],
+        backgroundColor: ["rgba(16, 185, 129, 0.85)", "rgba(245, 158, 11, 0.9)", "rgba(239, 68, 68, 0.88)"],
+        borderRadius: 8,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: AC ? AC.tooltipIntIndex() : {} },
+      scales: AC ? AC.cartesianScalesInt() : { x: { grid: { display: false } }, y: { beginAtZero: true } },
+    },
+  });
+  setInterval(async function () {
+    var res = await fetch("{% url 'admin-compliance-desk-live' %}");
+    if (!res.ok) return;
+    var d = await res.json();
+    document.getElementById("c1").textContent = d.top_cards.pending_individual_kyc;
+    document.getElementById("c2").textContent = d.top_cards.pending_corporate_kyc;
+    document.getElementById("c3").textContent = d.top_cards.partial_approved;
+    document.getElementById("m1").textContent = d.main_stats.total_kyc;
+    document.getElementById("m2").textContent = d.main_stats.pending_review;
+    document.getElementById("m3").textContent = d.main_stats.fully_verified;
+    document.getElementById("m4").textContent = d.main_stats.rejected;
+    document.getElementById("a1").textContent = d.activity.today_activity;
+    document.getElementById("a2").textContent = d.activity.fresh_lt_24h;
+    document.getElementById("a3").textContent = d.activity.overdue_gt_3d;
+    document.getElementById("a4").textContent = d.activity.avg_processing_time + "m";
+    document.getElementById("t1").textContent = d.team_workload.enabled_officers;
+    document.getElementById("t2").textContent = d.team_workload.unassigned;
+    document.getElementById("t3").textContent = d.team_workload.assigned;
+    document.getElementById("t4").textContent = d.team_workload.capacity;
+    trend.data.labels = d.trends.labels;
+    trend.data.datasets[0].data = d.trends.submissions;
+    trend.data.datasets[1].data = d.trends.verified;
+    trend.update("none");
+    status.data.datasets[0].data = [d.status_breakdown.fully_verified, d.status_breakdown.rejected, d.status_breakdown.pending];
+    status.update("none");
+    aging.data.datasets[0].data = [d.aging_distribution.lt_1d, d.aging_distribution.d1_3, d.aging_distribution.gt_3d];
+    aging.update("none");
+  }, 30000);
+})();
+</script>
+</div>
+{% endblock %}

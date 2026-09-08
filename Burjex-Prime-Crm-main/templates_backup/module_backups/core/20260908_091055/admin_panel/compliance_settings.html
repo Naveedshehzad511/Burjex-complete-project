@@ -1,0 +1,151 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Compliance Settings{% endblock %}
+
+{% block admin_content %}
+  <div class="space-y-5">
+    <div class="bg-white border rounded-xl p-5 shadow-sm">
+      <h1 class="text-xl font-semibold">Compliance Settings</h1>
+      <p class="text-sm text-slate-600 mt-1">Control required documents, bank/crypto verification and withdrawal security.</p>
+    </div>
+
+    <div class="bg-white border rounded-xl p-5 shadow-sm">
+      <h2 class="text-lg font-semibold mb-3">Compliance Master Settings</h2>
+      <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_security" />
+        <label><input type="checkbox" name="enable_identity_verification" {% if s.enable_identity_verification %}checked{% endif %}> Enable Identity Verification</label>
+        <label><input type="checkbox" name="identity_allow_reupload" {% if s.identity_allow_reupload %}checked{% endif %}> Identity Allow Re-upload</label>
+        <label><input type="checkbox" name="identity_lock_after_approval" {% if s.identity_lock_after_approval %}checked{% endif %}> Identity Lock After Approval</label>
+        <label><input type="checkbox" name="identity_require_expiry" {% if s.identity_require_expiry %}checked{% endif %}> Identity Require Expiry Date</label>
+        <label><input type="checkbox" name="identity_allow_multiple_documents" {% if s.identity_allow_multiple_documents %}checked{% endif %}> Identity Allow Multiple Documents</label>
+        <label><input type="checkbox" name="enable_address_verification" {% if s.enable_address_verification %}checked{% endif %}> Enable Address Verification</label>
+        <label><input type="checkbox" name="address_allow_reupload" {% if s.address_allow_reupload %}checked{% endif %}> Address Allow Re-upload</label>
+        <label><input type="checkbox" name="address_lock_after_approval" {% if s.address_lock_after_approval %}checked{% endif %}> Address Lock After Approval</label>
+        <label><input type="checkbox" name="enable_bank_verification" {% if s.enable_bank_verification %}checked{% endif %}> Enable Bank Verification</label>
+        <label><input type="checkbox" name="bank_lock_after_approval" {% if s.bank_lock_after_approval %}checked{% endif %}> Bank Lock After Approval</label>
+        <label><input type="checkbox" name="enable_crypto_verification" {% if s.enable_crypto_verification %}checked{% endif %}> Enable Crypto Verification</label>
+        <label><input type="checkbox" name="crypto_lock_after_approval" {% if s.crypto_lock_after_approval %}checked{% endif %}> Crypto Lock After Approval</label>
+        <label><input type="checkbox" name="show_compliance_section" {% if s.show_compliance_section %}checked{% endif %}> Show Compliance Section</label>
+        <label><input type="checkbox" name="show_bank_section" {% if s.show_bank_section %}checked{% endif %}> Show Bank Section</label>
+        <label><input type="checkbox" name="show_crypto_section" {% if s.show_crypto_section %}checked{% endif %}> Show Crypto Section</label>
+        <label><input type="checkbox" name="withdrawal_requires_compliance" {% if s.withdrawal_requires_compliance %}checked{% endif %}> Require approved Identity + Address before withdrawal</label>
+        <label><input type="checkbox" name="allow_withdraw_without_kyc" {% if s.allow_withdraw_without_kyc %}checked{% endif %}> Allow withdrawal without approved KYC</label>
+        <label><input type="checkbox" name="allow_deposit_without_kyc" {% if s.allow_deposit_without_kyc %}checked{% endif %}> Allow deposit without approved KYC</label>
+        <label><input type="checkbox" name="allow_ib_request_without_kyc" {% if s.allow_ib_request_without_kyc %}checked{% endif %}> Allow IB programme application without approved KYC</label>
+        <label><input type="checkbox" name="otp_email_enabled" {% if s.otp_email_enabled %}checked{% endif %}> Enable Email OTP (flag)</label>
+        <label><input type="checkbox" name="otp_sms_enabled" {% if s.otp_sms_enabled %}checked{% endif %}> Enable SMS OTP (flag)</label>
+        <label><input type="checkbox" name="otp_google_auth_future" {% if s.otp_google_auth_future %}checked{% endif %}> Google Authenticator (future)</label>
+        <div class="md:col-span-2">
+          <button class="bg-[#0B1F3A] text-white rounded-lg px-4 py-2">Save Security Settings</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <div class="bg-white border rounded-xl p-5 shadow-sm">
+        <h2 class="text-lg font-semibold mb-3">Identity Document Control</h2>
+        <div class="space-y-2">
+          {% for d in identity_docs %}
+            <form method="post" class="flex items-center justify-between border rounded-lg p-3 text-sm">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="update_document" />
+              <input type="hidden" name="id" value="{{ d.id }}" />
+              <div class="font-medium">{{ d.name }}</div>
+              <div class="flex items-center gap-4">
+                <label><input type="checkbox" name="is_enabled" {% if d.is_enabled %}checked{% endif %}> Enabled</label>
+                <label><input type="checkbox" name="is_required" {% if d.is_required %}checked{% endif %}> Required</label>
+                <button class="text-xs px-3 py-1 rounded bg-slate-100">Save</button>
+              </div>
+            </form>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="bg-white border rounded-xl p-5 shadow-sm">
+        <h2 class="text-lg font-semibold mb-3">Address Document Control</h2>
+        <div class="space-y-2">
+          {% for d in address_docs %}
+            <form method="post" class="flex items-center justify-between border rounded-lg p-3 text-sm">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="update_document" />
+              <input type="hidden" name="id" value="{{ d.id }}" />
+              <div class="font-medium">{{ d.name }}</div>
+              <div class="flex items-center gap-4">
+                <label><input type="checkbox" name="is_enabled" {% if d.is_enabled %}checked{% endif %}> Enabled</label>
+                <label><input type="checkbox" name="is_required" {% if d.is_required %}checked{% endif %}> Required</label>
+                <button class="text-xs px-3 py-1 rounded bg-slate-100">Save</button>
+              </div>
+            </form>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white border rounded-xl p-5 shadow-sm">
+      <h2 class="text-lg font-semibold mb-3">Add Custom Document</h2>
+      <form method="post" class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_document" />
+        <select name="category" class="border rounded-lg px-3 py-2">
+          <option value="IDENTITY">Identity</option>
+          <option value="ADDRESS">Address</option>
+        </select>
+        <input name="name" class="border rounded-lg px-3 py-2" placeholder="Document name" />
+        <label><input type="checkbox" name="is_enabled" checked> Enabled</label>
+        <label><input type="checkbox" name="is_required" checked> Required</label>
+        <div class="md:col-span-4">
+          <button class="bg-[#0B1F3A] text-white rounded-lg px-4 py-2">Add Document</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <div class="bg-white border rounded-xl p-5 shadow-sm">
+        <h2 class="text-lg font-semibold mb-3">Bank Verification Settings</h2>
+        <div class="space-y-2">
+          {% for f in bank_fields %}
+            <form method="post" class="flex items-center justify-between border rounded-lg p-3 text-sm">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="update_bank_field" />
+              <input type="hidden" name="id" value="{{ f.id }}" />
+              <div class="font-medium">{{ f.label }}</div>
+              <div class="flex items-center gap-4">
+                <label><input type="checkbox" name="is_enabled" {% if f.is_enabled %}checked{% endif %}> Enabled</label>
+                <label><input type="checkbox" name="is_required" {% if f.is_required %}checked{% endif %}> Required</label>
+                <button class="text-xs px-3 py-1 rounded bg-slate-100">Save</button>
+              </div>
+            </form>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="bg-white border rounded-xl p-5 shadow-sm">
+        <h2 class="text-lg font-semibold mb-3">Crypto Verification Settings</h2>
+        <div class="space-y-2 mb-4">
+          {% for n in crypto_networks %}
+            <form method="post" class="flex items-center justify-between border rounded-lg p-3 text-sm">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="update_network" />
+              <input type="hidden" name="id" value="{{ n.id }}" />
+              <input type="text" name="label" value="{{ n.label }}" class="border rounded px-2 py-1 flex-1 mr-3" />
+              <label><input type="checkbox" name="is_enabled" {% if n.is_enabled %}checked{% endif %}> Enabled</label>
+              <button class="text-xs px-3 py-1 rounded bg-slate-100 ml-3">Save</button>
+            </form>
+          {% endfor %}
+        </div>
+        <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add_network" />
+          <input name="code" class="border rounded-lg px-3 py-2" placeholder="Code (e.g. USDT_POLYGON)" />
+          <input name="label" class="border rounded-lg px-3 py-2" placeholder="Label (e.g. USDT POLYGON)" />
+          <div class="md:col-span-2">
+            <button class="bg-[#0B1F3A] text-white rounded-lg px-4 py-2">Add Network</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+

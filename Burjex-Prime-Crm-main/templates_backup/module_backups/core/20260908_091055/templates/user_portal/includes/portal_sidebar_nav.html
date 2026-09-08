@@ -1,0 +1,152 @@
+{% comment %}mid = "mobile" | "desktop" — submenu ids: {{ mid }}_my_fund etc.{% endcomment %}
+{% with p=request.path_info %}
+<ul class="portal-nav-list space-y-1.5">
+  {% if crm_dashboard_settings.show_sidebar_dashboard|default:True %}
+  <li class="{% if p|slice:':16' == '/user/dashboard/' or p == '/user/' or p == '/user-dashboard' %}portal-nav-li--active{% endif %}">
+    <a class="portal-nav-link" href="{% url 'user-dashboard' %}">
+      <span class="portal-nav-icon" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="home" %}</span>
+      <span class="portal-nav-text">Dashboard</span>
+    </a>
+  </li>
+  {% endif %}
+
+  {% if crm_dashboard_settings.show_sidebar_my_fund|default:True %}
+  <li class="portal-nav-group">
+    <button type="button" class="portal-nav-toggle sidebar-nav-toggle" data-portal-group-toggle aria-expanded="false" aria-controls="{{ mid }}_my_fund">
+      <span class="portal-nav-icon" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="bank" %}</span>
+      <span class="portal-nav-text">My Fund</span>
+      <span class="portal-nav-chevron" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="chevron" %}</span>
+    </button>
+    <ul id="{{ mid }}_my_fund" class="portal-submenu" style="display:none;">
+      {% if crm_dashboard_settings.enable_deposit_button|default:True %}
+      <li class="{% if p|slice:':23' == '/user/my-funds/deposit/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-deposit' %}">Deposit</a></li>
+      {% endif %}
+      {% if crm_dashboard_settings.enable_withdraw_button|default:True %}
+      <li class="{% if p|slice:':26' == '/user/my-funds/withdrawal/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-withdraw' %}">Withdraw</a></li>
+      {% endif %}
+      <li class="{% if p|slice:':31' == '/user/my-funds/internal-transfer/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-internal-transfer' %}">Internal Transfer</a></li>
+    </ul>
+  </li>
+  {% endif %}
+
+  {% if crm_dashboard_settings.show_sidebar_my_wallet|default:True %}
+  <li class="{% if p|slice:':13' == '/user/wallet/' %}portal-nav-li--active{% endif %}">
+    <a class="portal-nav-link" href="{% url 'user-wallet' %}">
+      <span class="portal-nav-icon" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="wallet" %}</span>
+      <span class="portal-nav-text">My Wallet</span>
+    </a>
+  </li>
+  {% endif %}
+
+  {% if crm_dashboard_settings.show_sidebar_regulations|default:True %}
+  <li class="{% if p|slice:':18' == '/user/regulations/' %}portal-nav-li--active{% endif %}">
+    <a class="portal-nav-link" href="{% url 'user-regulations' %}">
+      <span class="portal-nav-icon" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="shield" %}</span>
+      <span class="portal-nav-text">Compliance</span>
+    </a>
+  </li>
+  {% endif %}
+
+  {% if crm_dashboard_settings.show_sidebar_ib_programme|default:True %}
+  <li class="portal-nav-group">
+    <button type="button" class="portal-nav-toggle sidebar-nav-toggle" data-portal-group-toggle aria-expanded="false" aria-controls="{{ mid }}_ib_programme">
+      <span class="portal-nav-icon" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="users" %}</span>
+      <span class="portal-nav-text">IB Programme</span>
+      <span class="portal-nav-chevron" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="chevron" %}</span>
+    </button>
+    <ul id="{{ mid }}_ib_programme" class="portal-submenu" style="display:none;">
+      {% if request.user.is_ib %}
+        {% if crm_dashboard_settings.enable_ib_dashboard|default:True %}<li class="{% if p|slice:':27' == '/user/ib-program/dashboard/' or p|slice:':19' == '/user/ib-programme/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-ib-dashboard' %}">IB Dashboard</a></li>{% endif %}
+        <li class="{% if p|slice:':28' == '/user/ib-program/my-clients/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-ib-my-clients' %}">My Clients</a></li>
+        {% if crm_dashboard_settings.enable_ib_tree_chart|default:True %}<li class="{% if p|slice:':22' == '/user/ib-program/tree/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-ib-tree' %}">IB Tree Chart</a></li>{% endif %}
+        {% if crm_dashboard_settings.enable_ib_my_commission|default:True %}<li class="{% if p|slice:':28' == '/user/ib-program/commission/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-ib-commission' %}">My Commission</a></li>{% endif %}
+      {% else %}
+        <li class="{% if p|slice:':22' == '/user/ib-program/apply/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-ib-apply' %}">IB Request</a></li>
+      {% endif %}
+    </ul>
+  </li>
+  {% endif %}
+
+  {% if crm_dashboard_settings.show_sidebar_my_data|default:True %}
+  <li class="portal-nav-group">
+    <button type="button" class="portal-nav-toggle sidebar-nav-toggle" data-portal-group-toggle aria-expanded="false" aria-controls="{{ mid }}_my_data">
+      <span class="portal-nav-icon" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="chart" %}</span>
+      <span class="portal-nav-text">My Data</span>
+      <span class="portal-nav-chevron" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="chevron" %}</span>
+    </button>
+    <ul id="{{ mid }}_my_data" class="portal-submenu" style="display:none;">
+      {% if crm_dashboard_settings.enable_deposit_report|default:True %}<li class="{% if p|slice:':29' == '/user/my-data/deposit-report/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-deposit-report' %}">Deposit Report</a></li>{% endif %}
+      {% if crm_dashboard_settings.enable_withdraw_report|default:True %}<li class="{% if p|slice:':30' == '/user/my-data/withdraw-report/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-withdraw-report' %}">Withdraw Report</a></li>{% endif %}
+      {% if crm_dashboard_settings.enable_internal_transfers_report|default:True %}<li class="{% if p|slice:':39' == '/user/my-data/internal-transfer-report/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-internal-transfer-report' %}">Internal Transfers</a></li>{% endif %}
+      {% if crm_dashboard_settings.enable_deal_report|default:True %}<li class="{% if p|slice:':26' == '/user/my-data/deal-report/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-deal-report' %}">Deal Report</a></li>{% endif %}
+      {% if crm_dashboard_settings.enable_summary_report|default:True %}<li class="{% if p|slice:':29' == '/user/my-data/summary-report/' %}portal-submenu-li--active{% endif %}"><a href="{% url 'user-summary-report' %}">Summary Report</a></li>{% endif %}
+    </ul>
+  </li>
+  {% endif %}
+
+  {% if crm_dashboard_settings.show_sidebar_competition|default:True %}
+  <li class="{% if p|slice:':18' == '/user/competition/' %}portal-nav-li--active{% endif %}">
+    <a class="portal-nav-link" href="{% url 'user-competition' %}">
+      <span class="portal-nav-icon" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="trophy" %}</span>
+      <span class="portal-nav-text">Competition</span>
+    </a>
+  </li>
+  {% endif %}
+  {% if crm_dashboard_settings.show_sidebar_trade_and_win|default:True %}
+  <li class="{% if p|slice:':19' == '/user/trade-and-win/' %}portal-nav-li--active{% endif %}">
+    <a class="portal-nav-link" href="{% url 'user-trade-and-win' %}">
+      <span class="portal-nav-icon" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="gift" %}</span>
+      <span class="portal-nav-text">Trade And Win</span>
+    </a>
+  </li>
+  {% endif %}
+  {% if crm_dashboard_settings.show_sidebar_news|default:True %}
+  <li class="{% if p|slice:':11' == '/user/news/' %}portal-nav-li--active{% endif %}">
+    <a class="portal-nav-link" href="{% url 'user-news' %}">
+      <span class="portal-nav-icon" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="news" %}</span>
+      <span class="portal-nav-text">News</span>
+    </a>
+  </li>
+  {% endif %}
+
+  {% if crm_dashboard_settings.show_sidebar_trading|default:True %}
+  <li class="{% if p|slice:':22' == '/user/trading-platform/' %}portal-nav-li--active{% endif %}">
+    <a class="portal-nav-link" href="{% url 'user-trading-platform' %}">
+      <span class="portal-nav-icon" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="candle" %}</span>
+      <span class="portal-nav-text">Trading Platform</span>
+    </a>
+  </li>
+  {% endif %}
+  <li class="{% if p|slice:':22' == '/user/legal-agreements/' %}portal-nav-li--active{% endif %}">
+    <a class="portal-nav-link" href="{% url 'user-legal-agreements' %}">
+      <span class="portal-nav-icon" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="shield" %}</span>
+      <span class="portal-nav-text">Legal Agreements</span>
+    </a>
+  </li>
+</ul>
+
+<div class="portal-sidebar-footer" style="margin-top: auto; padding-top: 8px; padding-bottom: 8px;">
+  {% if crm_dashboard_settings.show_sidebar_support|default:True %}
+  <a href="{% url 'user-support' %}" class="support-card" style="display: flex; align-items: center; background: #f3f4f6; border-radius: 12px; padding: 8px 12px; text-decoration: none; margin-bottom: 8px; transition: background 0.2s;">
+    <div style="background: #dbeafe; border-radius: 50%; padding: 8px; margin-right: 10px; color: #1e3a8a; display: flex; align-items: center; justify-content: center;">
+      <div style="width: 20px; height: 20px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2a8 8 0 0 0-8 8v1a4 4 0 0 0 4 4h1a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1H5.5c0-3.5 3-6.5 6.5-6.5s6.5 3 6.5 6.5H15a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h1a4 4 0 0 0 4-4v-1a8 8 0 0 0-8-8z"/><path stroke-linecap="round" stroke-linejoin="round" d="M16 15v3a2 2 0 0 1-2 2h-2"/></svg>
+      </div>
+    </div>
+    <div style="flex: 1;">
+      <div style="color: #0f172a; font-weight: 700; font-size: 13px; margin-bottom: 2px;">Need Help?</div>
+      <div style="color: #64748b; font-size: 11px; line-height: 1.2;">Our support team is<br>available 24/7</div>
+    </div>
+    <div style="color: #64748b; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; margin-left: 6px;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+    </div>
+  </a>
+  {% endif %}
+  <a href="{% url 'logout' %}" style="display: flex; align-items: center; justify-content: center; border: 1px solid #ef4444; border-radius: 8px; padding: 8px; color: #ef4444; font-weight: 600; font-size: 13px; text-decoration: none; transition: all 0.2s; gap: 8px;" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='transparent'">
+    <span style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; color: inherit;">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+    </span>
+    Logout
+  </a>
+</div>
+{% endwith %}

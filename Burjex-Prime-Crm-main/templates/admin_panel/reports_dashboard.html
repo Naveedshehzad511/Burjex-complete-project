@@ -1,0 +1,55 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Reports Dashboard{% endblock %}
+{% block admin_content %}
+<div class="max-w-6xl mx-auto space-y-6 pb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-slate-900">Reports Dashboard</h1>
+    <p class="text-sm text-slate-600 mt-1">Select a report card to open the detailed report page.</p>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for card in cards %}
+      <a href="{% url card.url_name %}{% if card.query %}?{{ card.query }}{% endif %}" class="group block rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md hover:border-indigo-600/40 transition report-card" data-title="{{ card.title }}">
+        <div class="flex items-start gap-4">
+          <span class="report-icon-wrap inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors" style="background-color: {{ card.color|default:'#0B3C5D' }}1A; color: {{ card.color|default:'#0B3C5D' }};">
+            <i class="fa-solid {{ card.icon }}"></i>
+          </span>
+          <span class="min-w-0">
+            <span class="block text-base font-semibold text-slate-900 group-hover:text-indigo-600">{{ card.title }}</span>
+            <span class="block text-sm text-slate-500 mt-1">{{ card.description }}</span>
+          </span>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const colorMap = {
+      "Deposit Report": "#10b981",
+      "Withdrawal Report": "#f43f5e",
+      "IB Commission Report": "#f59e0b",
+      "Transaction Report": "#3b82f6",
+      "Client Report": "#6366f1",
+      "Active Traders Report": "#8b5cf6",
+      "IB Performance Report": "#14b8a6",
+      "IB Withdrawal Report": "#ec4899",
+      "IB Clients Report": "#0ea5e9",
+      "Trading Volume Report": "#eab308",
+      "Account Report": "#f97316",
+      "MT5 Trading Report": "#0B3C5D"
+    };
+    
+    document.querySelectorAll(".report-card").forEach(function(card) {
+      const title = card.getAttribute("data-title");
+      if (colorMap[title]) {
+        const wrap = card.querySelector(".report-icon-wrap");
+        if (wrap) {
+          wrap.style.backgroundColor = colorMap[title] + "1A";
+          wrap.style.color = colorMap[title];
+        }
+      }
+    });
+  });
+</script>
+{% endblock %}

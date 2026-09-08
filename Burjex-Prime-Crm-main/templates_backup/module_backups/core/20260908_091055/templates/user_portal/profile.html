@@ -1,0 +1,58 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Profile - Burjex Prime{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">Profile</h1>
+  <p class="portal-page-subtitle">Your account details and quick links.</p>
+
+  <div class="portal-card max-w-xl">
+    <div class="space-y-3 text-sm">
+      <div class="flex items-center gap-3 py-2" style="border-bottom:1px solid var(--portal-border-subtle);">
+        <span class="w-36 shrink-0 font-medium" style="color:var(--portal-text-muted);">Name</span>
+        <span style="color:var(--portal-text-main);">{{ u.display_name }}</span>
+      </div>
+      <div class="flex items-center gap-3 py-2" style="border-bottom:1px solid var(--portal-border-subtle);">
+        <span class="w-36 shrink-0 font-medium" style="color:var(--portal-text-muted);">Email</span>
+        <span style="color:var(--portal-text-main);">{{ u.email }}</span>
+      </div>
+      <div class="flex items-center gap-3 py-2" style="border-bottom:1px solid var(--portal-border-subtle);">
+        <span class="w-36 shrink-0 font-medium" style="color:var(--portal-text-muted);">Phone</span>
+        <span style="color:var(--portal-text-main);">{{ u.phone|default:"-" }}</span>
+      </div>
+      <div class="flex items-center gap-3 py-2" style="border-bottom:1px solid var(--portal-border-subtle);">
+        <span class="w-36 shrink-0 font-medium" style="color:var(--portal-text-muted);">Country</span>
+        <span style="color:var(--portal-text-main);">{{ u.country|default:"-" }}</span>
+      </div>
+      <div class="flex items-center gap-3 py-2" style="border-bottom:1px solid var(--portal-border-subtle);">
+        <span class="w-36 shrink-0 font-medium" style="color:var(--portal-text-muted);">Registration Date</span>
+        <span style="color:var(--portal-text-main);">{{ u.date_joined|date:"Y-m-d H:i" }}</span>
+      </div>
+      <div class="flex items-center gap-3 py-2">
+        <span class="w-36 shrink-0 font-medium" style="color:var(--portal-text-muted);">KYC Status</span>
+        <span style="color:var(--portal-text-main);">{{ u.kyc_status }}</span>
+      </div>
+    </div>
+
+    <div class="portal-divider"></div>
+
+    <div class="flex flex-col gap-3">
+      <a href="{% url 'user-compliance' %}" class="flex items-center gap-2 text-sm font-medium" style="color:var(--portal-brand-primary);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+        Upload KYC Documents
+      </a>
+      <a href="{% url 'user-security-center' %}" class="flex items-center gap-2 text-sm font-medium" style="color:var(--portal-brand-primary);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Security &amp; Two-Factor Authentication
+      </a>
+      <a href="{% url 'user-trading-platform' %}" class="flex items-center gap-2 text-sm font-medium" style="color:var(--portal-brand-primary);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Trading Platform
+      </a>
+      <a href="{% url 'user-legal-agreements' %}" class="flex items-center gap-2 text-sm font-medium" style="color:var(--portal-brand-primary);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+        Legal Agreements
+      </a>
+    </div>
+  </div>
+{% endblock %}

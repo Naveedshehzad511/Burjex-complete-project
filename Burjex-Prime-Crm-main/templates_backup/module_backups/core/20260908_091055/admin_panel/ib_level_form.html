@@ -1,0 +1,244 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}{% if mode == 'add' %}Add IB Level{% else %}Edit {{ level.name }}{% endif %}{% endblock %}
+{% block admin_content %}
+<div class="max-w-4xl mx-auto space-y-8 pb-10">
+  <div class="flex items-center justify-between gap-3">
+    <h1 class="text-xl font-semibold text-slate-900">{% if mode == 'add' %}Add IB Level{% else %}Edit Level: {{ level.name }}{% endif %}</h1>
+    <a href="{% url 'admin-ib-levels' %}" class="text-sm text-indigo-600 font-medium">← Back to list</a>
+  </div>
+
+  <form method="post" class="space-y-8 bg-white border rounded-xl p-6 shadow-sm">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save">
+
+    <section>
+      <h2 class="text-lg font-semibold text-slate-800 mb-3">Basic information</h2>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Level name</label>
+          <input name="name" required class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.name|default:'' }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Sequence</label>
+          <input name="sequence" type="number" min="1" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.sequence|default:1 }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Level type</label>
+          <select name="level_type" class="w-full border rounded-lg px-3 py-2 text-sm">
+            {% for v,l in level_types %}
+              <option value="{{ v }}" {% if level and level.level_type == v %}selected{% elif not level and v == 'PROGRESSION' %}selected{% endif %}>{{ l }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="flex items-center pt-6">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="is_active" {% if not level or level.is_active %}checked{% endif %}>
+            Active
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-semibold text-slate-800 mb-3">Upgrade conditions</h2>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Metric time window</label>
+          <select name="metric_window" class="w-full border rounded-lg px-3 py-2 text-sm">
+            {% for v,l in metric_windows %}
+              <option value="{{ v }}" {% if level and level.metric_window == v %}selected{% elif not level and v == 'ALL_TIME' %}selected{% endif %}>{{ l }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Primary progress metric (client UI)</label>
+          <select name="primary_progress_metric" class="w-full border rounded-lg px-3 py-2 text-sm">
+            {% for v,l in progress_metrics %}
+              <option value="{{ v }}" {% if level and level.primary_progress_metric == v %}selected{% elif not level and v == 'VOLUME' %}selected{% endif %}>{{ l }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Minimum volume (lots)</label>
+          <input name="target_lots" type="number" step="0.01" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.target_lots|default:0 }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Minimum team deposit</label>
+          <input name="target_deposit" type="number" step="0.01" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.target_deposit|default:0 }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Minimum referrals</label>
+          <input name="min_referrals" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.min_referrals|default:0 }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Target active clients (legacy sync)</label>
+          <input name="target_active_clients" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.target_active_clients|default:0 }}">
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-semibold text-slate-800 mb-3">Commission &amp; limits</h2>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Default commission % (matrix fallback)</label>
+          <input name="commission_percentage" type="number" step="0.01" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.commission_percentage|default:30 }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Min holding period (seconds)</label>
+          <input name="min_holding_period_seconds" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.min_holding_period_seconds|default:0 }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Daily cap (0=off)</label>
+          <input name="cap_daily" type="number" step="0.01" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.cap_daily|default:0 }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Weekly cap</label>
+          <input name="cap_weekly" type="number" step="0.01" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.cap_weekly|default:0 }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Monthly cap</label>
+          <input name="cap_monthly" type="number" step="0.01" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.cap_monthly|default:0 }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Per trade max</label>
+          <input name="cap_per_trade" type="number" step="0.01" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.cap_per_trade|default:0 }}">
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-semibold text-slate-800 mb-3">Auto downgrade</h2>
+      <div class="grid md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Review period (days)</label>
+          <input name="downgrade_review_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.downgrade_review_days|default:0 }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Grace period (days)</label>
+          <input name="downgrade_grace_days" type="number" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" value="{{ level.downgrade_grace_days|default:0 }}">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Downgrade to level</label>
+          <select name="downgrade_to_level_id" class="w-full border rounded-lg px-3 py-2 text-sm">
+            <option value="">— None —</option>
+            {% for ol in all_levels %}
+              {% if not level or ol.id != level.id %}
+                <option value="{{ ol.id }}" {% if level and level.downgrade_to_level_id == ol.id %}selected{% endif %}>{{ ol.name }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-semibold text-slate-800 mb-3">Benefits (notes)</h2>
+      <textarea name="benefits" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm">{{ level.benefits|default:'' }}</textarea>
+    </section>
+
+    <div class="flex gap-3">
+      <button type="submit" class="px-5 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-medium">Save level</button>
+      <a href="{% url 'admin-ib-levels' %}" class="px-5 py-2.5 rounded-lg border text-sm">Cancel</a>
+    </div>
+  </form>
+
+  {% if mode == 'edit' %}
+  <div class="bg-white border rounded-xl p-6 shadow-sm space-y-4">
+    <h2 class="text-lg font-semibold text-slate-800">Rewards</h2>
+    <ul class="divide-y border rounded-lg">
+      {% for r in rewards %}
+        <li class="p-3 flex justify-between items-center text-sm">
+          <span><strong>{{ r.get_reward_kind_display }}</strong> — {{ r.title }} {% if r.value_text %}<span class="text-slate-500">({{ r.value_text }})</span>{% endif %}</span>
+          <form method="post">{% csrf_token %}
+            <input type="hidden" name="action" value="delete_reward">
+            <input type="hidden" name="reward_id" value="{{ r.id }}">
+            <button type="submit" class="text-rose-600 text-sm">Remove</button>
+          </form>
+        </li>
+      {% empty %}
+        <li class="p-3 text-slate-500 text-sm">No rewards yet.</li>
+      {% endfor %}
+    </ul>
+    <form method="post" class="grid md:grid-cols-4 gap-2 items-end border-t pt-4">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add_reward">
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Kind</label>
+        <select name="reward_kind" class="w-full border rounded-lg px-2 py-2 text-sm">
+          {% for v,l in reward_kinds %}<option value="{{ v }}">{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-xs text-slate-500 mb-1">Title</label>
+        <input name="reward_title" class="w-full border rounded-lg px-2 py-2 text-sm" placeholder="e.g. iPhone reward">
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Value / detail</label>
+        <input name="reward_value_text" class="w-full border rounded-lg px-2 py-2 text-sm" placeholder="optional">
+      </div>
+      <button type="submit" class="md:col-span-4 px-4 py-2 rounded-lg bg-slate-100 text-sm font-medium">Add reward</button>
+    </form>
+  </div>
+
+  <div class="bg-white border rounded-xl p-6 shadow-sm space-y-4">
+    <h2 class="text-lg font-semibold text-slate-800">Default MT5 groups by account type</h2>
+    <table class="min-w-full text-sm border rounded-lg overflow-hidden">
+      <thead class="bg-slate-50"><tr>
+        <th class="text-left p-2">Account type</th>
+        <th class="text-left p-2">Live group</th>
+        <th class="text-left p-2">Demo group</th>
+        <th class="p-2"></th>
+      </tr></thead>
+      <tbody>
+        {% for d in account_defaults %}
+          <tr class="border-t">
+            <td class="p-2">{{ d.account_type.account_name }}</td>
+            <td class="p-2">{{ d.live_mt5_group|default:"—" }}</td>
+            <td class="p-2">{{ d.demo_mt5_group|default:"—" }}</td>
+            <td class="p-2 text-right">
+              <form method="post" class="inline">{% csrf_token %}
+                <input type="hidden" name="action" value="delete_default">
+                <input type="hidden" name="default_id" value="{{ d.id }}">
+                <button type="submit" class="text-rose-600 text-xs">Remove</button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="p-3 text-slate-500">No overrides yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" class="grid md:grid-cols-4 gap-2 items-end">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_default">
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Account type</label>
+        <select name="account_type_id" class="w-full border rounded-lg px-2 py-2 text-sm" required>
+          <option value="">Select…</option>
+          {% for at in account_types %}
+            <option value="{{ at.id }}">{{ at.account_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Live MT5 group</label>
+        <select name="live_mt5_group_id" class="w-full border rounded-lg px-2 py-2 text-sm">
+          <option value="">—</option>
+          {% for g in mt5_groups %}<option value="{{ g.id }}">{{ g }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Demo MT5 group</label>
+        <select name="demo_mt5_group_id" class="w-full border rounded-lg px-2 py-2 text-sm">
+          <option value="">—</option>
+          {% for g in mt5_groups %}<option value="{{ g.id }}">{{ g }}</option>{% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm">Save mapping</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+

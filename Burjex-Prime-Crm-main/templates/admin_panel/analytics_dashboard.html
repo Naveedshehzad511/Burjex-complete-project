@@ -1,0 +1,51 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Analytics Dashboard{% endblock %}
+{% block admin_content %}
+
+<style>
+  /* Dynamic pastel gradient backgrounds for each icon box */
+  .analytic-card:nth-child(1) .icon-box { background: #f5f3ff; color: #8b5cf6; } /* purple for Client */
+  html.dark .analytic-card:nth-child(1) .icon-box { background: rgba(139, 92, 246, 0.2); }
+  
+  .analytic-card:nth-child(2) .icon-box { background: #eff6ff; color: #3b82f6; } /* blue for Deposit */
+  html.dark .analytic-card:nth-child(2) .icon-box { background: rgba(59, 130, 246, 0.2); }
+  
+  .analytic-card:nth-child(3) .icon-box { background: #fff1f2; color: #f43f5e; } /* rose for Withdrawal */
+  html.dark .analytic-card:nth-child(3) .icon-box { background: rgba(244, 63, 94, 0.2); }
+  
+  .analytic-card:nth-child(4) .icon-box { background: #f0fdf4; color: #22c55e; } /* emerald for IB */
+  html.dark .analytic-card:nth-child(4) .icon-box { background: rgba(34, 197, 94, 0.2); }
+  
+  .analytic-card:nth-child(5) .icon-box { background: #fffbeb; color: #f59e0b; } /* amber for Revenue */
+  html.dark .analytic-card:nth-child(5) .icon-box { background: rgba(245, 158, 11, 0.2); }
+</style>
+
+<div class="bp-page-header" style="margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="bp-page-title" style="display:flex; align-items:center;">
+      <i class="fa-solid fa-chart-pie" style="background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-right: 0.5rem;"></i>
+      Analytics Dashboard
+    </h1>
+    <p class="bp-page-subtitle">Select an analytics module to view detailed performance metrics.</p>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+  {% for card in cards %}
+    <a href="{% url card.url_name %}" class="analytic-card group block rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
+      <div class="flex items-start gap-4">
+        <div class="icon-box w-12 h-12 shrink-0 rounded-lg flex items-center justify-center transition-all duration-300">
+          <i class="fa-solid {{ card.icon }} text-xl"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <span class="block text-base font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{{ card.title }}</span>
+          <span class="block text-sm text-slate-500 dark:text-slate-400 mt-1">{{ card.description }}</span>
+        </div>
+        <div class="shrink-0 text-slate-300 dark:text-slate-600 group-hover:text-indigo-500 transition-colors">
+            <i class="fa-solid fa-chevron-right text-sm"></i>
+        </div>
+      </div>
+    </a>
+  {% endfor %}
+</div>
+{% endblock %}

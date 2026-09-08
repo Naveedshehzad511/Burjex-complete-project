@@ -1,0 +1,257 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}IB Plan Management{% endblock %}
+{% block admin_content %}
+
+<div class="bp-page-header">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-sitemap bp-s-8"></i>IB Plan Management</h1>
+    <p class="bp-page-subtitle">Configure introducing broker commission structures and symbol-wise rebate rates</p>
+  </div>
+  {% if selected_plan %}
+    <div>
+      <a href="{% url 'admin-ib-plan' %}" class="bp-btn bp-btn-outline bp-btn-sm">
+        <i class="fa-solid fa-arrow-left"></i> Back to Plans List
+      </a>
+    </div>
+  {% endif %}
+</div>
+
+{% if selected_plan %}
+  <!-- Detail View of Selected Plan -->
+  <div class="bp-grid-2">
+    <!-- Plan Settings Panel -->
+    <div class="bp-card">
+      <div class="bp-card-header">
+        <span class="bp-card-header-title"><i class="fa-solid fa-edit"></i> Edit Plan Details: {{ selected_plan.name }}</span>
+      </div>
+      <div class="bp-card-body">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="edit_plan">
+          <input type="hidden" name="id" value="{{ selected_plan.id }}">
+
+          <div class="bp-form-group">
+            <label class="bp-form-label">Plan Name</label>
+            <input name="name" class="bp-input" value="{{ selected_plan.name }}" required>
+          </div>
+
+          <div class="bp-form-group">
+            <label class="bp-form-label">Description</label>
+            <textarea name="description" class="bp-input" rows="3" placeholder="Enter Plan Description...">{{ selected_plan.description }}</textarea>
+          </div>
+
+          <div class="bp-form-group">
+            <label class="bp-form-label" style="display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" name="is_active" {% if selected_plan.is_active %}checked{% endif %}>
+              Is Active (enabled for assignment)
+            </label>
+          </div>
+
+          <button type="submit" class="bp-btn bp-btn-primary">
+            <i class="fa-solid fa-save"></i> Save Changes
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Symbol Wise Rebates Configuration -->
+    <div class="bp-card">
+      <div class="bp-card-header">
+        <span class="bp-card-header-title"><i class="fa-solid fa-coins"></i> Symbol Rebate Rules</span>
+      </div>
+      <div class="bp-card-body">
+        <!-- Add New Rebate Form -->
+        <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--bp-text-main);">Add / Update Symbol Rule</h3>
+        <form method="post" class="bp-grid-3" style="gap: 12px; margin-bottom: 24px; align-items: end;">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add_symbol_rebate">
+          <input type="hidden" name="plan_id" value="{{ selected_plan.id }}">
+
+          <div>
+            <label class="bp-form-label" style="font-size: 11px;">Symbol (e.g. XAUUSD)</label>
+            <input name="symbol" class="bp-input" placeholder="XAUUSD" required style="height: 34px;">
+          </div>
+          <div>
+            <label class="bp-form-label" style="font-size: 11px;">Account Type (Optional)</label>
+            <select name="account_type_id" class="bp-input" style="height: 34px;">
+              <option value="">-- All Types --</option>
+              {% for at in account_types %}
+                <option value="{{ at.id }}">{{ at.account_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="bp-form-label" style="font-size: 11px;">Rebate Per Lot ($)</label>
+            <input type="number" name="rebate_per_lot" step="0.0001" min="0" placeholder="5.00" class="bp-input" required style="height: 34px;">
+          </div>
+          <div style="grid-column: span 3; text-align: right;">
+            <button type="submit" class="bp-btn bp-btn-primary bp-btn-sm">
+              <i class="fa-solid fa-plus"></i> Save Symbol Rule
+            </button>
+          </div>
+        </form>
+
+        <!-- Current Rules List -->
+        <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--bp-text-main);">Existing Rules</h3>
+        <div class="overflow-x-auto w-full">
+          <table class="bp-table min-w-full whitespace-nowrap">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Account Type Override</th>
+                <th>Rebate Per Lot</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for rule in symbol_rebates %}
+                <tr>
+                  <td><strong>{{ rule.symbol }}</strong></td>
+                  <td>
+                    {% if rule.account_type %}
+                      <span class="bp-badge bp-badge-info">{{ rule.account_type.account_name }}</span>
+                    {% else %}
+                      <span class="bp-badge bp-badge-neutral">All Account Types</span>
+                    {% endif %}
+                  </td>
+                  <td><strong>${{ rule.rebate_per_lot|floatformat:4 }}</strong></td>
+                  <td>
+                    {% if rule.is_active %}
+                      <span class="bp-badge bp-badge-success">Active</span>
+                    {% else %}
+                      <span class="bp-badge bp-badge-error">Disabled</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <form method="post" class="inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="delete_symbol_rebate">
+                      <input type="hidden" name="rule_id" value="{{ rule.id }}">
+                      <button type="submit" class="bp-btn bp-btn-danger bp-btn-xs" onclick="return confirm('Are you sure you want to delete this rule?');">
+                        <i class="fa-solid fa-trash"></i> Delete
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="5" style="text-align: center; color: var(--bp-text-muted); padding: 12px;">No rules set for this plan. Closed trades will fallback to default rates.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <!-- Plan List View (Active plans & plan creation) -->
+  <div class="w-full">
+    {% if not add_only %}
+      <!-- IB Plan List Card -->
+      <div class="bp-card w-full">
+        <div class="bp-card-header flex justify-between items-center">
+          <span class="bp-card-header-title"><i class="fa-solid fa-list bp-s-80"></i>IB Plan List</span>
+          <button type="button" onclick="document.getElementById('addPlanModal').classList.remove('hidden')" class="bp-btn bp-btn-primary bp-btn-sm">
+            <i class="fa-solid fa-plus-circle"></i> Add IB Plan
+          </button>
+        </div>
+        <div class="bp-card-body bp-s-48">
+          <div class="overflow-x-auto w-full">
+            <table class="bp-table min-w-full whitespace-nowrap">
+              <thead>
+                <tr>
+                  <th>Plan Name</th>
+                  <th>Description</th>
+                  <th>Rebate Settings</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in rows %}
+                <tr>
+                  <td>
+                    <a href="?id={{ r.id }}" style="font-weight: 700; color: var(--bp-brand-primary); text-decoration: underline;">
+                      {{ r.name }}
+                    </a>
+                  </td>
+                  <td>{{ r.description|default:"—" }}</td>
+                  <td>
+                    <span class="bp-badge bp-badge-info">
+                      {{ r.symbol_rebates.count }} Custom Rules
+                    </span>
+                  </td>
+                  <td>
+                    {% if r.is_active %}
+                      <span class="bp-badge bp-badge-success">Active</span>
+                    {% else %}
+                      <span class="bp-badge bp-badge-neutral">Inactive</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div style="display: flex; gap: 4px;">
+                      <a href="?id={{ r.id }}" class="bp-btn bp-btn-outline bp-btn-xs">
+                        <i class="fa-solid fa-edit"></i> Edit / Rules
+                      </a>
+                      <form method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete this plan?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="id" value="{{ r.id }}">
+                        <button type="submit" class="bp-btn bp-btn-danger bp-btn-xs">
+                          <i class="fa-solid fa-trash bp-s-82"></i>Delete
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td class="bp-s-154" colspan="5">
+                    <i class="fa-solid fa-inbox bp-s-155"></i>
+                    No plans have been created yet.
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Add Plan Modal -->
+  <div id="addPlanModal" class="fixed inset-0 z-[100] flex items-center justify-center hidden bg-black/50 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+      <div class="border-b dark:border-slate-800 px-5 py-4 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+        <h3 class="font-bold text-slate-800 dark:text-white flex items-center gap-2"><i class="fa-solid fa-plus-circle text-indigo-600"></i> Add IB Plan</h3>
+        <button onclick="document.getElementById('addPlanModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xl transition-colors">&times;</button>
+      </div>
+      <form method="post" class="p-5 space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add">
+        
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Plan Name</label>
+          <input name="name" class="bp-input w-full" placeholder="Enter Plan Name" required>
+        </div>
+        
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Description (Optional)</label>
+          <textarea name="description" class="bp-input w-full" rows="3" placeholder="Brief description of the rebate rules"></textarea>
+        </div>
+        
+        <div class="flex justify-end gap-2 pt-4 border-t dark:border-slate-800 mt-2">
+          <button type="button" onclick="document.getElementById('addPlanModal').classList.add('hidden')" class="px-4 py-2 text-sm rounded-lg font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">Cancel</button>
+          <button type="submit" class="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-2">
+            <i class="fa-solid fa-check"></i> Submit
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}

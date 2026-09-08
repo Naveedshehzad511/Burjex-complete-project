@@ -1,0 +1,66 @@
+{% extends "user_portal/base.html" %}
+{% block title %}Security — {{ title }}{% endblock %}
+{% block user_content %}
+  <h1 class="portal-page-heading">Account Security</h1>
+  <p class="portal-page-subtitle">Protect your account with Google Authenticator (TOTP). When enabled, you will enter a code after your password at login.</p>
+
+  <div class="portal-card max-w-xl space-y-5">
+    <div>
+      <h2 class="text-base font-semibold" style="color:var(--portal-text-main);">Two-factor authentication</h2>
+      <p class="text-sm mt-1" style="color:var(--portal-text-muted);">
+        Status:
+        {% if totp_enabled %}
+          <span class="portal-badge portal-badge--green ml-1">Enabled</span>
+        {% else %}
+          <span class="portal-badge portal-badge--slate ml-1">Off</span>
+        {% endif %}
+      </p>
+    </div>
+
+    {% if not totp_enabled %}
+    <div class="space-y-4" style="border-top:1px solid var(--portal-border-subtle);padding-top:1.25rem;">
+      {% if setup_secret %}
+        <div class="rounded-lg px-3 py-2 text-xs font-mono break-all" style="background:var(--portal-muted-bg);color:var(--portal-text-muted);border:1px solid var(--portal-border);">
+          Secret: {{ setup_secret }}
+        </div>
+        {% if otp_uri %}
+        <p class="text-sm" style="color:var(--portal-text-main);">
+          Add this account in Google Authenticator using "Enter a setup key" or open:
+          <a class="underline font-medium" style="color:var(--portal-brand-primary);" href="{{ otp_uri }}">otpauth link</a>
+        </p>
+        {% endif %}
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="confirm_totp">
+          <div>
+            <label class="portal-form-label">6-digit code</label>
+            <input name="code" class="portal-input" autocomplete="one-time-code" maxlength="12" placeholder="Enter code from authenticator app">
+          </div>
+          <button class="portal-btn-primary" type="submit">Confirm &amp; Enable 2FA</button>
+        </form>
+      {% else %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="start_totp">
+          <button class="portal-btn-primary" type="submit">Start Setup</button>
+        </form>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="space-y-3" style="border-top:1px solid var(--portal-border-subtle);padding-top:1.25rem;">
+      <p class="text-sm" style="color:var(--portal-text-muted);">Enter your current authenticator code to disable 2FA.</p>
+      <form method="post" class="space-y-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="disable_totp">
+        <div>
+          <label class="portal-form-label">Current authenticator code</label>
+          <input name="code" class="portal-input" autocomplete="one-time-code" maxlength="12" placeholder="6-digit code">
+        </div>
+        <button type="submit" class="portal-btn-secondary" style="border-color:rgba(220,38,38,0.4);color:#b91c1c;">
+          Disable 2FA
+        </button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+{% endblock %}

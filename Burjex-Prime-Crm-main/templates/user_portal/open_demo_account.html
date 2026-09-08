@@ -1,0 +1,41 @@
+{% extends "user_portal/base.html" %}
+{% block title %}Open Demo Account{% endblock %}
+{% block user_content %}
+  <h1 class="portal-page-heading">Open Demo Account</h1>
+  <p class="portal-page-subtitle">Virtual account for practice trading. No real funds, no payment gateway, no withdrawals.</p>
+
+  <div class="portal-card max-w-2xl">
+    <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {% csrf_token %}
+      <div>
+        <label class="portal-form-label">Demo Account Type</label>
+        <select name="account_type" class="portal-input" required>
+          <option value="">Select type</option>
+          {% for t in account_types %}
+            <option value="{{ t.id }}">Demo — {{ t.account_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="portal-form-label">Demo Group</label>
+        <select name="group_id" class="portal-input">
+          <option value="">Auto (admin default)</option>
+          {% for g in demo_groups %}
+            <option value="{{ g.id }}">{{ g.crm_group_name|default:g.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="rounded-lg p-3" style="border:1px solid var(--portal-border);background:var(--portal-muted-bg);">
+        <div class="portal-stat-label">Default Virtual Balance</div>
+        <div class="font-semibold mt-0.5" style="color:var(--portal-text-main);">{{ demo_settings.default_balance }} USD</div>
+      </div>
+      <div class="rounded-lg p-3" style="border:1px solid var(--portal-border);background:var(--portal-muted-bg);">
+        <div class="portal-stat-label">Default Leverage</div>
+        <div class="font-semibold mt-0.5" style="color:var(--portal-text-main);">1:{{ demo_settings.default_leverage }}</div>
+      </div>
+      <div class="md:col-span-2">
+        <button class="portal-btn-primary" type="submit">Create Demo Account</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

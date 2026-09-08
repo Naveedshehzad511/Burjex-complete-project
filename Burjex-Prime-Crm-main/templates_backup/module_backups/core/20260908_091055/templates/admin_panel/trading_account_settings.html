@@ -1,0 +1,383 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Account Types Wizard{% endblock %}
+{% block admin_content %}
+<div class="bp-page-header bp-s-6 flex justify-between items-center flex-wrap gap-4">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-layer-group bp-s-140"></i>Account types</h1>
+    <p class="bp-page-subtitle">Manage client account types, platforms, and trading parameters.</p>
+  </div>
+  {% if edit_obj or request.resolver_match.url_name == 'admin-account-type-add' %}
+  <div>
+    <a href="{% url 'admin-account-type-list' %}" class="bp-btn bp-btn-outline bp-btn-sm">
+      <i class="fa-solid fa-arrow-left me-1"></i> Back to Account Types
+    </a>
+  </div>
+  {% endif %}
+</div>
+
+<div class="bp-grid-4 bp-s-6">
+  <!-- Total Types -->
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important; font-weight: 500 !important; margin: 0 !important; line-height: 1.1; text-transform: uppercase tracking-wide;">TOTAL TYPES</div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important; margin: 0 !important; line-height: 1.2 !important;">{{ stats.total_types }}</div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; border-radius: 50% !important; background: #3b82f626 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #3b82f6 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-layer-group"></i>
+    </div>
+  </div>
+  
+  <!-- Active -->
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important; font-weight: 500 !important; margin: 0 !important; line-height: 1.1; text-transform: uppercase tracking-wide;">ACTIVE</div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important; margin: 0 !important; line-height: 1.2 !important;">{{ stats.active_types }}</div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; border-radius: 50% !important; background: #10b98126 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #10b981 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-check"></i>
+    </div>
+  </div>
+  
+  <!-- Inactive -->
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important; font-weight: 500 !important; margin: 0 !important; line-height: 1.1; text-transform: uppercase tracking-wide;">INACTIVE</div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important; margin: 0 !important; line-height: 1.2 !important;">{{ stats.inactive_types }}</div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; border-radius: 50% !important; background: #f43f5e26 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #f43f5e !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-xmark"></i>
+    </div>
+  </div>
+  
+  <!-- Total Accounts -->
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important; font-weight: 500 !important; margin: 0 !important; line-height: 1.1; text-transform: uppercase tracking-wide;">TOTAL ACCOUNTS</div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important; margin: 0 !important; line-height: 1.2 !important;">{{ stats.total_accounts }}</div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; border-radius: 50% !important; background: #8b5cf626 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #8b5cf6 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-users"></i>
+    </div>
+  </div>
+</div>
+
+{% if show_form %}
+<div class="bp-card">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title">{% if edit_obj %}Edit{% else %}Create{% endif %} Account Type</span>
+  </div>
+  <div class="bp-card-body">
+    <form method="post" id="wizardForm" class="space-y-4">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="{% if edit_obj %}edit{% else %}add{% endif %}">
+      <input type="hidden" name="id" value="{{ edit_obj.id|default:'' }}">
+      <input type="hidden" name="account_code" id="id_account_code" value="{{ edit_obj.account_code|default:'' }}">
+      <input type="hidden" name="server_name" id="id_server_name" value="{{ edit_obj.server_name|default:'' }}">
+
+      <div class="flex flex-wrap gap-2 mb-4">
+        <button type="button" class="step-btn bp-btn bp-btn-primary btn-gradient border-0 text-white" data-step="1">1. Basic Info</button>
+        <button type="button" class="step-btn bp-btn bp-btn-outline" data-step="2">2. Trading Config</button>
+        <button type="button" class="step-btn bp-btn bp-btn-outline" data-step="3">3. Eligibility & Limits</button>
+      </div>
+
+      <section class="step-panel" data-step="1">
+        <h3 class="font-semibold text-slate-800 dark:text-slate-200 mb-3">Account Details</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="md:col-span-2"><label class="bp-form-label">Account Title</label><input name="account_name" required value="{{ edit_obj.account_name|default:'' }}" class="bp-input w-full"></div>
+          <div class="md:col-span-2"><label class="bp-form-label">Suitable For</label><input name="suitable_for" value="{{ edit_obj.suitable_for|default:'' }}" class="bp-input w-full"></div>
+          <div>
+            <label class="bp-form-label">Category</label>
+            <select name="account_category" id="id_account_category" class="bp-input w-full">
+              <option value="LIVE" {% if edit_obj.account_category == 'LIVE' or not edit_obj %}selected{% endif %}>Live Account Type</option>
+              <option value="DEMO" {% if edit_obj.account_category == 'DEMO' %}selected{% endif %}>Standalone Demo Account Type</option>
+            </select>
+          </div>
+          <div class="live-only-field"><label class="bp-form-label">Min Deposit</label><input type="number" step="0.01" name="min_deposit" required value="{{ edit_obj.min_deposit|default:'' }}" class="bp-input w-full" id="id_min_deposit"></div>
+          <div class="demo-only-field hidden"><label class="bp-form-label">Min Demo Balance</label><input type="number" step="0.01" name="min_demo_balance" value="{{ edit_obj.min_demo_balance|default:'100.00' }}" class="bp-input w-full"></div>
+          <div class="demo-only-field hidden"><label class="bp-form-label">Max Demo Balance</label><input type="number" step="0.01" name="max_demo_balance" value="{{ edit_obj.max_demo_balance|default:'100000.00' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Min Spread</label><input type="number" step="0.0001" name="min_spread" required value="{{ edit_obj.min_spread|default:'' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Commission (optional)</label><input type="number" step="0.01" name="commission" value="{{ edit_obj.commission|default:'0' }}" class="bp-input w-full"></div>
+          <div>
+            <label class="bp-form-label">Currency</label>
+            <select name="currency" class="bp-input w-full">
+              <option value="USD" {% if edit_obj.currency == 'USD' or not edit_obj %}selected{% endif %}>USD</option>
+              <option value="EUR" {% if edit_obj.currency == 'EUR' %}selected{% endif %}>EUR</option>
+              <option value="GBP" {% if edit_obj.currency == 'GBP' %}selected{% endif %}>GBP</option>
+              <option value="AUD" {% if edit_obj.currency == 'AUD' %}selected{% endif %}>AUD</option>
+            </select>
+          </div>
+          <div><label class="bp-form-label">Display Order</label><input type="number" name="display_order" value="{{ edit_obj.display_order|default:'0' }}" class="bp-input w-full"></div>
+          <div class="flex items-end">
+            <label class="inline-flex items-center gap-2 bp-input bg-slate-50 dark:bg-slate-800/50 w-full h-[38px]"><input type="checkbox" class="w-4 h-4 text-indigo-600 rounded" name="is_active" {% if edit_obj and not edit_obj.is_active %}{% else %}checked{% endif %}> Active Account Type</label>
+          </div>
+        </div>
+      </section>
+
+      <section class="step-panel hidden" data-step="2">
+        <h3 class="font-semibold text-slate-800 dark:text-slate-200 mb-2">CRM group</h3>
+        <p class="text-xs text-slate-500 mb-4">Choose the CRM group created under <a href="{% url 'admin-group-list' %}" class="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">Group Management</a>.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <div class="md:col-span-2">
+            <label class="bp-form-label">CRM group <span class="text-rose-600">*</span></label>
+            <select name="crm_group_id" id="id_crm_group" required class="bp-input w-full">
+              <option value="">Select CRM group</option>
+              {% for bg in broker_groups %}
+                <option value="{{ bg.id }}" data-group-name="{{ bg.name }}" {% if edit_obj.crm_group_id == bg.id %}selected{% endif %}>{{ bg.crm_group_name|default:bg.name }} — {{ bg.get_platform_display }} — {{ bg.platform_group_name|default:bg.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <input name="manual_group_name" type="hidden" value="">
+          
+        </div>
+        <div class="mt-4">
+          <label class="bp-form-label">Leverage (multi select)</label>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {% for lv in leverage_choices %}
+              <label class="inline-flex items-center gap-2 bp-input cursor-pointer">
+                <input type="checkbox" class="w-4 h-4 text-indigo-600 rounded" name="leverage_options" value="{{ lv }}" {% if edit_obj and lv in edit_obj.leverage_options %}checked{% endif %}>
+                <span>1:{{ lv }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="mt-4 live-only-field">
+          <label class="inline-flex items-center gap-2 bp-form-label cursor-pointer mb-2"><input type="checkbox" class="w-4 h-4 text-indigo-600 rounded" id="id_demo_enabled" name="demo_enabled" {% if edit_obj.demo_enabled %}checked{% endif %}> Enable Demo Accounts</label>
+          <div id="demo_group_wrap" class="{% if not edit_obj.demo_enabled %}hidden{% endif %}">
+            <select name="demo_group_id" class="bp-input w-full md:w-1/2">
+              <option value="">Select demo CRM group</option>
+              {% for bg in broker_groups %}
+                <option value="{{ bg.id }}" {% if edit_obj.demo_group_id == bg.id %}selected{% endif %}>{{ bg.crm_group_name|default:bg.name }} — {{ bg.get_platform_display }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="step-panel hidden" data-step="3">
+        <h3 class="font-semibold text-slate-800 dark:text-slate-200 mb-4">Eligibility & Limits</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div><label class="bp-form-label">Account Type</label><input value="Individual Only" disabled class="bp-input w-full bg-slate-50 dark:bg-slate-800/50"></div>
+          <div>
+            <label class="bp-form-label">KYC Requirement</label>
+            <select name="kyc_requirement" class="bp-input w-full">
+              <option value="NONE" {% if edit_obj.kyc_requirement == 'NONE' or not edit_obj %}selected{% endif %}>None</option>
+              <option value="BASIC" {% if edit_obj.kyc_requirement == 'BASIC' %}selected{% endif %}>Basic</option>
+              <option value="FULL" {% if edit_obj.kyc_requirement == 'FULL' %}selected{% endif %}>Full</option>
+            </select>
+          </div>
+          <div>
+            <label class="bp-form-label">&nbsp;</label>
+            <label class="inline-flex items-center gap-2 bp-input h-[38px] w-full"><input type="checkbox" class="w-4 h-4 text-indigo-600 rounded" id="id_geo_enabled" name="geographic_restrictions_enabled" {% if edit_obj.geographic_restrictions_enabled %}checked{% endif %}> Geo Restrictions</label>
+          </div>
+          <div>
+            <label class="bp-form-label">Geo Mode</label>
+            <select name="geographic_mode" class="bp-input w-full">
+              <option value="ALLOW" {% if edit_obj.geographic_mode == 'ALLOW' or not edit_obj %}selected{% endif %}>Allow List</option>
+              <option value="BLOCK" {% if edit_obj.geographic_mode == 'BLOCK' %}selected{% endif %}>Block List</option>
+            </select>
+          </div>
+          <div class="md:col-span-2"><label class="bp-form-label">Countries (comma separated)</label><input name="geographic_countries" value="{{ edit_obj.geographic_countries|default:'' }}" class="bp-input w-full"></div>
+        </div>
+        <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+          <label class="inline-flex items-center gap-2 bp-input h-[38px] cursor-pointer"><input type="checkbox" class="w-4 h-4 text-indigo-600 rounded" name="require_email_verified" {% if edit_obj.require_email_verified %}checked{% endif %}> Email Verified</label>
+          <label class="inline-flex items-center gap-2 bp-input h-[38px] cursor-pointer"><input type="checkbox" class="w-4 h-4 text-indigo-600 rounded" name="require_phone_verified" {% if edit_obj.require_phone_verified %}checked{% endif %}> Phone Verified</label>
+          <label class="inline-flex items-center gap-2 bp-input h-[38px] cursor-pointer"><input type="checkbox" class="w-4 h-4 text-indigo-600 rounded" name="require_id_document" {% if edit_obj.require_id_document %}checked{% endif %}> ID Document</label>
+          <label class="inline-flex items-center gap-2 bp-input h-[38px] cursor-pointer"><input type="checkbox" class="w-4 h-4 text-indigo-600 rounded" name="require_proof_of_address" {% if edit_obj.require_proof_of_address %}checked{% endif %}> Proof of Address</label>
+        </div>
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div><label class="bp-form-label">Max Live Acc</label><input type="number" name="max_live_accounts" value="{{ edit_obj.max_live_accounts|default:'1' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Max Demo Acc</label><input type="number" name="max_demo_accounts" value="{{ edit_obj.max_demo_accounts|default:'1' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Demo Expiry (Days)</label><input type="number" name="demo_expiry_days" value="{{ edit_obj.demo_expiry_days|default:'0' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Max Total Bal</label><input type="number" step="0.01" name="max_total_balance" value="{{ edit_obj.max_total_balance|default:'0' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Max Single Dep</label><input type="number" step="0.01" name="max_single_deposit" value="{{ edit_obj.max_single_deposit|default:'0' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Min First Dep</label><input type="number" step="0.01" name="min_first_deposit" value="{{ edit_obj.min_first_deposit|default:'0' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Max W/D Per Req</label><input type="number" step="0.01" name="max_withdrawal_per_request" value="{{ edit_obj.max_withdrawal_per_request|default:'0' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Max W/D Per Day</label><input type="number" step="0.01" name="max_withdrawal_per_day" value="{{ edit_obj.max_withdrawal_per_day|default:'0' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Max W/D Reqs Per Day</label><input type="number" name="max_withdrawal_requests_per_day" value="{{ edit_obj.max_withdrawal_requests_per_day|default:'0' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Inact. Fee</label><input type="number" step="0.01" name="inactivity_fee_amount" value="{{ edit_obj.inactivity_fee_amount|default:'0' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Inact. Days</label><input type="number" name="inactivity_fee_after_days" value="{{ edit_obj.inactivity_fee_after_days|default:'0' }}" class="bp-input w-full"></div>
+          <div><label class="bp-form-label">Maint. Fee</label><input type="number" step="0.01" name="maintenance_fee_amount" value="{{ edit_obj.maintenance_fee_amount|default:'0' }}" class="bp-input w-full"></div>
+        </div>
+      </section>
+
+      <div class="flex flex-wrap gap-2 pt-4 border-t dark:border-slate-800">
+        <button type="button" id="btnPrev" class="bp-btn bp-btn-outline hidden">Previous</button>
+        <button type="button" id="btnNext" class="bp-btn bp-btn-primary">Next</button>
+        <button type="submit" id="btnSubmit" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all hidden">Create Account Type</button>
+        <a href="{% url 'admin-account-type-list' %}" class="bp-btn bp-btn-outline ml-auto">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% else %}
+<div class="bp-card mb-6">
+  <div class="bp-card-body">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      <div class="w-full min-w-0">
+        <select name="status" class="bp-input w-full">
+          <option value="">Status</option>
+          <option value="active" {% if filters.status == 'active' %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-3 md:col-span-2 w-full min-w-0">
+        <input name="min_deposit_min" value="{{ filters.min_deposit_min }}" placeholder="Min Deposit Min" class="bp-input w-full min-w-0">
+        <input name="min_deposit_max" value="{{ filters.min_deposit_max }}" placeholder="Min Deposit Max" class="bp-input w-full min-w-0">
+      </div>
+      <button class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all w-full h-[38px]"><i class="fa-solid fa-filter me-1"></i> Apply Filter</button>
+    </form>
+  </div>
+</div>
+
+<div class="bp-card">
+  <div class="bp-card-header flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+    <span class="bp-card-header-title"><i class="fa-solid fa-list me-2"></i>Account Types List</span>
+    <a href="{% url 'admin-account-type-add' %}" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all h-[38px]"><i class="fa-solid fa-plus me-1"></i> Add Account Type</a>
+  </div>
+</div>
+<div class="overflow-x-auto w-full mt-5">
+      <table class="bp-table min-w-full">
+        <thead>
+          <tr>
+            <th>Account Type</th>
+            <th>Group Name</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>
+              <div class="font-semibold text-slate-800 dark:text-slate-200">{{ r.account_name }}</div>
+            </td>
+            <td>
+              {% if r.crm_group %}
+                <span class="font-medium text-slate-700 dark:text-slate-300">{{ r.crm_group.crm_group_name|default:r.crm_group.name }}</span>
+              {% else %}
+                <span class="text-rose-500">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="flex items-center gap-2">
+                <a href="{% url 'admin-account-type-edit' %}?edit={{ r.id }}" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all px-3 py-1 text-xs h-auto"><i class="fa-solid fa-pen"></i> Edit</a>
+                <form method="post" class="inline m-0">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="{% if r.is_active %}disable{% else %}enable{% endif %}">
+                  <input type="hidden" name="id" value="{{ r.id }}">
+                  <button type="submit" class="bp-btn bg-slate-600 hover:bg-slate-700 text-white border-0 px-3 py-1 text-xs h-auto shadow-sm">{% if r.is_active %}<i class="fa-solid fa-ban"></i> Disable{% else %}<i class="fa-solid fa-check"></i> Enable{% endif %}</button>
+                </form>
+                <form method="post" class="inline m-0">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="id" value="{{ r.id }}">
+                  <button type="submit" onclick="return confirm('Permanently delete CRM group (account type) &quot;{{ r.account_name|escapejs }}&quot;?')" class="bp-btn bg-rose-500 hover:bg-rose-600 text-white border-0 px-3 py-1 text-xs h-auto shadow-sm"><i class="fa-solid fa-trash"></i> Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="p-8 text-center text-slate-500">No account types found.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+{% endif %}
+
+<script>
+(() => {
+  const form = document.getElementById('wizardForm');
+  const stepBtns = Array.from(document.querySelectorAll('.step-btn'));
+  const panels = Array.from(document.querySelectorAll('.step-panel'));
+  const btnPrev = document.getElementById('btnPrev');
+  const btnNext = document.getElementById('btnNext');
+  const btnSubmit = document.getElementById('btnSubmit');
+  const demoToggle = document.getElementById('id_demo_enabled');
+  const demoWrap = document.getElementById('demo_group_wrap');
+  const groupSel = document.getElementById('id_crm_group');
+  const serverDisplay = document.getElementById('server_name_display');
+  const serverHidden = document.getElementById('id_server_name');
+  const codeHidden = document.getElementById('id_account_code');
+  const accountCategorySelect = document.getElementById('id_account_category');
+  if (accountCategorySelect) {
+    accountCategorySelect.addEventListener('change', function() {
+      const isDemo = this.value === 'DEMO';
+      document.querySelectorAll('.live-only-field').forEach(el => el.classList.toggle('hidden', isDemo));
+      document.querySelectorAll('.demo-only-field').forEach(el => el.classList.toggle('hidden', !isDemo));
+      
+      const minDepInput = document.getElementById('id_min_deposit');
+      if (minDepInput) minDepInput.required = !isDemo;
+    });
+    accountCategorySelect.dispatchEvent(new Event('change'));
+  }
+
+  const nameInput = form.querySelector('input[name="account_name"]');
+  let current = 1;
+
+  function syncCode() {
+    const raw = (nameInput.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    codeHidden.value = (raw || 'ACC').slice(0, 20);
+  }
+  function syncServer() {
+    const opt = groupSel.options[groupSel.selectedIndex];
+    const server = opt ? (opt.getAttribute('data-group-name') || '') : '';
+    serverDisplay.value = server || 'Auto detected from group';
+    serverHidden.value = server;
+  }
+  function draw() {
+    stepBtns.forEach(b => {
+      const isActive = Number(b.dataset.step) === current;
+      b.classList.toggle('bp-btn-primary', isActive);
+      b.classList.toggle('btn-gradient', isActive);
+      b.classList.toggle('border-0', isActive);
+      b.classList.toggle('text-white', isActive);
+      b.classList.toggle('bp-btn-outline', !isActive);
+    });
+    panels.forEach(p => p.classList.toggle('hidden', Number(p.dataset.step) !== current));
+    btnPrev.disabled = current === 1;
+    btnPrev.classList.toggle('hidden', current === 1);
+    btnNext.classList.toggle('hidden', current === 3);
+    btnSubmit.classList.toggle('hidden', current !== 3);
+    btnSubmit.textContent = '{{ edit_obj|yesno:"Update Account Type,Create Account Type" }}';
+  }
+  function validateStep(step) {
+    const panel = document.querySelector(`.step-panel[data-step="${step}"]`);
+    if (!panel) return true;
+    const inputs = panel.querySelectorAll('input[required], select[required], textarea[required]');
+    for (const input of inputs) {
+      if (!input.checkValidity()) {
+        input.reportValidity();
+        return false;
+      }
+    }
+    return true;
+  }
+  stepBtns.forEach(b => b.addEventListener('click', () => { 
+    const targetStep = Number(b.dataset.step);
+    if (targetStep > current) {
+      for (let i = current; i < targetStep; i++) {
+        if (!validateStep(i)) return;
+      }
+    }
+    current = targetStep; 
+    draw(); 
+  }));
+  btnPrev.addEventListener('click', () => { if (current > 1) { current--; draw(); } });
+  btnNext.addEventListener('click', () => { 
+    if (current < 3) { 
+      if (!validateStep(current)) return;
+      current++; 
+      draw(); 
+    } 
+  });
+  demoToggle.addEventListener('change', () => demoWrap.classList.toggle('hidden', !demoToggle.checked));
+  groupSel.addEventListener('change', syncServer);
+  nameInput.addEventListener('input', syncCode);
+
+  syncCode();
+  syncServer();
+  draw();
+})();
+</script>
+{% endblock %}
+

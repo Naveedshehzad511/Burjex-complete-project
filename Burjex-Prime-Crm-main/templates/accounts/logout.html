@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Logged Out - Forex Broker CRM{% endblock %}
+
+{% block content %}
+  <div class="max-w-md mx-auto mt-10 bg-white border rounded-lg p-6">
+    <h1 class="text-xl font-semibold mb-2">You have been logged out.</h1>
+    <div class="flex gap-3 mt-3">
+      <a class="text-indigo-600 hover:underline text-sm" href="{% url 'user-login' %}">User Login</a>
+      <a class="text-indigo-600 hover:underline text-sm" href="{% url 'admin-login' %}">Admin Login</a>
+    </div>
+  </div>
+{% endblock %}
+

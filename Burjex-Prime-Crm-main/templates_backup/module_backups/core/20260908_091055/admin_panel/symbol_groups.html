@@ -1,0 +1,27 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Symbol Groups{% endblock %}
+{% block admin_content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <h1 class="text-xl font-semibold">Symbol groups (legacy)</h1>
+  <div class="rounded-lg bg-slate-50 border border-slate-200 text-slate-700 text-sm px-4 py-3">
+    Manual symbol groups are <strong>disabled</strong>. CRM uses <strong>Group Management</strong> as the master: each CRM group maps to a platform group; instruments sync into the CRM automatically.
+  </div>
+  <div class="bg-white border rounded-xl overflow-hidden">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-left"><tr><th class="p-2">Name</th><th class="p-2">Slug</th></tr></thead>
+      <tbody>
+        {% for g in rows %}
+        <tr class="border-t">
+          <td class="p-2">{{ g.name }}</td>
+          <td class="p-2 font-mono text-xs">{{ g.slug }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2" class="p-4 text-slate-500">No legacy groups.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <a href="{% url 'admin-trading-symbols' %}" class="text-sm text-indigo-600 hover:underline">Synced symbols →</a>
+</div>
+{% endblock %}
+

@@ -1,0 +1,25 @@
+{% extends "sales_layout.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block admin_shell_page_title %}{{ page_title }}{% endblock %}
+{% block admin_content %}
+<div class="max-w-6xl mx-auto px-2 pb-12">
+  <h1 class="text-xl font-semibold text-slate-900 mb-4">{{ page_title }}</h1>
+  <form method="post" class="mt-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+    {% csrf_token %}
+    {% for folder, items in perm_folders %}
+    <section>
+      <h3 class="text-sm font-semibold text-slate-900 mb-3">{{ folder }} Permissions</h3>
+      <div class="grid md:grid-cols-2 gap-2">
+        {% for code, label in items %}
+        <label class="inline-flex items-center gap-2 text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <input type="checkbox" name="perm_{{ code }}" {% if code in granted_set %}checked{% endif %} />
+          <span>{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+    <button class="w-full rounded-lg bg-indigo-600 text-white py-2.5 font-semibold">Save Permissions</button>
+  </form>
+</div>
+{% endblock %}

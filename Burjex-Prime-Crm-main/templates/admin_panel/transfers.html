@@ -1,0 +1,99 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Transfers{% endblock %}
+
+{% block admin_content %}
+  <div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+        <i class="fa-solid fa-money-bill-transfer"></i>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-slate-900 dark:text-white">Internal Transfer Report</h1>
+      </div>
+    </div>
+    <div class="w-full sm:w-auto">
+      <form method="get" class="flex flex-nowrap items-center gap-2 w-full" id="transferFilterForm">
+        <div class="relative w-full sm:w-[260px]">
+          <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 12px;"></i>
+          <input type="text" name="email" value="{{ filters.email }}" placeholder="Search by email..." class="w-full h-9 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors text-slate-900 dark:text-white placeholder:text-slate-400" style="padding-left: 32px; padding-right: 16px;" oninput="debounceSubmit()" />
+        </div>
+        <a href="?type={{ filters.type|urlencode }}&email={{ filters.email|urlencode }}&status={{ filters.status|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}&export=excel" class="h-9 px-3 rounded-lg text-xs font-semibold transition-colors btn-cancel flex items-center justify-center whitespace-nowrap shadow-sm"><i class="fa-solid fa-file-excel mr-1.5 text-emerald-600 dark:text-emerald-500"></i> Excel</a>
+      </form>
+    </div>
+  </div>
+  <script>
+    let debounceTimer;
+    function debounceSubmit() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        document.getElementById('transferFilterForm').submit();
+      }, 500);
+    }
+  </script>
+
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden mb-6">
+    <div class="overflow-x-auto w-full">
+      <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+        <thead>
+          <tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Date</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">User</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Type</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">From</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">To</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Amount</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider text-right">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+          {% for r in page_obj.object_list %}
+            <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors group">
+              <td class="px-4 py-3 text-slate-500 font-medium text-xs">{{ r.created_at|date:"M d, Y H:i" }}</td>
+              <td class="px-4 py-3 font-bold text-slate-900 dark:text-white">{{ r.user.email }}</td>
+              <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">{{ r.transfer_type }}</span></td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400 font-medium">{{ r.from_account }}</td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400 font-medium">{{ r.to_account }}</td>
+              <td class="px-4 py-3 font-bold text-slate-900 dark:text-white">{{ r.amount }} <span class="text-xs text-slate-500">{{ r.currency }}</span></td>
+              <td class="px-4 py-3 text-right">
+                {% if r.status == "APPROVED" %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">Approved</span>
+                {% elif r.status == "PENDING" %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800">Pending</span>
+                {% else %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">Rejected</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="flex flex-col items-center justify-center py-12">
+                  <div class="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
+                    <i class="fa-solid fa-folder-open text-2xl"></i>
+                  </div>
+                  <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-1">No transfers found</h3>
+                  <p class="text-xs text-slate-500">There are no transfers matching your search criteria.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="px-4 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-4">
+      <span class="text-xs text-slate-500 font-medium">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      <div class="flex items-center gap-1.5">
+        {% if page_obj.has_previous %}
+        <a class="h-8 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center" href="?page={{ page_obj.previous_page_number }}&type={{ filters.type|urlencode }}&email={{ filters.email|urlencode }}&status={{ filters.status|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}">Prev</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+        <a class="h-8 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center" href="?page={{ page_obj.next_page_number }}&type={{ filters.type|urlencode }}&email={{ filters.email|urlencode }}&status={{ filters.status|urlencode }}&from={{ filters.from|urlencode }}&to={{ filters.to|urlencode }}">Next</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+{% endblock %}

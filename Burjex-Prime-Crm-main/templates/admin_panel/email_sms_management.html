@@ -1,0 +1,73 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}System Management - Email & SMS{% endblock %}
+{% block admin_content %}
+<div class="space-y-4">
+  <h1 class="text-xl font-semibold">System Management → Email & SMS</h1>
+  <div class="bg-white border rounded p-4">
+    <form method="post" class="grid md:grid-cols-4 gap-3 items-end">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_defaults" />
+      <div>
+        <label class="text-xs">Default Email Provider</label>
+        <select name="default_email_provider" class="border rounded px-2 py-1 w-full">
+          <option value="">--</option>
+          {% for p in email_providers %}<option value="{{ p.id }}" {% if email_settings.default_provider_id == p.id %}selected{% endif %}>{{ p.get_provider_display }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="text-xs">Default SMS Provider</label>
+        <select name="default_sms_provider" class="border rounded px-2 py-1 w-full">
+          <option value="">--</option>
+          {% for p in sms_providers %}<option value="{{ p.id }}" {% if sms_settings.default_provider_id == p.id %}selected{% endif %}>{{ p.get_provider_display }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="px-3 py-1 bg-slate-900 text-white rounded">Save Defaults</button>
+    </form>
+  </div>
+  <div class="grid md:grid-cols-2 gap-3">
+    {% for p in email_providers %}
+    <form method="post" class="bg-white border rounded p-3 space-y-2 text-xs">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_email_provider"><input type="hidden" name="id" value="{{ p.id }}">
+      <div class="font-semibold">{{ p.get_provider_display }} <span class="text-slate-500">(Email)</span></div>
+      <label><input type="checkbox" name="enabled" {% if p.enabled %}checked{% endif %}> Enabled</label>
+      <label><input type="checkbox" name="is_active" {% if p.is_active %}checked{% endif %}> Active</label>
+      <input name="api_key" value="{{ p.api_key }}" class="border rounded px-2 py-1 w-full" placeholder="API Key">
+      <input name="secret_key" value="{{ p.secret_key }}" class="border rounded px-2 py-1 w-full" placeholder="Secret Key">
+      <input name="domain" value="{{ p.domain }}" class="border rounded px-2 py-1 w-full" placeholder="Domain">
+      <input name="sender_email" value="{{ p.sender_email }}" class="border rounded px-2 py-1 w-full" placeholder="Sender Email">
+      <input name="sender_name" value="{{ p.sender_name }}" class="border rounded px-2 py-1 w-full" placeholder="Sender Name">
+      <input name="smtp_host" value="{{ p.smtp_host }}" class="border rounded px-2 py-1 w-full" placeholder="SMTP Host">
+      <input name="smtp_port" value="{{ p.smtp_port }}" class="border rounded px-2 py-1 w-full" placeholder="SMTP Port">
+      <input name="username" value="{{ p.username }}" class="border rounded px-2 py-1 w-full" placeholder="Username">
+      <input name="password" value="{{ p.password }}" class="border rounded px-2 py-1 w-full" placeholder="Password">
+      <input name="encryption" value="{{ p.encryption }}" class="border rounded px-2 py-1 w-full" placeholder="Encryption">
+      <button class="px-3 py-1 bg-blue-700 text-white rounded">Configure</button>
+    </form>
+    {% endfor %}
+  </div>
+  <div class="grid md:grid-cols-2 gap-3">
+    {% for p in sms_providers %}
+    <form method="post" class="bg-white border rounded p-3 space-y-2 text-xs">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_sms_provider"><input type="hidden" name="id" value="{{ p.id }}">
+      <div class="font-semibold">{{ p.get_provider_display }} <span class="text-slate-500">(SMS)</span></div>
+      <label><input type="checkbox" name="enabled" {% if p.enabled %}checked{% endif %}> Enabled</label>
+      <label><input type="checkbox" name="is_active" {% if p.is_active %}checked{% endif %}> Active</label>
+      <input name="api_key" value="{{ p.api_key }}" class="border rounded px-2 py-1 w-full" placeholder="API Key">
+      <input name="sender_id" value="{{ p.sender_id }}" class="border rounded px-2 py-1 w-full" placeholder="Sender ID">
+      <input name="api_url" value="{{ p.api_url }}" class="border rounded px-2 py-1 w-full" placeholder="API URL">
+      <input name="account_sid" value="{{ p.account_sid }}" class="border rounded px-2 py-1 w-full" placeholder="Account SID">
+      <input name="auth_token" value="{{ p.auth_token }}" class="border rounded px-2 py-1 w-full" placeholder="Auth Token">
+      <input name="phone_number" value="{{ p.phone_number }}" class="border rounded px-2 py-1 w-full" placeholder="Phone Number">
+      <button class="px-3 py-1 bg-blue-700 text-white rounded">Configure</button>
+    </form>
+    {% endfor %}
+  </div>
+  <div class="bg-white border rounded p-4 flex gap-3">
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="test_email"><button class="px-3 py-1 bg-emerald-700 text-white rounded">Send Test Email</button></form>
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="test_sms"><button class="px-3 py-1 bg-indigo-700 text-white rounded">Send Test SMS</button></form>
+  </div>
+</div>
+{% endblock %}
+

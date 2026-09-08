@@ -1,0 +1,87 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}User Wise Lot Report{% endblock %}
+{% block admin_content %}
+
+<div class="bp-page-header">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-chart-bar bp-s-3"></i>User Wise Lot Report</h1>
+    <p class="bp-page-subtitle">Volume breakdown by user — lots traded per account</p>
+  </div>
+</div>
+
+<div class="bp-card bp-s-6">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title"><i class="fa-solid fa-magnifying-glass bp-s-5"></i>Search &amp; Filter</span>
+  </div>
+  <div class="bp-card-body">
+    <form class="bp-form-group bp-s-258">
+      <div class="bp-s-182">
+        <label class="bp-form-label">Search</label>
+        <input name="q" value="{{ filters.q }}" class="bp-input" placeholder="Name / Email">
+      </div>
+      <div>
+        <button type="submit" class="bp-btn bp-btn-primary"><i class="fa-solid fa-search bp-s-5"></i>Search</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="bp-card">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title"><i class="fa-solid fa-users bp-s-5"></i>Lot Volume by User</span>
+  </div>
+  <div class="bp-card-body bp-s-48">
+    <div class="bp-table -wrap">
+      <table class="bp-table">
+        <thead>
+          <tr>
+            <th><i class="fa-solid fa-user bp-s-259"></i>Name</th>
+            <th><i class="fa-solid fa-envelope bp-s-259"></i>Email</th>
+            <th class="bp-s-134"><i class="fa-solid fa-layer-group bp-s-259"></i>Total Lots</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in page_obj.object_list %}
+          <tr>
+            <td>{{ u.display_name }}</td>
+            <td>{{ u.email }}</td>
+            <td class="bp-s-134">
+              <span class="bp-badge bp-badge-primary bp-s-260">{{ u.total_lots }}</span>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td class="bp-s-261" colspan="3">
+              <div class="bp-alert bp-alert-neutral bp-s-262">
+                <i class="fa-solid fa-inbox"></i> No lot data found.
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if page_obj.has_other_pages %}
+  <div class="bp-card-footer bp-s-263">
+    <div class="bp-pagination">
+      {% if page_obj.has_previous %}
+      <a href="?{% if filters.q %}q={{ filters.q }}&{% endif %}page={{ page_obj.previous_page_number }}" class="bp-page-btn"><i class="fa-solid fa-chevron-left"></i></a>
+      {% endif %}
+      {% for num in page_obj.paginator.page_range %}
+        {% if page_obj.number == num %}
+        <span class="bp-page-btn bp-page-btn--active">{{ num }}</span>
+        {% else %}
+        <a href="?{% if filters.q %}q={{ filters.q }}&{% endif %}page={{ num }}" class="bp-page-btn">{{ num }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if page_obj.has_next %}
+      <a href="?{% if filters.q %}q={{ filters.q }}&{% endif %}page={{ page_obj.next_page_number }}" class="bp-page-btn"><i class="fa-solid fa-chevron-right"></i></a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,277 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Deposit - Burjex Prime{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">{{ title }}</h1>
+
+  <div class="portal-card">
+    <div class="grid {% if gateways|length == 1 %}grid-cols-1{% else %}grid-cols-2{% endif %} sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      {% for g in gateways %}
+        {% if g.client_can_use %}
+        <a href="?gateway={{ g.id }}"
+           class="rounded-xl p-4 text-center transition hover:shadow-md"
+           style="border:2px solid {% if selected_gateway and selected_gateway.id == g.id %}var(--portal-brand-primary){% else %}var(--portal-border){% endif %};background:var(--portal-surface-bg);box-shadow:{% if selected_gateway and selected_gateway.id == g.id %}0 0 0 3px rgba(11,60,93,0.12){% else %}none{% endif %};">
+        {% else %}
+        <div class="rounded-xl p-4 text-center"
+             style="border:1px solid var(--portal-border);background:var(--portal-muted-bg);opacity:0.75;">
+        {% endif %}
+          <div class="w-12 h-12 mx-auto rounded-full flex items-center justify-center overflow-hidden"
+               style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+            {% if g.icon %}
+              <img src="{{ g.icon.url }}" alt="" class="w-full h-full object-cover" />
+            {% else %}
+              <span class="text-xs font-bold" style="color:var(--portal-brand-primary);">
+                {% if g.gateway_type == "THIRD_PARTY" %}US{% else %}{{ g.name|slice:":2"|upper }}{% endif %}
+              </span>
+            {% endif %}
+          </div>
+          <div class="font-semibold mt-2 text-sm" style="color:var(--portal-brand-primary);">
+            {% if g.gateway_type == "THIRD_PARTY" %}{{ g.currency|default:"USDT" }}{% else %}{{ g.name }}{% endif %}
+          </div>
+          {% if g.display_badge %}
+            <div class="text-[10px] uppercase tracking-wide mt-1" style="color:#92400e;">{{ g.display_badge }}</div>
+          {% endif %}
+          <div class="text-xs mt-1" style="color:var(--portal-text-muted);">Min: {{ g.min_amount }} {{ g.currency }}</div>
+          <div class="text-xs"      style="color:var(--portal-text-muted);">Processing: {{ g.processing_time|default:"-" }}</div>
+          {% if not g.client_can_use %}
+            <div class="text-xs font-medium mt-2" style="color:#92400e;">Method temporarily under maintenance</div>
+          {% endif %}
+        {% if g.client_can_use %}</a>{% else %}</div>{% endif %}
+      {% empty %}
+        <div class="text-sm col-span-4" style="color:var(--portal-text-muted);">No deposit methods available.</div>
+      {% endfor %}
+    </div>
+
+    {% if selected_gateway and not selected_gateway.client_can_use %}
+      <div class="portal-alert portal-alert--warning mb-4">
+        This deposit method is temporarily under maintenance. Please choose another method or contact support.
+      </div>
+    {% endif %}
+
+    {% if selected_gateway and selected_gateway.client_can_use and selected_profile == "MATCH2PAY" and m2p_integration_enabled %}
+      {% if m2p_session %}
+        <div class="space-y-4 max-w-lg">
+          <div class="rounded-xl p-4 text-sm space-y-2" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+            <div class="font-semibold mb-1" style="color:var(--portal-brand-primary);">Send cryptocurrency</div>
+            <p class="text-sm mb-3" style="color:var(--portal-text-muted);">Continue the payment on Match2Pay. Your wallet will be credited after the payment is confirmed on the network.</p>
+            <div style="color:var(--portal-text-main);"><span style="color:var(--portal-text-muted);">Network:</span> <span class="font-medium">{{ m2p_session.network }}</span></div>
+            <div style="color:var(--portal-text-main);"><span style="color:var(--portal-text-muted);">Amount:</span> <span class="font-mono font-semibold">{{ m2p_session.amount }} {{ m2p_session.currency }}</span></div>
+            <div style="color:var(--portal-text-main);"><span style="color:var(--portal-text-muted);">Payment reference:</span> <span class="font-mono text-xs break-all">{{ m2p_session.payment_id }}</span></div>
+          </div>
+
+          {% if m2p_session.address %}
+          <div>
+            <label class="portal-form-label">Wallet address</label>
+            <div class="flex flex-wrap gap-2 items-stretch">
+              <div class="flex-1 min-w-0 rounded-lg px-3 py-2 text-xs font-mono break-all"
+                   style="border:1px solid var(--portal-border);background:var(--portal-muted-bg);color:var(--portal-text-main);">
+                {{ m2p_session.address }}
+              </div>
+              <button type="button" class="portal-btn-primary shrink-0" id="copyAddrBtn">Copy</button>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if m2p_session.raw_create_response.checkout_url %}
+            <a href="{{ m2p_session.raw_create_response.checkout_url }}" class="portal-btn-primary">Open payment page</a>
+          {% endif %}
+
+          {% if m2p_session.qr_code_data %}
+          <div>
+            <div class="portal-form-label mb-2">QR code</div>
+            {% with q=m2p_session.qr_code_data %}
+              {% if q|slice:":8" == "https://" or q|slice:":7" == "http://" %}
+                <img src="{{ q }}" alt="Payment QR" class="w-48 h-48 rounded-xl p-2 object-contain" style="border:1px solid var(--portal-border);background:var(--portal-surface-bg);" />
+              {% elif q|slice:":10" == "data:image" %}
+                <img src="{{ q }}" alt="Payment QR" class="w-48 h-48 rounded-xl p-2 object-contain" style="border:1px solid var(--portal-border);background:var(--portal-surface-bg);" />
+              {% else %}
+                <img src="data:image/png;base64,{{ q }}" alt="Payment QR" class="w-48 h-48 rounded-xl p-2 object-contain" style="border:1px solid var(--portal-border);background:var(--portal-surface-bg);" />
+              {% endif %}
+            {% endwith %}
+          </div>
+          {% endif %}
+
+          <a href="?gateway={{ selected_gateway.id }}" class="text-sm font-medium" style="color:var(--portal-brand-primary);">← Start another deposit</a>
+        </div>
+
+        <script>
+          (function () {
+            var btn = document.getElementById("copyAddrBtn");
+            if (!btn) return;
+            var text = "{{ m2p_session.address|escapejs }}";
+            if (!text) return;
+            btn.addEventListener("click", function () {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () {
+                  btn.textContent = "Copied!";
+                  setTimeout(function () { btn.textContent = "Copy"; }, 2000);
+                });
+              }
+            });
+          })();
+        </script>
+
+      {% else %}
+        <div class="max-w-md mx-auto">
+          <div class="portal-card">
+            <div class="portal-card-header">
+              <div class="flex items-center gap-3 w-full">
+                <a href="{% url 'user-dashboard' %}" class="text-xl leading-none" style="color:var(--portal-text-muted);" aria-label="Back">&larr;</a>
+                <h2 class="flex-1 text-base font-semibold text-center pr-6" style="color:var(--portal-text-main);">Deposit &amp; Withdrawal</h2>
+              </div>
+              <div class="grid grid-cols-2 text-sm mt-4 w-full" style="border-bottom:1px solid var(--portal-border);">
+                <div class="text-center font-semibold pb-2" style="color:var(--portal-brand-primary);border-bottom:2px solid var(--portal-brand-primary);margin-bottom:-1px;">Deposit</div>
+                <a href="{% url 'user-withdraw' %}" class="text-center pb-2" style="color:var(--portal-text-muted);">Withdrawal</a>
+              </div>
+            </div>
+
+            <form method="post" class="space-y-4">
+              {% csrf_token %}
+              <input type="hidden" name="gateway" value="{{ selected_gateway.id }}" />
+              <input type="hidden" name="m2p_action" value="create_crypto_session" />
+
+              <div class="flex justify-center">
+                <div class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium"
+                     style="background:var(--portal-muted-bg);color:var(--portal-text-main);border:1px solid var(--portal-border);">
+                  <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white text-xs font-bold">$</span>
+                  USDT
+                </div>
+              </div>
+
+              <div>
+                <label class="portal-form-label">Select Account <span class="text-red-500">*</span></label>
+                <select name="trading_account" required class="portal-input">
+                  <option value="wallet">My Wallet{% if wallet_balance is not None %} — {{ wallet_balance|floatformat:2 }} USD{% endif %}</option>
+                  {% for account in trading_accounts %}
+                    <option value="{{ account.account_number }}">{{ account.account_number }}{% if account.mt5_account %} — Balance {{ account.mt5_account.balance|floatformat:2 }}{% endif %}</option>
+                  {% endfor %}
+                </select>
+                {% if not trading_accounts %}
+                  <p class="mt-1 text-xs" style="color:var(--portal-text-muted);">No live deposit-enabled trading account found. Deposit will go to My Wallet.</p>
+                {% endif %}
+              </div>
+
+              <div>
+                <label class="portal-form-label">Select Method <span class="text-red-500">*</span></label>
+                <select name="crypto_network" required class="portal-input">
+                  {% for method in allowed_crypto_methods %}
+                    <option value="{{ method.network }}">{{ method.label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div>
+                <label class="portal-form-label">Amount <span class="text-red-500">*</span></label>
+                <input type="number" name="amount" step="0.01" min="0.01" required class="portal-input" placeholder="Enter amount" />
+              </div>
+
+              <div class="flex justify-center pt-1">
+                <button type="submit" class="portal-btn-primary px-8">Submit &rsaquo;</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      {% endif %}
+
+    {% elif selected_gateway and selected_gateway.client_can_use %}
+      <form method="post" enctype="multipart/form-data" class="space-y-4 max-w-lg">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <input type="hidden" name="gateway" value="{{ selected_gateway.id }}" />
+
+        <div>
+          <label class="portal-form-label">Selected method</label>
+          <div class="text-sm font-semibold" style="color:var(--portal-brand-primary);">{{ selected_gateway.name }}</div>
+        </div>
+
+        {% if selected_profile == "MANUAL" %}
+          <div class="rounded-xl p-4 text-sm space-y-1" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+            <div class="font-semibold mb-2" style="color:var(--portal-brand-primary);">Bank Details</div>
+            <div style="color:var(--portal-text-main);">Bank Name: <span class="font-medium">{{ selected_gateway.bank_name|default:"-" }}</span></div>
+            <div style="color:var(--portal-text-main);">Account Name: <span class="font-medium">{{ selected_gateway.account_name|default:"-" }}</span></div>
+            <div style="color:var(--portal-text-main);">Account Number: <span class="font-medium">{{ selected_gateway.account_number|default:"-" }}</span></div>
+            <div style="color:var(--portal-text-main);">IBAN: <span class="font-medium">{{ selected_gateway.iban|default:"-" }}</span></div>
+            <div style="color:var(--portal-text-main);">Processing Time: <span class="font-medium">{{ selected_gateway.processing_time|default:"-" }}</span></div>
+            <div style="color:var(--portal-text-main);">Commission: <span class="font-medium">{{ selected_gateway.charges|default:"-" }}</span></div>
+          </div>
+        {% elif selected_profile == "CRYPTO" %}
+          <div class="rounded-xl p-4 text-sm space-y-1" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+            <div class="font-semibold mb-2" style="color:var(--portal-brand-primary);">Crypto payment details</div>
+            <div style="color:var(--portal-text-main);">Currency: <span class="font-medium">{{ selected_gateway.currency|default:"-" }}</span></div>
+            <div style="color:var(--portal-text-main);">Network: <span class="font-medium">{{ selected_gateway.network|default:"-" }}</span></div>
+            <div style="color:var(--portal-text-main);">Wallet Address: <span class="font-mono text-xs break-all">{{ selected_gateway.wallet_address|default:"—" }}</span></div>
+          </div>
+        {% endif %}
+
+        <div>
+          <label class="portal-form-label">Select Account <span class="text-red-500">*</span></label>
+          <select name="trading_account" required class="portal-input">
+            <option value="wallet">My Wallet{% if wallet_balance is not None %} — {{ wallet_balance|floatformat:2 }} USD{% endif %}</option>
+            {% for account in trading_accounts %}
+              <option value="{{ account.account_number }}">{{ account.account_number }}{% if account.mt5_account %} — Balance {{ account.mt5_account.balance|floatformat:2 }}{% endif %}</option>
+            {% endfor %}
+          </select>
+          {% if not trading_accounts %}
+            <p class="mt-1 text-xs" style="color:var(--portal-text-muted);">No live deposit-enabled trading account found. Deposit will go to My Wallet.</p>
+          {% endif %}
+        </div>
+
+        <div>
+          <label class="portal-form-label">Amount</label>
+          {{ form.amount }}{{ form.amount.errors }}
+        </div>
+        <div>
+          <label class="portal-form-label">Currency</label>
+          {{ form.currency }}{{ form.currency.errors }}
+        </div>
+        <div>
+          <label class="portal-form-label">Transaction ID</label>
+          {{ form.reference }}{{ form.reference.errors }}
+        </div>
+        {% if selected_profile == "MANUAL" %}
+          <style>
+            input[type="file"] {
+              padding: 0;
+              line-height: 1.5;
+            }
+            input[type="file"]::file-selector-button {
+              margin-right: 1rem;
+              padding: 0.5625rem 1.125rem;
+              border: 1px solid transparent;
+              border-radius: calc(var(--portal-radius, 12px) - 2px);
+              background: var(--portal-brand-button, var(--portal-brand-primary, #0b3c5d));
+              color: var(--portal-button-text, #fff);
+              font-size: 0.875rem;
+              font-weight: 600;
+              cursor: pointer;
+              transition: opacity 0.15s ease, transform 0.1s ease;
+            }
+            input[type="file"]::file-selector-button:hover {
+              opacity: 1;
+              background: var(--portal-button-hover, var(--portal-brand-primary, #0b3c5d));
+            }
+            input[type="file"]::file-selector-button:active { 
+              transform: scale(0.98); 
+            }
+            html[data-portal-theme="dark"] input[type="file"]::file-selector-button {
+              background: var(--portal-brand-button, var(--portal-brand-primary, #0b3c5d));
+            }
+          </style>
+          <div>
+            <label class="portal-form-label">Upload Slip</label>
+            {{ form.payment_screenshot }}{{ form.payment_screenshot.errors }}
+          </div>
+        {% endif %}
+        <div>
+          <label class="portal-form-label">Notes</label>
+          {{ form.notes }}{{ form.notes.errors }}
+        </div>
+
+        <button class="portal-btn-primary" type="submit">Deposit Now</button>
+      </form>
+
+    
+    {% endif %}
+  </div>
+{% endblock %}

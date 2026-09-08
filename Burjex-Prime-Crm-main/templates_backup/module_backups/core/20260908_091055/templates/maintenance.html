@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ settings_obj.title|default:"System Under Maintenance" }}</title>
+  <link rel="stylesheet" href="{% static 'css/tailwind-output.css' %}" />
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-800">
+  <main class="min-h-screen flex items-center justify-center px-4">
+    <section class="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-sm p-8 text-center space-y-5">
+      {% if org.logo %}
+        <img src="{{ org.logo.url }}" alt="Logo" class="h-14 w-auto mx-auto">
+      {% endif %}
+      <h1 class="text-3xl font-bold text-slate-900">{{ settings_obj.title|default:"System Under Maintenance" }}</h1>
+      <p class="text-slate-600">{{ settings_obj.message|default:"We are currently performing scheduled maintenance. Please check back shortly." }}</p>
+      {% if settings_obj.estimated_time %}
+        <p class="text-sm text-slate-500"><span class="font-semibold">Estimated time:</span> {{ settings_obj.estimated_time }}</p>
+      {% endif %}
+      {% if settings_obj.support_email %}
+        <p class="text-sm text-slate-500">
+          Need help?
+          <a href="mailto:{{ settings_obj.support_email }}" class="text-[#0B3C5D] font-semibold hover:underline">{{ settings_obj.support_email }}</a>
+        </p>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>
+

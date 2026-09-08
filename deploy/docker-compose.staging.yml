@@ -1,0 +1,162 @@
+# ============================================================================
+#  Burjex Prime — B-TRADER STAGING stack (engine + gateway + ws + market-data
+#  + its own Postgres/Redis). Built to run SIDE-BY-SIDE with production on the
+#  same host: distinct project name, distinct network, distinct volumes, and a
+#  5xxx host-port range that does not overlap the prod 4xxx/80/443/8000 ports.
+#
+#  This is the environment for developing and testing spec item #2 (execution
+#  engine), #14 (crypto/silver margins) and the #3B read-only role WITHOUT
+#  touching the live money engine. It is btrader-only by design — the signed-off
+#  prerequisite calls for "a staging btrader (its own engine + gateway +
+#  database, fed by the same or a test MT5 feed)". If CRM-side staging is later
+#  needed (e.g. #3A social-login end-to-end), add it as a separate stack.
+#
+#  Run from the repo root (BurjeX Prime/):
+#    docker compose -f deploy/docker-compose.staging.yml --env-file deploy/.env.staging up -d --build
+#
+#  Published host ports (staging — see deploy/README-STAGING.md):
+#    5100  REST gateway   5101  WebSocket   5300  MT5 tick ingest
+#    5433  Postgres (optional, for a DB GUI — commented by default)
+# ============================================================================
+
+name: btrader_staging
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # ── B-Trader's OWN Postgres (isolated volume; never the prod DB) ──────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: btrader_stg_postgres
+    <<: *restart
+    environment:
+      POSTGRES_USER: ${BT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${BT_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${BT_POSTGRES_DB}
+    volumes:
+      - btrader_stg_pg:/var/lib/postgresql/data
+    # Uncomment to reach the staging DB from a host GUI (5433 must be free):
+    # ports: ['127.0.0.1:5433:5432']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${BT_POSTGRES_USER} -d ${BT_POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [staging_internal]
+
+  redis:
+    image: redis:7-alpine
+    container_name: btrader_stg_redis
+    <<: *restart
+    command: >
+      redis-server --requirepass ${BT_REDIS_PASSWORD} --appendonly yes
+      --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - btrader_stg_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${BT_REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [staging_internal]
+
+  # ── REST gateway. Applies the Prisma schema on boot so a fresh staging DB
+  #    is never raced by the engine. Same image/source as prod, so it carries
+  #    whatever #2/#3B changes are on the branch being tested. ───────────────
+  gateway-api:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: gateway-api } }
+    container_name: btrader_stg_gateway
+    <<: *restart
+    env_file: .env.staging
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      API_PORT: '4100'
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@postgres:5432/${BT_POSTGRES_DB}?schema=public
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@redis:6379
+    command: >-
+      sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
+      cd /app/apps/gateway-api && exec node dist/main.js"
+    ports:
+      - '5100:4100'
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    volumes:
+      - btrader_stg_uploads:/app/uploads
+    networks: [staging_internal]
+
+  ws-gateway:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: ws-gateway } }
+    container_name: btrader_stg_ws
+    <<: *restart
+    env_file: .env.staging
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      WS_PORT: '4101'
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@redis:6379
+    ports:
+      - '5101:4101'
+    depends_on:
+      redis: { condition: service_healthy }
+      # Shares JWT_SECRET with the gateway; wait for it so tables/tenant exist.
+      gateway-api: { condition: service_started }
+    networks: [staging_internal]
+
+  # ── The engine under test. ENGINE_TICK_INTERVAL_MS is surfaced in the env
+  #    template specifically so #2A fix #3 (lower the coalescing drain) can be
+  #    exercised here without a code change. ──────────────────────────────────
+  trading-engine:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: trading-engine } }
+    container_name: btrader_stg_engine
+    <<: *restart
+    env_file: .env.staging
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@postgres:5432/${BT_POSTGRES_DB}?schema=public
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@redis:6379
+      ENGINE_TICK_INTERVAL_MS: ${ENGINE_TICK_INTERVAL_MS:-250}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      gateway-api: { condition: service_started }
+    networks: [staging_internal]
+
+  # ── Price feed. Default driver is `mock` (safe synthetic ticks) so staging
+  #    comes up trading out of the box. Point a TEST MT5 bridge at host :5300
+  #    and set LP_BRIDGE_DRIVER=mt5-ingest in .env.staging to use a real feed.
+  #    Never point the PRODUCTION MT5 feed here. ─────────────────────────────
+  market-data:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: market-data } }
+    container_name: btrader_stg_market_data
+    <<: *restart
+    env_file: .env.staging
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@postgres:5432/${BT_POSTGRES_DB}?schema=public
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@redis:6379
+      LP_BRIDGE_DRIVER: ${LP_BRIDGE_DRIVER:-mock}
+      MT5_INGEST_PORT: '4200'
+      MT5_FEED_TOKEN: ${MT5_FEED_TOKEN:-}
+      MT5_SYMBOL_SUFFIX: ${MT5_SYMBOL_SUFFIX:-}
+      MT5_MAX_TICK_AGE_MS: ${MT5_MAX_TICK_AGE_MS:-0}
+    ports:
+      # host 5300 -> container 4200 (ingest), mirroring prod's 4300->4200 offset
+      - '5300:4200'
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      gateway-api: { condition: service_started }
+    networks: [staging_internal]
+
+volumes:
+  btrader_stg_pg:
+  btrader_stg_redis:
+  btrader_stg_uploads:
+
+networks:
+  # Single private plane for the staging stack. Named distinctly so it never
+  # joins or clashes with the production `btrader_internal` / `burjex_edge`.
+  staging_internal:
+    name: btrader_staging_internal
+    driver: bridge

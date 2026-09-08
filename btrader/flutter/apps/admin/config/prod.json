@@ -1,0 +1,10 @@
+{
+  "_comment": "Production build for the admin web. Points at the Hetzner gateway/WS over HTTPS/WSS. Build with: flutter build web --release --dart-define-from-file=config/prod.json",
+  "API_BASE": "https://api.example.com",
+  "WS_URL": "wss://ws.example.com",
+  "TENANT": "demo",
+  "BRAND_NAME": "Example",
+  "BRAND_LOGO": "https://admin.example.io/btrader-logo.png",
+  "BRAND_PRIMARY": "#C9A24C",
+  "BRAND_ACCENT": "#0E4D35"
+}

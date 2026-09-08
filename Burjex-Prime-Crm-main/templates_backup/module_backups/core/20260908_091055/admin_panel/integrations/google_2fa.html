@@ -1,0 +1,51 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Google 2FA{% endblock %}
+{% block admin_content %}
+<div class="max-w-2xl mx-auto space-y-6 pb-10 px-2">
+  <a href="{% url 'admin-integrations-hub' %}" class="text-sm text-indigo-600 hover:underline">← Integrations</a>
+  <h1 class="text-xl font-semibold text-slate-900">Google 2FA</h1>
+  <form method="post" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-5">
+    {% csrf_token %}
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="enabled" {% if obj.enabled %}checked{% endif %} class="rounded border-slate-300" />
+      <span class="text-sm font-medium">Enable integration</span>
+    </label>
+    <p class="text-xs font-bold uppercase text-slate-500">2FA methods</p>
+    <label class="inline-flex items-center gap-2"><input type="checkbox" name="method_google_auth" {% if obj.method_google_auth %}checked{% endif %} class="rounded border-slate-300" /><span class="text-sm">Google Authenticator</span></label>
+    <label class="inline-flex items-center gap-2"><input type="checkbox" name="method_microsoft_auth" {% if obj.method_microsoft_auth %}checked{% endif %} class="rounded border-slate-300" /><span class="text-sm">Microsoft Authenticator</span></label>
+    <label class="inline-flex items-center gap-2"><input type="checkbox" name="method_authy" {% if obj.method_authy %}checked{% endif %} class="rounded border-slate-300" /><span class="text-sm">Authy (optional)</span></label>
+    <p class="text-xs font-bold uppercase text-slate-500">Apply 2FA on</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+      <label class="inline-flex items-center gap-2"><input type="checkbox" name="apply_client_login" {% if obj.apply_client_login %}checked{% endif %} class="rounded border-slate-300" /> Client login</label>
+      <label class="inline-flex items-center gap-2"><input type="checkbox" name="apply_admin_login" {% if obj.apply_admin_login %}checked{% endif %} class="rounded border-slate-300" /> Admin login</label>
+      <label class="inline-flex items-center gap-2"><input type="checkbox" name="apply_withdrawal" {% if obj.apply_withdrawal %}checked{% endif %} class="rounded border-slate-300" /> Withdrawal</label>
+      <label class="inline-flex items-center gap-2"><input type="checkbox" name="apply_password_change" {% if obj.apply_password_change %}checked{% endif %} class="rounded border-slate-300" /> Password change</label>
+      <label class="inline-flex items-center gap-2"><input type="checkbox" name="apply_wallet_access" {% if obj.apply_wallet_access %}checked{% endif %} class="rounded border-slate-300" /> Wallet access</label>
+      <label class="inline-flex items-center gap-2"><input type="checkbox" name="apply_profile_changes" {% if obj.apply_profile_changes %}checked{% endif %} class="rounded border-slate-300" /> Profile changes</label>
+    </div>
+    <p class="text-xs font-bold uppercase text-slate-500">Security</p>
+    <label class="inline-flex items-center gap-2"><input type="checkbox" name="backup_codes_enabled" {% if obj.backup_codes_enabled %}checked{% endif %} class="rounded border-slate-300" /><span class="text-sm">Backup codes enabled</span></label>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Remember device (days)</label>
+      <input type="number" name="remember_device_days" value="{{ obj.remember_device_days }}" min="0" class="w-full border rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <label class="inline-flex items-center gap-2"><input type="checkbox" name="force_2fa_admin" {% if obj.force_2fa_admin %}checked{% endif %} class="rounded border-slate-300" /><span class="text-sm">Force 2FA for admin</span></label>
+    <label class="inline-flex items-center gap-2"><input type="checkbox" name="force_2fa_clients" {% if obj.force_2fa_clients %}checked{% endif %} class="rounded border-slate-300" /><span class="text-sm">Force 2FA for clients</span></label>
+    <p class="text-xs font-bold uppercase text-slate-500">Advanced</p>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">OTP expiry (seconds)</label>
+      <input type="number" name="otp_expiry_seconds" value="{{ obj.otp_expiry_seconds }}" min="15" class="w-full border rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Max attempts</label>
+      <input type="number" name="max_attempts" value="{{ obj.max_attempts }}" min="1" class="w-full border rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Lock time (seconds)</label>
+      <input type="number" name="lockout_seconds" value="{{ obj.lockout_seconds }}" min="60" class="w-full border rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium">Save configuration</button>
+  </form>
+</div>
+{% endblock %}
+

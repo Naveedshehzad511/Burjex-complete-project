@@ -1,0 +1,19 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Customer support integrations{% endblock %}
+{% block admin_content %}
+<div class="max-w-3xl mx-auto space-y-6 pb-10 px-2">
+  <a href="{% url 'admin-integrations-hub' %}" class="text-sm text-indigo-600 hover:underline">← Integrations</a>
+  <h1 class="text-xl font-semibold text-slate-900">Customer Support</h1>
+  <p class="text-sm text-slate-600">Configure widgets, embed codes, and API tokens on the full support page.</p>
+  <a href="{{ full_page_url }}" class="inline-flex rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium">Open support integrations</a>
+  <ul class="mt-6 space-y-2 text-sm text-slate-700">
+    {% for r in rows %}
+    <li class="rounded-lg border border-slate-200 bg-white px-4 py-3 flex justify-between">
+      <span>{{ r.integration_name|default:r.get_integration_type_display }}</span>
+      <span class="text-slate-500">{% if r.enabled %}On{% else %}Off{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
+

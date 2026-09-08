@@ -1,0 +1,103 @@
+{% extends "sales_panel/base.html" %}
+{% load humanize %}
+
+{% block title %}Leads - Sales CRM{% endblock %}
+{% block admin_shell_page_title %}Leads{% endblock %}
+
+{% block admin_content %}
+  {% include "sales_panel/includes/table_page_styles.html" %}
+
+  <div class="bp-page-header">
+    <div>
+      <h1 class="bp-page-title"><i class="fa-solid fa-users-line" style="margin-right:0.5rem;color:var(--bp-primary);"></i>Leads</h1>
+      <p class="bp-page-subtitle">Recent marketing leads. For bulk tools and Django admin CRUD, use the admin marketing module when enabled.</p>
+    </div>
+  </div>
+
+  {% if manager_referral_url %}
+  <div class="bp-alert bp-alert-success" style="margin-bottom:1.25rem;">
+    <i class="fa-solid fa-link" style="margin-right:0.5rem;"></i>
+    <strong>Your referral link:</strong>
+    <code style="display:block;margin-top:0.4rem;word-break:break-all;font-size:0.75rem;background:rgba(255,255,255,0.7);padding:0.25rem 0.5rem;border-radius:4px;border:1px solid rgba(0,0,0,0.07);">{{ manager_referral_url }}</code>
+  </div>
+  {% endif %}
+
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <span class="bp-card-header-title"><i class="fa-solid fa-table-list" style="margin-right:0.5rem;"></i>Lead List</span>
+    </div>
+    <div class="bp-card-body" style="padding:0;">
+      {% if leads %}
+        <div class="bp-table -wrap">
+          <table class="bp-table">
+            <thead>
+              <tr>
+                <th>Name / Email</th>
+                <th>Status</th>
+                <th>Campaign</th>
+                <th>Manager / Dept</th>
+                <th>Created</th>
+                {% if show_lead_assign %}<th>Assign</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for lead in leads %}
+                <tr>
+                  <td>
+                    <strong>{{ lead.full_name|default:"—" }}</strong><br>
+                    <span class="bp-caption" style="color:var(--bp-text-muted,#64748b);">{{ lead.email|default:"—" }}</span>
+                  </td>
+                  <td>
+                    {% if lead.status == 'new' %}
+                      <span class="bp-badge bp-badge-info">{{ lead.get_status_display }}</span>
+                    {% elif lead.status == 'contacted' %}
+                      <span class="bp-badge bp-badge-warning">{{ lead.get_status_display }}</span>
+                    {% elif lead.status == 'converted' %}
+                      <span class="bp-badge bp-badge-success">{{ lead.get_status_display }}</span>
+                    {% elif lead.status == 'lost' or lead.status == 'rejected' %}
+                      <span class="bp-badge bp-badge-error">{{ lead.get_status_display }}</span>
+                    {% else %}
+                      <span class="bp-badge bp-badge-neutral">{{ lead.get_status_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ lead.campaign.name|default:"—" }}</td>
+                  <td>
+                    <span class="bp-small">{{ lead.assigned_to.email|default:"—" }}</span><br>
+                    <span class="bp-caption" style="color:var(--bp-text-muted,#94a3b8);">{{ lead.department.name|default:"—" }}</span>
+                  </td>
+                  <td><span class="bp-small">{{ lead.created_at|date:"M j, Y H:i" }}</span></td>
+                  {% if show_lead_assign %}
+                  <td>
+                    <form method="post" action="{% url 'sales-leads' %}" style="display:flex;flex-direction:column;gap:0.35rem;min-width:10rem;">
+                      {% csrf_token %}
+                      <input type="hidden" name="lead_id" value="{{ lead.pk }}" />
+                      <select name="manager_user_id" class="bp-input" style="font-size:0.75rem;padding:0.2rem 0.4rem;height:auto;">
+                        <option value="">Manager…</option>
+                        {% for m in assign_managers %}
+                        <option value="{{ m.pk }}" {% if lead.assigned_to_id == m.pk %}selected{% endif %}>{{ m.email }}</option>
+                        {% endfor %}
+                      </select>
+                      <select name="department_id" class="bp-input" style="font-size:0.75rem;padding:0.2rem 0.4rem;height:auto;">
+                        <option value="">Dept…</option>
+                        {% for d in crm_departments %}
+                        <option value="{{ d.pk }}" {% if lead.department_id == d.pk %}selected{% endif %}>{{ d.name }}</option>
+                        {% endfor %}
+                      </select>
+                      <button type="submit" class="bp-btn bp-btn-primary bp-btn-xs"><i class="fa-solid fa-floppy-disk" style="margin-right:0.3rem;"></i>Save</button>
+                    </form>
+                  </td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div style="padding:2.5rem;text-align:center;color:var(--bp-text-muted,#94a3b8);">
+          <i class="fa-solid fa-users-slash" style="font-size:2rem;margin-bottom:0.75rem;display:block;opacity:0.4;"></i>
+          <span class="bp-label">No leads yet.</span>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

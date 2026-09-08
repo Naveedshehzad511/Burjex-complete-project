@@ -1,0 +1,36 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Integration logs{% endblock %}
+{% block admin_content %}
+<div class="max-w-5xl mx-auto space-y-6 pb-10 px-2">
+  <a href="{% url 'admin-integrations-hub' %}" class="text-sm text-indigo-600 hover:underline">← Integrations</a>
+  <h1 class="text-xl font-semibold text-slate-900">Connection &amp; test logs</h1>
+  <p class="text-sm text-slate-600">Recent integration probes (newest first).</p>
+  <div class="rounded-xl border border-slate-200 bg-white overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-left text-xs uppercase text-slate-500">
+        <tr>
+          <th class="px-4 py-3">Time</th>
+          <th class="px-4 py-3">Slug</th>
+          <th class="px-4 py-3">Category</th>
+          <th class="px-4 py-3">Result</th>
+          <th class="px-4 py-3">Message</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for log in logs %}
+        <tr>
+          <td class="px-4 py-2 text-slate-600 whitespace-nowrap">{{ log.created_at }}</td>
+          <td class="px-4 py-2 font-mono text-xs">{{ log.integration_slug }}</td>
+          <td class="px-4 py-2">{{ log.category|default:"—" }}</td>
+          <td class="px-4 py-2">{% if log.success %}<span class="text-emerald-700">OK</span>{% else %}<span class="text-red-600">Fail</span>{% endif %}</td>
+          <td class="px-4 py-2 text-slate-700 max-w-md truncate" title="{{ log.message }}">{{ log.message|truncatechars:180 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="px-4 py-8 text-center text-slate-500">No log entries yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

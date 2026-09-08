@@ -1,0 +1,357 @@
+﻿# ============================================================================
+#  Burjex Prime â€” IP-ONLY edge (no domain, no TLS).
+#
+#  Use this instead of ./Caddyfile when the server has a bare IP and no DNS.
+#  Let's Encrypt cannot issue a certificate for an IP address, so `auto_https
+#  off` is mandatory: without it Caddy would try (and fail) to provision certs
+#  and then refuse to serve.
+#
+#  Routing is BY PORT, not by hostname or path:
+#     :8000  Django CRM (portal, admin, /api/v1, /static, /media, live chat WS)
+#     :4100  B-Trader REST gateway
+#     :4101  B-Trader WebSocket
+#     :4200  B-Trader admin dashboard (Flutter web, static)
+#     :4300  MT5 tick ingest
+#     :4400  B-Trader web trader (Flutter web, static, optional)
+#
+#  Why port-based and not path-based: the ws-gateway listens on the ROOT path
+#  and authenticates from `?token=`, and the Flutter clients build their URL as
+#  '$wsUrl?token=â€¦' with no path segment. A `/ws` prefix would need rewriting on
+#  the proxy AND a client change. One port per service avoids both.
+#
+#  Tenant resolution still works without hostnames: TenantMiddleware checks the
+#  X-BT-Tenant header BEFORE the Host header, and the Flutter clients always
+#  send it from `--dart-define=TENANT=<slug>` (default `demo`).
+#
+#  Caddy still fronts every service here rather than publishing the containers
+#  directly, because Django has no WhiteNoise in this project â€” with DEBUG=0 it
+#  does not serve /static or /media at all. Caddy serves both off disk.
+# ============================================================================
+
+{
+	# Staged domain cutover: auto_https is ON so the hostname sites below get
+	# Let's Encrypt certificates automatically. The port-based sites (:8000,
+	# :4100, ...) are addresses without a hostname, so Caddy never tries to
+	# issue certs for them and they keep serving plain HTTP exactly as before.
+	# This is what lets the IP access and the domain run side by side.
+	#
+	# Uncomment acme_ca for a STAGING dry run. Real Let's Encrypt allows only
+	# 5 failures per hostname per hour, and seven hostnames on a first attempt
+	# is exactly when a config mistake gets expensive.
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+	email {$ACME_EMAIL}
+	admin off
+}
+
+# â”€â”€ Reusable snippets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+# Plain request/response proxying (REST).
+(api_proxy) {
+	reverse_proxy {args[0]} {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		transport http {
+			dial_timeout 10s
+			read_timeout 120s
+		}
+	}
+}
+
+# Streaming/WebSocket proxying: no read timeout, no response buffering.
+# Caddy performs the Upgrade handshake itself â€” there is no Nginx-style
+# `proxy_set_header Upgrade` to write. What must be set is the transport
+# timeout, or an idle price socket gets torn down.
+(ws_proxy) {
+	reverse_proxy {args[0]} {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		flush_interval -1
+		transport http {
+			dial_timeout 10s
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}
+
+# No Strict-Transport-Security here: there is no TLS to pin, and a stray HSTS
+# header would be a footgun the day this IP does get a certificate.
+(ip_headers) {
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# Cache policy for a Flutter web build. Shared by (spa_site) and (tls_spa).
+#
+# Only /canvaskit/* may be pinned: its path carries the Flutter engine version,
+# so a new build fetches a new URL.
+#
+# EVERYTHING else Flutter emits keeps a STABLE filename across builds -
+# main.dart.js, flutter.js, flutter_bootstrap.js, flutter_service_worker.js,
+# version.json, manifest.json - and assets/ changes content without changing
+# name (MaterialIcons is tree-shaken per build). Pinning those as immutable
+# strands every returning visitor on the build they first loaded.
+#
+# flutter_service_worker.js is the one that really hurts: the service worker
+# decides when new code is adopted, so a cached worker keeps serving the old
+# main.dart.js out of Cache Storage. It intercepts the request before it
+# reaches the network, which is why a hard refresh does not clear it either.
+# This is exactly what hid the chart/history rework after it was deployed.
+#
+# "no-cache" still stores the file - it only forces revalidation, and Caddy
+# answers with 304 off the ETag, so repeat loads stay cheap.
+(flutter_cache) {
+	@immutable path /canvaskit/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	@revalidate not path /canvaskit/*
+	header @revalidate Cache-Control "no-cache"
+}
+
+(spa_site) {
+	import ip_headers
+	root * {args[0]}
+	encode zstd gzip
+	try_files {path} {path}/ /index.html
+	file_server
+	import flutter_cache
+}
+
+# ============================================================================
+#  CRM site body â€” shared by :8000 (legacy app) and :80 (mobile/carrier-safe).
+# ============================================================================
+# Security headers for the TLS hostname sites. Adds HSTS, which must NEVER be
+# sent on the plain-HTTP port sites - a browser that caches it would refuse to
+# talk to this IP over HTTP afterwards.
+(tls_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+(tls_spa) {
+	import tls_headers
+	root * {args[0]}
+	encode zstd gzip
+	try_files {path} {path}/ /index.html
+	file_server
+	import flutter_cache
+}
+
+(portal_spa) {
+	import ip_headers
+	root * /srv/burjex-portal
+	encode zstd gzip
+	redir /bt /bt/
+	handle_path /bt/* {
+		root * /srv/burjex-portal/bt
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	handle {
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	import flutter_cache
+}
+
+(portal_spa_tls) {
+	import tls_headers
+	root * /srv/burjex-portal
+	encode zstd gzip
+	redir /bt /bt/
+	handle_path /bt/* {
+		root * /srv/burjex-portal/bt
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	handle {
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	import flutter_cache
+}
+
+
+(crm_site) {
+	import ip_headers
+
+	# Collected static + uploaded media come straight off disk (never Django â€”
+	# this project has no WhiteNoise, so DEBUG=0 would 404 them).
+	handle_path /static/* {
+		root * /srv/crm/static
+		file_server
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+	handle_path /media/* {
+		root * /srv/crm/media
+		file_server
+	}
+
+	# Django Channels (live_chat) â€” same port, needs the streaming transport.
+	@crm_ws path /ws/*
+	handle @crm_ws {
+		import ws_proxy crm-web:8000
+	}
+
+	handle {
+		import api_proxy crm-web:8000
+	}
+
+	request_body {
+		max_size 25MB
+	}
+	encode zstd gzip
+}
+
+# ============================================================================
+#  :8000 â€” Django CRM (ASGI). Admin + client portal + /api/v1 + live chat WS.
+#          http://<VPS_IP>:8000/
+# ============================================================================
+:8000 {
+	import crm_site
+}
+
+# ============================================================================
+#  :80 â€” same CRM edge on standard HTTP (many mobile carriers block :8000).
+#          http://<VPS_IP>/api/v1/
+# ============================================================================
+:80 {
+	import crm_site
+}
+
+# ============================================================================
+#  :4100 â€” B-Trader REST gateway (gateway-api). Swagger at /docs, API at /v1.
+#          http://<VPS_IP>:4100/v1
+# ============================================================================
+:4100 {
+	import ip_headers
+	import api_proxy btrader-gateway:4100
+	request_body {
+		max_size 10MB
+	}
+	encode zstd gzip
+}
+
+# ============================================================================
+#  :4101 â€” B-Trader WebSocket (ws-gateway).
+#          ws://<VPS_IP>:4101   (no path, no trailing slash â€” the client
+#          appends `?token=<accessJWT>` itself)
+#
+#  Do NOT add `encode` here: compressing a socket adds latency and defeats the
+#  per-frame flush that keeps ticks instant.
+# ============================================================================
+:4101 {
+	import ip_headers
+	import ws_proxy btrader-ws:4101
+}
+
+# ============================================================================
+#  :4200 â€” B-Trader admin dashboard (static Flutter web build rsynced to
+#          /opt/burjex/web/admin on the host).
+#          http://<VPS_IP>:4200/
+# ============================================================================
+:4200 {
+	import spa_site /srv/btrader-admin
+}
+
+# ============================================================================
+#  :4300 â€” MT5 price ingest. The Windows MT5 bridge POSTs tick batches to
+#          http://<VPS_IP>:4300/ingest with the X-Feed-Token header.
+#
+#  Published on 4300, NOT 4200: the market-data container listens on 4200
+#  internally (MT5_INGEST_PORT), and 4200 on the host is taken by the admin
+#  dashboard above. The internal port is unchanged; only the host port differs.
+#
+#  Set FEED_ALLOWED_IPS to the bridge VPS IP(s) to lock this down â€” this is the
+#  one endpoint reachable from the open internet by design, and over plain HTTP
+#  the token travels in the clear, so the IP allowlist matters more here than
+#  it does in the TLS setup.
+# ============================================================================
+:4300 {
+	import ip_headers
+
+	@blocked not remote_ip {$FEED_ALLOWED_IPS:0.0.0.0/0 ::/0}
+	respond @blocked "forbidden" 403
+
+	import api_proxy btrader-market-data:4200
+}
+
+# ============================================================================
+#  :4500 — Burjex Prime portal (the forexten client, Flutter web build).
+#          http://<VPS_IP>:4500/
+#
+#  Same client as the mobile app, same btrader_core, served in a browser so a
+#  change can be checked without cutting and installing an APK. The mobile app
+#  is unaffected: this is an additional target, not a replacement.
+#
+#  The bundle talks to the CRM on :80 and the B-Trader gateway/WS on
+#  :4100/:4101, so those origins must appear in CORS_ALLOWED_ORIGINS.
+# ============================================================================
+:4500 {
+	import portal_spa
+}
+
+# ============================================================================
+#  :4400 â€” B-Trader web trader (static Flutter web build). Optional; the port
+#          simply 404s until you rsync a build to /opt/burjex/web/trader.
+# ============================================================================
+:4400 {
+	import spa_site /srv/btrader-trader
+}
+
+# ============================================================================
+#  DOMAIN SITES (https://) - added alongside the IP ports, not replacing them.
+#
+#  Both stay live during the cutover: existing mobile builds keep using
+#  http://5.226.139.8:<port> while the web portal and new builds use these.
+#  Retire the port sites only once every client has moved.
+#
+#  Certificates are issued automatically on first request per hostname.
+# ============================================================================
+
+{$CRM_HOST} {
+	import crm_site
+}
+
+{$API_HOST} {
+	import tls_headers
+	import api_proxy btrader-gateway:4100
+	request_body {
+		max_size 10MB
+	}
+	encode zstd gzip
+}
+
+{$WS_HOST} {
+	import tls_headers
+	import ws_proxy btrader-ws:4101
+}
+
+{$PORTAL_HOST} {
+	import portal_spa_tls
+}
+
+{$ADMIN_HOST} {
+	import tls_spa /srv/btrader-admin
+}
+
+{$APP_HOST} {
+	import tls_spa /srv/btrader-trader
+}
+
+{$FEED_HOST} {
+	import tls_headers
+	@blocked not remote_ip {$FEED_ALLOWED_IPS:0.0.0.0/0 ::/0}
+	respond @blocked "forbidden" 403
+	import api_proxy btrader-market-data:4200
+}

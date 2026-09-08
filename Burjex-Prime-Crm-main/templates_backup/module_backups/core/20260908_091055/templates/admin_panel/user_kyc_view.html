@@ -1,0 +1,66 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Client profile &amp; KYC (read-only){% endblock %}
+{% block admin_content %}
+<div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold text-slate-900">Client overview</h1>
+      <p class="text-sm text-slate-500 mt-1">Read-only snapshot. Use Review KYC from the pending list for decisions.</p>
+    </div>
+    <a href="{% url 'admin-kyc-review' user_obj.id %}?from_status={{ from_status|default:'pending' }}" class="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Review KYC</a>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
+      <div class="font-semibold mb-2 text-slate-800">Profile</div>
+      <div class="text-sm space-y-1">
+        <div><span class="text-slate-500">Name:</span> {{ user_obj.profile_display_name }}</div>
+        <div><span class="text-slate-500">Email:</span> {{ user_obj.email }}</div>
+        <div><span class="text-slate-500">Phone:</span> {{ user_obj.phone|default:"—" }}</div>
+        <div><span class="text-slate-500">Country:</span> {{ user_obj.country|default:"—" }}</div>
+        <div><span class="text-slate-500">Registered:</span> {{ user_obj.date_joined|date:"Y-m-d H:i" }}</div>
+        <div><span class="text-slate-500">KYC status:</span> {{ user_obj.kyc_status }}</div>
+      </div>
+    </div>
+    <div class="bg-slate-50 rounded-lg p-3">
+      <div class="font-semibold mb-1">Identity</div>
+      {% if identity %}
+        <div>{{ identity.document_type }}</div>
+        <div>Status: {{ identity.status }}</div>
+      {% else %}
+        <div>No identity submitted.</div>
+      {% endif %}
+    </div>
+    <div class="bg-slate-50 rounded-lg p-3">
+      <div class="font-semibold mb-1">Address</div>
+      {% if address %}
+        <div>{{ address.document_type }}</div>
+        <div>Status: {{ address.status }}</div>
+      {% else %}
+        <div>No address submitted.</div>
+      {% endif %}
+    </div>
+    <div class="bg-slate-50 rounded-lg p-3">
+      <div class="font-semibold mb-1">Bank/Crypto</div>
+      <div>Bank: {% if bank %}{{ bank.status }}{% else %}N/A{% endif %}</div>
+      <div>Crypto: {% if crypto %}{{ crypto.status }}{% else %}N/A{% endif %}</div>
+    </div>
+  </div>
+  <div>
+    <div class="font-semibold mb-2">Uploaded Documents</div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50"><tr><th class="p-2 text-left">Type</th><th class="p-2 text-left">Status</th><th class="p-2 text-left">Date</th></tr></thead>
+        <tbody>
+          {% for d in docs %}
+          <tr class="border-b"><td class="p-2">{{ d.doc_type }}</td><td class="p-2">{{ d.status }}</td><td class="p-2">{{ d.uploaded_at|date:"Y-m-d H:i" }}</td></tr>
+          {% empty %}
+          <tr><td colspan="3" class="p-2 text-slate-500">No documents found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+

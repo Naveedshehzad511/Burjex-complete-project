@@ -1,0 +1,135 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Position Report{% endblock %}
+{% block admin_content %}
+
+<div class="bp-page-header bp-s-6 flex items-start justify-between gap-4">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-chart-line bp-s-140"></i>Position Report</h1>
+    <p class="bp-page-subtitle">Live trading positions and P&amp;L summary across all accounts</p>
+  </div>
+  <a href="{% url 'admin-reports-dashboard' %}" class="bp-btn bp-btn-outline h-9 w-9 p-0 flex items-center justify-center shrink-0 mt-1" title="Back to Reports Dashboard">
+    <i class="fa-solid fa-arrow-left"></i>
+  </a>
+</div>
+
+<div class="bp-grid-4 bp-s-6">
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important; border-radius: 12px !important; box-shadow: none !important;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important; font-weight: 500 !important; margin: 0 !important; line-height: 1.1; text-transform: uppercase tracking-wide;">BALANCE</div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important; margin: 0 !important; line-height: 1.2 !important;">{{ summary.balance|floatformat:2 }}</div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; border-radius: 50% !important; background: #64748b26 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #64748b !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-wallet"></i>
+    </div>
+  </div>
+  
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important; border-radius: 12px !important; box-shadow: none !important;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important; font-weight: 500 !important; margin: 0 !important; line-height: 1.1; text-transform: uppercase tracking-wide;">EQUITY</div>
+      <div class="text-indigo-600 dark:text-indigo-400" style="font-size: 1.2rem !important; font-weight: 700 !important; margin: 0 !important; line-height: 1.2 !important;">{{ summary.equity|floatformat:2 }}</div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; border-radius: 50% !important; background: #4f46e526 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #4f46e5 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-scale-balanced"></i>
+    </div>
+  </div>
+
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important; border-radius: 12px !important; box-shadow: none !important;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important; font-weight: 500 !important; margin: 0 !important; line-height: 1.1; text-transform: uppercase tracking-wide;">PROFIT</div>
+      <div class="{% if summary.profit >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-rose-600 dark:text-rose-400{% endif %}" style="font-size: 1.2rem !important; font-weight: 700 !important; margin: 0 !important; line-height: 1.2 !important;">{{ summary.profit|floatformat:2 }}</div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; border-radius: 50% !important; {% if summary.profit >= 0 %}background: #10b98126 !important; color: #10b981 !important;{% else %}background: #e11d4826 !important; color: #e11d48 !important;{% endif %} display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-money-bill-trend-up"></i>
+    </div>
+  </div>
+
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important; border-radius: 12px !important; box-shadow: none !important;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important; font-weight: 500 !important; margin: 0 !important; line-height: 1.1; text-transform: uppercase tracking-wide;">FREE MARGIN</div>
+      <div class="text-indigo-500 dark:text-indigo-400" style="font-size: 1.2rem !important; font-weight: 700 !important; margin: 0 !important; line-height: 1.2 !important;">{{ summary.free_margin|floatformat:2 }}</div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; border-radius: 50% !important; background: #6366f126 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #6366f1 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-unlock"></i>
+    </div>
+  </div>
+</div>
+
+<div class="bp-card mb-6">
+  <div class="bp-card-body p-4 bg-slate-50/50 dark:bg-slate-900/20">
+    <form class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end w-full text-sm">
+      <div class="w-full min-w-0">
+        <select name="account" class="bp-input w-full">
+          <option value="">All Accounts</option>
+          {% for a in accounts %}
+          <option value="{{ a.id }}" {% if filters.account == a.id|stringformat:"s" %}selected{% endif %}>{{ a.login_id }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="w-full min-w-0 md:col-span-2">
+        <input name="q" value="{{ filters.q }}" class="bp-input w-full" placeholder="Search Login ID or email...">
+      </div>
+      <button type="submit" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all h-[38px] w-full">
+        <i class="fa-solid fa-filter me-1"></i> Apply Filter
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="bp-card">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title"><i class="fa-solid fa-list me-2"></i>Open Positions</span>
+  </div>
+  <div class="bp-card-body p-0">
+    <div class="overflow-x-auto w-full">
+      <table class="bp-table min-w-full text-sm">
+        <thead>
+          <tr>
+            <th>Login</th>
+            <th>Symbol</th>
+            <th>Ticket</th>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Volume</th>
+            <th>Open Price</th>
+            <th>SL</th>
+            <th>TP</th>
+            <th>Current Price</th>
+            <th>Profit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in positions %}
+          <tr>
+            <td class="font-medium text-indigo-600 dark:text-indigo-400">{{ r.login_id }}</td>
+            <td class="font-bold text-slate-800 dark:text-slate-200">{{ r.symbol }}</td>
+            <td class="text-slate-500 font-mono text-xs">#{{ r.ticket }}</td>
+            <td class="whitespace-nowrap text-slate-600 dark:text-slate-400">{{ r.time|date:"Y-m-d H:i" }}</td>
+            <td>
+              <span class="px-2 py-0.5 rounded text-xs font-semibold {% if r.type == 'Buy' %}bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400{% else %}bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400{% endif %}">
+                {{ r.type }}
+              </span>
+            </td>
+            <td class="font-mono text-slate-700 dark:text-slate-300">{{ r.volume }}</td>
+            <td class="font-mono text-slate-700 dark:text-slate-300">{{ r.open_price }}</td>
+            <td class="text-slate-400 font-mono">{{ r.sl|default:"-" }}</td>
+            <td class="text-slate-400 font-mono">{{ r.tp|default:"-" }}</td>
+            <td class="font-mono text-slate-700 dark:text-slate-300">{{ r.current_price }}</td>
+            <td class="font-bold font-mono {% if r.profit >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-rose-600 dark:text-rose-400{% endif %}">
+              {{ r.profit }}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td class="p-8 text-center text-slate-500" colspan="11">
+              No open positions found.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+  
+
+{% endblock %}

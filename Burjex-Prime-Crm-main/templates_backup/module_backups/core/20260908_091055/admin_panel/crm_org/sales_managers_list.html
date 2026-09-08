@@ -1,0 +1,373 @@
+{% extends "sales_layout.html" %}
+{% block title %}Sales Managers{% endblock %}
+{% block admin_shell_page_title %}Sales Managers{% endblock %}
+{% block admin_content %}
+<style>
+  .smgr-wrap { max-width: 80rem; margin: 0 auto; padding: 0 0.5rem 3rem; }
+  .smgr-card {
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    overflow: hidden;
+  }
+  .smgr-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.875rem; }
+  .smgr-table thead th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+    background: #f8fafc;
+    padding: 14px 20px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .smgr-table tbody td {
+    padding: 18px 20px;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+    color: #334155;
+  }
+  .smgr-table tbody tr:last-child td { border-bottom: none; }
+  .smgr-table tbody tr:hover { background: #fafbfc; }
+  .smgr-btn-edit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #2563eb;
+    color: #fff !important;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .smgr-btn-edit:hover { background: #1d4ed8; color: #fff !important; }
+  .smgr-btn-assign {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #10b981;
+    color: #fff !important;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    margin-left: 10px;
+  }
+  .smgr-btn-assign:hover { background: #059669; color: #fff !important; }
+  .smgr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0; }
+  .smgr-modal-backdrop {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(15, 23, 42, 0.45);
+    display: none; align-items: center; justify-content: center; padding: 1rem;
+  }
+  .smgr-modal-backdrop.is-open { display: flex; }
+  .smgr-modal {
+    width: 100%; max-width: 42rem; max-height: 85vh;
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .smgr-modal-head { padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0; }
+  .smgr-modal-body { padding: 1rem 1.5rem; overflow-y: auto; flex: 1; min-height: 0; }
+  .smgr-modal-foot { padding: 1rem 1.5rem; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 0.75rem; }
+  .smgr-search {
+    width: 100%; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 10px 14px; font-size: 0.875rem; margin-bottom: 1rem;
+  }
+  .smgr-search:focus { outline: 2px solid #2563eb33; border-color: #2563eb; }
+  .smgr-client-table { width: 100%; font-size: 0.8125rem; border-collapse: collapse; }
+  .smgr-client-table th { text-align: left; padding: 10px 12px; background: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .smgr-client-table td { padding: 12px; border-top: 1px solid #f1f5f9; vertical-align: middle; }
+  .smgr-toast {
+    position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 70;
+    background: #0f172a; color: #fff; padding: 14px 20px; border-radius: 8px;
+    font-size: 0.875rem; font-weight: 500; box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    display: none; animation: smgrToastIn 0.2s ease;
+  }
+  .smgr-toast.is-visible { display: block; }
+  @keyframes smgrToastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .smgr-assign-primary {
+    background: #10b981; color: #fff; border: none; border-radius: 6px;
+    padding: 8px 20px; font-weight: 600; font-size: 0.875rem; cursor: pointer;
+  }
+  .smgr-assign-primary:hover { background: #059669; }
+  .smgr-assign-secondary {
+    background: #f1f5f9; color: #475569; border: none; border-radius: 6px;
+    padding: 8px 16px; font-weight: 600; font-size: 0.875rem; cursor: pointer;
+  }
+  .smgr-assign-secondary:hover { background: #e2e8f0; }
+  .smgr-count { font-variant-numeric: tabular-nums; font-weight: 600; color: #0f172a; }
+</style>
+
+<div class="smgr-wrap">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-semibold text-slate-900 tracking-tight">Sales Managers</h1>
+    <a href="{% url 'admin-crm-sales-manager-add' %}" class="rounded-lg bg-indigo-600 text-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-indigo-700 transition-colors">Create Manager</a>
+  </div>
+
+  <div class="smgr-card overflow-x-auto">
+    <table class="smgr-table min-w-[720px]">
+      <thead>
+        <tr>
+          <th>Manager Name</th>
+          <th>Email</th>
+          <th>Username</th>
+          <th>Role</th>
+          <th>Assigned Clients Count</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in managers %}
+        <tr data-manager-row="{{ m.pk }}">
+          <td class="font-medium text-slate-900">{{ m.profile_display_name|default:m.email }}</td>
+          <td class="text-slate-600">{{ m.email }}</td>
+          <td><span class="font-mono text-xs text-slate-500">{{ m.username }}</span></td>
+          <td class="text-slate-700">{{ m.crm_role.name|default:"—" }}</td>
+          <td><span class="smgr-count js-mgr-count">{{ m.assigned_clients_count|default:0 }}</span></td>
+          <td>
+            {% if m.is_active %}
+            <span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-800 px-2.5 py-0.5 text-xs font-semibold">Active</span>
+            {% else %}
+            <span class="inline-flex items-center rounded-full bg-slate-100 text-slate-600 px-2.5 py-0.5 text-xs font-semibold">Inactive</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="smgr-actions">
+              <a href="{% url 'admin-crm-sales-manager-edit' m.pk %}" class="smgr-btn-edit">Edit</a>
+              <button type="button" class="smgr-btn-assign js-open-assign"
+                data-manager-id="{{ m.pk }}"
+                data-manager-label="{{ m.profile_display_name|default:m.email|escape }}"
+                data-candidates-url="{% url 'admin-crm-sales-manager-assign-candidates' m.pk %}"
+                data-assign-url="{% url 'admin-crm-sales-manager-assign-clients' m.pk %}">Assign Clients</button>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" class="text-center py-16 text-slate-500">No sales managers found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="smgr-modal" class="smgr-modal-backdrop" aria-hidden="true">
+  <div class="smgr-modal" role="dialog" aria-labelledby="smgr-modal-title">
+    <div class="smgr-modal-head">
+      <h2 id="smgr-modal-title" class="text-lg font-semibold text-slate-900">Assign clients</h2>
+      <p id="smgr-modal-sub" class="text-sm text-slate-500 mt-1"></p>
+    </div>
+    <div class="smgr-modal-body">
+      <input type="search" id="smgr-search" class="smgr-search" placeholder="Search by email or name…" autocomplete="off" />
+      <div class="flex items-center gap-3 mb-3">
+        <label class="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+          <input type="checkbox" id="smgr-select-all" />
+          <span>Select all (visible)</span>
+        </label>
+        <span id="smgr-loading" class="text-xs text-slate-400 hidden">Loading…</span>
+      </div>
+      <div class="rounded-lg border border-slate-200 overflow-hidden">
+        <table class="smgr-client-table">
+          <thead>
+            <tr>
+              <th class="bp-s-59"></th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+            </tr>
+          </thead>
+          <tbody id="smgr-client-tbody"></tbody>
+        </table>
+      </div>
+      <p id="smgr-empty" class="text-sm text-slate-500 text-center py-8 hidden">No clients match your search.</p>
+    </div>
+    <div class="smgr-modal-foot">
+      <button type="button" class="smgr-assign-secondary" id="smgr-cancel">Cancel</button>
+      <button type="button" class="smgr-assign-primary" id="smgr-submit-assign">Assign</button>
+    </div>
+  </div>
+</div>
+
+<div id="smgr-toast" class="smgr-toast" role="status"></div>
+
+<script>
+(function () {
+  const modal = document.getElementById('smgr-modal');
+  const sub = document.getElementById('smgr-modal-sub');
+  const search = document.getElementById('smgr-search');
+  const tbody = document.getElementById('smgr-client-tbody');
+  const selectAll = document.getElementById('smgr-select-all');
+  const loading = document.getElementById('smgr-loading');
+  const empty = document.getElementById('smgr-empty');
+  const toast = document.getElementById('smgr-toast');
+  const csrfToken = "{{ csrf_token }}";
+
+  let state = {
+    managerId: null,
+    candidatesUrl: '',
+    assignUrl: '',
+    clients: [],
+    debounce: null,
+  };
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('is-visible');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function () { toast.classList.remove('is-visible'); }, 4000);
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function renderRows() {
+    tbody.innerHTML = '';
+    const list = state.clients;
+    if (!list.length) {
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    list.forEach(function (c) {
+      const tr = document.createElement('tr');
+      tr.dataset.clientId = c.id;
+      tr.innerHTML =
+        '<td><input type="checkbox" class="smgr-row-cb" data-id="' + c.id + '"' + (c.assigned ? ' checked' : '') + ' /></td>' +
+        '<td>' + escapeHtml(c.name || '—') + '</td>' +
+        '<td>' + escapeHtml(c.email || '') + '</td>' +
+        '<td class="text-slate-500">' + escapeHtml(c.phone || '—') + '</td>';
+      tbody.appendChild(tr);
+    });
+    syncSelectAll();
+  }
+
+  function syncSelectAll() {
+    const boxes = tbody.querySelectorAll('.smgr-row-cb');
+    if (!boxes.length) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+      return;
+    }
+    let n = 0;
+    boxes.forEach(function (b) { if (b.checked) n++; });
+    selectAll.checked = n === boxes.length;
+    selectAll.indeterminate = n > 0 && n < boxes.length;
+  }
+
+  async function loadCandidates() {
+    loading.classList.remove('hidden');
+    try {
+      const res = await fetch(state.candidatesUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      state.clients = data.clients || [];
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+      renderRows();
+    } catch (e) {
+      state.clients = [];
+      renderRows();
+      showToast('Could not load clients.');
+    } finally {
+      loading.classList.add('hidden');
+    }
+  }
+
+  document.querySelectorAll('.js-open-assign').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      state.managerId = btn.getAttribute('data-manager-id');
+      state.candidatesUrl = btn.getAttribute('data-candidates-url');
+      state.assignUrl = btn.getAttribute('data-assign-url');
+      sub.textContent = 'Manager: ' + (btn.getAttribute('data-manager-label') || '');
+      search.value = '';
+      selectAll.checked = false;
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      loadCandidates('');
+    });
+  });
+
+  function closeModal() {
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('smgr-cancel').addEventListener('click', closeModal);
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) closeModal();
+  });
+
+  search.addEventListener('input', function () {
+    clearTimeout(state.debounce);
+    const q = (search.value || '').trim();
+    state.debounce = setTimeout(function () { loadCandidates(q); }, 300);
+  });
+
+  selectAll.addEventListener('change', function () {
+    tbody.querySelectorAll('.smgr-row-cb').forEach(function (cb) {
+      cb.checked = selectAll.checked;
+    });
+  });
+
+  tbody.addEventListener('change', function (e) {
+    if (e.target.classList.contains('smgr-row-cb')) syncSelectAll();
+  });
+
+  document.getElementById('smgr-submit-assign').addEventListener('click', async function () {
+    const ids = [];
+    tbody.querySelectorAll('.smgr-row-cb:checked').forEach(function (cb) {
+      ids.push(parseInt(cb.getAttribute('data-id'), 10));
+    });
+    if (!ids.length) {
+      showToast('Select at least one client.');
+      return;
+    }
+    try {
+      const res = await fetch(state.assignUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ client_ids: ids }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        showToast(data.error || 'Assignment failed.');
+        return;
+      }
+      const row = document.querySelector('[data-manager-row="' + state.managerId + '"]');
+      if (row && typeof data.assigned_clients_count === 'number') {
+        const el = row.querySelector('.js-mgr-count');
+        if (el) el.textContent = data.assigned_clients_count;
+      }
+      showToast(data.message || 'Clients assigned successfully');
+      closeModal();
+    } catch (e) {
+      showToast('Network error. Try again.');
+    }
+  });
+})();
+</script>
+{% endblock %}
+

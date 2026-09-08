@@ -1,0 +1,212 @@
+{% extends "sales_panel/base.html" %}
+{% load humanize static %}
+
+{% block title %}Sales Funnel &amp; Leads — Forex CRM{% endblock %}
+{% block admin_shell_page_title %}Leads / Funnel{% endblock %}
+
+{% block admin_content %}
+
+<div class="bp-page-header sales-funnel-page-header">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-filter-circle-dollar" style="color:var(--bp-primary);margin-right:0.5rem;"></i>Advanced Sales Funnel</h1>
+    <p class="bp-page-subtitle">Forex CRM pipeline from visitor capture through KYC, live accounts, first deposit, and active trading. Green highlights value and progression; orange marks pending steps; red marks dropped or leakage. Click any stage to open the lead list and run sales actions.</p>
+  </div>
+</div>
+
+<!-- Drop bar -->
+<div class="bp-alert bp-alert-info sales-funnel-dropbar" role="status">
+  <span><i class="fa-solid fa-user-xmark"></i>Dropped visitors: <strong>{{ funnel_dropped_visitors|intcomma }}</strong></span>
+  <span><i class="fa-solid fa-person-walking-arrow-right"></i>Dropped clients: <strong>{{ funnel_dropped_clients|intcomma }}</strong></span>
+</div>
+
+<!-- Funnel stage KPI cards -->
+<div class="bp-grid-4 sales-funnel-card-grid" aria-label="Funnel stages">
+  {% for c in funnel_cards %}
+    <a href="{% url 'sales-funnel-stage' c.key %}" class="bp-kpi-card bp-kpi-card--clickable sales-funnel-card">
+      <div class="sales-funnel-card__main">
+        <div class="bp-kpi-icon-wrap sales-funnel-card__icon">
+          <i class="fa-solid fa-users"></i>
+        </div>
+        <div class="sales-funnel-card__metric">
+          <div class="bp-kpi-label sales-funnel-card__label">{{ c.title }}</div>
+          <div class="bp-kpi-value">{{ c.count|intcomma }}</div>
+        </div>
+      </div>
+      <div class="bp-kpi-footer sales-funnel-card__footer">
+        <span class="bp-small">
+          <i class="fa-solid fa-circle-dollar-to-slot sales-funnel-card__money-icon"></i>
+          Potential: <strong>${{ c.profit_potential|floatformat:0|intcomma }}</strong>
+        </span>
+        <span class="bp-small">
+          {% if c.conversion_to_next != None %}
+            <i class="fa-solid fa-arrow-right"></i>
+            Conv. to next:
+            {% if c.conversion_to_next < 25 %}
+              <span class="bp-badge bp-badge-error">{{ c.conversion_to_next }}%</span>
+            {% else %}
+              <span class="bp-badge bp-badge-success">{{ c.conversion_to_next }}%</span>
+            {% endif %}
+          {% elif c.conversion_from_prev != None %}
+            <i class="fa-solid fa-arrow-left"></i>
+            From prev.: <span class="bp-badge bp-badge-info">{{ c.conversion_from_prev }}%</span>
+          {% else %}
+            <span class="bp-badge bp-badge-neutral">Top of funnel</span>
+          {% endif %}
+        </span>
+      </div>
+    </a>
+  {% endfor %}
+</div>
+
+<!-- Charts row -->
+<div class="bp-grid-2" style="margin-bottom:1.5rem;">
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <span class="bp-card-header-title"><i class="fa-solid fa-chart-bar" style="margin-right:0.5rem;color:var(--bp-primary);"></i>Funnel Volume</span>
+    </div>
+    <div class="bp-card-body">
+      <p class="bp-caption" style="margin-bottom:1rem;">Headcount by stage — narrowing funnel to active traders.</p>
+      <div style="height:280px;position:relative;"><canvas id="sfChartFunnel" aria-label="Funnel chart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <span class="bp-card-header-title"><i class="fa-solid fa-chart-line" style="margin-right:0.5rem;color:var(--bp-primary);"></i>Stage Conversion Rate</span>
+    </div>
+    <div class="bp-card-body">
+      <p class="bp-caption" style="margin-bottom:1rem;">Percentage flowing to the next stage (red bars = under 25%).</p>
+      <div style="height:280px;position:relative;"><canvas id="sfChartConv" aria-label="Conversion chart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent funnel activity -->
+<div class="bp-card">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title"><i class="fa-solid fa-clock-rotate-left" style="margin-right:0.5rem;color:var(--bp-primary);"></i>Recent Funnel Activity</span>
+  </div>
+  <div class="bp-card-body" style="padding:0;">
+    <div class="bp-table -wrap">
+      <table class="bp-table">
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th>Contact</th>
+            <th>Date &amp; Time</th>
+            <th>Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in funnel_logs %}
+            <tr>
+              <td>
+                <span class="bp-badge bp-badge-info">{{ log.get_channel_display }}</span>
+              </td>
+              <td>
+                {% if log.visitor %}<span class="bp-small"><i class="fa-solid fa-eye" style="margin-right:0.3rem;opacity:0.6;"></i>{{ log.visitor.email }}</span>{% endif %}
+                {% if log.client %}<span class="bp-small"><i class="fa-solid fa-user" style="margin-right:0.3rem;opacity:0.6;"></i>{{ log.client.display_name }}</span>{% endif %}
+                {% if not log.visitor and not log.client %}<span class="bp-caption">—</span>{% endif %}
+              </td>
+              <td><span class="bp-small">{{ log.created_at|date:"M j, Y H:i" }}</span></td>
+              <td>
+                {% if log.body %}
+                  <span class="bp-small">{{ log.body|truncatechars:80 }}</span>
+                {% else %}
+                  <span class="bp-caption">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4" style="text-align:center;padding:2rem;">
+                <span class="bp-caption"><i class="fa-solid fa-inbox" style="margin-right:0.5rem;opacity:0.5;"></i>No activity yet.</span>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{{ funnel_chart_labels|json_script:"sf-labels" }}
+{{ funnel_chart_counts|json_script:"sf-counts" }}
+{{ funnel_stage_conv|json_script:"sf-conv" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  function read(id) {
+    var el = document.getElementById(id);
+    try { return JSON.parse(el ? el.textContent : "[]"); } catch (e) { return []; }
+  }
+  var labels = read("sf-labels");
+  var counts = read("sf-counts");
+  var conv = read("sf-conv");
+  var grid = "rgba(148, 163, 184, 0.12)";
+  var tick = "#94a3b8";
+  if (!labels.length) labels = ["—"];
+  if (!counts.length) counts = [0];
+
+  if (typeof Chart !== "undefined" && document.getElementById("sfChartFunnel")) {
+    new Chart(document.getElementById("sfChartFunnel"), {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Users",
+          data: counts,
+          backgroundColor: counts.map(function (v, i) {
+            var t = i / Math.max(counts.length - 1, 1);
+            return "rgba(16, 185, 129, " + (0.35 + t * 0.45) + ")";
+          }),
+          borderColor: "#10b981",
+          borderWidth: 1,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, grid: { color: grid }, ticks: { color: tick } },
+          y: { grid: { display: false }, ticks: { color: tick } }
+        }
+      }
+    });
+  }
+
+  var convLabels = labels.slice(0, -1);
+  var convData = conv.slice(0, -1).map(function (x) { return x === null ? 0 : x; });
+  if (typeof Chart !== "undefined" && document.getElementById("sfChartConv")) {
+    new Chart(document.getElementById("sfChartConv"), {
+      type: "bar",
+      data: {
+        labels: convLabels.length ? convLabels : ["—"],
+        datasets: [{
+          label: "To next %",
+          data: convData.length ? convData : [0],
+          backgroundColor: convData.map(function (v) {
+            return v < 25 ? "rgba(248, 113, 113, 0.55)" : "rgba(16, 185, 129, 0.5)";
+          }),
+          borderColor: convData.map(function (v) { return v < 25 ? "#f87171" : "#10b981"; }),
+          borderWidth: 1,
+          borderRadius: 5
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: grid }, ticks: { color: tick, maxRotation: 40 } },
+          y: { beginAtZero: true, max: 100, grid: { color: grid }, ticks: { color: tick } }
+        }
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

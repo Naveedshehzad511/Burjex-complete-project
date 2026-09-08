@@ -1,0 +1,78 @@
+# B-Trader local/staging stack. Postgres + Redis + the four backend services.
+# Ports are offset from the CRM's defaults so both stacks run side-by-side.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: btrader
+      POSTGRES_PASSWORD: btrader
+      POSTGRES_DB: btrader
+    # Internal-only: services reach it at postgres:5432 on the compose network.
+    # Uncomment to expose for a host DB GUI (ensure 5433 is free first):
+    # ports: ['5433:5432']
+    volumes: ['btrader_pg:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U btrader']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    # Internal-only: services reach it at redis:6379 on the compose network.
+    # ports: ['6380:6379']
+    volumes: ['btrader_redis:/data']
+
+  gateway-api:
+    build: { context: .., dockerfile: infra/Dockerfile, args: { SERVICE: gateway-api } }
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgresql://btrader:btrader@postgres:5432/btrader?schema=public
+      REDIS_URL: redis://redis:6379
+    ports: ['0.0.0.0:4100:4100']
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  trading-engine:
+    build: { context: .., dockerfile: infra/Dockerfile, args: { SERVICE: trading-engine } }
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgresql://btrader:btrader@postgres:5432/btrader?schema=public
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    deploy: { replicas: 1 } # scale horizontally; partition by tenant in prod
+
+  market-data:
+    build: { context: .., dockerfile: infra/Dockerfile, args: { SERVICE: market-data } }
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgresql://btrader:btrader@postgres:5432/btrader?schema=public
+      REDIS_URL: redis://redis:6379
+      LP_BRIDGE_DRIVER: mock
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  ws-gateway:
+    build: { context: .., dockerfile: infra/Dockerfile, args: { SERVICE: ws-gateway } }
+    env_file: ../.env
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports: ['0.0.0.0:4101:4101']
+    depends_on:
+      redis: { condition: service_started }
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes: ['./nginx/btrader.conf:/etc/nginx/conf.d/default.conf:ro']
+    ports: ['8080:80']
+    depends_on: [gateway-api, ws-gateway]
+
+volumes:
+  btrader_pg:
+  btrader_redis:

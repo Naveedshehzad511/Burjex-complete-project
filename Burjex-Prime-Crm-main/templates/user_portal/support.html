@@ -1,0 +1,78 @@
+{% extends "user_portal/base.html" %}
+{% block title %}Support{% endblock %}
+{% block user_content %}
+  <h1 class="portal-page-heading">Support</h1>
+  <p class="portal-page-subtitle">Create a support ticket and track its status.</p>
+
+  <div class="portal-card mb-6">
+    <div class="portal-card-header">
+      <div class="portal-card-title">New Ticket</div>
+    </div>
+    <form method="post" class="grid md:grid-cols-2 gap-4">
+      {% csrf_token %}
+      <div>
+        <label class="portal-form-label">User Name</label>
+        <input disabled value="{{ request.user.display_name }}" class="portal-input" style="opacity:.7;" />
+      </div>
+      <div>
+        <label class="portal-form-label">Email</label>
+        <input disabled value="{{ request.user.email }}" class="portal-input" style="opacity:.7;" />
+      </div>
+      <div class="md:col-span-2">
+        <label class="portal-form-label">Subject</label>
+        <input name="subject" required maxlength="200" class="portal-input" placeholder="Enter ticket subject" />
+      </div>
+      <div class="md:col-span-2">
+        <label class="portal-form-label">Description</label>
+        <textarea name="description" required rows="4" class="portal-input" placeholder="Describe your issue"></textarea>
+      </div>
+      <div>
+        <label class="portal-form-label">Category</label>
+        <select name="category" required class="portal-input">
+          {% for value, label in ticket_categories %}
+            <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="portal-form-label">Priority</label>
+        <select name="priority" required class="portal-input">
+          {% for value, label in ticket_priorities %}
+            <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="md:col-span-2">
+        <button class="portal-btn-primary" type="submit">Create Ticket</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="portal-card">
+    <div class="portal-card-header">
+      <div class="portal-card-title">My Tickets</div>
+    </div>
+    <div class="portal-table-wrap overflow-x-auto w-full" style="box-shadow:none;border-radius:8px;">
+      <table class="portal-table min-w-full whitespace-nowrap">
+        <thead>
+          <tr>
+            <th>Ticket #</th><th>Subject</th><th>Category</th><th>Priority</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in my_tickets %}
+            <tr style="cursor:pointer;" onclick="window.location='{% url 'user-ticket-detail' t.ticket_number %}'" class="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+              <td class="font-mono text-xs">{{ t.ticket_number }}</td>
+              <td>{{ t.subject }}</td>
+              <td>{{ t.get_category_display }}</td>
+              <td>{{ t.get_priority_display }}</td>
+              <td>{{ t.get_status_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" style="text-align:center;color:var(--portal-text-muted);padding:1.5rem 1rem;">No tickets yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

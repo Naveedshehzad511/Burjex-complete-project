@@ -1,0 +1,727 @@
+{% extends "admin_panel/base.html" %}
+{% load static %}
+
+{% block title %}Admin Dashboard - {{ crm_company_name|default:"CRM" }}{% endblock %}
+{% load humanize %}
+
+{% block admin_shell_header_title %}
+<div>
+  <h1 class="bp-topbar-title">Dashboard</h1>
+  <p class="bp-topbar-subtitle">Overview of your CRM performance</p>
+</div>
+{% endblock %}
+
+{% block admin_content %}
+<style>
+  @media (max-width: 767px) {
+    .mobile-stack { flex-direction: column !important; }
+    .mobile-w-full { width: 100% !important; }
+    .mobile-ml-0 { margin-left: 0 !important; }
+    .mobile-row { flex-direction: row !important; }
+    .mobile-gap { gap: 1.5rem !important; }
+    .mobile-pl-0 { padding-left: 0 !important; }
+    .mobile-mt-2 { margin-top: 0.5rem !important; }
+    .mobile-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  }
+</style>
+<div>
+
+  <!-- -- Main Statistics -------------------------------------------- -->
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  
+    <section class="mb-6">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+      {% for c in stat_cards %}
+      <a href="{{ c.url }}" class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group" style="text-decoration: none;">
+        
+        <!-- Text on Left -->
+        <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+          <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 break-words">{{ c.title }}</span>
+          <span class="text-slate-900 dark:text-white font-extrabold text-base xl:text-xl leading-none tracking-tight">{{ c.value }}</span>
+        </div>
+
+        <!-- Icon on Right -->
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, {{ c.icon_color }}20 0%, {{ c.icon_color }}05 100%); border: 1px solid {{ c.icon_color }}30; color: {{ c.icon_color }}; box-shadow: 0 4px 12px {{ c.icon_color }}15;">
+          <i class="{{ c.icon }} text-[16px]"></i>
+        </div>
+
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- -- Pending Statistics -------------------------------------------- -->
+  <section class="mb-6">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      {% for c in pending_cards %}
+      <a href="{{ c.url }}" class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group" style="text-decoration: none;">
+        
+        <!-- Text on Left -->
+        <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+          <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 break-words">{{ c.title }}</span>
+          <span class="text-slate-900 dark:text-white font-extrabold text-base xl:text-xl leading-none tracking-tight">{{ c.value }}</span>
+        </div>
+
+        <!-- Icon on Right -->
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, {{ c.icon_color }}20 0%, {{ c.icon_color }}05 100%); border: 1px solid {{ c.icon_color }}30; color: {{ c.icon_color }}; box-shadow: 0 4px 12px {{ c.icon_color }}15;">
+          <i class="{{ c.icon }} text-[16px]"></i>
+        </div>
+
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- -- Complex Charts -------------------------------------------- -->
+  <section class="mb-6">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- Deposits Overview -->
+      <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm relative">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">Deposits Overview</h3>
+          <select id="depositsFilter" class="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-1 outline-none text-slate-600 dark:text-slate-300">
+            <option value="this_week">This Week</option>
+            <option value="this_month">This Month</option>
+            <option value="last_6_months">Last 6 Months</option>
+            <option value="this_year" selected>This Year</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-4 gap-3 mb-4 mobile-grid-2">
+          <div class="border border-slate-100 dark:border-slate-800 rounded-lg text-center" style="padding: 0.25rem 0.5rem;" class="bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-center">
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 font-medium mb-1 capitalize tracking-wide">Today</div>
+            <div class="text-sm lg:text-base font-bold " style="color: #10b981;" class="truncate">${{ metrics.today_deposits|default:0|floatformat:2|intcomma }}</div>
+          </div>
+          <div class="border border-slate-100 dark:border-slate-800 rounded-lg text-center" style="padding: 0.25rem 0.5rem;" class="bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-center">
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 font-medium mb-1 capitalize tracking-wide">This Week</div>
+            <div class="text-sm lg:text-base font-bold " style="color: #10b981;" class="truncate">${{ metrics.weekly_deposits|default:0|floatformat:2|intcomma }}</div>
+          </div>
+          <div class="border border-slate-100 dark:border-slate-800 rounded-lg text-center" style="padding: 0.25rem 0.5rem;" class="bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-center">
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 font-medium mb-1 capitalize tracking-wide">This Month</div>
+            <div class="text-sm lg:text-base font-bold " style="color: #10b981;" class="truncate">${{ metrics.monthly_deposits|default:0|floatformat:2|intcomma }}</div>
+          </div>
+          <div class="border border-slate-100 dark:border-slate-800 rounded-lg text-center" style="padding: 0.25rem 0.5rem;" class="bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-center">
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 font-medium mb-1 capitalize tracking-wide">Total</div>
+            <div class="text-sm lg:text-base font-bold " style="color: #10b981;" class="truncate">${{ metrics.total_deposits|default:0|floatformat:2|intcomma }}</div>
+          </div>
+        </div>
+        <div id="depositsChart" class="h-48 mt-4 -ml-2"></div>
+      </div>
+
+      <!-- Withdrawals Overview -->
+      <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm relative">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">Withdrawals Overview</h3>
+          <select id="withdrawalsFilter" class="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md px-3 py-1 outline-none text-slate-600 dark:text-slate-300">
+            <option value="this_week">This Week</option>
+            <option value="this_month">This Month</option>
+            <option value="last_6_months">Last 6 Months</option>
+            <option value="this_year" selected>This Year</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-4 gap-3 mb-4 mobile-grid-2">
+          <div class="border border-slate-100 dark:border-slate-800 rounded-lg text-center" style="padding: 0.25rem 0.5rem;" class="bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-center">
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 font-medium mb-1 capitalize tracking-wide">Today</div>
+            <div class="text-sm lg:text-base font-bold " style="color: #ef4444;" class="truncate">${{ metrics.today_withdrawals|default:0|floatformat:2|intcomma }}</div>
+          </div>
+          <div class="border border-slate-100 dark:border-slate-800 rounded-lg text-center" style="padding: 0.25rem 0.5rem;" class="bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-center">
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 font-medium mb-1 capitalize tracking-wide">This Week</div>
+            <div class="text-sm lg:text-base font-bold " style="color: #ef4444;" class="truncate">${{ metrics.weekly_withdrawals|default:0|floatformat:2|intcomma }}</div>
+          </div>
+          <div class="border border-slate-100 dark:border-slate-800 rounded-lg text-center" style="padding: 0.25rem 0.5rem;" class="bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-center">
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 font-medium mb-1 capitalize tracking-wide">This Month</div>
+            <div class="text-sm lg:text-base font-bold " style="color: #ef4444;" class="truncate">${{ metrics.monthly_withdrawals|default:0|floatformat:2|intcomma }}</div>
+          </div>
+          <div class="border border-slate-100 dark:border-slate-800 rounded-lg text-center" style="padding: 0.25rem 0.5rem;" class="bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-center">
+            <div class="text-[11px] text-slate-600 dark:text-slate-400 font-medium mb-1 capitalize tracking-wide">Total</div>
+            <div class="text-sm lg:text-base font-bold " style="color: #ef4444;" class="truncate">${{ metrics.total_withdrawals|default:0|floatformat:2|intcomma }}</div>
+          </div>
+        </div>
+        <div id="withdrawalsChart" class="h-48 mt-4 -ml-2"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Bottom 3 Cards -->
+  <section class="mb-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <!-- Client Overview -->
+      <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col justify-between">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-2">Client Overview</h3>
+        <div class="flex flex-col items-center justify-between h-full pt-2 pb-2">
+          <div id="clientOverviewChart" class="w-full flex justify-center"></div>
+          <div class="w-full flex flex-row justify-center gap-6 mt-4">
+            <div class="flex gap-2 items-start">
+              <div class="w-2.5 h-2.5 rounded-full bg-[#10b981] mt-1 shrink-0"></div>
+              <div class="flex flex-col">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Active</span>
+                <span class="text-slate-900 dark:text-white font-extrabold text-base xl:text-xl break-words">
+                  {{ metrics.active_users|default:"0" }} <span class="text-[11px] text-slate-400 font-normal">({{ metrics.active_pct|default:"0" }}%)</span>
+                </span>
+              </div>
+            </div>
+            <div class="flex gap-2 items-start">
+              <div class="w-2.5 h-2.5 rounded-full bg-[#ef4444] mt-1 shrink-0"></div>
+              <div class="flex flex-col">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Inactive</span>
+                <span class="text-slate-900 dark:text-white font-extrabold text-base xl:text-xl break-words">
+                  {{ metrics.inactive_users|default:"0" }} <span class="text-[11px] text-slate-400 font-normal">({{ metrics.inactive_pct|default:"0" }}%)</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Client Activity -->
+      <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col justify-between">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">Client Activity (Last 30 Days)</h3>
+        </div>
+        <div class="flex gap-4 mb-2">
+           <div class="flex items-center gap-1.5 text-xs text-slate-500 font-medium"><span class="w-2 h-2 rounded-full bg-[#3b82f6]"></span> New Clients</div>
+        </div>
+        <div id="clientActivityChart" class="h-32 -ml-3"></div>
+      </div>
+
+      <!-- Accounts Overview -->
+      <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col justify-between">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-2">Accounts Overview</h3>
+        <div class="flex flex-col items-center justify-between h-full pt-2 pb-2">
+          <div id="accountsOverviewChart" class="w-full flex justify-center"></div>
+          <div class="w-full flex flex-row justify-center gap-6 mt-4">
+            <div class="flex gap-2 items-start">
+              <div class="w-2.5 h-2.5 rounded-full bg-[#10b981] mt-1 shrink-0"></div>
+              <div class="flex flex-col">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Real</span>
+                <span class="text-slate-900 dark:text-white font-extrabold text-base xl:text-xl break-words">
+                  {{ metrics.real_accounts|default:"0" }} <span class="text-[11px] text-slate-400 font-normal">({{ metrics.real_pct|default:"0" }}%)</span>
+                </span>
+              </div>
+            </div>
+            <div class="flex gap-2 items-start">
+              <div class="w-2.5 h-2.5 rounded-full bg-[#eab308] mt-1 shrink-0"></div>
+              <div class="flex flex-col">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Demo</span>
+                <span class="text-slate-900 dark:text-white font-extrabold text-base xl:text-xl break-words">
+                  {{ metrics.demo_accounts|default:"0" }} <span class="text-[11px] text-slate-400 font-normal">({{ metrics.demo_pct|default:"0" }}%)</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- -- Live Activity ----------------------------------------------- -->
+  <section class="bp-section">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h2 class="text-xl font-semibold text-slate-900 dark:text-white">Live Activity</h2>
+      <span class="text-xs text-slate-500 font-medium" id="liveActivityUpdated">Loading...</span>
+    </div>
+    
+    <p class="bp-live-err bp-hidden" id="liveActivityError" role="alert"></p>
+    
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <!-- Registrations -->
+      <div class="bp-card">
+        <div class="bp-card-header border-b border-slate-200 dark:border-slate-700 pb-3">
+          <h3 class="bp-card-header-title text-sm font-semibold">Recent Registrations</h3>
+          <a href="{% url 'admin-user-list' %}" class="text-xs text-blue-600 hover:underline">View All</a>
+        </div>
+        <div class="p-0">
+          <ul class="bp-live-list p-0 m-0 list-none" id="regList"></ul>
+          <p class="bp-live-empty bp-hidden text-sm text-slate-500 p-4 text-center m-0" id="regEmpty">No recent registrations.</p>
+        </div>
+      </div>
+
+      <!-- Deposits -->
+      <div class="bp-card">
+        <div class="bp-card-header border-b border-slate-200 dark:border-slate-700 pb-3">
+          <h3 class="bp-card-header-title text-sm font-semibold">Recent Deposits</h3>
+          <a href="{% url 'admin-hub-deposits' %}" class="text-xs text-blue-600 hover:underline">View All</a>
+        </div>
+        <div class="p-0">
+          <ul class="bp-live-list p-0 m-0 list-none" id="depList"></ul>
+          <p class="bp-live-empty bp-hidden text-sm text-slate-500 p-4 text-center m-0" id="depEmpty">No recent deposits.</p>
+        </div>
+      </div>
+
+      <!-- Withdrawals -->
+      <div class="bp-card">
+        <div class="bp-card-header border-b border-slate-200 dark:border-slate-700 pb-3">
+          <h3 class="bp-card-header-title text-sm font-semibold">Recent Withdrawals</h3>
+          <a href="{% url 'admin-hub-withdrawals' %}" class="text-xs text-blue-600 hover:underline">View All</a>
+        </div>
+        <div class="p-0">
+          <ul class="bp-live-list p-0 m-0 list-none" id="wdList"></ul>
+          <p class="bp-live-empty bp-hidden text-sm text-slate-500 p-4 text-center m-0" id="wdEmpty">No recent withdrawals.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="bp-section mt-6">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+      <h2 class="text-xl font-semibold text-slate-900 dark:text-white">Support Tickets</h2>
+      <div style="display: flex; gap: 1rem;">
+        <div id="filterResolvedBtn" onclick="filterTickets('resolved')" class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl px-4 py-2.5 flex items-center justify-between relative overflow-hidden shadow-sm min-w-[160px] cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-200">
+          <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+            <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 break-words">Resolved</span>
+            <span class="text-slate-900 dark:text-white font-extrabold text-lg leading-none tracking-tight">{{ resolved_tickets_count }}</span>
+          </div>
+          <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 z-10 shadow-sm" style="background: linear-gradient(135deg, #10b98120 0%, #10b98105 100%); border: 1px solid #10b98130; color: #10b981; box-shadow: 0 4px 12px #10b98115;">
+            <i class="fa-solid fa-check text-[14px]"></i>
+          </div>
+        </div>
+        <div id="filterPendingBtn" onclick="filterTickets('pending')" class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl px-4 py-2.5 flex items-center justify-between relative overflow-hidden shadow-sm min-w-[160px] cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-200">
+          <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+            <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 break-words">Pending</span>
+            <span class="text-slate-900 dark:text-white font-extrabold text-lg leading-none tracking-tight">{{ pending_tickets_count }}</span>
+          </div>
+          <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 z-10 shadow-sm" style="background: linear-gradient(135deg, #f43f5e20 0%, #f43f5e05 100%); border: 1px solid #f43f5e30; color: #f43f5e; box-shadow: 0 4px 12px #f43f5e15;">
+            <i class="fa-solid fa-clock text-[14px]"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-1">
+
+      <div class="bp-card">
+        <div class="bp-card-header border-b border-slate-200 dark:border-slate-700 pb-3">
+          <h3 class="bp-card-header-title text-sm font-semibold">Recent Tickets</h3>
+        </div>
+        <div class="p-0">
+          <ul class="bp-live-list p-0 m-0 list-none" id="tickList">
+            {% for t in recent_tickets %}
+              <li onclick="window.location.href='{% url 'admin-tickets' %}?tab={{ t.status }}&ticket_id={{ t.id }}'" class="bp-live-item border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-200 tick-item cursor-pointer" data-status="{{ t.status }}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                  <div style="width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.85rem;" class="text-amber-500 bg-amber-50">
+                    <i class="fa-solid fa-ticket"></i>
+                  </div>
+                  <div>
+                    <div class="bp-live-summary text-slate-900 dark:text-white" style="font-size: 0.875rem; font-weight: 600;">{{ t.subject|truncatechars:20 }}</div>
+                    <div class="bp-live-sub text-slate-500 dark:text-slate-400" style="font-size: 0.75rem;">{{ t.user.display_name|default:t.user.email }}</div>
+                  </div>
+                </div>
+                <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem;">
+                  <div class="bp-live-sub text-slate-500 dark:text-slate-400" style="font-size: 0.75rem;">{{ t.created_at|timesince }} ago</div>
+                  <span class="bp-live-badge bp-live-badge--neutral" style="font-size: 0.65rem;">{{ t.status }}</span>
+                </div>
+              </li>
+            {% empty %}
+              <p class="bp-live-empty text-sm text-slate-500 p-4 text-center m-0">No recent tickets.</p>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+{{ metrics.deposit_toggle_data|json_script:"realDepositData" }}
+{{ metrics.withdraw_toggle_data|json_script:"realWithdrawalData" }}
+{{ metrics.clients_growth_labels|json_script:"clientGrowthLabels" }}
+{{ metrics.clients_growth_values|json_script:"clientGrowthValues" }}
+
+<script>
+  (function () {
+    var apiUrl = "{{ live_activity_url|escapejs }}";
+    
+    var lists = {
+      registrations: { el: document.getElementById("regList"), empty: document.getElementById("regEmpty") },
+      deposits: { el: document.getElementById("depList"), empty: document.getElementById("depEmpty") },
+      withdrawals: { el: document.getElementById("wdList"), empty: document.getElementById("wdEmpty") }
+    };
+    var errEl = document.getElementById("liveActivityError");
+    var updatedEl = document.getElementById("liveActivityUpdated");
+
+    function badgeClass(st) {
+      var s = (st || "").toString().toLowerCase();
+      if (s.indexOf("approv") >= 0 || s.indexOf("complet") >= 0 || s === "joined" || s === "active") return "bp-live-badge--success";
+      if (s.indexOf("reject") >= 0 || s.indexOf("fail") >= 0) return "bp-live-badge--error";
+      if (s.indexOf("pend") >= 0) return "bp-live-badge--warning";
+      return "bp-live-badge--neutral";
+    }
+
+    function renderList(items, type) {
+      var listData = lists[type];
+      if (!listData) return;
+      var listEl = listData.el;
+      var emptyEl = listData.empty;
+      
+      listEl.innerHTML = "";
+      emptyEl.classList.add("bp-hidden");
+      
+      if (!items || !items.length) {
+        emptyEl.classList.remove("bp-hidden");
+        return;
+      }
+      
+      items.forEach(function (it) {
+        var li = document.createElement("li");
+        li.className = "bp-live-item border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-200";
+        li.style.display = "flex";
+        li.style.justifyContent = "space-between";
+        li.style.alignItems = "center";
+        li.style.padding = "0.75rem 1rem";
+
+        var leftDiv = document.createElement("div");
+        leftDiv.style.display = "flex";
+        leftDiv.style.alignItems = "center";
+        leftDiv.style.gap = "0.75rem";
+        
+        var icon = document.createElement("div");
+        icon.style.width = "36px";
+        icon.style.height = "36px";
+        icon.style.borderRadius = "50%";
+        icon.style.display = "flex";
+        icon.style.alignItems = "center";
+        icon.style.justifyContent = "center";
+        icon.style.fontWeight = "600";
+        icon.style.fontSize = "0.85rem";
+        
+        if (type === 'registrations') {
+            icon.className = "bp-live-icon bp-live-icon--reg text-blue-600 bg-blue-50";
+            icon.textContent = it.initials;
+        } else {
+            icon.className = "bp-live-icon bp-live-icon--tx text-slate-500 bg-slate-50";
+            icon.innerHTML = '<i class="fa-solid fa-' + (type === 'deposits' ? 'arrow-down' : 'arrow-up') + '"></i>';
+        }
+        
+        var content = document.createElement("div");
+        
+        var nameEl = document.createElement("div");
+        nameEl.className = "bp-live-summary text-slate-900 dark:text-white";
+        nameEl.style.fontSize = "0.875rem";
+        nameEl.style.fontWeight = "600";
+        nameEl.textContent = it.name;
+        
+        var subEl = document.createElement("div");
+        subEl.className = "bp-live-sub text-slate-500 dark:text-slate-400";
+        subEl.style.fontSize = "0.75rem";
+        subEl.textContent = (type === 'registrations' ? it.country : it.method);
+        
+        content.appendChild(nameEl);
+        content.appendChild(subEl);
+        leftDiv.appendChild(icon);
+        leftDiv.appendChild(content);
+        
+        var rightDiv = document.createElement("div");
+        rightDiv.style.textAlign = "right";
+        rightDiv.style.display = "flex";
+        rightDiv.style.flexDirection = "column";
+        rightDiv.style.alignItems = "flex-end";
+        rightDiv.style.gap = "0.25rem";
+        
+        if (type === 'registrations') {
+           var timeEl = document.createElement("div");
+           timeEl.className = "bp-live-sub text-slate-500 dark:text-slate-400";
+           timeEl.style.fontSize = "0.75rem";
+           timeEl.textContent = it.time_ago;
+           rightDiv.appendChild(timeEl);
+        } else {
+           var amountEl = document.createElement("div");
+           amountEl.style.fontSize = "0.875rem";
+           amountEl.style.fontWeight = "700";
+           amountEl.style.color = type === 'deposits' ? "#10b981" : "#ef4444";
+           amountEl.textContent = it.amount;
+           
+           var badge = document.createElement("span");
+           badge.className = "bp-live-badge " + badgeClass(it.status);
+           badge.style.fontSize = "0.65rem";
+           badge.textContent = it.status;
+           
+           rightDiv.appendChild(amountEl);
+           rightDiv.appendChild(badge);
+        }
+        
+        li.appendChild(leftDiv);
+        li.appendChild(rightDiv);
+        listEl.appendChild(li);
+      });
+    }
+
+    function fetchActivity() {
+      errEl.classList.add("bp-hidden");
+      fetch(apiUrl, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          updatedEl.textContent = "Updated " + (new Date()).toLocaleTimeString();
+          if (data.items) {
+             renderList(data.items.registrations, 'registrations');
+             renderList(data.items.deposits, 'deposits');
+             renderList(data.items.withdrawals, 'withdrawals');
+          }
+        })
+        .catch(function () {
+          errEl.textContent = "Could not refresh live activity. Retrying...";
+          errEl.classList.remove("bp-hidden");
+        });
+    }
+
+    fetchActivity();
+    setInterval(fetchActivity, 15000);
+  })();
+  // ApexCharts Configurations
+  const initApexCharts = () => {
+    if (typeof ApexCharts === 'undefined') {
+      setTimeout(initApexCharts, 100);
+      return;
+    }
+
+    const isDark = localStorage.getItem('admin-theme') === 'burjex-admin-dark';
+    const textColor = isDark ? '#94a3b8' : '#64748b';
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : '#e2e8f0';
+
+  try {
+    const depositDataStore = JSON.parse(document.getElementById('realDepositData').textContent);
+    const withdrawalDataStore = JSON.parse(document.getElementById('realWithdrawalData').textContent);
+
+  // Process data from the backend to match the perfect UI options without clutter
+  const processChartData = (store, mode) => {
+    let rawLabels = [];
+    let rawValues = [];
+    
+    // Helper to format "Oct 2025" into just "Oct" so all 12 months fit horizontally
+    const shortenMonth = (label) => {
+      if (typeof label === 'string' && label.includes(' ')) {
+        return label.split(' ')[0]; // Returns just "Oct"
+      }
+      return label;
+    };
+
+    if (mode === 'this_year') {
+      rawLabels = store['monthly'].labels.map(shortenMonth); // Full 12 months
+      rawValues = store['monthly'].values;
+    } else if (mode === 'last_6_months') {
+      rawLabels = store['monthly'].labels.slice(-6).map(shortenMonth); // Last 6 items
+      rawValues = store['monthly'].values.slice(-6);
+    } else if (mode === 'this_month') {
+      let lbls = store['daily'].labels; // 30 items
+      let vals = store['daily'].values;
+      // Show every 2nd day to prevent too many lines/clutter
+      for (let i = 0; i < lbls.length; i++) {
+        if (i % 2 === 0) {
+          rawLabels.push(lbls[i]);
+          rawValues.push(vals[i]);
+        }
+      }
+    } else if (mode === 'this_week') {
+      rawLabels = store['daily'].labels.slice(-7); // Last 7 items
+      rawValues = store['daily'].values.slice(-7);
+    }
+    
+    return { labels: rawLabels, values: rawValues };
+  };
+
+  const initDeposits = processChartData(depositDataStore, 'this_year');
+  const initWithdrawals = processChartData(withdrawalDataStore, 'this_year');
+
+  const commonBarOptions = {
+    chart: { type: 'bar', height: 200, toolbar: { show: false }, parentHeightOffset: 0, sparkline: { enabled: false }, animations: { enabled: true } },
+    plotOptions: { bar: { borderRadius: 3, columnWidth: '15%' } },
+    dataLabels: { enabled: false },
+    stroke: { width: 0 },
+    noData: {
+      text: 'No Data Available',
+      align: 'center',
+      verticalAlign: 'middle',
+      style: { color: textColor, fontSize: '14px' }
+    },
+    xaxis: { 
+      type: 'category',
+      labels: { 
+        style: { colors: textColor, fontSize: '10px' },
+        hideOverlappingLabels: true,
+        rotate: 0
+      },
+      axisBorder: { show: false }, axisTicks: { show: false },
+    },
+    yaxis: { 
+      labels: { 
+        style: { colors: textColor, fontSize: '10px' },
+        formatter: (value) => { return value >= 1000 ? (value/1000) + 'K' : value; }
+      }
+    },
+    grid: { borderColor: gridColor, strokeDashArray: 3, xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } }, padding: { top: 0, right: 0, bottom: 10, left: 10 } },
+    tooltip: { 
+      theme: isDark ? 'dark' : 'light', 
+      y: { formatter: (val) => val + " USD" },
+      style: { fontSize: '11px' },
+      marker: { show: false }
+    }
+  };
+
+  const isEmptySeries = (arr) => arr.length === 0 || arr.every(v => v === 0);
+
+  const depositsChart = new ApexCharts(document.querySelector("#depositsChart"), {
+    ...commonBarOptions,
+    colors: ['#10b981'],
+    xaxis: { ...commonBarOptions.xaxis, categories: initDeposits.labels },
+    series: isEmptySeries(initDeposits.values) ? [] : [{ name: 'Deposits', data: initDeposits.values }]
+  });
+  depositsChart.render();
+
+  const withdrawalsChart = new ApexCharts(document.querySelector("#withdrawalsChart"), {
+    ...commonBarOptions,
+    colors: ['#ef4444'],
+    xaxis: { ...commonBarOptions.xaxis, categories: initWithdrawals.labels },
+    series: isEmptySeries(initWithdrawals.values) ? [] : [{ name: 'Withdrawals', data: initWithdrawals.values }]
+  });
+  withdrawalsChart.render();
+
+  // Dynamic Listeners for Filters
+  document.getElementById('depositsFilter').addEventListener('change', function(e) {
+    let selectedData = processChartData(depositDataStore, e.target.value);
+    depositsChart.updateSeries(isEmptySeries(selectedData.values) ? [] : [{ name: 'Deposits', data: selectedData.values }]);
+    depositsChart.updateOptions({ xaxis: { categories: selectedData.labels } });
+  });
+
+  document.getElementById('withdrawalsFilter').addEventListener('change', function(e) {
+    let selectedData = processChartData(withdrawalDataStore, e.target.value);
+    withdrawalsChart.updateSeries(isEmptySeries(selectedData.values) ? [] : [{ name: 'Withdrawals', data: selectedData.values }]);
+    withdrawalsChart.updateOptions({ xaxis: { categories: selectedData.labels } });
+  });
+
+  // Client Overview Donut
+  const activeClients = parseInt('{{ metrics.active_users|default:"0" }}', 10) || 0;
+  const inactiveClients = parseInt('{{ metrics.inactive_users|default:"0" }}', 10) || 0;
+  const totalClients = activeClients + inactiveClients;
+  const clientSeries = totalClients === 0 ? [1] : [activeClients, inactiveClients];
+  const clientColors = totalClients === 0 ? [isDark ? '#334155' : '#e2e8f0'] : ['#10b981', '#ef4444'];
+
+  const clientDonutOpts = {
+    series: clientSeries,
+    labels: ['Active Clients', 'Inactive Clients'],
+    chart: { type: 'donut', height: 170, width: '100%', parentHeightOffset: 0 },
+    colors: clientColors,
+    plotOptions: {
+      pie: {
+        donut: { size: '75%', labels: { show: true, name: { show: true, fontSize: '10px', color: textColor }, value: { show: true, fontSize: '14px', fontWeight: 'bold', color: isDark ? '#fff' : '#0f172a' }, total: { show: true, showAlways: true, label: 'Total', fontSize: '10px', color: textColor, formatter: function (w) { return totalClients; } } } }
+      }
+    },
+    dataLabels: { enabled: false },
+    stroke: { show: true, width: 0, colors: ['transparent'] },
+    legend: { show: false },
+    tooltip: { theme: isDark ? 'dark' : 'light' }
+  };
+  new ApexCharts(document.querySelector("#clientOverviewChart"), clientDonutOpts).render();
+
+  // Accounts Overview Donut
+  const realAccCount = parseInt('{{ metrics.real_accounts|default:"0" }}', 10) || 0;
+  const demoAccCount = parseInt('{{ metrics.demo_accounts|default:"0" }}', 10) || 0;
+  const totalAccCount = realAccCount + demoAccCount;
+  const accountSeries = totalAccCount === 0 ? [1] : [realAccCount, demoAccCount];
+  const accountColors = totalAccCount === 0 ? [isDark ? '#334155' : '#e2e8f0'] : ['#10b981', '#eab308'];
+
+  const accountDonutOpts = {
+    series: accountSeries,
+    labels: ['Real Accounts', 'Demo Accounts'],
+    chart: { type: 'donut', height: 170, width: '100%', parentHeightOffset: 0 },
+    colors: accountColors,
+    plotOptions: {
+      pie: {
+        donut: { size: '75%', labels: { show: true, name: { show: true, fontSize: '10px', color: textColor }, value: { show: true, fontSize: '14px', fontWeight: 'bold', color: isDark ? '#fff' : '#0f172a' }, total: { show: true, showAlways: true, label: 'Total', fontSize: '10px', color: textColor, formatter: function (w) { return totalAccCount; } } } }
+      }
+    },
+    dataLabels: { enabled: false },
+    stroke: { show: true, width: 0, colors: ['transparent'] },
+    legend: { show: false },
+    tooltip: { theme: isDark ? 'dark' : 'light' }
+  };
+  new ApexCharts(document.querySelector("#accountsOverviewChart"), accountDonutOpts).render();
+
+  // Client Activity Line Chart
+  let rawClientGrowthLabels = [];
+  let rawClientGrowthValues = [];
+  try {
+    rawClientGrowthLabels = JSON.parse(document.getElementById('clientGrowthLabels').textContent) || [];
+    rawClientGrowthValues = JSON.parse(document.getElementById('clientGrowthValues').textContent) || [];
+  } catch(e) {}
+  
+  // Format labels to just show "Jun 14" instead of full date to prevent cutoff
+  const formattedGrowthLabels = rawClientGrowthLabels.map(d => {
+    let dt = new Date(d);
+    return isNaN(dt) ? d : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  });
+
+  const clientActivityOpts = {
+    series: [{ name: 'New Clients', data: rawClientGrowthValues }],
+    chart: { type: 'line', height: 140, toolbar: { show: false }, parentHeightOffset: 0, sparkline: { enabled: false } },
+    colors: ['#3b82f6'],
+    stroke: { width: 2, curve: 'smooth' },
+    xaxis: { categories: formattedGrowthLabels, labels: { style: { colors: textColor, fontSize: '10px' }, offsetY: 0, hideOverlappingLabels: true, rotate: 0 }, axisBorder: { show: false }, axisTicks: { show: false }, tickAmount: 6 },
+    yaxis: { show: false, min: 0 },
+    grid: { borderColor: gridColor, strokeDashArray: 3, xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } }, padding: { top: 0, right: 0, bottom: 0, left: 24 } },
+    legend: { show: false },
+    tooltip: { theme: isDark ? 'dark' : 'light' }
+  };
+  new ApexCharts(document.querySelector("#clientActivityChart"), clientActivityOpts).render();
+  
+  } catch (error) {
+    console.error("Dashboard Chart Error:", error);
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = "grid-column: span 3; background: #fee2e2; color: #ef4444; padding: 20px; border-radius: 8px; font-weight: bold; font-family: monospace; border: 1px solid #f87171;";
+    errDiv.innerHTML = "CRITICAL JS ERROR: " + error.message + "<br><br>" + (error.stack || "").replace(/\n/g, '<br>');
+    document.querySelector('.grid').prepend(errDiv);
+  }
+  }; // <--- THIS CLOSES initApexCharts
+
+  // Filter support tickets
+  window.filterTickets = function(filterType) {
+    const btnResolved = document.getElementById('filterResolvedBtn');
+    const btnPending = document.getElementById('filterPendingBtn');
+    
+    // Toggle active state visualization
+    if (filterType === 'resolved') {
+      if (btnResolved.classList.contains('ring-2')) {
+        // Deselect
+        btnResolved.classList.remove('ring-2', 'ring-emerald-500', 'ring-offset-2');
+        filterType = 'all';
+      } else {
+        // Select
+        btnResolved.classList.add('ring-2', 'ring-emerald-500', 'ring-offset-2');
+        btnPending.classList.remove('ring-2', 'ring-rose-500', 'ring-offset-2');
+      }
+    } else if (filterType === 'pending') {
+      if (btnPending.classList.contains('ring-2')) {
+        // Deselect
+        btnPending.classList.remove('ring-2', 'ring-rose-500', 'ring-offset-2');
+        filterType = 'all';
+      } else {
+        // Select
+        btnPending.classList.add('ring-2', 'ring-rose-500', 'ring-offset-2');
+        btnResolved.classList.remove('ring-2', 'ring-emerald-500', 'ring-offset-2');
+      }
+    }
+    
+    // Filter list items
+    const tickItems = document.querySelectorAll('.tick-item');
+    tickItems.forEach(item => {
+      const status = (item.getAttribute('data-status') || '').toUpperCase();
+      if (filterType === 'all') {
+        item.style.display = 'flex';
+      } else if (filterType === 'resolved') {
+        if (status === 'RESOLVED') {
+          item.style.display = 'flex';
+        } else {
+          item.style.display = 'none';
+        }
+      } else if (filterType === 'pending') {
+        // Everything else is pending (OPEN, IN_PROGRESS, ESCALATED, etc.)
+        if (status !== 'RESOLVED' && status !== 'CLOSED') {
+          item.style.display = 'flex';
+        } else {
+          item.style.display = 'none';
+        }
+      }
+    });
+  };
+  
+  initApexCharts();
+</script>
+{% endblock %}

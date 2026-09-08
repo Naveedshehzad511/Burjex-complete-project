@@ -1,0 +1,156 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}MT5 accounts{% endblock %}
+{% block um_body %}
+
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden mb-6">
+    <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <h2 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 shrink-0">
+        <div class="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+          <i class="fa-solid fa-chart-line"></i>
+        </div>
+        MT5 Accounts
+      </h2>
+      <div class="flex flex-nowrap items-center gap-2 w-full sm:w-auto">
+        <a href="{% url 'admin-mt5-list' %}" class="h-9 px-4 rounded-lg text-sm font-semibold transition-all flex items-center justify-center {% if not filters.account_type %}btn-gradient text-white shadow-md shadow-indigo-500/20 border-0{% else %}bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700{% endif %}">
+          All
+        </a>
+        <a href="{% url 'admin-mt5-list' %}?account_type=LIVE" class="h-9 px-4 rounded-lg text-sm font-semibold transition-all flex items-center justify-center {% if filters.account_type == 'LIVE' %}btn-gradient text-white shadow-md shadow-indigo-500/20 border-0{% else %}bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700{% endif %}">
+          Live
+        </a>
+        <a href="{% url 'admin-mt5-list' %}?account_type=DEMO" class="h-9 px-4 rounded-lg text-sm font-semibold transition-all flex items-center justify-center {% if filters.account_type == 'DEMO' %}btn-gradient text-white shadow-md shadow-indigo-500/20 border-0{% else %}bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700{% endif %}">
+          Demo
+        </a>
+      </div>
+    </div>
+    <div class="overflow-x-auto w-full">
+      <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+        <thead>
+          <tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">ID</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">MT5 ID</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Name</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Email</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Phone</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Account Type</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Country</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Registered</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+          {% for acc in accounts %}
+            <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors group">
+              <td class="px-4 py-3 text-slate-500 font-medium">#{{ acc.id }}</td>
+              <td class="px-4 py-3 font-bold text-slate-900 dark:text-white">{{ acc.login_id }}</td>
+              <td class="px-4 py-3">
+                <a href="{% url 'admin-user-view' acc.user.pk %}" class="font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+                  {{ acc.user.display_name }}
+                </a>
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ acc.user.email }}</td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ acc.user.phone|default:"—" }}</td>
+              <td class="px-4 py-3">
+                {% if acc.group %}
+                  <span class="inline-flex items-center px-2.5 py-1 rounded text-[10px] font-bold tracking-wide btn-gradient text-white shadow-sm border-0">{% with at=acc.group.account_types.first %}{{ at.account_name|default:acc.group.crm_group_name|default:acc.group.name }}{% endwith %}</span>
+                {% else %}
+                  <span class="inline-flex items-center px-2.5 py-1 rounded text-[10px] font-bold tracking-wide bg-slate-200 text-slate-500 shadow-sm border-0">—</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ acc.user.country|default:"—" }}</td>
+              <td class="px-4 py-3 text-slate-500 text-xs">{{ acc.user.date_joined|date:"M d, Y" }} <span class="opacity-70">{{ acc.user.date_joined|date:"H:i" }}</span></td>
+              <td class="px-4 py-3 text-right">
+                <button
+                  type="button"
+                  class="h-8 px-3 rounded-lg bg-emerald-500 dark:bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-600 dark:hover:bg-emerald-700 shadow-sm shadow-emerald-500/20 transition-colors um-mt5-open flex items-center justify-center ml-auto gap-1.5 opacity-100"
+                  data-login="{{ acc.login_id }}"
+                  data-balance="{{ acc.balance }}"
+                  data-credit="{{ acc.credit }}"
+                  data-margin="{{ acc.free_margin }}"
+                  data-currency-digits="2"
+                  data-margin-leverage="1:{{ acc.leverage }}"
+                  data-profit="{{ acc.unrealized_pnl }}"
+                  data-equity="{{ acc.equity }}"
+                  data-leverage="{{ acc.leverage }}"
+                  data-assets="{{ acc.balance|add:acc.credit }}"
+                  data-equity-per-day="{% if acc.created_at %}{{ acc.equity }}{% else %}0{% endif %}"
+                  data-created="{{ acc.created_at|date:'Y-m-d H:i' }}"
+                >
+                  <i class="fa-solid fa-circle-info"></i> Details
+                </button>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="flex flex-col items-center justify-center py-12">
+                  <div class="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
+                    <i class="fa-solid fa-folder-open text-2xl"></i>
+                  </div>
+                  <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-1">No MT5 accounts found</h3>
+                  <p class="text-xs text-slate-500">There are no MT5 accounts matching your criteria.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="mt5-modal" class="hidden fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-start justify-center pt-10 px-4 transition-opacity">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 max-w-md w-full overflow-hidden transform transition-all">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+        <div>
+          <h3 class="text-lg font-bold text-slate-900 dark:text-white">MT5 Details</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Live account statistics</p>
+        </div>
+        <button type="button" class="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-500 hover:border-rose-200 flex items-center justify-center transition-colors" id="mt5-modal-close" aria-label="Close">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-6">
+        <dl class="space-y-3 text-sm">
+          <div class="flex justify-between items-center gap-4 py-1 border-b border-slate-50 dark:border-slate-800/50"><dt class="text-slate-500 font-medium">Login ID</dt><dd class="font-bold text-slate-900 dark:text-white" id="m-login"></dd></div>
+          <div class="flex justify-between items-center gap-4 py-1 border-b border-slate-50 dark:border-slate-800/50"><dt class="text-slate-500 font-medium">Balance</dt><dd class="font-bold text-slate-900 dark:text-white" id="m-balance"></dd></div>
+          <div class="flex justify-between items-center gap-4 py-1 border-b border-slate-50 dark:border-slate-800/50"><dt class="text-slate-500 font-medium">Credit</dt><dd class="font-bold text-slate-900 dark:text-white" id="m-credit"></dd></div>
+          <div class="flex justify-between items-center gap-4 py-1 border-b border-slate-50 dark:border-slate-800/50"><dt class="text-slate-500 font-medium">Margin</dt><dd class="font-bold text-slate-900 dark:text-white" id="m-margin"></dd></div>
+          <div class="flex justify-between items-center gap-4 py-1"><dt class="text-slate-500 font-medium">Margin Leverage</dt><dd class="font-bold text-slate-900 dark:text-white" id="m-leverage"></dd></div>
+        </dl>
+      </div>
+      <div class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex justify-end">
+        <button type="button" id="mt5-modal-close-2" class="h-10 px-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold transition-colors">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const modal = document.getElementById("mt5-modal");
+      const closeBtn = document.getElementById("mt5-modal-close");
+      function set(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+      function open(btn) {
+        set("m-login", btn.dataset.login || "");
+        set("m-balance", "$" + (parseFloat(btn.dataset.balance) || 0).toFixed(2));
+        set("m-credit", "$" + (parseFloat(btn.dataset.credit) || 0).toFixed(2));
+        set("m-margin", "$" + (parseFloat(btn.dataset.margin) || 0).toFixed(2));
+        set("m-currency-digits", btn.dataset.currencyDigits || "2");
+        set("m-margin-leverage", btn.dataset.marginLeverage || ("1:" + (btn.dataset.leverage || "")));
+        set("m-profit", "$" + (parseFloat(btn.dataset.profit) || 0).toFixed(2));
+        set("m-equity", "$" + (parseFloat(btn.dataset.equity) || 0).toFixed(2));
+        set("m-leverage", "1:" + (btn.dataset.leverage || ""));
+        set("m-assets", "$" + (parseFloat(btn.dataset.assets) || 0).toFixed(2));
+        set("m-equity-per-day", "$" + (parseFloat(btn.dataset.equityPerDay) || 0).toFixed(2));
+        set("m-created", btn.dataset.created || "");
+        modal.classList.remove("hidden");
+      }
+      document.querySelectorAll(".um-mt5-open").forEach(function (b) {
+        b.addEventListener("click", function () { open(b); });
+      });
+      function hide() { modal.classList.add("hidden"); }
+      closeBtn.addEventListener("click", hide);
+      const closeBtn2 = document.getElementById("mt5-modal-close-2");
+      if (closeBtn2) closeBtn2.addEventListener("click", hide);
+      modal.addEventListener("click", function (e) { if (e.target === modal) hide(); });
+    })();
+  </script>
+{% endblock %}

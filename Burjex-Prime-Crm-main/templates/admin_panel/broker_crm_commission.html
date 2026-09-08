@@ -1,0 +1,16 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Broker CRM Commission{% endblock %}
+{% block admin_content %}
+<div class="max-w-xl mx-auto bg-white border rounded-xl p-6 shadow-sm space-y-4">
+  <h1 class="text-xl font-semibold">Broker CRM commission (testing)</h1>
+  <p class="text-sm text-slate-600">When enabled, the trade simulator uses “commission per lot” as the client charge base for IB % calculations. Production markup is normally applied in MT5.</p>
+  <form method="post">
+    {% csrf_token %}
+    <label class="flex items-center gap-2 text-sm font-medium mb-3"><input type="checkbox" name="enable_crm_lot_commission" {% if obj.enable_crm_lot_commission %}checked{% endif %}> Enable CRM per-lot commission for simulator</label>
+    <label class="block text-sm text-slate-600 mb-1">Notes</label>
+    <textarea name="notes" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm">{{ obj.notes }}</textarea>
+    <button type="submit" class="mt-4 bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold">Save</button>
+  </form>
+</div>
+{% endblock %}
+

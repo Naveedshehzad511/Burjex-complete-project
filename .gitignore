@@ -1,0 +1,47 @@
+# --- secrets (never push) ---
+CREDENTIALS.txt
+bridge.config.json
+env.prod.ip
+env.prod.ip.bak*
+.env
+.env.*
+!.env.example
+!.env.prod.example
+!.env.prod.ip.example
+**/.env
+!**/.env.example
+!**/.env.prod.example
+!**/.env.prod.ip.example
+btrader/bridges/mt5-manager-python/config.json
+
+# --- local / generated ---
+.venv/
+**/__pycache__/
+*.py[cod]
+*.sqlite3
+db.sqlite3
+node_modules/
+dist/
+build/
+.next/
+coverage/
+*.tsbuildinfo
+*.log
+*.pid
+.DS_Store
+Thumbs.db
+
+# --- runtime junk ---
+_archive/
+.docker-winrm/
+Burjex-Prime-Crm-main/logs/
+Burjex-Prime-Crm-main/.venv/
+btrader/bridges/mt5-manager-python/logs/
+btrader/.tools/
+*.bak
+*.bak-*
+
+# --- Docker / Caddy local state ---
+caddy_data/
+caddy_config/
+_dockercfg/

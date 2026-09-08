@@ -1,0 +1,33 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Branding — White label{% endblock %}
+{% block admin_content %}
+<div class="max-w-5xl space-y-6 pb-10">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-900">Branding settings</h1>
+    <p class="text-sm text-slate-600 mt-1">Client portal assets (PNG, JPG, SVG, WEBP — max 2MB). Also available under <a href="{% url 'admin-branding-logo' %}" class="text-indigo-700 font-medium hover:underline">full branding</a> alongside admin assets.</p>
+  </div>
+  {% include "admin_panel/white_label/includes/subnav.html" %}
+
+  <form method="post" enctype="multipart/form-data" class="space-y-6 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+    {% csrf_token %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <label class="block text-sm md:col-span-2">
+        <span class="text-slate-700 font-medium">Company name override</span>
+        <input type="text" name="company_name_override" value="{{ profile.company_name_override }}" placeholder="Leave empty to use Organization profile / auth branding" class="mt-1 w-full border rounded-lg px-3 py-2" />
+      </label>
+      <label class="block text-sm md:col-span-2">
+        <span class="text-slate-700 font-medium">Footer text</span>
+        <textarea name="footer_text" rows="3" class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="Optional notice shown at bottom of client portal">{{ profile.footer_text }}</textarea>
+      </label>
+    </div>
+    <h2 class="text-lg font-semibold text-slate-900">Files</h2>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {% for row in user_branding_rows %}
+        {% include "admin_panel/includes/branding_field.html" %}
+      {% endfor %}
+    </div>
+    <button type="submit" class="inline-flex px-5 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold">Save branding</button>
+  </form>
+</div>
+{% endblock %}
+

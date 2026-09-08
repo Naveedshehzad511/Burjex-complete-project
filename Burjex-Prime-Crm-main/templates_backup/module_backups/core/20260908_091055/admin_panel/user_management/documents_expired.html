@@ -1,0 +1,73 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}Expired Documents List{% endblock %}
+{% block um_body %}
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 mb-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 font-medium">
+      <div class="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+        <i class="fa-solid fa-file-circle-exclamation"></i>
+      </div>
+      <span>Expired User Documents</span>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden mb-6">
+    <div class="overflow-x-auto w-full">
+      <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+        <thead>
+          <tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">ID</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Name</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Email</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Document Type</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider text-center">Image</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Comment</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Status</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Expire Date</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Date</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+          {% for d in documents %}
+            <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors group">
+              <td class="px-4 py-3 text-slate-500 font-medium">#{{ d.id }}</td>
+              <td class="px-4 py-3">
+                <a href="{% url 'admin-user-view' d.user.pk %}" class="font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+                  {{ d.user.display_name }}
+                </a>
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ d.user.email }}</td>
+              <td class="px-4 py-3 text-slate-700 dark:text-slate-300 font-medium">{{ d.get_doc_type_display }}</td>
+              <td class="px-4 py-3 text-center">
+                {% if d.file %}
+                  <a href="{{ d.file.url }}" target="_blank" rel="noopener" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors" title="Preview Document">
+                    <i class="fa-solid fa-eye"></i>
+                  </a>
+                {% else %}
+                  <span class="text-slate-400">—</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400 max-w-[180px] truncate" title="{{ d.comment|default:d.review_comment }}">{{ d.comment|default:d.review_comment|default:"—" }}</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800">Expired</span>
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400 font-medium">{% if d.expires_at %}{{ d.expires_at|date:"M d, Y" }}{% else %}—{% endif %}</td>
+              <td class="px-4 py-3 text-slate-500 text-xs">{{ d.uploaded_at|date:"M d, Y" }} <span class="opacity-70">{{ d.uploaded_at|date:"H:i" }}</span></td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="flex flex-col items-center justify-center py-12">
+                  <div class="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
+                    <i class="fa-solid fa-file-circle-exclamation text-2xl"></i>
+                  </div>
+                  <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-1">No expired documents</h3>
+                  <p class="text-xs text-slate-500">There are no expired user documents to display.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

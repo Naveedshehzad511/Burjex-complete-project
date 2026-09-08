@@ -1,0 +1,28 @@
+{% extends "sales_panel/base.html" %}
+
+{% block title %}Commission - Sales CRM{% endblock %}
+{% block admin_shell_page_title %}Commission{% endblock %}
+
+{% block admin_content %}
+  {% include "sales_panel/includes/table_page_styles.html" %}
+  <div class="sp-page">
+    <div class="sp-page__head">
+      <h2>Commission</h2>
+      <p>IB and partner commission tools open in the admin area with full context.</p>
+    </div>
+    <div class="sp-hub-grid">
+      <a class="sp-hub-tile" href="{% url 'admin-report-ib-commission' %}">
+        <div class="sp-hub-tile__title"><i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>IB commission report</div>
+        <div class="sp-hub-tile__sub">Structured payouts</div>
+      </a>
+      <a class="sp-hub-tile" href="{% url 'admin-ib-commission-report' %}">
+        <div class="sp-hub-tile__title"><i class="fa-solid fa-handshake" aria-hidden="true"></i>IB commission (IB module)</div>
+        <div class="sp-hub-tile__sub">Partner performance</div>
+      </a>
+      <a class="sp-hub-tile" href="{% url 'admin-ib-set-commission' %}">
+        <div class="sp-hub-tile__title"><i class="fa-solid fa-sliders" aria-hidden="true"></i>Set IB commission</div>
+        <div class="sp-hub-tile__sub">Rules and rates</div>
+      </a>
+    </div>
+  </div>
+{% endblock %}

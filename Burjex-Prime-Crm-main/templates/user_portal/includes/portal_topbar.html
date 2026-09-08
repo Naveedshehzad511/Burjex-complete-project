@@ -1,0 +1,9 @@
+{% comment %}Sticky desktop/tablet navbar for the client portal.{% endcomment %}
+<header class="portal-topbar" role="banner">
+  <div class="portal-topbar-actions">
+    {% include "user_portal/includes/portal_theme_toggle.html" %}
+    {% if user.is_authenticated %}
+      {% include "user_portal/includes/portal_profile_dropdown.html" %}
+    {% endif %}
+  </div>
+</header>

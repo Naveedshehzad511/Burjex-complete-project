@@ -1,0 +1,110 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Integrations — {{ crm_company_name|default:"CRM" }}{% endblock %}
+
+{% block admin_content %}
+<div class="bp-s-68 integrations-hub-page">
+
+  <div class="bp-page-header bp-s-6 flex items-start justify-between gap-4">
+    <div>
+      <h1 class="bp-page-title"><i class="fa-solid fa-plug bp-s-17"></i>Integrations</h1>
+      <p class="bp-page-subtitle">AI, compliance, support, email, trading platforms, security &amp; payments</p>
+    </div>
+    <div class="flex flex-col sm:flex-row items-center gap-2 shrink-0 mt-1">
+      <a href="{% url 'admin-integrations-logs' %}" class="bp-btn bp-btn-secondary h-9 px-3 flex items-center justify-center text-sm">
+        <i class="fa-solid fa-list-check mr-2" aria-hidden="true"></i>
+        Connection Logs
+      </a>
+      <a href="{% url 'admin-system-management-dashboard' %}" class="bp-btn bp-btn-outline h-9 w-9 p-0 flex items-center justify-center shrink-0" title="Back to System Management">
+        <i class="fa-solid fa-arrow-left"></i>
+      </a>
+    </div>
+  </div>
+
+
+
+  <div class="bp-grid-3">
+
+    <a href="{% url 'admin-integrations-ai' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-188">
+        <i class="fa-solid fa-brain fa-sm" aria-hidden="true"></i>
+      </div>
+      <div class="bp-s-189">AI &amp; Machine Learning</div>
+      <p class="bp-s-190">Brokeret, Built-in, ChatGPT, Gemini, Grok</p>
+      <div class="bp-s-191">Configure <i class="fa-solid fa-arrow-right fa-xs"></i></div>
+    </a>
+
+    <a href="{% url 'admin-integrations-compliance' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-192">
+        <i class="fa-solid fa-shield-check fa-sm" aria-hidden="true"></i>
+      </div>
+      <div class="bp-s-189">Compliance / KYC</div>
+      <p class="bp-s-190">Sumsub, Onfido, Shufti Pro, IDnow, KYC Chain, Veriff&hellip;</p>
+      <div class="bp-s-191">Configure <i class="fa-solid fa-arrow-right fa-xs"></i></div>
+    </a>
+
+    <a href="{% url 'admin-integrations-support' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-193">
+        <i class="fa-solid fa-headset fa-sm" aria-hidden="true"></i>
+      </div>
+      <div class="bp-s-189">Customer Support</div>
+      <p class="bp-s-190">Tawk.to, WhatsApp, Zoho SalesIQ</p>
+      <div class="bp-s-191">Configure <i class="fa-solid fa-arrow-right fa-xs"></i></div>
+    </a>
+
+    <a href="{% url 'admin-integrations-email-sms' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-194">
+        <i class="fa-solid fa-envelope fa-sm" aria-hidden="true"></i>
+      </div>
+      <div class="bp-s-189">Email &amp; SMS</div>
+      <p class="bp-s-190">SMTP, SES, SendGrid, Reoon, Zoho Mail</p>
+      <div class="bp-s-191">Configure <i class="fa-solid fa-arrow-right fa-xs"></i></div>
+    </a>
+
+    <a href="{% url 'admin-integrations-trading-platforms-hub' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-195">
+        <i class="fa-solid fa-chart-candlestick fa-sm" aria-hidden="true"></i>
+      </div>
+      <div class="bp-s-189">Trading Platforms</div>
+      <p class="bp-s-190">MT5, cTrader &amp; more</p>
+      <div class="bp-s-191">Configure <i class="fa-solid fa-arrow-right fa-xs"></i></div>
+    </a>
+
+    <a href="{% url 'admin-trading-monitor-match-trader' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-195">
+        <i class="fa-solid fa-signal fa-sm" aria-hidden="true"></i>
+      </div>
+      <div class="bp-s-189">Trading Monitor</div>
+      <p class="bp-s-190">Match-Trader status, sync, accounts &amp; logs</p>
+      <div class="bp-s-191">Open <i class="fa-solid fa-arrow-right fa-xs"></i></div>
+    </a>
+
+    <a href="{% url 'admin-integrations-recaptcha' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-196">
+        <i class="fa-brands fa-google fa-sm" aria-hidden="true"></i>
+      </div>
+      <div class="bp-s-189">Google reCAPTCHA</div>
+      <p class="bp-s-190">v2 / v3, apply on login &amp; signup</p>
+      <div class="bp-s-191">Configure <i class="fa-solid fa-arrow-right fa-xs"></i></div>
+    </a>
+
+    <a href="{% url 'admin-integrations-google-2fa' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-197">
+        <i class="fa-solid fa-mobile-screen-button fa-sm" aria-hidden="true"></i>
+      </div>
+      <div class="bp-s-189">Google 2FA</div>
+      <p class="bp-s-190">Authenticator policies &amp; lockout</p>
+      <div class="bp-s-191">Configure <i class="fa-solid fa-arrow-right fa-xs"></i></div>
+    </a>
+
+    <a href="{% url 'admin-integrations-match2pay' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-193">
+        <i class="fa-solid fa-bitcoin-sign fa-sm" aria-hidden="true"></i>
+      </div>
+      <div class="bp-s-189">Match2Pay</div>
+      <p class="bp-s-190">Crypto deposits &amp; withdrawals</p>
+      <div class="bp-s-191">Configure <i class="fa-solid fa-arrow-right fa-xs"></i></div>
+    </a>
+
+  </div>
+</div>
+{% endblock %}

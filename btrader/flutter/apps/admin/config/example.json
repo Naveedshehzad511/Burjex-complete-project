@@ -1,0 +1,10 @@
+{
+  "_comment": "Broker admin build. Broker is currently a tenant on the shared Example server; API/WS hosts are the same and TENANT pins the admin to the broker tenant. If Broker moves to its own server, change API_BASE/WS_URL to that server's hosts.",
+  "API_BASE": "https://api.example.com",
+  "WS_URL": "wss://ws.example.com",
+  "TENANT": "broker",
+  "BRAND_NAME": "Broker",
+  "BRAND_LOGO": "",
+  "BRAND_PRIMARY": "#1652F0",
+  "BRAND_ACCENT": "#0BB07B"
+}

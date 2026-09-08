@@ -1,0 +1,15 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}{{ title }} - User Portal{% endblock %}
+
+{% block user_content %}
+  <div class="portal-card">
+    <div class="portal-card-header"><div class="portal-card-title">{{ title }}</div></div>
+    <p class="text-sm" style="color:var(--portal-text-muted);">
+      This is a wired placeholder for the required route. Implement the full form flows (deposits/withdrawals/internal transfers, etc.) next.
+    </p>
+    {% if message %}
+      <div class="portal-alert portal-alert--warning mt-4">{{ message }}</div>
+    {% endif %}
+  </div>
+{% endblock %}

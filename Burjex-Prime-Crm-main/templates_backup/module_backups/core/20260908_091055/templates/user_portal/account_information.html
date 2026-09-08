@@ -1,0 +1,52 @@
+{% extends "user_portal/base.html" %}
+{% block title %}Account Information{% endblock %}
+{% block user_content %}
+  <h1 class="portal-page-heading">Account Information</h1>
+
+  <div class="portal-card max-w-2xl">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+      {% for label, value in forloop.counter|default:'' %}{% endfor %}
+      <div class="rounded-lg p-3" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+        <div class="portal-stat-label">Account Number</div>
+        <div class="font-semibold mt-0.5" style="color:var(--portal-text-main);">{{ mt5.login_id }}</div>
+      </div>
+      <div class="rounded-lg p-3" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+        <div class="portal-stat-label">Account Type</div>
+        <div class="font-semibold mt-0.5" style="color:var(--portal-text-main);">{{ mt5.account_type }}</div>
+      </div>
+      <div class="rounded-lg p-3" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+        <div class="portal-stat-label">Platform</div>
+        <div class="font-semibold mt-0.5" style="color:var(--portal-text-main);">MT5</div>
+      </div>
+      <div class="rounded-lg p-3" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+        <div class="portal-stat-label">Server</div>
+        <div class="font-semibold mt-0.5" style="color:var(--portal-text-main);">{{ mt5.server }}</div>
+      </div>
+      <div class="rounded-lg p-3" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+        <div class="portal-stat-label">Leverage</div>
+        <div class="font-semibold mt-0.5" style="color:var(--portal-brand-primary);">1:{{ mt5.leverage }}</div>
+      </div>
+      <div class="rounded-lg p-3" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+        <div class="portal-stat-label">Currency</div>
+        <div class="font-semibold mt-0.5" style="color:var(--portal-text-main);">USD</div>
+      </div>
+      <div class="rounded-lg p-3" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+        <div class="portal-stat-label">Balance</div>
+        <div class="font-semibold mt-0.5" style="color:var(--portal-brand-primary);">{{ mt5.balance }}</div>
+      </div>
+      <div class="rounded-lg p-3" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+        <div class="portal-stat-label">Equity</div>
+        <div class="font-semibold mt-0.5" style="color:var(--portal-brand-primary);">{{ mt5.equity }}</div>
+      </div>
+    </div>
+
+    <details class="mt-4 rounded-xl" style="border:1px solid var(--portal-border);">
+      <summary class="cursor-pointer px-4 py-3 text-sm font-semibold" style="color:var(--portal-brand-primary);">More Details</summary>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm p-4 pt-2">
+        <div><span style="color:var(--portal-text-muted);">Margin:</span> <span class="font-medium" style="color:var(--portal-text-main);">{{ margin }}</span></div>
+        <div><span style="color:var(--portal-text-muted);">Free Margin:</span> <span class="font-medium" style="color:var(--portal-text-main);">{{ mt5.free_margin }}</span></div>
+        <div><span style="color:var(--portal-text-muted);">Created:</span> <span class="font-medium" style="color:var(--portal-text-main);">{{ mt5.created_at|date:"Y-m-d H:i" }}</span></div>
+      </div>
+    </details>
+  </div>
+{% endblock %}

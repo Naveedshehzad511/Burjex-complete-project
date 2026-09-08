@@ -1,0 +1,33 @@
+{% comment %}
+  Shared left panel for staff and client auth.
+  Expects: branding (AdminAuthBrandingSettings or UserAuthBrandingSettings), branding_v (int).
+{% endcomment %}
+<aside
+  class="login-panel-left"
+  style="background-color: {{ branding.panel_background_color|default:'#0f172a' }};"
+  aria-hidden="false"
+>
+  <div class="login-panel__watermark-layer">
+    {% if branding.background_logo %}
+      <img
+        src="{{ branding.background_logo.url }}?v={{ branding_v }}"
+        alt=""
+        class="login-bg-logo logo-{{ branding.logo_size|default:'medium' }} login-bg-logo--{{ branding.logo_position|default:'center' }}"
+        style="opacity: {{ branding.logo_opacity|default:0.1 }};"
+        loading="lazy"
+      />
+    {% elif branding.logo %}
+      <img
+        src="{{ branding.logo.url }}?v={{ branding_v }}"
+        alt=""
+        class="login-bg-logo logo-{{ branding.logo_size|default:'medium' }} login-bg-logo--{{ branding.logo_position|default:'center' }}"
+        style="opacity: {{ branding.logo_opacity|default:0.1 }};"
+        loading="lazy"
+      />
+    {% endif %}
+  </div>
+  <div class="login-panel__welcome-stack">
+    <p class="login-panel__welcome">{{ branding.welcome_text|default:"Welcome Back" }}</p>
+    <div class="login-panel__company">{{ branding.company_name|default:"Burjex Prime" }}</div>
+  </div>
+</aside>

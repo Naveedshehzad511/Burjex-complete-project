@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Admin verification — {{ branding.company_name|default:"Burjex Prime" }}{% endblock %}
+
+{% block head_extra %}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{% static 'css/login.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}" />
+{% endblock %}
+
+{% block content %}
+  <div
+    class="login-shell auth-page-shell"
+    style="
+      font-family: {{ branding.font_style|default:'Inter, system-ui, sans-serif' }};
+      --auth-text-size: {{ branding.text_size_px|default:14 }}px;
+      --auth-heading-size: {{ branding.heading_size_px|default:28 }}px;
+      --login-accent: {{ branding.button_color|default:branding.primary_color|default:'#0B3C5D' }};
+      --login-accent-dark: {{ branding.secondary_color|default:'#072A42' }};
+    "
+  >
+    {% include "accounts/includes/login_left_panel.html" %}
+
+    <main class="login-panel-right">
+      <div class="login-card">
+        <div class="bg-white border border-slate-200/90 rounded-2xl shadow-[0_20px_50px_-14px_rgba(15,23,42,0.1)] p-6 sm:p-8">
+          <div class="text-center mb-6">
+            {% if branding.logo %}
+              <img src="{{ branding.logo.url }}?v={{ branding_v }}" alt="" class="h-auto max-h-12 w-auto max-w-[min(280px,88vw)] mx-auto mb-3 object-contain" />
+            {% elif brand_logo_url %}
+              <img src="{{ brand_logo_url }}" alt="" class="h-auto max-h-12 w-auto max-w-[min(280px,88vw)] mx-auto mb-3 object-contain" />
+            {% endif %}
+            <h1 class="auth-card-title" style="color: {{ branding.primary_color|default:'#0B3C5D' }};">Staff 2FA</h1>
+            <p class="text-slate-500 text-sm mt-1">Enter your authenticator code to open the CRM.</p>
+          </div>
+          <form method="post" class="space-y-4">
+            {% csrf_token %}
+            {% if messages %}
+              <ul class="text-sm text-red-600 space-y-1">{% for m in messages %}<li>{{ m }}</li>{% endfor %}</ul>
+            {% endif %}
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5" for="admin-totp-code">Code</label>
+              <input
+                id="admin-totp-code"
+                name="code"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                autofocus
+                maxlength="12"
+                class="form-control text-center text-lg tracking-widest"
+                placeholder="000000"
+              />
+            </div>
+            <button
+              type="submit"
+              class="btn-primary-auth"
+              style="background: {{ branding.button_color|default:branding.primary_color|default:'#0B3C5D' }};"
+            >
+              Verify
+            </button>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+{% endblock %}

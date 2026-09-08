@@ -1,0 +1,119 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Customer Support Integrations{% endblock %}
+{% block admin_content %}
+<div class="bp-page-header" style="margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="bp-page-title" style="display:flex; align-items:center;">
+      <i class="fa-solid fa-headset" style="background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-right: 0.5rem;"></i>
+      Customer Support Integrations
+    </h1>
+    <p class="bp-page-subtitle">Configure third-party chat widgets and support email settings.</p>
+  </div>
+</div>
+
+<div class="bp-card mb-6">
+  <div class="bp-card-header">
+    <div class="bp-card-header-title"><i class="fa-solid fa-sliders me-2"></i>Global Support Settings</div>
+  </div>
+  <div class="bp-card-body">
+    <form method="post" class="flex flex-col sm:flex-row items-end gap-4 m-0">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_settings" />
+      <div class="flex items-center gap-2 mb-2 sm:mb-0 pb-1">
+        <input type="checkbox" id="floating_button_enabled" name="floating_button_enabled" class="bp-checkbox" {% if settings.floating_button_enabled %}checked{% endif %}>
+        <label for="floating_button_enabled" class="text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer">Floating support button enabled</label>
+      </div>
+      <div class="flex-1 w-full sm:w-auto">
+        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Default Ticket Email</label>
+        <input name="default_ticket_email" value="{{ settings.default_ticket_email }}" class="bp-input w-full max-w-sm">
+      </div>
+      <button type="submit" class="bp-btn btn-gradient" style="padding: 0.625rem 1.5rem; font-weight: 700;">
+        <i class="fa-solid fa-floppy-disk me-1"></i> Save Settings
+      </button>
+    </form>
+    <div class="mt-4 bp-alert bp-alert-info text-xs">
+      <i class="fa-solid fa-circle-info me-1"></i> Only one customer support integration can be active at a time. Enabling one will automatically disable the previous active integration.
+    </div>
+  </div>
+</div>
+
+<div class="grid md:grid-cols-2 gap-6">
+  {% for r in rows %}
+  <div class="bp-card">
+    <form method="post" class="h-full flex flex-col m-0">
+      {% csrf_token %}
+      <input type="hidden" name="id" value="{{ r.id }}" />
+      <div class="bp-card-header">
+        <div class="bp-card-header-title flex items-center justify-between w-full">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-plug"></i> {{ r.get_integration_type_display }}
+            <span class="relative inline-flex group ml-1">
+              <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700 text-[10px] text-slate-600 dark:text-slate-300 cursor-help transition-colors hover:bg-indigo-100 hover:text-indigo-600 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-400" tabindex="0"><i class="fa-solid fa-question"></i></span>
+              <span class="hidden group-hover:block group-focus-within:block absolute left-0 bottom-full mb-2 z-20 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-xs font-normal text-slate-700 dark:text-slate-300 shadow-xl">
+                {% if r.integration_type == "WHATSAPP_DIRECT" %}
+                  <strong class="block text-slate-900 dark:text-white mb-1">WhatsApp setup</strong>
+                  <span class="block">1. Add support phone number with country code, no plus sign or spaces. Example: 254********.</span>
+                  <span class="block">2. Add optional prefilled message.</span>
+                  <span class="block">3. Enable and save. The portal uses the built-in WhatsApp icon.</span>
+                {% elif r.integration_type == "TAWK_TO" %}
+                  <strong class="block text-slate-900 dark:text-white mb-1">Tawk.to setup</strong>
+                  <span class="block">1. Login to Tawk.to and open your property.</span>
+                  <span class="block">2. Go to Administration / Chat Widget / Installation or Widget Code.</span>
+                  <span class="block">3. Copy the full JavaScript embed code and paste it below.</span>
+                {% elif r.integration_type == "ZOHO_SALESIQ" %}
+                  <strong class="block text-slate-900 dark:text-white mb-1">Zoho SalesIQ setup</strong>
+                  <span class="block">1. Login to Zoho SalesIQ and open your Brand.</span>
+                  <span class="block">2. Go to Installation / Website or Live Chat Widget Code.</span>
+                  <span class="block">3. Copy the real Zoho embed script and paste it below.</span>
+                  <span class="block">4. Do not use placeholder text like YOUR_WIDGET_CODE.</span>
+                {% endif %}
+              </span>
+            </span>
+          </div>
+          <div>
+            {% if r.status == 'ACTIVE' %}
+              <span class="bp-badge bp-badge-success">Active</span>
+            {% else %}
+              <span class="bp-badge bp-badge-neutral">Inactive</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="bp-card-body flex-1 flex flex-col gap-4">
+        <div class="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+          <input type="checkbox" id="enabled_{{ r.id }}" name="enabled" class="bp-checkbox" {% if r.enabled %}checked{% endif %}>
+          <label for="enabled_{{ r.id }}" class="text-sm font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">Enable Integration</label>
+        </div>
+
+        {% if r.integration_type == "WHATSAPP_DIRECT" %}
+          <div>
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Phone Number (with country code)</label>
+            <input name="phone_number" value="{{ r.phone_number }}" class="bp-input w-full" placeholder="e.g. 919999999999">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Prefilled Message</label>
+            <textarea name="prefilled_message" class="bp-input w-full min-h-[80px]" placeholder="Hello, I need help with...">{{ r.prefilled_message }}</textarea>
+          </div>
+        {% elif r.integration_type == "TAWK_TO" %}
+          <div class="flex-1">
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Tawk.to Embed Code</label>
+            <textarea name="embed_code" class="bp-input w-full h-[120px] font-mono text-xs" placeholder="Paste the script here...">{{ r.embed_code }}</textarea>
+          </div>
+        {% elif r.integration_type == "ZOHO_SALESIQ" %}
+          <div class="flex-1">
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Zoho SalesIQ Embed Script</label>
+            <textarea name="embed_script" class="bp-input w-full h-[120px] font-mono text-xs" placeholder="Paste the script here...">{{ r.embed_script }}</textarea>
+          </div>
+        {% endif %}
+
+        <div class="mt-auto pt-2">
+          <button type="submit" name="action" value="save_integration" class="bp-btn btn-gradient" style="width: 100%; justify-content: center; font-weight: 700;">
+            <i class="fa-solid fa-wrench me-1"></i> Configure &amp; Save
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

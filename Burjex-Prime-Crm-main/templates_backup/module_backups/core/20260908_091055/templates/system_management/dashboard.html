@@ -1,0 +1,67 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}System Management{% endblock %}
+{% block admin_content %}
+
+<style>
+  /* Dynamic pastel gradient backgrounds for each icon box */
+  .system-card:nth-child(1) .icon-box { background: #f0fdf4; color: #22c55e; } /* emerald */
+  html.dark .system-card:nth-child(1) .icon-box { background: rgba(34, 197, 94, 0.2); }
+  
+  .system-card:nth-child(2) .icon-box { background: #eff6ff; color: #3b82f6; } /* blue */
+  html.dark .system-card:nth-child(2) .icon-box { background: rgba(59, 130, 246, 0.2); }
+  
+  .system-card:nth-child(3) .icon-box { background: #fff1f2; color: #f43f5e; } /* rose */
+  html.dark .system-card:nth-child(3) .icon-box { background: rgba(244, 63, 94, 0.2); }
+  
+  .system-card:nth-child(4) .icon-box { background: #f5f3ff; color: #8b5cf6; } /* purple */
+  html.dark .system-card:nth-child(4) .icon-box { background: rgba(139, 92, 246, 0.2); }
+  
+  .system-card:nth-child(5) .icon-box { background: #fffbeb; color: #f59e0b; } /* amber */
+  html.dark .system-card:nth-child(5) .icon-box { background: rgba(245, 158, 11, 0.2); }
+  
+  .system-card:nth-child(n+6) .icon-box { background: #f8fafc; color: #64748b; } /* slate */
+  html.dark .system-card:nth-child(n+6) .icon-box { background: rgba(100, 116, 139, 0.2); }
+</style>
+
+<div class="bp-page-header" style="margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="bp-page-title" style="display:flex; align-items:center;">
+      <i class="fa-solid fa-server" style="background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-right: 0.5rem;"></i>
+      System Management
+    </h1>
+    <p class="bp-page-subtitle">Configure core platform settings, themes, and integrations.</p>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  {% for card in cards %}
+    <a href="{% url card.url_name %}" class="system-card group block rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
+      <div class="flex items-start gap-4">
+        <div class="icon-box w-12 h-12 shrink-0 rounded-lg flex items-center justify-center transition-all duration-300">
+            {% if forloop.counter == 1 %}
+                <i class="fa-solid fa-envelope-open-text text-xl"></i>
+            {% elif forloop.counter == 2 %}
+                <i class="fa-solid fa-plug text-xl"></i>
+            {% elif forloop.counter == 3 %}
+                <i class="fa-solid fa-palette text-xl"></i>
+            {% elif forloop.counter == 4 %}
+                <i class="fa-solid fa-desktop text-xl"></i>
+            {% elif forloop.counter == 5 %}
+                <i class="fa-solid fa-building text-xl"></i>
+            {% else %}
+                <i class="fa-solid fa-file-contract text-xl"></i>
+            {% endif %}
+        </div>
+        <div class="min-w-0 flex-1">
+          <span class="block text-base font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{{ card.title }}</span>
+          <span class="block text-sm text-slate-500 dark:text-slate-400 mt-1">Open configuration module</span>
+        </div>
+        <div class="shrink-0 text-slate-300 dark:text-slate-600 group-hover:text-indigo-500 transition-colors">
+            <i class="fa-solid fa-chevron-right text-sm"></i>
+        </div>
+      </div>
+    </a>
+  {% endfor %}
+</div>
+{% endblock %}
+

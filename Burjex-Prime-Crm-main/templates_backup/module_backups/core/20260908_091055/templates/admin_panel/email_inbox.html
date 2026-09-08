@@ -1,0 +1,44 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Email Inbox{% endblock %}
+{% block admin_content %}
+<div class="bg-[#FFFFFF] border border-[#E7DCCF] rounded-xl p-6 shadow-sm">
+  <div class="flex flex-wrap gap-2 justify-between items-center mb-4">
+    <h1 class="text-xl font-semibold text-[#6A4B34]">Email Inbox</h1>
+    <div class="flex gap-2">
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="fetch"><button class="bg-[#6A4B34] text-white px-3 py-2 rounded text-sm">Fetch IMAP</button></form>
+      <form method="post" class="flex gap-2">{% csrf_token %}<input type="hidden" name="action" value="test"><input name="test_email" type="email" class="border rounded px-2 py-2 text-sm" placeholder="test@email.com"><button class="bg-[#8B5E3C] text-white px-3 py-2 rounded text-sm">Test Email</button></form>
+    </div>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-[#F7F1EB] text-left">
+        <tr><th class="p-2 border-b">Sender</th><th class="p-2 border-b">Subject</th><th class="p-2 border-b">Message</th><th class="p-2 border-b">Date</th><th class="p-2 border-b">Reply</th></tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr class="border-t align-top">
+          <td class="p-2">{{ r.sender }}</td>
+          <td class="p-2">{{ r.subject }}</td>
+          <td class="p-2 max-w-[420px] whitespace-pre-wrap">{{ r.message|truncatechars:280 }}</td>
+          <td class="p-2">{{ r.received_at|default:r.created_at|date:"Y-m-d H:i" }}</td>
+          <td class="p-2">
+            <form method="post" class="space-y-1">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="reply">
+              <input type="hidden" name="id" value="{{ r.id }}">
+              <textarea name="reply_body" rows="2" class="w-64 border rounded px-2 py-1 text-xs" placeholder="Write reply..."></textarea>
+              <button class="bg-[#6A4B34] text-white px-2 py-1 rounded text-xs">{% if r.replied %}Reply Again{% else %}Reply{% endif %}</button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="p-4 text-slate-500">No inbox emails. Click Fetch IMAP.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+

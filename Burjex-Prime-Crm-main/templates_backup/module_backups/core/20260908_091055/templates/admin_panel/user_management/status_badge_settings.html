@@ -1,0 +1,35 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}Status Settings — User List Badges{% endblock %}
+{% block um_body %}
+  <p class="text-sm text-slate-600 mb-4 max-w-3xl">Configure labels, colors, and visibility for status badges on the User List. Defaults follow the professional green / orange / red scheme.</p>
+  <form method="post" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 max-w-4xl space-y-6">
+    {% csrf_token %}
+    {% for key, b in badges.items %}
+      <div class="border border-slate-100 rounded-lg p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+        <div class="md:col-span-3">
+          <div class="font-semibold text-slate-800 capitalize">{{ key|cut:"_"|title }}</div>
+          <label class="inline-flex items-center gap-2 mt-2 text-sm text-slate-600">
+            <input type="checkbox" name="{{ key }}__enabled" {% if b.enabled %}checked{% endif %} class="rounded border-slate-300" />
+            Show badge
+          </label>
+        </div>
+        <div class="md:col-span-3">
+          <label class="block text-xs text-slate-500 mb-1">Label</label>
+          <input type="text" name="{{ key }}__label" value="{{ b.label }}" class="w-full border rounded-lg px-2 py-1.5 text-sm" />
+        </div>
+        <div class="md:col-span-3">
+          <label class="block text-xs text-slate-500 mb-1">Background</label>
+          <input type="text" name="{{ key }}__bg" value="{{ b.bg }}" class="w-full border rounded-lg px-2 py-1.5 text-sm font-mono" />
+        </div>
+        <div class="md:col-span-3">
+          <label class="block text-xs text-slate-500 mb-1">Text color</label>
+          <input type="text" name="{{ key }}__fg" value="{{ b.fg }}" class="w-full border rounded-lg px-2 py-1.5 text-sm font-mono" />
+        </div>
+      </div>
+    {% endfor %}
+    <div class="flex gap-3">
+      <button type="submit" class="bg-indigo-600 text-white rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-indigo-700">Save settings</button>
+      <a href="{% url 'admin-user-list' %}" class="inline-flex items-center rounded-lg border px-5 py-2.5 text-sm text-slate-700 hover:bg-slate-50">Back to User List</a>
+    </div>
+  </form>
+{% endblock %}

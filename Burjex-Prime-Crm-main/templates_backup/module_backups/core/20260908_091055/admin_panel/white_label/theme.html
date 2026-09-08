@@ -1,0 +1,100 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Theme settings — White label{% endblock %}
+{% block admin_content %}
+<div class="max-w-3xl space-y-6 pb-10" id="wl-theme-page">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-900">Theme settings</h1>
+    <p class="text-sm text-slate-600 mt-1">Leave a colour empty to inherit from User auth branding or sidebar UI defaults.</p>
+  </div>
+  {% include "admin_panel/white_label/includes/subnav.html" %}
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <form method="post" class="space-y-4 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+      {% csrf_token %}
+      <h2 class="text-sm font-semibold text-slate-800">Colours</h2>
+      <label class="block text-sm"><span class="text-slate-600">Primary</span><input type="text" name="primary_color" value="{{ profile.primary_color }}" placeholder="#0B3C5D" class="mt-1 w-full border rounded-lg px-3 py-2 font-mono text-sm" /></label>
+      <label class="block text-sm"><span class="text-slate-600">Secondary</span><input type="text" name="secondary_color" value="{{ profile.secondary_color }}" class="mt-1 w-full border rounded-lg px-3 py-2 font-mono text-sm" /></label>
+      <label class="block text-sm"><span class="text-slate-600">Sidebar background</span><input type="text" name="sidebar_bg_color" value="{{ profile.sidebar_bg_color }}" class="mt-1 w-full border rounded-lg px-3 py-2 font-mono text-sm" /></label>
+      <label class="block text-sm"><span class="text-slate-600">Header (mobile) background</span><input type="text" name="header_bg_color" value="{{ profile.header_bg_color }}" class="mt-1 w-full border rounded-lg px-3 py-2 font-mono text-sm" /></label>
+      <label class="block text-sm"><span class="text-slate-600">Buttons</span><input type="text" name="button_color" value="{{ profile.button_color }}" class="mt-1 w-full border rounded-lg px-3 py-2 font-mono text-sm" /></label>
+      <label class="block text-sm"><span class="text-slate-600">Main content text</span><input type="text" name="content_text_color" value="{{ profile.content_text_color }}" placeholder="#0f172a" class="mt-1 w-full border rounded-lg px-3 py-2 font-mono text-sm" /></label>
+
+      <h2 class="text-sm font-semibold text-slate-800 pt-2">Typography</h2>
+      <label class="block text-sm"><span class="text-slate-600">Font size</span>
+        <select name="font_size_preset" class="mt-1 w-full border rounded-lg px-3 py-2">
+          <option value="sm" {% if profile.font_size_preset == "sm" %}selected{% endif %}>Small</option>
+          <option value="md" {% if profile.font_size_preset == "md" %}selected{% endif %}>Medium</option>
+          <option value="lg" {% if profile.font_size_preset == "lg" %}selected{% endif %}>Large</option>
+        </select>
+      </label>
+      <label class="block text-sm"><span class="text-slate-600">Font weight (navigation)</span>
+        <select name="font_weight_preset" class="mt-1 w-full border rounded-lg px-3 py-2">
+          <option value="normal" {% if profile.font_weight_preset == "normal" %}selected{% endif %}>Normal</option>
+          <option value="medium" {% if profile.font_weight_preset == "medium" %}selected{% endif %}>Medium</option>
+          <option value="bold" {% if profile.font_weight_preset == "bold" %}selected{% endif %}>Bold</option>
+        </select>
+      </label>
+      <button type="submit" class="inline-flex px-5 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold">Save theme</button>
+    </form>
+
+    <div class="bg-slate-900 rounded-xl p-4 text-white space-y-3 bp-s-372" id="wl-preview">
+      <div class="text-xs font-semibold uppercase tracking-wide text-white/70">Live preview</div>
+      <div class="rounded-lg p-3 border border-white/20 bp-s-373" data-preview-sidebar>
+        <div class="flex items-center gap-2 mb-3">
+          <div class="w-8 h-8 rounded-lg bg-white/10"></div>
+          <div class="font-semibold text-sm" data-preview-brand>Broker</div>
+        </div>
+        <div class="space-y-1 text-sm" data-preview-nav>
+          <div class="rounded-md px-2 py-1.5 bg-white/10">Dashboard</div>
+          <div class="rounded-md px-2 py-1.5 opacity-80">My Wallet</div>
+        </div>
+      </div>
+      <div class="rounded-lg p-3 bg-white text-slate-900" data-preview-content>
+        <div class="text-lg font-semibold" data-preview-h1>Overview</div>
+        <p class="text-sm mt-1 opacity-90" data-preview-body>Sample body text for the client portal.</p>
+        <button type="button" class="mt-3 px-3 py-1.5 rounded-lg text-sm font-semibold text-white bp-s-374" data-preview-btn>Primary action</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var root = document.getElementById("wl-theme-page");
+  if (!root) return;
+  function hexOr(css, fallback) {
+    var v = (css || "").trim();
+    return v || fallback;
+  }
+  function apply() {
+    var pri = hexOr(root.querySelector("[name=primary_color]") && root.querySelector("[name=primary_color]").value, "#0B3C5D");
+    var side = hexOr(root.querySelector("[name=sidebar_bg_color]") && root.querySelector("[name=sidebar_bg_color]").value, "#0B1E3A");
+    var btn = hexOr(root.querySelector("[name=button_color]") && root.querySelector("[name=button_color]").value, pri);
+    var txt = hexOr(root.querySelector("[name=content_text_color]") && root.querySelector("[name=content_text_color]").value, "#0f172a");
+    var fs = (root.querySelector("[name=font_size_preset]") || {}).value || "md";
+    var fw = (root.querySelector("[name=font_weight_preset]") || {}).value || "medium";
+    var navPx = fs === "sm" ? 14 : fs === "lg" ? 16 : 15;
+    var h1Px = fs === "sm" ? 20 : fs === "lg" ? 24 : 22;
+    var bodyPx = fs === "sm" ? 13 : fs === "lg" ? 15 : 14;
+    var fwNum = fw === "bold" ? 600 : fw === "normal" ? 400 : 500;
+    var sb = root.querySelector("[data-preview-sidebar]");
+    if (sb) sb.style.background = side;
+    var b = root.querySelector("[data-preview-btn]");
+    if (b) b.style.background = btn;
+    var c = root.querySelector("[data-preview-content]");
+    if (c) c.style.color = txt;
+    var nav = root.querySelector("[data-preview-nav]");
+    if (nav) { nav.style.fontSize = navPx + "px"; nav.style.fontWeight = String(fwNum); }
+    var h1 = root.querySelector("[data-preview-h1]");
+    if (h1) { h1.style.fontSize = h1Px + "px"; h1.style.fontWeight = "600"; }
+    var body = root.querySelector("[data-preview-body]");
+    if (body) body.style.fontSize = bodyPx + "px";
+  }
+  root.querySelectorAll("input, select").forEach(function (el) {
+    el.addEventListener("input", apply);
+    el.addEventListener("change", apply);
+  });
+  apply();
+})();
+</script>
+{% endblock %}
+

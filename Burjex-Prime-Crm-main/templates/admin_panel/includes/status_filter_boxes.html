@@ -1,0 +1,51 @@
+{# Expects: url_name, list_status, status_counts, query_ex_status #}
+<div class="flex flex-col sm:flex-row sm:flex-nowrap gap-3 w-full sm:w-auto">
+  
+  <!-- Pending -->
+  <a href="{% url url_name %}?status=pending{% if query_ex_status %}&{{ query_ex_status }}{% endif %}" 
+     class="bg-white dark:bg-slate-900 rounded-xl p-2.5 flex items-center gap-3 relative overflow-hidden transition-all duration-300 group flex-1 sm:flex-none sm:min-w-[150px] {% if list_status != 'pending' %}border border-slate-100 dark:border-slate-800 hover:shadow-md{% endif %}" 
+     style="text-decoration: none; {% if list_status == 'pending' %}border: 1.5px solid #f59e0b; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);{% else %}box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);{% endif %}">
+    
+    <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" 
+         style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%); border: 1px solid rgba(245, 158, 11, 0.3); color: #f59e0b;">
+      <i class="fa-solid fa-clock-rotate-left" style="font-size: 14px;"></i>
+    </div>
+
+    <div class="flex flex-col pr-1 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[9px] tracking-wider  leading-tight mb-0.5">Pending</span>
+      <span class="text-slate-900 dark:text-white font-extrabold text-base leading-none tracking-tight">{{ status_counts.pending|default:0 }}</span>
+    </div>
+  </a>
+
+  <!-- Approved -->
+  <a href="{% url url_name %}?status=approved{% if query_ex_status %}&{{ query_ex_status }}{% endif %}" 
+     class="bg-white dark:bg-slate-900 rounded-xl p-2.5 flex items-center gap-3 relative overflow-hidden transition-all duration-300 group flex-1 sm:flex-none sm:min-w-[150px] {% if list_status != 'approved' %}border border-slate-100 dark:border-slate-800 hover:shadow-md{% endif %}" 
+     style="text-decoration: none; {% if list_status == 'approved' %}border: 1.5px solid #10b981; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);{% else %}box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);{% endif %}">
+    
+    <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" 
+         style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.05) 100%); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981;">
+      <i class="fa-solid fa-check-double" style="font-size: 14px;"></i>
+    </div>
+
+    <div class="flex flex-col pr-1 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[9px] tracking-wider  leading-tight mb-0.5">Approved</span>
+      <span class="text-slate-900 dark:text-white font-extrabold text-base leading-none tracking-tight">{{ status_counts.approved|default:0 }}</span>
+    </div>
+  </a>
+
+  <!-- Rejected -->
+  <a href="{% url url_name %}?status=rejected{% if query_ex_status %}&{{ query_ex_status }}{% endif %}" 
+     class="bg-white dark:bg-slate-900 rounded-xl p-2.5 flex items-center gap-3 relative overflow-hidden transition-all duration-300 group flex-1 sm:flex-none sm:min-w-[150px] {% if list_status != 'rejected' %}border border-slate-100 dark:border-slate-800 hover:shadow-md{% endif %}" 
+     style="text-decoration: none; {% if list_status == 'rejected' %}border: 1.5px solid #ef4444; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);{% else %}box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);{% endif %}">
+    
+    <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" 
+         style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.05) 100%); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444;">
+      <i class="fa-solid fa-xmark" style="font-size: 14px;"></i>
+    </div>
+
+    <div class="flex flex-col pr-1 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[9px] tracking-wider  leading-tight mb-0.5">Rejected</span>
+      <span class="text-slate-900 dark:text-white font-extrabold text-base leading-none tracking-tight">{{ status_counts.rejected|default:0 }}</span>
+    </div>
+  </a>
+</div>

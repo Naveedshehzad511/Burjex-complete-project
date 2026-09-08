@@ -1,0 +1,38 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Edit template · {{ tpl.name }}{% endblock %}
+{% block admin_content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <div class="flex items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold">{{ tpl.name }}</h1>
+      <p class="text-sm text-slate-500 font-mono mt-1">{{ tpl.event_key }}</p>
+    </div>
+    <a href="{% url 'admin-system-email-templates' %}" class="text-sm text-indigo-600 hover:underline">Email Templates (new)</a>
+    <span class="text-slate-300">|</span>
+    <a href="{% url 'admin-email-management' %}" class="text-sm text-slate-600 hover:underline">Email management</a>
+  </div>
+  <form method="post" class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save" />
+    <label class="block text-sm font-medium text-slate-700">Template label</label>
+    <input name="name" value="{{ tpl.name }}" class="w-full border rounded-lg px-3 py-2 text-sm" />
+    <label class="block text-sm font-medium text-slate-700">Subject</label>
+    <input name="subject" value="{{ tpl.subject }}" class="w-full border rounded-lg px-3 py-2 text-sm" />
+    <label class="block text-sm font-medium text-slate-700">Body</label>
+    <textarea name="body" rows="14" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">{{ tpl.body }}</textarea>
+    <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="send_enabled" {% if tpl.send_enabled %}checked{% endif %}> Send email when this event fires</label>
+    <div class="flex gap-2">
+      <button type="submit" class="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold">Save</button>
+    </div>
+  </form>
+  {% if preview_user %}
+  <form method="post" class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="send_test" />
+    <p class="text-sm text-slate-600 mb-2">Send a test to <strong>{{ preview_user.email }}</strong> (first user in database).</p>
+    <button type="submit" class="text-sm font-semibold text-indigo-700 hover:underline">Send test</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
+

@@ -1,0 +1,245 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}My Commission - Burjex Prime{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">My Commission &amp; Rebates</h1>
+  <p class="portal-page-subtitle">Track your referred client trading volumes, rebate settings, and commission payout summaries.</p>
+
+  <!-- Premium Tabbed Interface Navigation -->
+  <div class="flex border-b border-gray-200 mb-6" style="border-bottom-color: var(--portal-border);">
+    <button onclick="switchTab('rebates')" id="tab-btn-rebates" class="py-2.5 px-5 font-semibold text-sm focus:outline-none transition-colors border-b-2" style="border-bottom-color: var(--portal-brand-primary); color: var(--portal-brand-primary);">
+      Rebate History
+    </button>
+    <button onclick="switchTab('summary')" id="tab-btn-summary" class="py-2.5 px-5 font-semibold text-sm focus:outline-none transition-colors border-b-2" style="border-bottom-color: transparent; color: var(--portal-text-muted);">
+      Earnings Summary
+    </button>
+    <button onclick="switchTab('clients')" id="tab-btn-clients" class="py-2.5 px-5 font-semibold text-sm focus:outline-none transition-colors border-b-2" style="border-bottom-color: transparent; color: var(--portal-text-muted);">
+      Client-wise Volume
+    </button>
+  </div>
+
+  <!-- Tab 1: Rebate History -->
+  <div id="tab-content-rebates" class="space-y-4 tab-content">
+    <div class="portal-card">
+      <div class="portal-card-header">
+        <div class="portal-card-title">Rebate Transactions</div>
+      </div>
+
+      <div class="portal-table-wrap overflow-x-auto w-full">
+        <table class="portal-table min-w-full whitespace-nowrap">
+          <thead>
+            <tr>
+              <th>Date/Time (UTC)</th>
+              <th>Deal ID</th>
+              <th>Trading Account (MT5 Login)</th>
+              <th>Symbol</th>
+              <th>Volume (Lots)</th>
+              <th>Commission</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in history_rows %}
+              <tr>
+                <td>{{ r.close_time|date:"Y-m-d H:i:s" }}</td>
+                <td class="font-mono text-xs">{{ r.deal_id }}</td>
+                <td class="font-mono text-sm">{{ r.login_id }}</td>
+                <td class="font-semibold">{{ r.symbol }}</td>
+                <td>{{ r.volume_lots.normalize }}</td>
+                <td class="font-bold" style="color: var(--portal-brand-primary);">${{ r.rebate_amount|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6" class="text-center py-4" style="color:var(--portal-text-muted);">No rebate deals processed yet.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if page_obj.paginator.num_pages > 1 %}
+      <div class="mt-4 flex items-center justify-between text-sm">
+        {% if page_obj.has_previous %}
+          <a class="portal-btn-secondary px-3 py-1" href="?page={{ page_obj.previous_page_number }}">Previous Page</a>
+        {% else %}
+          <div></div>
+        {% endif %}
+        <span style="color:var(--portal-text-muted);">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+          <a class="portal-btn-secondary px-3 py-1" href="?page={{ page_obj.next_page_number }}">Next Page</a>
+        {% else %}
+          <div></div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Tab 2: Earnings Summary -->
+  <div id="tab-content-summary" class="grid grid-cols-1 gap-6 tab-content hidden" style="display: none;">
+    <!-- Daily Earnings -->
+    <div class="portal-card">
+      <div class="portal-card-header">
+        <div class="portal-card-title">Daily Earnings Summary (Last 30 Days)</div>
+      </div>
+      <div class="portal-table-wrap overflow-x-auto w-full">
+        <table class="portal-table min-w-full whitespace-nowrap">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Total Lots Traded</th>
+              <th>Total Commission Generated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in daily_earnings %}
+              <tr>
+                <td>{{ row.date|date:"Y-m-d" }}</td>
+                <td class="font-semibold">{{ row.total_lots.normalize }}</td>
+                <td class="font-bold" style="color: var(--portal-brand-primary);">${{ row.total_amount|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="3" class="text-center py-4" style="color:var(--portal-text-muted);">No daily history available.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Weekly & Monthly Side by Side -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Weekly -->
+      <div class="portal-card">
+        <div class="portal-card-header">
+          <div class="portal-card-title">Weekly Earnings</div>
+        </div>
+        <div class="portal-table-wrap overflow-x-auto w-full">
+          <table class="portal-table min-w-full whitespace-nowrap">
+            <thead>
+              <tr>
+                <th>Week Starting</th>
+                <th>Total Lots</th>
+                <th>Commission</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in weekly_earnings %}
+                <tr>
+                  <td>{{ row.week|date:"Y-m-d" }}</td>
+                  <td>{{ row.total_lots.normalize }}</td>
+                  <td class="font-bold" style="color: var(--portal-brand-primary);">${{ row.total_amount|floatformat:2 }}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="3" class="text-center py-4" style="color:var(--portal-text-muted);">No weekly history available.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Monthly -->
+      <div class="portal-card">
+        <div class="portal-card-header">
+          <div class="portal-card-title">Monthly Earnings</div>
+        </div>
+        <div class="portal-table-wrap overflow-x-auto w-full">
+          <table class="portal-table min-w-full whitespace-nowrap">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Total Lots</th>
+                <th>Commission</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in monthly_earnings %}
+                <tr>
+                  <td>{{ row.month|date:"F Y" }}</td>
+                  <td>{{ row.total_lots.normalize }}</td>
+                  <td class="font-bold" style="color: var(--portal-brand-primary);">${{ row.total_amount|floatformat:2 }}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="3" class="text-center py-4" style="color:var(--portal-text-muted);">No monthly history available.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 3: Client-wise Volume -->
+  <div id="tab-content-clients" class="space-y-4 tab-content hidden" style="display: none;">
+    <div class="portal-card">
+      <div class="portal-card-header">
+        <div class="portal-card-title">Volume &amp; Commission by Referred Account</div>
+      </div>
+
+      <div class="portal-table-wrap overflow-x-auto w-full">
+        <table class="portal-table min-w-full whitespace-nowrap">
+          <thead>
+            <tr>
+              <th>Client Name</th>
+              <th>Trading Login ID</th>
+              <th>Total Lots Traded</th>
+              <th>Total Commission Generated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in client_rows %}
+              <tr>
+                <td>{{ r.client_name }}</td>
+                <td class="font-mono text-sm">{{ r.login_id }}</td>
+                <td class="font-semibold">{{ r.total_lots.normalize }}</td>
+                <td class="font-bold" style="color: var(--portal-brand-primary);">${{ r.total_amount|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="4" class="text-center py-4" style="color:var(--portal-text-muted);">No client activity recorded.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function switchTab(tabId) {
+      // Hide all tabs
+      var tabs = document.getElementsByClassName("tab-content");
+      for (var i = 0; i < tabs.length; i++) {
+        tabs[i].style.display = "none";
+      }
+
+      // Deactivate button styling
+      var buttons = ["rebates", "summary", "clients"];
+      buttons.forEach(function(b) {
+        var el = document.getElementById("tab-btn-" + b);
+        if (el) {
+          el.style.borderBottomColor = "transparent";
+          el.style.color = "var(--portal-text-muted)";
+        }
+      });
+
+      // Show selected tab
+      var activeTab = document.getElementById("tab-content-" + tabId);
+      if (activeTab) {
+        activeTab.style.display = (tabId === "summary") ? "grid" : "block";
+      }
+
+      // Activate selected button styling
+      var activeBtn = document.getElementById("tab-btn-" + tabId);
+      if (activeBtn) {
+        activeBtn.style.borderBottomColor = "var(--portal-brand-primary)";
+        activeBtn.style.color = "var(--portal-brand-primary)";
+      }
+    }
+  </script>
+{% endblock %}

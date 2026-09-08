@@ -1,0 +1,74 @@
+{% extends "sales_panel/base.html" %}
+
+{% block title %}Activity Log - Sales CRM{% endblock %}
+{% block admin_shell_page_title %}Activity Log{% endblock %}
+
+{% block admin_content %}
+  {% include "sales_panel/includes/table_page_styles.html" %}
+
+  <div class="bp-page-header">
+    <div>
+      <h1 class="bp-page-title"><i class="fa-solid fa-clock-rotate-left" style="margin-right:0.5rem;color:var(--bp-primary);"></i>Activity Log</h1>
+      <p class="bp-page-subtitle">{% if sales_manager_activity %}Notes and touches on your assigned leads and clients.{% else %}Recent staff and admin audit events. For filters and exports, use the enterprise audit log in admin.{% endif %}</p>
+    </div>
+  </div>
+
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <span class="bp-card-header-title"><i class="fa-solid fa-list-ul" style="margin-right:0.5rem;"></i>{% if sales_manager_activity %}Activity Entries{% else %}Audit Events{% endif %}</span>
+    </div>
+    <div class="bp-card-body" style="padding:0;">
+      {% if logs %}
+        <div class="bp-table -wrap">
+          <table class="bp-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                {% if sales_manager_activity %}
+                <th>Channel</th>
+                <th>Detail</th>
+                <th>By</th>
+                {% else %}
+                <th>Action</th>
+                <th>Entity</th>
+                <th>Actor</th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for log in logs %}
+                <tr>
+                  <td style="white-space:nowrap;">
+                    <span class="bp-caption" style="color:var(--bp-text);"><i class="fa-regular fa-clock" style="margin-right:0.35rem;color:var(--bp-primary);opacity:0.7;"></i>{{ log.created_at|date:"M j, Y H:i" }}</span>
+                  </td>
+                  {% if sales_manager_activity %}
+                  <td><span class="bp-badge bp-badge-info"><i class="fa-solid fa-satellite-dish" style="margin-right:0.3rem;"></i>{{ log.get_channel_display }}</span></td>
+                  <td style="max-width:400px;">{{ log.body|truncatechars:120|default:"—" }}</td>
+                  <td><span class="bp-small" style="color:var(--bp-text);"><i class="fa-regular fa-user" style="margin-right:0.3rem;"></i>{{ log.created_by.email|default:"—" }}</span></td>
+                  {% else %}
+                  <td><span class="bp-badge bp-badge-primary"><i class="fa-solid fa-bolt" style="margin-right:0.3rem;"></i>{{ log.action }}</span></td>
+                  <td><span class="bp-small">{{ log.entity_type }}{% if log.entity_id %} <span class="bp-badge bp-badge-neutral">#{{ log.entity_id }}</span>{% endif %}</span></td>
+                  <td><span class="bp-small" style="color:var(--bp-text);"><i class="fa-regular fa-user" style="margin-right:0.3rem;"></i>{{ log.actor_email|default:"—" }}</span></td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div style="padding:3rem 2rem;text-align:center;">
+          <i class="fa-solid fa-inbox" style="font-size:2.5rem;color:var(--bp-border);margin-bottom:1rem;display:block;"></i>
+          <p class="bp-caption" style="color:var(--bp-text);opacity:0.6;">No audit entries yet.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not sales_manager_activity %}
+  <div style="margin-top:1rem;">
+    <a href="{% url 'admin-enterprise-audit' %}" class="bp-btn bp-btn-outline bp-btn-sm">
+      <i class="fa-solid fa-arrow-up-right-from-square" style="margin-right:0.4rem;"></i>Full Audit Log in Admin
+    </a>
+  </div>
+  {% endif %}
+{% endblock %}

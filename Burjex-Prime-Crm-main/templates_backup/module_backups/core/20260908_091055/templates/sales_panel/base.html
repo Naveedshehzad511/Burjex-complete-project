@@ -1,0 +1,144 @@
+{% extends "admin_panel/base.html" %}
+{% load static %}
+
+{% block crm_sidebar_brand_extra %}
+  <link rel="stylesheet" href="{% static 'css/sales-enterprise.css' %}?v=salescrm-20260610-3">
+  <span class="bp-sidebar-brand-tag sales-crm-brand-tag">Sales CRM</span>
+{% endblock %}
+
+{% block crm_sidebar_nav %}
+  {# ── Overview ── #}
+  <a href="{% url 'sales-dashboard' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'dashboard' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-gauge-high bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Sales Dashboard</span>
+  </a>
+
+  {# ── Funnel Pipeline ── #}
+  <div class="bp-nav-section sales-sidebar-section-label">Funnel Pipeline</div>
+
+  <a href="{% url 'sales-funnel' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'funnel' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-filter bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Leads / Funnel</span>
+  </a>
+
+  {# Funnel stages — indented #}
+  <div class="sales-sidebar-stage-group">
+    <a href="{% url 'sales-funnel-stage' 'visitors' %}" class="bp-nav-link admin-main-link sales-sidebar-stage-link {% if sales_nav_active == 'funnel_visitors' %}active admin-main-link--active{% endif %}">
+      <i class="fa-solid fa-door-open bp-nav-icon" aria-hidden="true"></i>
+      <span>Visitors</span>
+    </a>
+    <a href="{% url 'sales-funnel-stage' 'registered' %}" class="bp-nav-link admin-main-link sales-sidebar-stage-link {% if sales_nav_active == 'funnel_registered' %}active admin-main-link--active{% endif %}">
+      <i class="fa-solid fa-user-plus bp-nav-icon" aria-hidden="true"></i>
+      <span>Registered</span>
+    </a>
+    <a href="{% url 'sales-funnel-stage' 'verified' %}" class="bp-nav-link admin-main-link sales-sidebar-stage-link {% if sales_nav_active == 'funnel_verified' %}active admin-main-link--active{% endif %}">
+      <i class="fa-solid fa-id-card bp-nav-icon" aria-hidden="true"></i>
+      <span>Verified</span>
+    </a>
+    <a href="{% url 'sales-funnel-stage' 'trading' %}" class="bp-nav-link admin-main-link sales-sidebar-stage-link {% if sales_nav_active == 'funnel_trading' %}active admin-main-link--active{% endif %}">
+      <i class="fa-solid fa-chart-line bp-nav-icon" aria-hidden="true"></i>
+      <span>Trading Accounts</span>
+    </a>
+    <a href="{% url 'sales-funnel-stage' 'deposit' %}" class="bp-nav-link admin-main-link sales-sidebar-stage-link {% if sales_nav_active == 'funnel_deposit' %}active admin-main-link--active{% endif %}">
+      <i class="fa-solid fa-coins bp-nav-icon" aria-hidden="true"></i>
+      <span>Deposits</span>
+    </a>
+    <a href="{% url 'sales-funnel-stage' 'active' %}" class="bp-nav-link admin-main-link sales-sidebar-stage-link {% if sales_nav_active == 'funnel_active' %}active admin-main-link--active{% endif %}">
+      <i class="fa-solid fa-bolt bp-nav-icon" aria-hidden="true"></i>
+      <span>Active Clients</span>
+    </a>
+  </div>
+
+  <a href="{% url 'sales-ib-analytics' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'ib_analytics' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-network-wired bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>IB Analytics</span>
+  </a>
+
+  {# ── Operations ── #}
+  <div class="bp-nav-section sales-sidebar-section-label">Operations</div>
+
+  <a href="{% url 'sales-leads' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'leads' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-address-book bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Leads</span>
+  </a>
+  <a href="{% url 'sales-clients' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'clients' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-users bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Clients</span>
+  </a>
+  <a href="{% url 'sales-follow-ups' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'followups' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-phone-volume bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Follow Ups</span>
+  </a>
+  <a href="{% url 'sales-conversions' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'conversions' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-check-double bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Conversions</span>
+  </a>
+  <a href="{% url 'sales-targets' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'targets' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-bullseye bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Targets</span>
+  </a>
+  <a href="{% url 'sales-commission' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'commission' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-percent bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Commission</span>
+  </a>
+
+  {# ── Performance & Reports ── #}
+  <div class="bp-nav-section sales-sidebar-section-label">Analytics</div>
+
+  <a href="{% url 'sales-reports' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'reports' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-file-lines bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Reports</span>
+  </a>
+  <a href="{% url 'sales-revenue' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'revenue' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-sack-dollar bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Revenue</span>
+  </a>
+  <a href="{% url 'sales-performance' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'performance' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-chart-line bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Performance</span>
+  </a>
+  <a href="{% url 'sales-activity-log' %}" class="bp-nav-link admin-main-link {% if sales_nav_active == 'activity' %}active admin-main-link--active{% endif %}">
+    <i class="fa-solid fa-clock-rotate-left bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Activity Log</span>
+  </a>
+
+  {# ── Admin ── #}
+  <div class="bp-nav-section sales-sidebar-section-label">Admin</div>
+
+  <a href="{% url 'admin-crm-sales-managers' %}" class="bp-nav-link admin-main-link">
+    <i class="fa-solid fa-user-tie bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Sales Managers</span>
+  </a>
+  <a href="{% url 'admin-crm-departments' %}" class="bp-nav-link admin-main-link">
+    <i class="fa-solid fa-building bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Departments</span>
+  </a>
+  <a href="{% url 'admin-crm-roles' %}" class="bp-nav-link admin-main-link">
+    <i class="fa-solid fa-shield-halved bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Manager Roles</span>
+  </a>
+  <a href="{% url 'admin-crm-permissions' %}" class="bp-nav-link admin-main-link">
+    <i class="fa-solid fa-sliders bp-nav-icon nav-icon" aria-hidden="true"></i>
+    <span>Permissions</span>
+  </a>
+
+{% endblock %}
+
+{% block crm_topbar_dropdown %}
+  <a href="{% url 'admin-dashboard' %}" class="bp-dropdown-item">
+    <i class="fa-solid fa-gauge-high opacity-60" aria-hidden="true"></i> Admin Dashboard
+  </a>
+  <a href="{% url 'sales-dashboard' %}" class="bp-dropdown-item">
+    <i class="fa-solid fa-chart-pie opacity-60" aria-hidden="true"></i> Main Sales Dashboard
+  </a>
+  <a href="{% url 'admin-profile' %}" class="bp-dropdown-item">
+    <i class="fa-solid fa-user-gear opacity-60" aria-hidden="true"></i> Profile Settings
+  </a>
+  <a href="{% url 'admin-profile-password-change' %}" class="bp-dropdown-item">
+    <i class="fa-solid fa-key opacity-60" aria-hidden="true"></i> Change Password
+  </a>
+  <div class="bp-dropdown-divider admin-user-divider"></div>
+  <a href="{% url 'admin_logout' %}" class="bp-dropdown-item">
+    <i class="fa-solid fa-right-from-bracket opacity-60" aria-hidden="true"></i> Logout
+  </a>
+{% endblock %}

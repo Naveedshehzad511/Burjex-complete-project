@@ -1,0 +1,21 @@
+{% extends "user_portal/base.html" %}
+{% block title %}Change Leverage{% endblock %}
+{% block user_content %}
+  <h1 class="portal-page-heading">Change Leverage</h1>
+  <p class="portal-page-subtitle">Account #{{ mt5.login_id }} — available options up to 1:{{ max_allowed }}</p>
+
+  <div class="portal-card max-w-md">
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="portal-form-label" for="leverage-select">Select Leverage</label>
+        <select id="leverage-select" name="leverage" class="portal-input">
+          {% for lev in leverage_options %}
+            <option value="{{ lev }}" {% if mt5.leverage == lev %}selected{% endif %}>1:{{ lev }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="portal-btn-primary" type="submit">Update Leverage</button>
+    </form>
+  </div>
+{% endblock %}

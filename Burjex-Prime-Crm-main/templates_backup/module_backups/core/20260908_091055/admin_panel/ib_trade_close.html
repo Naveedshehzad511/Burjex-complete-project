@@ -1,0 +1,65 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}IB Trade Close Event{% endblock %}
+{% block admin_content %}
+<div class="max-w-3xl bg-[#FFFFFF] border border-[#E7DCCF] rounded-xl p-6 shadow-sm">
+  <h1 class="text-xl font-semibold mb-4 text-[#6A4B34]">Auto Commission Trigger (Trade Closed)</h1>
+  <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {% csrf_token %}
+    <div class="md:col-span-2">
+      <label class="block text-sm mb-1">Client</label>
+      <select name="client_id" class="w-full border rounded px-3 py-2 text-sm" required>
+        <option value="">Select Client</option>
+        {% for c in clients %}
+          <option value="{{ c.id }}">{{ c.email }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Lots</label>
+      <input name="lots" type="number" step="0.01" class="w-full border rounded px-3 py-2 text-sm" required>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Volume</label>
+      <input name="volume" type="number" step="0.01" class="w-full border rounded px-3 py-2 text-sm" value="0">
+    </div>
+    <div class="md:col-span-2">
+      <label class="block text-sm mb-1">Trade Reference</label>
+      <input name="reference" class="w-full border rounded px-3 py-2 text-sm" placeholder="e.g. MT5-TICKET-12345">
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Symbol</label>
+      <input name="symbol" class="w-full border rounded px-3 py-2 text-sm" placeholder="EURUSD">
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Group</label>
+      <input name="group_name" class="w-full border rounded px-3 py-2 text-sm" placeholder="Standard / Pro / Raw">
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Spread Amount</label>
+      <input name="spread_amount" type="number" step="0.01" value="0" class="w-full border rounded px-3 py-2 text-sm">
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Commission Amount</label>
+      <input name="commission_amount" type="number" step="0.01" value="0" class="w-full border rounded px-3 py-2 text-sm">
+    </div>
+    <div class="md:col-span-2">
+      <label class="block text-sm mb-1">Account type (for matrix / suffix match)</label>
+      <select name="account_type_id" class="w-full border rounded px-3 py-2 text-sm">
+        <option value="">— Optional —</option>
+        {% for at in account_types %}
+          <option value="{{ at.id }}">{{ at.account_name }} ({{ at.account_code }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Hold time (seconds)</label>
+      <input name="hold_seconds" type="number" min="0" class="w-full border rounded px-3 py-2 text-sm" placeholder="optional">
+    </div>
+    <div class="md:col-span-2">
+      <button class="bg-[#6A4B34] text-white px-4 py-2 rounded">Run Auto Commission</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+

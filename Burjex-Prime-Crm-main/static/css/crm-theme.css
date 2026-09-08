@@ -1,0 +1,143 @@
+/**
+ * Forex CRM — global Navy / White design tokens and form controls.
+ * Loaded from base.html; applies to admin and user portals.
+ */
+:root {
+  --crm-navy: #0b3c5d;
+  --crm-navy-dark: #072a42;
+  --crm-navy-hover: #124a73;
+  --crm-accent: #3d6b8c;
+  --crm-accent-soft: #e7eef4;
+  --crm-surface: #ffffff;
+  --crm-muted-bg: #f3f4f6;
+  --crm-border: #e5e7eb;
+  --crm-placeholder: #9ca3af;
+  --crm-text: #0b3c5d;
+  --crm-radius: 0.5rem;
+  --crm-radius-lg: 0.75rem;
+  --crm-focus-ring: rgba(11, 60, 93, 0.18);
+}
+
+.crm-app {
+  color: var(--crm-text);
+}
+
+/* ---- Placeholders (professional light grey) ---- */
+.crm-app input::placeholder,
+.crm-app textarea::placeholder {
+  color: var(--crm-placeholder);
+  opacity: 1;
+}
+
+/* ---- Inputs / selects / textareas: white surface, navy focus ---- */
+.crm-app input[type="text"],
+.crm-app input[type="email"],
+.crm-app input[type="password"],
+.crm-app input[type="number"],
+.crm-app input[type="tel"],
+.crm-app input[type="url"],
+.crm-app input[type="search"],
+.crm-app input[type="date"],
+.crm-app input[type="datetime-local"],
+.crm-app input[type="time"],
+.crm-app textarea,
+.crm-app select {
+  background-color: var(--crm-surface);
+  border: 1px solid var(--crm-border);
+  border-radius: var(--crm-radius);
+  color: var(--crm-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.crm-app input[type="text"]:focus,
+.crm-app input[type="email"]:focus,
+.crm-app input[type="password"]:focus,
+.crm-app input[type="number"]:focus,
+.crm-app input[type="tel"]:focus,
+.crm-app input[type="url"]:focus,
+.crm-app input[type="search"]:focus,
+.crm-app input[type="date"]:focus,
+.crm-app input[type="datetime-local"]:focus,
+.crm-app input[type="time"]:focus,
+.crm-app textarea:focus,
+.crm-app select:focus {
+  outline: none;
+  border-color: var(--crm-navy);
+  box-shadow: 0 0 0 3px var(--crm-focus-ring);
+}
+
+.crm-app select {
+  cursor: pointer;
+}
+
+.crm-app select option:hover,
+.crm-app select option:checked {
+  background-color: var(--crm-accent-soft);
+  color: var(--crm-navy);
+}
+
+/* ---- Navy “button bar” container (action groups) ---- */
+.crm-btn-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(180deg, rgba(11, 60, 93, 0.08) 0%, rgba(11, 60, 93, 0.04) 100%);
+  border: 1px solid rgba(11, 60, 93, 0.14);
+  border-radius: var(--crm-radius-lg);
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.crm-btn-bar--end {
+  justify-content: flex-end;
+}
+
+/* Rounded primary / secondary buttons (when using classes below) */
+.crm-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #fff;
+  background-color: var(--crm-navy);
+  border: none;
+  border-radius: var(--crm-radius-lg);
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.crm-btn-primary:hover {
+  background-color: var(--crm-navy-hover);
+  box-shadow: 0 4px 14px rgba(11, 60, 93, 0.22);
+}
+
+.crm-btn-primary:active {
+  transform: translateY(1px);
+}
+
+.crm-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--crm-navy);
+  background: #fff;
+  border: 1px solid rgba(11, 60, 93, 0.25);
+  border-radius: var(--crm-radius-lg);
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.crm-btn-secondary:hover {
+  background: var(--crm-accent-soft);
+  border-color: var(--crm-navy);
+}

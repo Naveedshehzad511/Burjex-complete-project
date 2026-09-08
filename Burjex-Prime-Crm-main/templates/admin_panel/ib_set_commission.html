@@ -1,0 +1,91 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Set IB Commission{% endblock %}
+{% block admin_content %}
+<div class="bg-indigo-600 text-white rounded-xl px-4 py-3 mb-4 shadow-sm"><h1 class="text-xl font-semibold">User Commission List</h1></div>
+<div class="bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl p-4 shadow-sm mb-4">
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+    <form class="flex items-center gap-2 w-full sm:w-auto">
+      <input name="q" value="{{ filters.q }}" class="border dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded px-3 py-2 text-sm flex-1 sm:min-w-[260px] outline-none focus:ring focus:ring-indigo-500" placeholder="Search">
+      <button class="bg-indigo-600 text-white rounded px-3 py-2 text-sm font-semibold hover:bg-opacity-90 whitespace-nowrap">Search</button>
+    </form>
+    <button type="button" onclick="document.getElementById('addUserCommissionModal').classList.remove('hidden')" class="px-3 py-2 rounded bg-indigo-600 text-white text-sm font-semibold hover:bg-opacity-90 whitespace-nowrap">
+      <i class="fa-solid fa-plus mr-1"></i> Add User Commission
+    </button>
+  </div>
+</div>
+<div class="w-full">
+  <div class="bp-card">
+    <div class="bp-card-body bp-s-48">
+      <div class="overflow-x-auto w-full">
+        <table class="bp-table min-w-full whitespace-nowrap">
+          <thead>
+            <tr><th>ID</th><th>Plan Name</th><th>Name</th><th>Email</th><th>Date</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+          {% for r in page_obj.object_list %}
+          <tr>
+          <td>{{ r.id }}</td>
+          <td><strong>{{ r.plan.name }}</strong></td>
+          <td>{{ r.ib_user.display_name }}</td>
+          <td>{{ r.ib_user.email }}</td>
+          <td>{{ r.created_at|date:"Y-m-d H:i" }}</td>
+          <td class="bp-s-90"><a href="{% url 'admin-ib-set-commission' %}?edit={{ r.id }}" class="bp-btn bp-btn-outline bp-btn-xs"><i class="fa-solid fa-pen-to-square"></i> Edit</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="bp-s-91"><i class="fa-solid fa-inbox bp-s-92 block"></i>No user commissions found.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="mt-4 flex items-center justify-between text-sm">
+      <div class="text-slate-500 dark:text-slate-400">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}<a class="px-3 py-1 border dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-300" href="?page={{ page_obj.previous_page_number }}&q={{ filters.q|urlencode }}">Previous</a>{% endif %}
+        {% if page_obj.has_next %}<a class="px-3 py-1 border dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-300" href="?page={{ page_obj.next_page_number }}&q={{ filters.q|urlencode }}">Next</a>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal Form -->
+<div id="addUserCommissionModal" class="fixed inset-0 z-[100] flex items-center justify-center {% if not edit_obj %}hidden{% endif %} bg-black/50 backdrop-blur-sm">
+  <div class="bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
+    <div class="border-b dark:border-slate-800 px-5 py-4 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+      <h3 class="font-bold text-slate-800 dark:text-white">
+        {% if edit_obj %}Edit User Commission{% else %}Add User Commission{% endif %}
+      </h3>
+      <a href="{% url 'admin-ib-set-commission' %}" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xl transition-colors">&times;</a>
+    </div>
+    <form method="post" class="p-5 space-y-4">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="{% if edit_obj %}edit{% else %}add{% endif %}">
+      {% if edit_obj %}<input type="hidden" name="id" value="{{ edit_obj.id }}">{% endif %}
+      
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Select IB</label>
+        <select name="ib_id" class="w-full border dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring focus:ring-indigo-500" required>
+          <option value="">-- Select IB --</option>
+          {% for ib in ib_users %}<option value="{{ ib.id }}" {% if edit_obj and edit_obj.ib_user_id == ib.id %}selected{% endif %}>{{ ib.email }}</option>{% endfor %}
+        </select>
+      </div>
+      
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Select Plan</label>
+        <select name="plan_id" class="w-full border dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring focus:ring-indigo-500" required>
+          <option value="">-- Select Plan --</option>
+          {% for p in plans %}<option value="{{ p.id }}" {% if edit_obj and edit_obj.plan_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+        </select>
+      </div>
+      
+      <div class="pt-2">
+        <button class="w-full bg-indigo-600 hover:bg-opacity-90 text-white rounded-lg px-3 py-2 text-sm font-semibold transition-colors">
+          {% if edit_obj %}Update{% else %}Submit{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,167 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Support Ticket {{ ticket.ticket_number }} - Burjex Prime{% endblock %}
+{% block portal_shell_page_title %}Ticket {{ ticket.ticket_number }}{% endblock %}
+{% block portal_shell_mobile_title %}Ticket {{ ticket.ticket_number }}{% endblock %}
+
+{% block user_content %}
+  <div class="portal-card mb-5">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <h2 class="text-xl font-bold text-slate-900">{{ ticket.subject }}</h2>
+        <div class="text-sm text-slate-500 mt-1 flex flex-wrap items-center gap-2">
+          <span class="inline-flex items-center rounded-md bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10">Category: {{ ticket.get_category_display }}</span>
+          <span class="inline-flex items-center rounded-md bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10">Priority: {{ ticket.get_priority_display }}</span>
+          <span class="inline-flex items-center rounded-md {% if ticket.status == 'RESOLVED' %}bg-emerald-50 text-emerald-700 ring-emerald-600/20{% elif ticket.status == 'CLOSED' %}bg-slate-100 text-slate-700 ring-slate-500/20{% else %}bg-blue-50 text-blue-700 ring-blue-700/10{% endif %} px-2 py-1 text-xs font-medium ring-1 ring-inset">Status: {{ ticket.get_status_display }}</span>
+        </div>
+      </div>
+      <div>
+        <a href="{% url 'user-support' %}" class="portal-btn-secondary inline-flex items-center">
+          <svg class="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+          Back to Tickets
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="portal-card flex flex-col h-[calc(100vh-250px)] min-h-[600px] overflow-hidden p-0 relative shadow-sm border border-slate-200">
+    <!-- Chat History -->
+    <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50 dark:bg-slate-900 flex flex-col gap-6" id="chat-container">
+      
+      <!-- Initial Ticket Description -->
+      <div class="flex justify-end">
+        <div class="max-w-[85%] md:max-w-[75%]">
+          <div class="flex items-end gap-2 justify-end">
+            <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-none px-4 py-3 shadow-sm text-sm">
+              <p class="whitespace-pre-wrap">{{ ticket.description }}</p>
+            </div>
+          </div>
+          <div class="text-xs text-slate-500 mt-1.5 mr-1 text-right font-medium">
+            You • {{ ticket.created_at|date:"M d, Y, h:i a" }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Replies -->
+      {% for reply in replies %}
+        {% if reply.is_admin %}
+          <div class="flex justify-start">
+            <div class="max-w-[85%] md:max-w-[75%]">
+              <div class="flex items-end gap-2">
+                <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-2xl rounded-tl-none px-4 py-3 shadow-sm text-sm">
+                  <p class="whitespace-pre-wrap">{{ reply.message }}</p>
+                  {% if reply.attachment %}
+                    <div class="mt-2">
+                      <a href="{{ reply.attachment.url }}" target="_blank" class="block rounded-lg overflow-hidden border border-slate-200 dark:border-slate-600">
+                        {% if reply.attachment.name|lower|slice:"-4:" in ".jpg,.png,.gif,.jpeg,.webp" %}
+                          <img src="{{ reply.attachment.url }}" alt="Attachment" class="max-w-full h-auto max-h-48 object-contain bg-slate-50 dark:bg-slate-900">
+                        {% else %}
+                          <div class="p-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                            <span class="truncate text-xs">{{ reply.attachment.name|slice:"19:" }}</span>
+                          </div>
+                        {% endif %}
+                      </a>
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="text-xs text-slate-500 mt-1.5 ml-1 font-medium">
+                Support Team • {{ reply.created_at|date:"M d, Y, h:i a" }}
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <div class="flex justify-end">
+            <div class="max-w-[85%] md:max-w-[75%]">
+              <div class="flex items-end gap-2 justify-end">
+                <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-none px-4 py-3 shadow-sm text-sm">
+                  <p class="whitespace-pre-wrap">{{ reply.message }}</p>
+                  {% if reply.attachment %}
+                    <div class="mt-2">
+                      <a href="{{ reply.attachment.url }}" target="_blank" class="block rounded-lg overflow-hidden border border-indigo-400">
+                        {% if reply.attachment.name|lower|slice:"-4:" in ".jpg,.png,.gif,.jpeg,.webp" %}
+                          <img src="{{ reply.attachment.url }}" alt="Attachment" class="max-w-full h-auto max-h-48 object-contain bg-white">
+                        {% else %}
+                          <div class="p-2 bg-indigo-500 text-white flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                            <span class="truncate text-xs">{{ reply.attachment.name|slice:"19:" }}</span>
+                          </div>
+                        {% endif %}
+                      </a>
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="text-xs text-slate-500 mt-1.5 mr-1 text-right font-medium">
+                You • {{ reply.created_at|date:"M d, Y, h:i a" }}
+              </div>
+            </div>
+          </div>
+        {% endif %}
+      {% endfor %}
+
+    </div>
+
+    <!-- Reply Input -->
+    <div class="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-10">
+      {% if ticket.status != "CLOSED" and ticket.status != "RESOLVED" %}
+        <form method="post" action="{% url 'user-ticket-detail' ticket.ticket_number %}" enctype="multipart/form-data" class="flex flex-row gap-3 items-center w-full">
+          {% csrf_token %}
+          <div class="shrink-0 relative">
+            <input type="file" name="attachment" id="reply-attachment" class="hidden" accept="image/*,application/pdf">
+            <label for="reply-attachment" class="cursor-pointer w-11 h-11 flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors bg-white dark:bg-slate-800 shadow-sm" title="Attach file">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+            </label>
+          </div>
+          <div class="flex-1 min-w-0">
+            <textarea 
+              name="message" 
+              class="w-full h-11 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-lg px-4 py-2.5 resize-none text-sm transition-shadow shadow-sm overflow-hidden" 
+              rows="1" 
+              placeholder="Type your reply here..." 
+            ></textarea>
+          </div>
+          <button 
+            type="submit" 
+            class="shrink-0 px-6 h-11 flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors shadow-sm focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 text-sm"
+          >
+            <svg class="w-4 h-4 mr-1.5 sm:mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M3.478 2.404a.75.75 0 00-.926.941l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.404z"></path></svg>
+            <span>Send</span>
+          </button>
+        </form>
+        <script>
+          const fileInput = document.getElementById('reply-attachment');
+          if (fileInput) {
+            fileInput.addEventListener('change', function(e) {
+              const label = document.querySelector('label[for="reply-attachment"]');
+              if (this.files && this.files[0]) {
+                label.classList.add('bg-indigo-100', 'text-indigo-700', 'border-indigo-400', 'dark:bg-indigo-900', 'dark:text-indigo-300', 'dark:border-indigo-600');
+                label.classList.remove('bg-white', 'text-slate-500', 'border-slate-300', 'dark:bg-slate-800', 'dark:text-slate-400', 'dark:border-slate-600');
+                label.title = this.files[0].name;
+              } else {
+                label.classList.remove('bg-indigo-100', 'text-indigo-700', 'border-indigo-400', 'dark:bg-indigo-900', 'dark:text-indigo-300', 'dark:border-indigo-600');
+                label.classList.add('bg-white', 'text-slate-500', 'border-slate-300', 'dark:bg-slate-800', 'dark:text-slate-400', 'dark:border-slate-600');
+                label.title = "Attach file";
+              }
+            });
+          }
+        </script>
+      {% else %}
+        <div class="text-center text-sm font-medium text-slate-500 py-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
+          This ticket is {{ ticket.get_status_display|lower }}. You cannot send further replies.
+        </div>
+      {% endif %}
+    </div>
+    
+    <script>
+      // Auto-scroll to bottom of chat
+      document.addEventListener("DOMContentLoaded", function() {
+        var chatContainer = document.getElementById("chat-container");
+        if (chatContainer) {
+          chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+      });
+    </script>
+  </div>
+{% endblock %}

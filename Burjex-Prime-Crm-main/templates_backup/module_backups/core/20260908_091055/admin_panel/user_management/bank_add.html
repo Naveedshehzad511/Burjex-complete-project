@@ -1,0 +1,47 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}Add User Bank Details{% endblock %}
+{% block um_body %}
+  <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 max-w-xl">
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Select Client</label>
+        <select name="client_id" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" required>
+          <option value="">—</option>
+          {% for c in clients %}
+            <option value="{{ c.id }}">{{ c.email }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Account Name</label>
+        <input name="account_name" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" required />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Account No</label>
+        <input name="account_no" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" required />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Swift Code</label>
+        <input name="swift_code" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">IBAN</label>
+        <input name="iban" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Bank Name</label>
+        <input name="bank_name" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" required />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Bank Address</label>
+        <textarea name="bank_address" rows="2" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"></textarea>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Country</label>
+        <input name="country" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+      </div>
+      <button type="submit" class="bg-indigo-600 text-white rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-indigo-700">Submit</button>
+    </form>
+  </div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "sales_panel/base.html" %}
+{% block title %}IB analytics{% endblock %}
+{% block admin_shell_page_title %}IB analytics{% endblock %}
+{% block admin_content %}
+<div class="p-4 max-w-5xl">
+  <h1 class="text-xl font-semibold mb-4">Introducing brokers</h1>
+  <ul class="space-y-2 text-sm">
+    {% for r in rows %}
+    <li><a class="text-indigo-600" href="{% url 'sales-ib-detail' r.user.id %}">{{ r.email }}</a> — {{ r.code }}</li>
+    {% empty %}
+    <li class="text-slate-500">No IB profiles yet.</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

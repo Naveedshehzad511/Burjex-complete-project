@@ -1,0 +1,106 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Bonus Management{% endblock %}
+
+{% block admin_content %}
+<div class="bp-page-header" style="margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="bp-page-title" style="display:flex; align-items:center;">
+      <i class="fa-solid fa-gift" style="background: linear-gradient(135deg, #f43f5e 0%, #a855f7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-right: 0.5rem;"></i>
+      Bonus Management
+    </h1>
+    <p class="bp-page-subtitle">Manage client trading bonuses, grant funds, and view bonus history.</p>
+  </div>
+</div>
+
+<div class="flex gap-3 text-sm mb-6 flex-wrap">
+  <a class="px-4 py-2 rounded-lg font-bold border transition-colors flex items-center {% if mode == 'give' %}bp-btn btn-gradient text-white border-transparent shadow-md{% else %}bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700{% endif %}" href="{% url 'admin-bonus-give' %}?mode=give">
+    <i class="fa-solid fa-hand-holding-dollar mr-2"></i> Give Bonus
+  </a>
+  <a class="px-4 py-2 rounded-lg font-bold border transition-colors flex items-center {% if mode == 'remove' %}bp-btn btn-gradient text-white border-transparent shadow-md{% else %}bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700{% endif %}" href="{% url 'admin-bonus-remove' %}?mode=remove">
+    <i class="fa-solid fa-minus-circle mr-2"></i> Remove Bonus
+  </a>
+  <a class="px-4 py-2 rounded-lg font-bold border transition-colors flex items-center {% if mode == 'list' %}bp-btn btn-gradient text-white border-transparent shadow-md{% else %}bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700{% endif %}" href="{% url 'admin-bonus-list' %}?mode=list">
+    <i class="fa-solid fa-list mr-2"></i> Bonus List
+  </a>
+</div>
+
+{% if mode != "list" %}
+<div class="bp-card mb-6 shadow-sm">
+  <div class="bp-card-body p-5">
+    <form method="post" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="{{ mode }}">
+      
+      <div class="flex flex-col gap-1.5 md:col-span-1">
+        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">MT5 Account</label>
+        <select name="mt5_id" class="bp-input" required>
+          <option value="">Select Account</option>
+          {% for a in mt5_accounts %}<option value="{{ a.id }}">{{ a.user.email }} — {{ a.login_id }}</option>{% endfor %}
+        </select>
+      </div>
+      
+      <div class="flex flex-col gap-1.5 md:col-span-1">
+        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</label>
+        <input name="amount" type="number" step="0.01" min="0.01" class="bp-input" placeholder="0.00" required>
+      </div>
+      
+      <div class="flex flex-col gap-1.5 md:col-span-1">
+        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Reason</label>
+        <input name="reason" class="bp-input" placeholder="Optional reason">
+      </div>
+      
+      <div class="md:col-span-1">
+        <button type="submit" class="bp-btn btn-gradient w-full justify-center py-2.5 font-bold shadow-md">
+          {% if mode == 'give' %}<i class="fa-solid fa-plus-circle mr-1"></i> Confirm Bonus{% else %}<i class="fa-solid fa-trash-can mr-1"></i> Revoke Bonus{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="overflow-x-auto w-full">
+  <table class="bp-table min-w-full text-sm">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Client</th>
+        <th>MT5 Account</th>
+        <th>Status</th>
+        <th>Amount</th>
+        <th>Reason</th>
+        <th>Granted By</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="font-medium text-slate-600 dark:text-slate-400">{{ r.created_at|date:"Y-m-d H:i" }}</td>
+        <td class="font-bold text-slate-800 dark:text-slate-200">{{ r.user.email }}</td>
+        <td class="text-indigo-600 dark:text-indigo-400 font-medium">{% if r.mt5_account %}{{ r.mt5_account.login_id }}{% else %}—{% endif %}</td>
+        <td>
+          {% if r.status == "PENDING" %}
+            <span class="bp-badge bp-badge-warning">Pending</span>
+          {% elif r.status == "COMPLETED" or r.status == "SUCCESS" %}
+            <span class="bp-badge bp-badge-success">Success</span>
+          {% else %}
+            <span class="bp-badge bp-badge-secondary">{{ r.status }}</span>
+          {% endif %}
+        </td>
+        <td class="font-bold text-emerald-600 dark:text-emerald-400">{{ r.amount }} {{ r.currency }}</td>
+        <td class="text-slate-500">{{ r.reason|default:"-" }}</td>
+        <td class="text-slate-500">{{ r.granted_by.email|default:"-" }}</td>
+      </tr>
+    {% empty %}
+      <tr>
+        <td colspan="7" class="p-8 text-center text-slate-500">
+          <i class="fa-solid fa-folder-open text-2xl mb-2 block text-slate-300"></i>
+          No bonus records found.
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

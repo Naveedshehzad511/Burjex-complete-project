@@ -1,0 +1,16 @@
+﻿STOP LAPTOP / OLD-PC BRIDGE — MANDATORY FOR THIS ENVIRONMENT
+============================================================
+Feed path is Windows Server ONLY:
+
+  Server: 5.226.139.8
+  Ingest: http://127.0.0.1:4300  (and public http://5.226.139.8:4300)
+  Bridge service: BurjexMt5Bridge (NSSM, AUTO_START)
+  FeedUrl in config.json: http://127.0.0.1:4300
+
+DO NOT use:
+  - Laptop MT5 bridge
+  - Old VPS 187.127.215.195 as feed/ingest target for this stack
+
+Old VPS may stay up for CRM fallback only — NOT for price feed.
+
+Two bridges = duplicate/fighting ticks. Stop laptop bridge permanently.

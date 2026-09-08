@@ -1,0 +1,10 @@
+<div style="padding:18px 20px 8px 20px;text-align:{{ settings.logo_align|default:'center' }};">
+  {% if settings.logo and settings.logo.url %}
+    <img src="{{ settings.logo.url }}" alt="{{ company_name|default:'Company' }}" style="max-height:56px;max-width:240px;display:inline-block;vertical-align:middle;" />
+  {% endif %}
+  {% if show_company_name_in_header %}
+    <div style="margin-top:8px;font-size:18px;font-weight:700;line-height:1.25;color:{{ settings.text_color|default:'#FFFFFF' }};">
+      {{ company_name }}
+    </div>
+  {% endif %}
+</div>

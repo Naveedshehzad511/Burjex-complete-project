@@ -1,0 +1,304 @@
+# ============================================================================
+#  Burjex Prime — IP-ONLY production stack: Django CRM + B-Trader.
+#
+#  Same services as docker-compose.prod.yml, but the edge runs Caddyfile.ip:
+#  no domain, no ACME, no TLS — every service is reached as http://<VPS_IP>:PORT.
+#  This is a STANDALONE file, not an override: use it with a single -f.
+#
+#  Run from the repo root:
+#    docker compose -f deploy/docker-compose.ip.yml --env-file deploy/.env.prod.ip up -d --build
+#
+#  Published host ports (see deploy/README-IP.md for the full table):
+#    8000  CRM        4100  BT REST      4101  BT WebSocket
+#    4200  BT admin   4300  MT5 ingest   4400  BT web trader (optional)
+# ============================================================================
+
+name: burjex
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # ==========================================================================
+  #  Edge — plain-HTTP reverse proxy, one listener per service.
+  #  Still the only container publishing ports: it serves Django's static and
+  #  media off disk (this project has no WhiteNoise) and keeps the WebSocket
+  #  transport timeouts disabled for the price/account sockets.
+  # ==========================================================================
+  caddy:
+    image: caddy:2-alpine
+    container_name: burjex_caddy
+    <<: *restart
+    ports:
+      - '80:80'       # Django CRM (standard HTTP — mobile/carrier-safe)
+      - '8000:8000'   # Django CRM (legacy / desktop)
+      - '4100:4100'   # B-Trader REST gateway
+      - '4101:4101'   # B-Trader WebSocket
+      - '4200:4200'   # B-Trader admin dashboard (static)
+      - '4300:4300'   # MT5 tick ingest  → market-data:4200
+      - '4400:4400'   # B-Trader web trader (static, optional)
+    env_file: .env.prod.ip
+    volumes:
+      - ./Caddyfile.ip:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      # Django's collected static + uploaded media, served straight off disk.
+      - crm_static:/srv/crm/static:ro
+      - crm_media:/srv/crm/media:ro
+      # Flutter web builds on the host (see README-IP / windows-server README).
+      # Override paths via BURJEX_WEB_* in the --env-file (Windows Server pack sets these).
+      - ${BURJEX_WEB_ADMIN:-/opt/burjex/web/admin}:/srv/btrader-admin:ro
+      - ${BURJEX_WEB_TRADER:-/opt/burjex/web/trader}:/srv/btrader-trader:ro
+    depends_on: [crm-web, btrader-gateway, btrader-ws, btrader-market-data]
+    networks: [edge]
+
+  # ==========================================================================
+  #  DJANGO CRM
+  # ==========================================================================
+  crm-postgres:
+    image: postgres:16-alpine
+    container_name: crm_postgres
+    <<: *restart
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - crm_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [crm_internal]
+
+  crm-redis:
+    image: redis:7-alpine
+    container_name: crm_redis
+    <<: *restart
+    command: >
+      redis-server --requirepass ${CRM_REDIS_PASSWORD} --appendonly yes
+      --maxmemory 512mb --maxmemory-policy noeviction
+    volumes:
+      - crm_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${CRM_REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [crm_internal]
+
+  # Django under an ASGI server: config/asgi.py routes both HTTP and the
+  # live_chat WebSockets, so a plain WSGI gunicorn would silently drop chat.
+  crm-web:
+    build:
+      context: ../Burjex-Prime-Crm-main
+      dockerfile: ../deploy/crm/Dockerfile
+    image: burjex/crm:latest
+    container_name: crm_web
+    <<: *restart
+    env_file: .env.prod.ip
+    command: >-
+      sh -lc "python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${CRM_WEB_WORKERS:-3} --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile -"
+    volumes:
+      - crm_static:/app/staticfiles
+      - crm_media:/app/media
+      - crm_logs:/app/logs
+      - crm_backups:/app/storage/backups
+    depends_on:
+      crm-postgres: { condition: service_healthy }
+      crm-redis: { condition: service_healthy }
+    # enterprise.views.health_ready — 200 once the DB is reachable, 503 until
+    # then. Requires 127.0.0.1 in DJANGO_ALLOWED_HOSTS or Django answers 400.
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8000/health/ready/']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    # edge → Caddy reaches it; also lets the CRM call http://btrader-gateway:4100.
+    networks: [crm_internal, edge]
+
+  crm-worker:
+    build:
+      context: ../Burjex-Prime-Crm-main
+      dockerfile: ../deploy/crm/Dockerfile
+    image: burjex/crm:latest
+    container_name: crm_worker
+    <<: *restart
+    env_file: .env.prod.ip
+    command: celery -A config worker -l info --concurrency=${CELERY_CONCURRENCY:-4}
+    volumes:
+      - crm_media:/app/media
+      - crm_logs:/app/logs
+      - crm_backups:/app/storage/backups
+    depends_on:
+      crm-web: { condition: service_healthy }
+    networks: [crm_internal, edge]
+
+  crm-beat:
+    build:
+      context: ../Burjex-Prime-Crm-main
+      dockerfile: ../deploy/crm/Dockerfile
+    image: burjex/crm:latest
+    container_name: crm_beat
+    <<: *restart
+    env_file: .env.prod.ip
+    command: celery -A config beat -l info --schedule /tmp/celerybeat-schedule
+    depends_on:
+      crm-web: { condition: service_healthy }
+    networks: [crm_internal, edge]
+
+  # ==========================================================================
+  #  B-TRADER
+  # ==========================================================================
+  btrader-postgres:
+    image: postgres:16-alpine
+    container_name: btrader_postgres
+    <<: *restart
+    environment:
+      POSTGRES_USER: ${BT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${BT_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${BT_POSTGRES_DB}
+    volumes:
+      - btrader_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${BT_POSTGRES_USER} -d ${BT_POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [btrader_internal]
+
+  btrader-redis:
+    image: redis:7-alpine
+    container_name: btrader_redis
+    <<: *restart
+    command: >
+      redis-server --requirepass ${BT_REDIS_PASSWORD} --appendonly yes
+      --maxmemory 512mb --maxmemory-policy noeviction
+    volumes:
+      - btrader_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${BT_REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [btrader_internal]
+
+  # Tenant comes from the X-BT-Tenant header here, not the Host — see
+  # apps/gateway-api/src/common/tenant.middleware.ts, which checks the header
+  # first and only then falls back to a hostname lookup.
+  btrader-gateway:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: gateway-api } }
+    container_name: btrader_gateway
+    <<: *restart
+    expose: ['4100']
+    env_file: .env.prod.ip
+    environment:
+      NODE_ENV: production
+      API_PORT: '4100'
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+    # Apply Prisma schema on boot so engine/gateway never race an empty DB.
+    command: >-
+      sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
+      cd /app/apps/gateway-api && exec node dist/main.js"
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+    volumes:
+      - btrader_uploads:/app/uploads
+    networks: [btrader_internal, edge]
+
+  # The realtime endpoint. Listens on the ROOT path and authenticates from
+  # `?token=`; the tenant comes out of the JWT claims, so it never needs a
+  # hostname. Shares JWT_SECRET with the gateway.
+  btrader-ws:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: ws-gateway } }
+    container_name: btrader_ws
+    <<: *restart
+    expose: ['4101']
+    env_file: .env.prod.ip
+    environment:
+      NODE_ENV: production
+      WS_PORT: '4101'
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+    depends_on:
+      btrader-redis: { condition: service_healthy }
+    networks: [btrader_internal, edge]
+
+  btrader-engine:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: trading-engine } }
+    container_name: btrader_engine
+    <<: *restart
+    env_file: .env.prod.ip
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+      # Wait for gateway boot (includes prisma db push) so tables exist.
+      btrader-gateway: { condition: service_started }
+    networks: [btrader_internal]
+
+  btrader-market-data:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: market-data } }
+    container_name: btrader_market_data
+    <<: *restart
+    env_file: .env.prod.ip
+    environment:
+      NODE_ENV: production
+      # Prefer fully-formed BTRADER_* URLs from .env.prod.ip (set by deploy).
+      # Falling back to BT_* pieces still requires --env-file .env.prod.ip.
+      DATABASE_URL: ${BTRADER_DATABASE_URL}
+      REDIS_URL: ${BTRADER_REDIS_URL}
+      # Unchanged from the TLS setup: the ingest server still listens on 4200
+      # INSIDE the container. Caddy publishes it on host port 4300 because 4200
+      # on the host serves the admin dashboard.
+      LP_BRIDGE_DRIVER: ${LP_BRIDGE_DRIVER:-mt5-ingest}
+      MT5_INGEST_PORT: '4200'
+      MT5_FEED_TOKEN: ${MT5_FEED_TOKEN:-}
+      MT5_SYMBOL_SUFFIX: ${MT5_SYMBOL_SUFFIX:-}
+      MT5_MAX_TICK_AGE_MS: ${MT5_MAX_TICK_AGE_MS:-0}
+      CANDLE_FLUSH_SCAN_MS: ${CANDLE_FLUSH_SCAN_MS:-5000}
+      CANDLE_TIP_MIN_MS: ${CANDLE_TIP_MIN_MS:-20000}
+      CANDLE_BATCH_SIZE: ${CANDLE_BATCH_SIZE:-80}
+      CANDLE_MAX_PER_FLUSH: ${CANDLE_MAX_PER_FLUSH:-400}
+      # Yield longer between history flush cycles so /ingest tick ACKs stay snappy.
+      CANDLE_FLUSH_YIELD_MS: ${CANDLE_FLUSH_YIELD_MS:-75}
+      CANDLE_HISTORY_QUEUE_CAP: ${CANDLE_HISTORY_QUEUE_CAP:-40000}
+    expose: ['4200']
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+      btrader-gateway: { condition: service_started }
+    networks: [btrader_internal, edge]
+
+volumes:
+  caddy_data:
+  caddy_config:
+  crm_pg:
+  crm_redis:
+  crm_static:
+  crm_media:
+  crm_logs:
+  crm_backups:
+  btrader_pg:
+  btrader_redis:
+  btrader_uploads:
+
+networks:
+  # Public-facing hop: Caddy ↔ app containers, and CRM ↔ btrader-gateway.
+  edge:
+    name: burjex_edge
+    driver: bridge
+  # CRM's private data plane — Postgres/Redis are unreachable from B-Trader.
+  crm_internal:
+    name: burjex_crm_internal
+    driver: bridge
+  # B-Trader's private data plane — mirrors the upstream infra compose.
+  btrader_internal:
+    name: btrader_internal
+    driver: bridge

@@ -1,0 +1,133 @@
+{% extends "sales_layout.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block admin_shell_page_title %}{{ page_title }}{% endblock %}
+{% block admin_content %}
+<div class="max-w-5xl mx-auto px-2 pb-12">
+  <h1 class="text-xl font-semibold text-slate-900 mb-2">{{ page_title }}</h1>
+  <p class="text-sm text-slate-500 mb-2">Three layers: <strong>CRM role</strong> (template per staff type), <strong>department</strong> (org-wide defaults), <strong>user</strong> (per-manager overrides). Admins and bankers always have full access.</p>
+  <p class="text-sm mb-6">
+    <a href="{% url 'admin-crm-roles' %}" class="text-indigo-600 font-semibold hover:underline">CRM roles</a>
+    <span class="text-slate-300 mx-2">|</span>
+    <a href="{% url 'admin-crm-departments' %}" class="text-indigo-600 font-medium hover:underline">Departments</a>
+    <span class="text-slate-300 mx-2">|</span>
+    <a href="{% url 'admin-crm-sales-managers' %}" class="text-indigo-600 font-medium hover:underline">Sales managers</a>
+    <span class="text-slate-300 mx-2">|</span>
+    <a href="{% url 'admin-account-managers' %}" class="text-indigo-600 font-medium hover:underline">Account managers</a>
+  </p>
+  <div class="grid gap-8 lg:grid-cols-2">
+    <form method="post" class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+      {% csrf_token %}
+      <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Department permission</h2>
+      <p class="text-xs text-slate-500">Applies to all staff in that department unless a role or user rule overrides.</p>
+      <input type="hidden" name="target" value="department" />
+      <label class="block text-sm font-medium text-slate-700">Department
+        <select name="target_id" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+          <option value="">Select department</option>
+          {% for d in departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="block text-sm font-medium text-slate-700">Permission
+        <select name="permission_code" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+          {% for folder, items in perm_folders %}
+          <optgroup label="{{ folder }}">
+            {% for code, label in items %}
+            <option value="{{ code }}">{{ label }} ({{ code }})</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" name="granted" checked />
+        Granted
+      </label>
+      <button type="submit" class="rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-semibold hover:bg-indigo-700">Save department rule</button>
+    </form>
+
+    <form method="post" class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+      {% csrf_token %}
+      <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">CRM role permission</h2>
+      <p class="text-xs text-slate-500">Fine-tune a role template. For bulk editing, use the <a href="{% url 'admin-crm-roles' %}" class="text-indigo-600 font-medium hover:underline">role matrix</a>.</p>
+      <input type="hidden" name="target" value="role" />
+      <label class="block text-sm font-medium text-slate-700">Role
+        <select name="target_id" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+          <option value="">Select role</option>
+          {% for r in crm_roles %}<option value="{{ r.id }}">{{ r.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="block text-sm font-medium text-slate-700">Permission
+        <select name="permission_code" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+          {% for folder, items in perm_folders %}
+          <optgroup label="{{ folder }}">
+            {% for code, label in items %}
+            <option value="{{ code }}">{{ label }} ({{ code }})</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" name="granted" checked />
+        Granted
+      </label>
+      <button type="submit" class="rounded-lg bg-slate-800 text-white px-5 py-2 text-sm font-semibold hover:bg-slate-900">Save role rule</button>
+    </form>
+  </div>
+
+  <form method="post" class="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+    {% csrf_token %}
+    <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Sales manager (user) override</h2>
+    <p class="text-xs text-slate-500">Overrides department and role for that user only.</p>
+    <input type="hidden" name="target" value="user" />
+    <label class="block text-sm font-medium text-slate-700">Manager
+      <select name="target_id" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+        <option value="">Select manager</option>
+        {% for u in staff_users %}<option value="{{ u.id }}">{{ u.email }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="block text-sm font-medium text-slate-700">Permission
+      <select name="permission_code" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+        {% for folder, items in perm_folders %}
+        <optgroup label="{{ folder }}">
+          {% for code, label in items %}
+          <option value="{{ code }}">{{ label }} ({{ code }})</option>
+          {% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+      <input type="checkbox" name="granted" checked />
+      Granted
+    </label>
+    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-semibold hover:bg-indigo-700">Save user override</button>
+  </form>
+
+  <div class="grid gap-6 md:grid-cols-3 mt-10 text-sm">
+    <div>
+      <h3 class="font-semibold text-slate-800 mb-2">Departments</h3>
+      <ul class="text-slate-600 space-y-1">
+        {% for d in departments %}
+        <li><span class="font-mono text-xs">{{ d.pk }}</span> — {{ d.name }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div>
+      <h3 class="font-semibold text-slate-800 mb-2">CRM roles</h3>
+      <ul class="text-slate-600 space-y-1">
+        {% for r in crm_roles %}
+        <li><span class="font-mono text-xs">{{ r.pk }}</span> — {{ r.name }} <a href="{% url 'admin-crm-role-permissions' r.pk %}" class="text-indigo-600 text-xs hover:underline">matrix</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div>
+      <h3 class="font-semibold text-slate-800 mb-2">Sales managers</h3>
+      <ul class="text-slate-600 space-y-1 max-h-48 overflow-y-auto">
+        {% for u in staff_users %}
+        <li><span class="font-mono text-xs">{{ u.pk }}</span> — {{ u.email }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

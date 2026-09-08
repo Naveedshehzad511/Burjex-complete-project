@@ -1,0 +1,103 @@
+{# scope: "admin" or "user", obj: AdminAuthBrandingSettings or UserAuthBrandingSettings #}
+<div class="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-sm space-y-6">
+  <input type="hidden" name="branding_scope" value="{{ scope }}" />
+  <p class="text-xs text-slate-500">
+    {% if scope == "admin" %}
+      Applies to <code class="text-xs bg-slate-100 px-1 rounded">/admin/login/</code>, admin TOTP, and admin CRM company name / colours. Does not affect client pages.
+    {% else %}
+      Applies to <code class="text-xs bg-slate-100 px-1 rounded">/user/login/</code>, <code class="text-xs bg-slate-100 px-1 rounded">/login/</code>, signup, forgot password, user TOTP, and client portal theme text.
+    {% endif %}
+  </p>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <label class="block sm:col-span-2">
+      <span class="text-sm font-medium text-slate-700">Company name</span>
+      <input type="text" name="{{ scope }}_company_name" value="{{ obj.company_name }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+    </label>
+    <label class="block sm:col-span-2">
+      <span class="text-sm font-medium text-slate-700">Welcome text</span>
+      <input type="text" name="{{ scope }}_welcome_text" value="{{ obj.welcome_text }}" placeholder="Welcome Back" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+    </label>
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">Primary colour</span>
+      <input type="text" name="{{ scope }}_primary_color" value="{{ obj.primary_color }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono" />
+    </label>
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">Secondary colour</span>
+      <input type="text" name="{{ scope }}_secondary_color" value="{{ obj.secondary_color }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono" />
+    </label>
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">Button colour</span>
+      <input type="text" name="{{ scope }}_button_color" value="{{ obj.button_color }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono" />
+    </label>
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">Panel background (hex)</span>
+      <input type="text" name="{{ scope }}_panel_background_color" value="{{ obj.panel_background_color }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono" />
+    </label>
+    <label class="block sm:col-span-2">
+      <span class="text-sm font-medium text-slate-700">Font style (CSS font-family)</span>
+      <input type="text" name="{{ scope }}_font_style" value="{{ obj.font_style }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+    </label>
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">Body text size (px)</span>
+      <input type="number" name="{{ scope }}_text_size_px" value="{{ obj.text_size_px }}" min="10" max="24" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+    </label>
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">Heading size (px)</span>
+      <input type="number" name="{{ scope }}_heading_size_px" value="{{ obj.heading_size_px }}" min="16" max="48" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+    </label>
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">Logo size</span>
+      <select name="{{ scope }}_logo_size" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+        <option value="small" {% if obj.logo_size == "small" %}selected{% endif %}>Small</option>
+        <option value="medium" {% if obj.logo_size == "medium" or not obj.logo_size %}selected{% endif %}>Medium</option>
+        <option value="large" {% if obj.logo_size == "large" %}selected{% endif %}>Large</option>
+      </select>
+    </label>
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">Logo position</span>
+      <select name="{{ scope }}_logo_position" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+        <option value="center" {% if obj.logo_position == "center" or not obj.logo_position %}selected{% endif %}>Center</option>
+        <option value="left" {% if obj.logo_position == "left" %}selected{% endif %}>Left</option>
+        <option value="right" {% if obj.logo_position == "right" %}selected{% endif %}>Right</option>
+      </select>
+    </label>
+    <label class="block sm:col-span-2">
+      <span class="text-sm font-medium text-slate-700">Background logo opacity (0.05–0.2)</span>
+      <input type="number" name="{{ scope }}_logo_opacity" value="{{ obj.logo_opacity|default:0.1 }}" min="0.05" max="0.2" step="0.01" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+    </label>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/80">
+      <div class="text-xs font-medium text-slate-600 mb-2">Header logo (PNG, JPG — max 2MB)</div>
+      {% if obj.logo %}
+        <img src="{{ obj.logo.url }}?v={{ obj.updated_at|date:'YmdHis' }}" alt="" class="max-h-16 object-contain mb-2" />
+      {% else %}
+        <p class="text-xs text-slate-500 mb-2">No logo uploaded.</p>
+      {% endif %}
+      <input type="file" name="{{ scope }}_logo" accept=".png,.jpg,.jpeg,.svg,.webp" class="w-full text-xs" />
+      <label class="inline-flex items-center gap-2 mt-2 text-xs text-slate-600">
+        <input type="checkbox" name="{{ scope }}_remove_logo" value="on" />
+        <span>Remove logo</span>
+      </label>
+    </div>
+    <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/80">
+      <div class="text-xs font-medium text-slate-600 mb-2">Background watermark logo</div>
+      {% if obj.background_logo %}
+        <img src="{{ obj.background_logo.url }}?v={{ obj.updated_at|date:'YmdHis' }}" alt="" class="max-h-16 object-contain mb-2" />
+      {% else %}
+        <p class="text-xs text-slate-500 mb-2">Falls back to header logo on auth pages.</p>
+      {% endif %}
+      <input type="file" name="{{ scope }}_background_logo" accept=".png,.jpg,.jpeg,.svg,.webp" class="w-full text-xs" />
+      <label class="inline-flex items-center gap-2 mt-2 text-xs text-slate-600">
+        <input type="checkbox" name="{{ scope }}_remove_background_logo" value="on" />
+        <span>Remove watermark</span>
+      </label>
+    </div>
+  </div>
+
+  <button type="submit" class="inline-flex justify-center items-center px-5 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:opacity-95">
+    Save {% if scope == "admin" %}admin{% else %}user{% endif %} auth branding
+  </button>
+</div>

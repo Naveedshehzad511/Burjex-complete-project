@@ -1,0 +1,9 @@
+{% extends "sales_panel/base.html" %}
+{% block title %}Performance{% endblock %}
+{% block admin_shell_page_title %}Performance{% endblock %}
+{% block admin_content %}
+<div class="p-4">
+  <h1 class="text-xl font-semibold mb-2">Sales performance</h1>
+  <p class="text-sm text-slate-600">Use <a class="text-indigo-600" href="{% url 'sales-team' %}">Sales team</a> for manager rollups.</p>
+</div>
+{% endblock %}

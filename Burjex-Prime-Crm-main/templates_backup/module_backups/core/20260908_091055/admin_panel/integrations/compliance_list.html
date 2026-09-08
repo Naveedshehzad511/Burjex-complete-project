@@ -1,0 +1,19 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Compliance integrations{% endblock %}
+{% block admin_content %}
+<div class="max-w-4xl mx-auto space-y-6 pb-10 px-2">
+  <a href="{% url 'admin-integrations-hub' %}" class="text-sm text-indigo-600 hover:underline">← Integrations</a>
+  <h1 class="text-xl font-semibold text-slate-900">Compliance / KYC</h1>
+  <ul class="space-y-2">
+    {% for it in items %}
+    <li>
+      <a href="{% url 'admin-integrations-compliance-edit' provider=it.slug %}" class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 hover:border-indigo-600/40 transition">
+        <span class="font-medium text-slate-900">{{ it.row.get_provider_display }}</span>
+        <span class="text-xs {% if it.row.enabled %}text-emerald-700{% else %}text-slate-500{% endif %}">{% if it.row.enabled %}Active{% else %}Inactive{% endif %}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
+

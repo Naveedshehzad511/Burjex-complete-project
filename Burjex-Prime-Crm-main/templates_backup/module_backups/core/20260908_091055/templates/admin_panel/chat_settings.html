@@ -1,0 +1,182 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Chat Settings{% endblock %}
+{% block admin_content %}
+<div class="max-w-7xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-900">Chat Settings</h1>
+    <p class="text-sm text-slate-500 mt-1">Modern live chat admin panel with modular controls.</p>
+  </div>
+  <div class="bg-white border rounded-xl p-3">
+    <div class="flex flex-wrap gap-2 text-sm">
+      <a href="#general" class="px-3 py-1.5 rounded-lg border">General Settings</a>
+      <a href="#messages" class="px-3 py-1.5 rounded-lg border">Messages</a>
+      <a href="#ai" class="px-3 py-1.5 rounded-lg border">AI Assistant</a>
+      <a href="#appearance" class="px-3 py-1.5 rounded-lg border">Widget Appearance</a>
+      <a href="#hours" class="px-3 py-1.5 rounded-lg border">Business Hours</a>
+      <a href="#replies" class="px-3 py-1.5 rounded-lg border">Quick Replies</a>
+      <a href="#notifications" class="px-3 py-1.5 rounded-lg border">Notifications</a>
+      <a href="#embed" class="px-3 py-1.5 rounded-lg border">Embed Widget</a>
+    </div>
+  </div>
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+    <div id="general" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="bg-white border rounded-xl p-4 space-y-3">
+        <h2 class="font-semibold">General Settings</h2>
+        <label><input type="checkbox" name="enable_live_chat" {% if s.enable_live_chat %}checked{% endif %}> Enable Live Chat</label><br>
+        <label><input type="checkbox" name="show_on_public_pages" {% if s.show_on_public_pages %}checked{% endif %}> Show on Public Pages</label><br>
+        <label><input type="checkbox" name="auto_assign_conversations" {% if s.auto_assign_conversations %}checked{% endif %}> Auto Assign Conversations</label><br>
+        <label><input type="checkbox" name="enable_attachments" {% if s.enable_attachments %}checked{% endif %}> Enable Attachments</label><br>
+        <label><input type="checkbox" name="show_typing_indicator" {% if s.show_typing_indicator %}checked{% endif %}> Show Typing Indicator</label>
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          <label>Missed Timeout (s)<input class="w-full border rounded p-2" name="missed_chat_timeout_seconds" type="number" value="{{ s.missed_chat_timeout_seconds }}"></label>
+          <label>Idle Timeout (s)<input class="w-full border rounded p-2" name="idle_timeout_seconds" type="number" value="{{ s.idle_timeout_seconds }}"></label>
+          <label>Max Concurrent<input class="w-full border rounded p-2" name="max_concurrent_chats" type="number" value="{{ s.max_concurrent_chats }}"></label>
+        </div>
+      </div>
+
+      <div id="messages" class="bg-white border rounded-xl p-4 space-y-3">
+        <h2 class="font-semibold">Messages Settings</h2>
+        <label><input type="checkbox" name="enable_welcome_message" {% if s.enable_welcome_message %}checked{% endif %}> Enable Welcome Message</label>
+        <label class="block text-sm">Welcome Message<textarea class="w-full border rounded p-2" name="welcome_message_text">{{ s.welcome_message_text }}</textarea></label>
+        <label class="block text-sm">Welcome Delay (s)<input class="w-full border rounded p-2" name="welcome_delay_seconds" type="number" value="{{ s.welcome_delay_seconds }}"></label>
+        <label><input type="checkbox" name="enable_offline_message" {% if s.enable_offline_message %}checked{% endif %}> Enable Offline Message</label>
+        <label class="block text-sm">Offline Message<textarea class="w-full border rounded p-2" name="offline_message_text">{{ s.offline_message_text }}</textarea></label>
+        <label class="block text-sm">Offline Delay (s)<input class="w-full border rounded p-2" name="offline_delay_seconds" type="number" value="{{ s.offline_delay_seconds }}"></label>
+        <label><input type="checkbox" name="collect_email_when_offline" {% if s.collect_email_when_offline %}checked{% endif %}> Collect Email When Offline</label>
+        <label><input type="checkbox" name="enable_away_message" {% if s.enable_away_message %}checked{% endif %}> Enable Away Message</label>
+        <label class="block text-sm">Away Message<textarea class="w-full border rounded p-2" name="away_message_text">{{ s.away_message_text }}</textarea></label>
+        <label class="block text-sm">Away Delay (s)<input class="w-full border rounded p-2" name="away_delay_seconds" type="number" value="{{ s.away_delay_seconds }}"></label>
+        <label><input type="checkbox" name="enable_end_message" {% if s.enable_end_message %}checked{% endif %}> Enable Conversation Ended Message</label>
+        <label class="block text-sm">End Message<textarea class="w-full border rounded p-2" name="end_message_text">{{ s.end_message_text }}</textarea></label>
+        <label class="block text-sm">End Delay (s)<input class="w-full border rounded p-2" name="end_delay_seconds" type="number" value="{{ s.end_delay_seconds }}"></label>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div id="appearance" class="bg-white border rounded-xl p-4 space-y-3">
+        <h2 class="font-semibold">Widget Appearance & Embed</h2>
+        <div class="grid grid-cols-3 gap-2 text-sm">
+          <label>Widget Color<input class="w-full border rounded p-2" type="color" name="widget_color" value="{{ s.widget_color }}"></label>
+          <label>Text Color<input class="w-full border rounded p-2" type="color" name="text_color" value="{{ s.text_color }}"></label>
+          <label>Background Color<input class="w-full border rounded p-2" type="color" name="background_color" value="{{ s.background_color }}"></label>
+        </div>
+        <label class="block text-sm">Position
+          <select class="w-full border rounded p-2" name="widget_position">
+            <option value="BOTTOM_RIGHT" {% if s.widget_position == 'BOTTOM_RIGHT' %}selected{% endif %}>Bottom Right</option>
+            <option value="BOTTOM_LEFT" {% if s.widget_position == 'BOTTOM_LEFT' %}selected{% endif %}>Bottom Left</option>
+            <option value="CUSTOM" {% if s.widget_position == 'CUSTOM' %}selected{% endif %}>Custom Position</option>
+          </select>
+        </label>
+        <label class="block text-sm">Custom Position CSS<input class="w-full border rounded p-2" name="custom_position_css" value="{{ s.custom_position_css }}"></label>
+        <div class="grid grid-cols-3 gap-2 text-sm">
+          <label>Button Size<input class="w-full border rounded p-2" type="number" name="button_size_px" value="{{ s.button_size_px }}"></label>
+          <label>Offset X<input class="w-full border rounded p-2" type="number" name="offset_x_px" value="{{ s.offset_x_px }}"></label>
+          <label>Offset Y<input class="w-full border rounded p-2" type="number" name="offset_y_px" value="{{ s.offset_y_px }}"></label>
+        </div>
+        <label class="block text-sm">Title<input class="w-full border rounded p-2" name="widget_title" value="{{ s.widget_title }}"></label>
+        <label class="block text-sm">Subtitle<input class="w-full border rounded p-2" name="widget_subtitle" value="{{ s.widget_subtitle }}"></label>
+        <label><input type="checkbox" name="show_agent_photo" {% if s.show_agent_photo %}checked{% endif %}> Show Agent Photo</label><br>
+        <label><input type="checkbox" name="auto_open" {% if s.auto_open %}checked{% endif %}> Auto Open</label><br>
+        <label><input type="checkbox" name="show_on_mobile" {% if s.show_on_mobile %}checked{% endif %}> Show on Mobile</label><br>
+        <label><input type="checkbox" name="sound_notifications" {% if s.sound_notifications %}checked{% endif %}> Sound Notifications</label><br>
+        <label><input type="checkbox" name="guest_info_collection" {% if s.guest_info_collection %}checked{% endif %}> Guest Info Collection</label><br>
+        <label><input type="checkbox" name="conversation_persistence" {% if s.conversation_persistence %}checked{% endif %}> Conversation Persistence</label><br>
+        <label><input type="checkbox" name="source_tracking" {% if s.source_tracking %}checked{% endif %}> Source Tracking</label>
+        <div class="text-xs text-slate-500 mt-2">Embed script: <code>&lt;script src="/chat/widget.js" async&gt;&lt;/script&gt;</code></div>
+      </div>
+
+      <div id="ai" class="bg-white border rounded-xl p-4 space-y-3">
+        <h2 class="font-semibold">AI + Business Hours + Notifications</h2>
+        <label><input type="checkbox" name="ai_enabled" {% if ai.enabled %}checked{% endif %}> Enable AI Assistant</label>
+        <label><input type="checkbox" name="auto_suggest_replies" {% if ai.auto_suggest_replies %}checked{% endif %}> Auto Suggest Replies</label>
+        <label class="block text-sm">Response Tone<input class="w-full border rounded p-2" name="response_tone" value="{{ ai.response_tone }}"></label>
+        <div class="grid grid-cols-3 gap-2 text-sm">
+          <label>Max Length<input class="w-full border rounded p-2" type="number" name="max_response_length" value="{{ ai.max_response_length }}"></label>
+          <label>Temperature<input class="w-full border rounded p-2" type="number" step="0.01" name="creativity_temperature" value="{{ ai.creativity_temperature }}"></label>
+          <label>Recent Messages<input class="w-full border rounded p-2" type="number" name="recent_messages_count" value="{{ ai.recent_messages_count }}"></label>
+        </div>
+        <label><input type="checkbox" name="include_user_info" {% if ai.include_user_info %}checked{% endif %}> Include User Info</label>
+        <label><input type="checkbox" name="include_page_url" {% if ai.include_page_url %}checked{% endif %}> Include Page URL</label>
+        <label class="block text-sm">System Role<input class="w-full border rounded p-2" name="system_role" value="{{ ai.system_role }}"></label>
+        <label class="block text-sm">AI Instructions<textarea class="w-full border rounded p-2" name="ai_instructions">{{ ai.ai_instructions }}</textarea></label>
+        <label class="block text-sm">Knowledge Base<textarea class="w-full border rounded p-2" name="knowledge_base">{{ ai.knowledge_base }}</textarea></label>
+      </div>
+    </div>
+
+    <div id="hours" class="bg-white border rounded-xl p-4 space-y-3">
+      <h2 class="font-semibold">Business Hours</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+        <label>Timezone<input class="w-full border rounded p-2" name="timezone" value="{{ bh.timezone }}"></label>
+        <label>Default Start<input class="w-full border rounded p-2" type="time" name="start_time" value="{{ bh.start_time|time:'H:i' }}"></label>
+        <label>Default End<input class="w-full border rounded p-2" type="time" name="end_time" value="{{ bh.end_time|time:'H:i' }}"></label>
+      </div>
+      <div class="space-y-2 text-sm">
+        <div class="grid grid-cols-4 gap-2 items-center"><label><input type="checkbox" name="mon_enabled" {% if bh.mon_enabled %}checked{% endif %}> Monday</label><input type="time" class="border rounded p-2" name="mon_start_time" value="{{ bh.mon_start_time|time:'H:i' }}"><input type="time" class="border rounded p-2" name="mon_end_time" value="{{ bh.mon_end_time|time:'H:i' }}"><span></span></div>
+        <div class="grid grid-cols-4 gap-2 items-center"><label><input type="checkbox" name="tue_enabled" {% if bh.tue_enabled %}checked{% endif %}> Tuesday</label><input type="time" class="border rounded p-2" name="tue_start_time" value="{{ bh.tue_start_time|time:'H:i' }}"><input type="time" class="border rounded p-2" name="tue_end_time" value="{{ bh.tue_end_time|time:'H:i' }}"><span></span></div>
+        <div class="grid grid-cols-4 gap-2 items-center"><label><input type="checkbox" name="wed_enabled" {% if bh.wed_enabled %}checked{% endif %}> Wednesday</label><input type="time" class="border rounded p-2" name="wed_start_time" value="{{ bh.wed_start_time|time:'H:i' }}"><input type="time" class="border rounded p-2" name="wed_end_time" value="{{ bh.wed_end_time|time:'H:i' }}"><span></span></div>
+        <div class="grid grid-cols-4 gap-2 items-center"><label><input type="checkbox" name="thu_enabled" {% if bh.thu_enabled %}checked{% endif %}> Thursday</label><input type="time" class="border rounded p-2" name="thu_start_time" value="{{ bh.thu_start_time|time:'H:i' }}"><input type="time" class="border rounded p-2" name="thu_end_time" value="{{ bh.thu_end_time|time:'H:i' }}"><span></span></div>
+        <div class="grid grid-cols-4 gap-2 items-center"><label><input type="checkbox" name="fri_enabled" {% if bh.fri_enabled %}checked{% endif %}> Friday</label><input type="time" class="border rounded p-2" name="fri_start_time" value="{{ bh.fri_start_time|time:'H:i' }}"><input type="time" class="border rounded p-2" name="fri_end_time" value="{{ bh.fri_end_time|time:'H:i' }}"><span></span></div>
+        <div class="grid grid-cols-4 gap-2 items-center"><label><input type="checkbox" name="sat_enabled" {% if bh.sat_enabled %}checked{% endif %}> Saturday</label><input type="time" class="border rounded p-2" name="sat_start_time" value="{{ bh.sat_start_time|time:'H:i' }}"><input type="time" class="border rounded p-2" name="sat_end_time" value="{{ bh.sat_end_time|time:'H:i' }}"><span></span></div>
+        <div class="grid grid-cols-4 gap-2 items-center"><label><input type="checkbox" name="sun_enabled" {% if bh.sun_enabled %}checked{% endif %}> Sunday</label><input type="time" class="border rounded p-2" name="sun_start_time" value="{{ bh.sun_start_time|time:'H:i' }}"><input type="time" class="border rounded p-2" name="sun_end_time" value="{{ bh.sun_end_time|time:'H:i' }}"><span></span></div>
+      </div>
+    </div>
+
+    <div id="notifications" class="bg-white border rounded-xl p-4 space-y-3">
+      <h2 class="font-semibold">Notifications</h2>
+      <label><input type="checkbox" name="new_chat_sound" {% if n.new_chat_sound %}checked{% endif %}> New Chat Sound</label><br>
+      <label><input type="checkbox" name="new_message_sound" {% if n.new_message_sound %}checked{% endif %}> New Message Sound</label><br>
+      <label><input type="checkbox" name="enable_browser_notifications" {% if n.enable_browser_notifications %}checked{% endif %}> Browser Notifications</label><br>
+      <label><input type="checkbox" name="agent_online_alert" {% if n.agent_online_alert %}checked{% endif %}> Agent Online Alert</label><br>
+      <label><input type="checkbox" name="agent_offline_alert" {% if n.agent_offline_alert %}checked{% endif %}> Agent Offline Alert</label><br>
+      <label><input type="checkbox" name="queue_threshold_alert" {% if n.queue_threshold_alert %}checked{% endif %}> Queue Threshold Alert</label><br>
+      <label class="block text-sm">Queue Threshold Number<input class="w-full border rounded p-2" type="number" name="queue_threshold_number" value="{{ n.queue_threshold_number }}"></label>
+      <label class="block text-sm">Sound Volume<input class="w-full border rounded p-2" type="number" name="volume_percent" value="{{ n.volume_percent }}"></label>
+    </div>
+
+    <div id="replies" class="bg-white border rounded-xl p-4 space-y-3">
+      <h2 class="font-semibold">Quick Replies</h2>
+      <input type="hidden" name="quick_reply_submit" value="1">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+        <input class="border rounded p-2" name="qr_title" placeholder="Title">
+        <input class="border rounded p-2" name="qr_slash_command" placeholder="/greeting">
+        <select class="border rounded p-2" name="qr_category">
+          <option value="GREETINGS">Greetings</option>
+          <option value="QUESTIONS">Questions</option>
+          <option value="RESPONSES">Responses</option>
+          <option value="CLOSING">Closing</option>
+        </select>
+        <label><input type="checkbox" name="qr_is_active" checked> Active</label>
+      </div>
+      <textarea class="w-full border rounded p-2" name="qr_message" placeholder="Template message"></textarea>
+      <input type="hidden" name="action" value="quick_reply_save">
+      <button class="px-4 py-2 rounded bg-indigo-600 text-white" type="submit">Save Settings</button>
+      <div class="overflow-auto">
+        <table class="w-full text-sm">
+          <thead><tr class="text-left border-b"><th class="py-2">Title</th><th>Command</th><th>Category</th><th>Message</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for q in quick_replies %}
+              <tr class="border-b"><td class="py-1">{{ q.title }}</td><td>{{ q.slash_command }}</td><td>{{ q.get_category_display }}</td><td>{{ q.message }}</td><td><form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="delete_quick_reply"><input type="hidden" name="quick_reply_id" value="{{ q.id }}"><button type="submit" class="rounded bg-rose-600 text-white px-3 py-1 text-xs font-semibold hover:bg-rose-700">Delete</button></form></td></tr>
+            {% empty %}
+              <tr><td colspan="5" class="py-2 text-slate-500">No templates yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="embed" class="bg-white border rounded-xl p-4 space-y-3">
+      <h2 class="font-semibold">Embed Widget</h2>
+      <label><input type="checkbox" name="embed_widget_enabled" {% if s.embed_widget_enabled %}checked{% endif %}> Enable Chat</label>
+      <div class="text-sm text-slate-700">Script URL: <code>/chat/widget.js</code></div>
+      <div class="bg-slate-50 border rounded-lg p-3 text-xs"><code>&lt;script src="/chat/widget.js" async&gt;&lt;/script&gt;</code></div>
+    </div>
+
+    <div class="flex justify-end">
+      <button class="px-4 py-2 rounded bg-indigo-600 text-white" type="submit">Save All Changes</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+

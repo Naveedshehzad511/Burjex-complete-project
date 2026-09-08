@@ -1,0 +1,27 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}My Clients - Burjex Prime{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">My Clients (Level 1)</h1>
+
+
+  <div class="portal-stat-grid mb-5">
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Commission</div>
+      <div class="portal-stat-value" style="color:var(--portal-brand-primary);">{{ cards.commission|floatformat:"-2" }}</div>
+    </div>
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Deposit</div>
+      <div class="portal-stat-value">{{ cards.deposit|floatformat:"-2" }}</div>
+    </div>
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Withdraw</div>
+      <div class="portal-stat-value">{{ cards.withdraw|floatformat:"-2" }}</div>
+    </div>
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Lot</div>
+      <div class="portal-stat-value">{{ cards.lot|floatformat:"-2" }}</div>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}White label — Client portal{% endblock %}
+{% block admin_content %}
+<div class="max-w-5xl space-y-6 pb-10">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-900">Client portal white label</h1>
+    <p class="text-sm text-slate-600 mt-1">Theme, layout, and branding for <code class="text-xs bg-slate-100 px-1 rounded">/user/</code>. Changes apply immediately after save. Use <strong>Brand profiles</strong> to prepare multiple companies — only one profile is active for the portal at a time.</p>
+  </div>
+  {% include "admin_panel/white_label/includes/subnav.html" %}
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <a href="{% url 'admin-white-label-theme' %}" class="block rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-indigo-600/40 transition">
+      <h2 class="text-lg font-semibold text-slate-900">Theme</h2>
+      <p class="text-sm text-slate-600 mt-1">Colours, font size &amp; weight presets.</p>
+    </a>
+    <a href="{% url 'admin-white-label-branding' %}" class="block rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-indigo-600/40 transition">
+      <h2 class="text-lg font-semibold text-slate-900">Branding</h2>
+      <p class="text-sm text-slate-600 mt-1">Logos, favicon, company name override, footer.</p>
+    </a>
+    <a href="{% url 'admin-white-label-layout' %}" class="block rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-indigo-600/40 transition">
+      <h2 class="text-lg font-semibold text-slate-900">Layout</h2>
+      <p class="text-sm text-slate-600 mt-1">Sidebar side, width, header height, icons, radius.</p>
+    </a>
+    <a href="{% url 'admin-dashboard-settings' %}" class="block rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-indigo-600/40 transition">
+      <h2 class="text-lg font-semibold text-slate-900">Menu visibility</h2>
+      <p class="text-sm text-slate-600 mt-1">Show or hide Dashboard, IB, Competition, News, Support, and more.</p>
+    </a>
+    <a href="{% url 'admin-white-label-profiles' %}" class="block rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-indigo-600/40 transition md:col-span-2">
+      <h2 class="text-lg font-semibold text-slate-900">Brand profiles</h2>
+      <p class="text-sm text-slate-600 mt-1">Multi-company ready: create profiles and switch which one is live.</p>
+    </a>
+  </div>
+
+  <p class="text-xs text-slate-500">Active profile: <strong>{{ profile.name }}</strong> (slug: {{ profile.slug }})</p>
+</div>
+{% endblock %}
+

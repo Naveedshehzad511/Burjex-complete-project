@@ -1,0 +1,101 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Tag System{% endblock %}
+{% block admin_content %}
+<div class="space-y-6">
+  <div class="bp-page-header mb-6 flex flex-row justify-between items-center gap-4 overflow-hidden">
+    <div class="shrink-0">
+      <h1 class="bp-page-title whitespace-nowrap"><i class="fa-solid fa-tags me-2 text-indigo-500"></i>Tag System</h1>
+    </div>
+    
+    <div>
+      <form method="post" class="flex flex-nowrap items-center gap-2 min-w-max">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_tag">
+        <input type="hidden" name="category_type" value="client">
+        
+        <input type="text" name="name" placeholder="Tag name" class="bp-input h-9 w-32 sm:w-40 text-sm" required>
+        <input type="text" name="description" placeholder="Description" class="bp-input h-9 w-40 sm:w-48 text-sm">
+        
+        <select name="color" class="bp-input h-9 w-24 sm:w-32 text-sm" required>
+          <option value="#3b82f6" class="text-blue-500 font-semibold">Blue</option>
+          <option value="#ef4444" class="text-red-500 font-semibold">Red</option>
+          <option value="#10b981" class="text-emerald-500 font-semibold">Green</option>
+          <option value="#f59e0b" class="text-amber-500 font-semibold">Yellow</option>
+          <option value="#8b5cf6" class="text-purple-500 font-semibold">Purple</option>
+          <option value="#64748b" class="text-slate-500 font-semibold">Gray</option>
+        </select>
+        
+        <button type="submit" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all h-9 px-4 text-sm whitespace-nowrap">
+          Create Tag
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden mb-6">
+    <div class="overflow-x-auto w-full">
+      <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+        <thead>
+          <tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+            <th class="px-6 py-4 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Tag</th>
+            <th class="px-6 py-4 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Description</th>
+            <th class="px-6 py-4 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Color</th>
+            <th class="px-6 py-4 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Status</th>
+            <th class="px-6 py-4 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+          {% for t in active_tags %}
+            <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors group">
+              <td class="px-6 py-4 font-bold text-slate-900 dark:text-white">{{ t.name }}</td>
+              <td class="px-6 py-4 text-slate-600 dark:text-slate-400">{{ t.description|default:"—" }}</td>
+              <td class="px-6 py-4">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold text-white shadow-sm" style="background-color:{{ t.color }};">
+                  {{ t.color }}
+                </span>
+              </td>
+              <td class="px-6 py-4">
+                {% if t.is_active %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">Active</span>
+                {% else %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">Disabled</span>
+                {% endif %}
+              </td>
+              <td class="px-6 py-4 text-right">
+                <div class="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                  <form method="post" class="inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="toggle_tag">
+                    <input type="hidden" name="tag_id" value="{{ t.id }}">
+                    <button type="submit" class="w-8 h-8 rounded-lg {% if t.is_active %}bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50{% else %}bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50{% endif %} flex items-center justify-center transition-colors" title="{% if t.is_active %}Disable{% else %}Enable{% endif %}">
+                      <i class="fa-solid {% if t.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
+                    </button>
+                  </form>
+                  <form method="post" class="inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_tag">
+                    <input type="hidden" name="tag_id" value="{{ t.id }}">
+                    <button type="submit" class="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 flex items-center justify-center transition-colors" onclick="return confirm('Delete this tag?')" title="Delete">
+                      <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="flex flex-row items-center justify-center py-6 gap-3">
+                  <i class="fa-solid fa-tags text-slate-400 text-lg"></i>
+                  <span class="text-sm font-bold text-slate-900 dark:text-white">No tags found</span>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

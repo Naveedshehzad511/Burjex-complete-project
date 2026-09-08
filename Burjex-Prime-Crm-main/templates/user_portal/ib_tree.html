@@ -1,0 +1,62 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}IB Tree Chart - Burjex Prime{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading mb-6">IB Tree Chart</h1>
+
+  <div class="portal-card p-4 sm:p-6 shadow-sm" style="background-color: var(--portal-surface-bg); border: 1px solid var(--portal-border); border-radius: 0.75rem;">
+
+    <!-- Root Node -->
+    <div class="flex items-center gap-4 relative z-20 pb-2" style="background-color: var(--portal-surface-bg);">
+      <div class="w-12 h-12 rounded-full flex items-center justify-center text-white shrink-0" style="background-color: var(--portal-brand-primary);">
+        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+      </div>
+      <div>
+        <div class="font-bold" style="font-size: 16px; color: var(--portal-text-main);">
+          {{ request.user.display_name|default:request.user.email|default:"IB (You)" }}
+        </div>
+        <div style="font-size: 14px; color: var(--portal-text-muted);">
+          {{ request.user.email }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Children Nodes Wrapper -->
+    <div class="relative">
+      <div class="space-y-0">
+        
+        {% for member in level1 %}
+        <div class="relative flex items-center z-10 group">
+          <!-- The vertical line -->
+          <div class="absolute z-0" style="left: 24px; {% if forloop.first %}top: -24px;{% else %}top: 0;{% endif %} {% if forloop.last %}bottom: 50%;{% else %}bottom: 0;{% endif %} width: 1px; background-color: var(--portal-border);"></div>
+          
+          <!-- The horizontal line -->
+          <div class="absolute z-0" style="left: 24px; top: 50%; width: 32px; height: 1px; background-color: var(--portal-border);"></div>
+          
+          <div class="shrink-0" style="width: 56px;"></div>
+          
+          <div class="flex items-center gap-4 flex-1 py-3 z-10" style="background-color: var(--portal-surface-bg); {% if not forloop.last %}border-bottom: 1px solid var(--portal-border);{% endif %}">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style="background-color: var(--portal-muted-bg); color: var(--portal-text-muted);">
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </div>
+            <div>
+              <div class="font-bold" style="font-size: 15px; color: var(--portal-text-main);">
+                {{ member.display_name|default:member.email|default:"Client" }}
+              </div>
+              <div style="font-size: 13px; color: var(--portal-text-muted);">
+                {{ member.email }}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% empty %}
+        <div class="py-6 text-center" style="color: var(--portal-text-muted); font-size: 14px; padding-left: 56px;">
+          No direct clients found in your downline.
+        </div>
+        {% endfor %}
+
+      </div>
+    </div>
+  </div>
+{% endblock %}

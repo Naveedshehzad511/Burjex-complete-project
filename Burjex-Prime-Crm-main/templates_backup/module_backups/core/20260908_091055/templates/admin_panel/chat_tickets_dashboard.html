@@ -1,0 +1,247 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Tickets Dashboard{% endblock %}
+{% block admin_content %}
+<div class="max-w-7xl mx-auto space-y-4">
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 {% if selected %}hidden{% endif %}">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">Support Tickets</h1>
+      <p class="text-sm text-slate-500 mt-1">Manage and respond to client inquiries.</p>
+    </div>
+    
+    <!-- Sleek Tab Navigation replacing the big cards -->
+    <div class="flex flex-wrap gap-2">
+      <a href="?tab=PENDING" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {% if active_tab == 'PENDING' %}bg-indigo-600 text-white shadow-sm{% else %}bg-white border text-slate-600 hover:bg-slate-50{% endif %}">Pending ({{ counts.PENDING|default:0 }})</a>
+      <a href="?tab=OPEN" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {% if active_tab == 'OPEN' %}bg-indigo-600 text-white shadow-sm{% else %}bg-white border text-slate-600 hover:bg-slate-50{% endif %}">Open ({{ counts.OPEN|default:0 }})</a>
+      <a href="?tab=IN_PROGRESS" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {% if active_tab == 'IN_PROGRESS' %}bg-indigo-600 text-white shadow-sm{% else %}bg-white border text-slate-600 hover:bg-slate-50{% endif %}">In Progress ({{ counts.IN_PROGRESS|default:0 }})</a>
+      <a href="?tab=RESOLVED" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {% if active_tab == 'RESOLVED' %}bg-emerald-600 text-white shadow-sm{% else %}bg-white border text-slate-600 hover:bg-slate-50{% endif %}">Resolved ({{ counts.RESOLVED|default:0 }})</a>
+      <a href="?tab=CLOSED" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {% if active_tab == 'CLOSED' %}bg-slate-700 text-white shadow-sm{% else %}bg-white border text-slate-600 hover:bg-slate-50{% endif %}">Closed ({{ counts.CLOSED|default:0 }})</a>
+    </div>
+  </div>
+
+  <div class="h-[calc(100vh-140px)] min-h-[600px] flex flex-col">
+    {% if not selected %}
+    <!-- Ticket List Sidebar -->
+    <div class="flex-1 w-full bg-white border rounded-xl flex flex-col overflow-hidden shadow-sm">
+      <div class="p-4 border-b bg-slate-50 flex items-center justify-between">
+        <h2 class="font-semibold text-slate-800">{{ active_tab|title }} Tickets</h2>
+        <span class="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 rounded-full">{{ tickets|length }}</span>
+      </div>
+      <div class="overflow-y-auto flex-1 p-3 space-y-2">
+        {% for c in tickets %}
+          <a href="?tab={{ active_tab }}&ticket_id={{ c.id }}" class="block border rounded-lg p-4 transition-colors hover:border-slate-300 hover:bg-slate-50">
+            <div class="flex justify-between items-start mb-1">
+              <div class="font-medium text-slate-900 truncate pr-2">{{ c.user.display_name|default:"Client" }}</div>
+              <span class="shrink-0 text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full {% if c.status == 'RESOLVED' %}bg-emerald-100 text-emerald-700{% elif c.status == 'CLOSED' %}bg-slate-100 text-slate-700{% else %}bg-blue-100 text-blue-700{% endif %}">{{ c.get_status_display }}</span>
+            </div>
+            <div class="text-xs text-slate-500 mb-2 font-mono">{{ c.ticket_number }}</div>
+            <div class="text-sm text-slate-700 truncate">{{ c.subject }}</div>
+          </a>
+        {% empty %}
+          <div class="flex flex-col items-center justify-center h-40 text-center px-4">
+            <div class="text-slate-400 mb-2">
+              <svg class="w-10 h-10 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
+            </div>
+            <div class="text-sm font-medium text-slate-600">No tickets found</div>
+            <div class="text-xs text-slate-500 mt-1">There are no tickets in the {{ active_tab|lower }} tab.</div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Conversation Area -->
+    {% if selected %}
+    <div class="flex-1 w-full bg-white border rounded-xl flex flex-col overflow-hidden shadow-sm relative">
+        <!-- Header -->
+        <div class="p-4 border-b flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white z-10 shadow-sm">
+          <div class="flex items-center gap-3">
+            <a href="?tab={{ active_tab }}" class="shrink-0 p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+            </a>
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <h2 class="font-bold text-lg text-slate-900">{{ selected.subject }}</h2>
+                <span class="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{{ selected.ticket_number }}</span>
+              </div>
+              <div class="text-sm text-slate-600 flex items-center gap-2">
+                <span class="font-medium text-slate-800">{{ selected.user.display_name|default:"-" }}</span>
+                <span class="text-slate-300">•</span>
+                <a href="mailto:{{ selected.user.email }}" class="text-indigo-600 hover:underline">{{ selected.user.email|default:"-" }}</a>
+              </div>
+            </div>
+          </div>
+          
+          <div class="flex flex-wrap items-center gap-2">
+            {% if selected.status != 'READ' and selected.status != 'RESOLVED' and selected.status != 'CLOSED' %}
+            <form method="post" action="{% url 'admin-ticket-update-status' selected.id %}" class="inline-block">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="read">
+              <input type="hidden" name="tab" value="{{ active_tab }}">
+              <button class="px-3 py-1.5 text-sm font-medium rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 transition-colors">Mark Read</button>
+            </form>
+            {% endif %}
+            
+            {% if selected.status != 'RESOLVED' %}
+            <form method="post" action="{% url 'admin-ticket-update-status' selected.id %}" class="inline-block">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="resolve">
+              <input type="hidden" name="tab" value="{{ active_tab }}">
+              <button class="px-3 py-1.5 text-sm font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">Resolve</button>
+            </form>
+            {% endif %}
+            
+            {% if selected.status != 'CLOSED' %}
+            <form method="post" action="{% url 'admin-ticket-update-status' selected.id %}" class="inline-block">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="close">
+              <input type="hidden" name="tab" value="{{ active_tab }}">
+              <button class="px-3 py-1.5 text-sm font-medium rounded-lg bg-slate-800 hover:bg-slate-900 text-white transition-colors">Close</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Chat History -->
+        <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50 flex flex-col gap-6" id="chat-container">
+          
+          <!-- Original Ticket Message (Client) -->
+          <div class="flex justify-start">
+            <div class="max-w-[85%] md:max-w-[75%]">
+              <div class="flex items-end gap-2">
+                <div class="bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-bl-none px-4 py-3 shadow-sm text-sm">
+                  <p class="whitespace-pre-wrap">{{ selected.description }}</p>
+                </div>
+              </div>
+              <div class="text-xs text-slate-500 mt-1.5 ml-1 font-medium">
+                {{ selected.user.display_name|default:"Client" }} • {{ selected.created_at|date:"M d, Y, h:i a" }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Replies -->
+          {% for m in replies %}
+            {% if m.is_admin %}
+              <div class="flex justify-end">
+                <div class="max-w-[85%] md:max-w-[75%]">
+                  <div class="flex items-end gap-2 justify-end">
+                    <div class="bg-indigo-600 text-white rounded-2xl rounded-br-none px-4 py-3 shadow-sm text-sm">
+                      <p class="whitespace-pre-wrap">{{ m.message }}</p>
+                      {% if m.attachment %}
+                        <div class="mt-2">
+                          <a href="{{ m.attachment.url }}" target="_blank" class="block rounded-lg overflow-hidden border border-indigo-400">
+                            {% if m.attachment.name|lower|slice:"-4:" in ".jpg,.png,.gif,.jpeg,.webp" %}
+                              <img src="{{ m.attachment.url }}" alt="Attachment" class="max-w-full h-auto max-h-48 object-contain bg-white">
+                            {% else %}
+                              <div class="p-2 bg-indigo-500 text-white flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                                <span class="truncate text-xs">{{ m.attachment.name|slice:"19:" }}</span>
+                              </div>
+                            {% endif %}
+                          </a>
+                        </div>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-1.5 mr-1 text-right font-medium">
+                    You (Admin) • {{ m.created_at|date:"M d, Y, h:i a" }}
+                  </div>
+                </div>
+              </div>
+            {% else %}
+              <div class="flex justify-start">
+                <div class="max-w-[85%] md:max-w-[75%]">
+                  <div class="flex items-end gap-2">
+                    <div class="bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-bl-none px-4 py-3 shadow-sm text-sm">
+                      <p class="whitespace-pre-wrap">{{ m.message }}</p>
+                      {% if m.attachment %}
+                        <div class="mt-2">
+                          <a href="{{ m.attachment.url }}" target="_blank" class="block rounded-lg overflow-hidden border border-slate-200">
+                            {% if m.attachment.name|lower|slice:"-4:" in ".jpg,.png,.gif,.jpeg,.webp" %}
+                              <img src="{{ m.attachment.url }}" alt="Attachment" class="max-w-full h-auto max-h-48 object-contain bg-slate-50">
+                            {% else %}
+                              <div class="p-2 bg-slate-100 text-slate-600 flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                                <span class="truncate text-xs">{{ m.attachment.name|slice:"19:" }}</span>
+                              </div>
+                            {% endif %}
+                          </a>
+                        </div>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-1.5 ml-1 font-medium">
+                    {{ selected.user.display_name|default:"Client" }} • {{ m.created_at|date:"M d, Y, h:i a" }}
+                  </div>
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+
+        <!-- Reply Input -->
+        <div class="p-4 bg-white border-t z-10">
+          {% if selected.status == 'CLOSED' %}
+            <div class="text-center text-sm font-medium text-slate-500 py-3 bg-slate-50 rounded-lg border border-slate-200">
+              This ticket is closed. You cannot send further replies unless it is reopened.
+            </div>
+          {% else %}
+            <form method="post" action="{% url 'admin-chat-send-message' selected.id %}" enctype="multipart/form-data" class="flex flex-row gap-3 items-center w-full">
+              {% csrf_token %}
+              <div class="shrink-0 relative">
+                <input type="file" name="attachment" id="reply-attachment" class="hidden" accept="image/*,application/pdf">
+                <label for="reply-attachment" class="cursor-pointer w-11 h-11 flex items-center justify-center rounded-lg border border-slate-300 text-slate-500 hover:bg-slate-50 hover:text-indigo-600 transition-colors bg-white shadow-sm" title="Attach file">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                </label>
+              </div>
+              <div class="flex-1 min-w-0">
+                <textarea 
+                  class="w-full h-11 border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-lg px-4 py-2.5 resize-none text-sm transition-shadow shadow-sm overflow-hidden" 
+                  name="text" 
+                  rows="1" 
+                  placeholder="Type your reply here..." 
+                ></textarea>
+              </div>
+              <button 
+                type="submit" 
+                class="shrink-0 px-6 h-11 flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors shadow-sm focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 text-sm"
+              >
+                <svg class="w-4 h-4 mr-1.5 sm:mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M3.478 2.404a.75.75 0 00-.926.941l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.404z"></path></svg>
+                <span>Send</span>
+              </button>
+            </form>
+            <script>
+              const fileInput = document.getElementById('reply-attachment');
+              if (fileInput) {
+                fileInput.addEventListener('change', function(e) {
+                  const label = document.querySelector('label[for="reply-attachment"]');
+                  if (this.files && this.files[0]) {
+                    label.classList.add('bg-indigo-100', 'text-indigo-700', 'border-indigo-400');
+                    label.classList.remove('bg-white', 'text-slate-500', 'border-slate-300');
+                    label.title = this.files[0].name;
+                  } else {
+                    label.classList.remove('bg-indigo-100', 'text-indigo-700', 'border-indigo-400');
+                    label.classList.add('bg-white', 'text-slate-500', 'border-slate-300');
+                    label.title = "Attach file";
+                  }
+                });
+              }
+            </script>
+          {% endif %}
+        </div>
+        
+        <script>
+          // Auto-scroll to bottom of chat
+          document.addEventListener("DOMContentLoaded", function() {
+            var chatContainer = document.getElementById("chat-container");
+            if (chatContainer) {
+              chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+          });
+        </script>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+

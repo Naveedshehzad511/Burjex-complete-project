@@ -1,0 +1,71 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}IB Application Form{% endblock %}
+{% block admin_content %}
+<div class="ib-application-form-page">
+  <div class="bp-page-header bp-s-6">
+    <div>
+      <h1 class="bp-page-title"><i class="fa-solid fa-list-check bp-s-140"></i>IB Application Form</h1>
+      <p class="bp-page-subtitle">Questions shown when a client applies to become an IB. Drag order uses sort order.</p>
+    </div>
+    <a href="{% url 'admin-ib-application-form-add' %}" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all">
+      <i class="fa-solid fa-plus"></i> Add question
+    </a>
+  </div>
+
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <span class="bp-card-header-title"><i class="fa-solid fa-clipboard-question bp-s-17"></i>Application Questions</span>
+    </div>
+    <div class="bp-card-body bp-s-48">
+      <div class="overflow-x-auto w-full">
+        <table class="bp-table min-w-full whitespace-nowrap">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Label</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Active</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for q in questions %}
+            <tr>
+              <td><span class="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-md">{{ q.sort_order }}</span></td>
+              <td><strong>{{ q.label }}</strong></td>
+              <td><span class="px-2.5 py-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 text-xs font-semibold rounded-full">{{ q.get_input_type_display }}</span></td>
+              <td>
+                {% if q.required %}
+                  <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400">Yes</span>
+                {% else %}
+                  <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">No</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if q.is_active %}
+                  <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">Yes</span>
+                {% else %}
+                  <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400">No</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="flex gap-2">
+                  <a href="{% url 'admin-ib-application-form-edit' q.id %}" class="px-3 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5"><i class="fa-solid fa-pen text-slate-500"></i> Edit</a>
+                  <form method="post" action="{% url 'admin-ib-application-form-delete' q.id %}" onsubmit="return confirm('Remove this question?');" class="inline m-0">
+                    {% csrf_token %}
+                    <button type="submit" class="px-3 py-1.5 rounded-md bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-sm"><i class="fa-solid fa-trash"></i> Remove</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="p-8 text-center text-slate-500">No questions yet. Add one or run migrations to seed defaults.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

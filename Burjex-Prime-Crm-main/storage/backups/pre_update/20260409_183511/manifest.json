@@ -1,0 +1,15 @@
+{
+  "backup_type": "pre_update",
+  "created_at_utc": "20260409_183511",
+  "database_engine": "django.db.backends.sqlite3",
+  "database_file": "D:\\forex_crm\\storage\\backups\\pre_update\\20260409_183511\\database_20260409_183511.sqlite3",
+  "protected_data_counts": {
+    "clients": 15,
+    "ibs": 1,
+    "transactions": 3,
+    "wallets": -1,
+    "emails": -1,
+    "verification": -1
+  },
+  "service_name": "crm"
+}

@@ -1,0 +1,33 @@
+{
+  "name": "b-trader",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "description": "B-Trader — multi-tenant SaaS trading platform (MT5-like) integrating with Example CRM via APIs",
+  "scripts": {
+    "dev": "pnpm --parallel -r dev",
+    "dev:api": "pnpm --filter @btrader/gateway-api dev",
+    "dev:engine": "pnpm --filter @btrader/trading-engine dev",
+    "dev:md": "pnpm --filter @btrader/market-data dev",
+    "dev:ws": "pnpm --filter @btrader/ws-gateway dev",
+    "build": "pnpm --parallel -r build",
+    "lint": "pnpm --parallel -r lint",
+    "typecheck": "pnpm --parallel -r typecheck",
+    "db:generate": "pnpm --filter @btrader/db db:generate",
+    "db:migrate": "pnpm --filter @btrader/db db:migrate",
+    "db:seed": "pnpm --filter @btrader/db db:seed",
+    "docker:dev": "docker compose -f infra/docker-compose.yml up",
+    "docker:down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

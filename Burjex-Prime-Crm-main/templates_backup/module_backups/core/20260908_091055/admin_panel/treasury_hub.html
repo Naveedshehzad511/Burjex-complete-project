@@ -1,0 +1,74 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Treasury Settings — {{ crm_company_name|default:"CRM" }}{% endblock %}
+
+{% block admin_shell_header_title %}
+<div>
+  <h1 class="bp-topbar-title">Treasury Settings</h1>
+  <p class="bp-topbar-subtitle">Payments, wallet, transfers and access controls</p>
+</div>
+{% endblock %}
+
+{% block admin_content %}
+<div class="bp-s-68">
+
+  <div class="bp-grid-3">
+
+    <a href="{% url 'admin-treasury-deposit-methods' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-265">
+        <div class="bp-s-266">
+          <i class="fa-solid fa-download fa-sm" aria-hidden="true"></i>
+        </div>
+        <span class="bp-label">Methods</span>
+      </div>
+      <div class="bp-s-267">Deposit Methods</div>
+      <p class="bp-s-190">Gateways, fees, limits, currency &amp; display.</p>
+      <div class="bp-s-191">
+        Configure <i class="fa-solid fa-arrow-right fa-xs" aria-hidden="true"></i>
+      </div>
+    </a>
+
+    <a href="{% url 'admin-treasury-withdraw-methods' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-265">
+        <div class="bp-s-268">
+          <i class="fa-solid fa-upload fa-sm" aria-hidden="true"></i>
+        </div>
+        <span class="bp-label">Methods</span>
+      </div>
+      <div class="bp-s-267">Withdrawal Methods</div>
+      <p class="bp-s-190">Status, security, limits &amp; processing.</p>
+      <div class="bp-s-191">
+        Configure <i class="fa-solid fa-arrow-right fa-xs" aria-hidden="true"></i>
+      </div>
+    </a>
+
+    <a href="{% url 'admin-treasury-wallet-settings' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-265">
+        <div class="bp-s-269">
+          <i class="fa-solid fa-wallet fa-sm" aria-hidden="true"></i>
+        </div>
+        <span class="bp-label">Wallet</span>
+      </div>
+      <div class="bp-s-267">Wallet Settings</div>
+      <p class="bp-s-190">Master wallet controls &amp; client visibility.</p>
+      <div class="bp-s-191">
+        Configure <i class="fa-solid fa-arrow-right fa-xs" aria-hidden="true"></i>
+      </div>
+    </a>
+
+    <a href="{% url 'admin-treasury-transfer-settings' %}" class="bp-kpi-card bp-kpi-card--clickable bp-s-71">
+      <div class="bp-s-265">
+        <div class="bp-s-270">
+          <i class="fa-solid fa-right-left fa-sm" aria-hidden="true"></i>
+        </div>
+        <span class="bp-label">Transfers</span>
+      </div>
+      <div class="bp-s-267">Transfer Settings</div>
+      <p class="bp-s-190">Internal transfer, P2P, fees &amp; maintenance.</p>
+      <div class="bp-s-191">
+        Configure <i class="fa-solid fa-arrow-right fa-xs" aria-hidden="true"></i>
+      </div>
+    </a>
+
+  </div>
+</div>
+{% endblock %}

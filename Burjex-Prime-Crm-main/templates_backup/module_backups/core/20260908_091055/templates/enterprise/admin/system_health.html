@@ -1,0 +1,159 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}System health{% endblock %}
+{% block admin_content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="bp-page-header" style="margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="bp-page-title" style="display:flex; align-items:center;">
+      <i class="fa-solid fa-heart-pulse" style="background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-right: 0.5rem;"></i>
+      System Health &amp; Operations
+    </h1>
+    <p class="bp-page-subtitle">Real-time system load, uptime metrics, and geographical traffic distribution.</p>
+  </div>
+</div>
+
+<!-- TOP METRICS -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <!-- Uptime -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">System Uptime</span>
+      <span class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ uptime_percentage }}%</span>
+      <div class="mt-2"><span class="bp-badge bp-badge-success text-[10px]"><i class="fa-solid fa-circle-check me-1"></i>0 Drops Today</span></div>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #22c55e20 0%, #22c55e05 100%); border: 1px solid #22c55e30; color: #22c55e; box-shadow: 0 4px 12px #22c55e15;">
+      <i class="fa-solid fa-arrow-trend-up text-[16px]"></i>
+    </div>
+  </div>
+  
+  <!-- Server Load -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Current Server Load</span>
+      <span class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ current_load }}%</span>
+      <div class="mt-2"><span class="text-[10px] text-slate-500 font-medium">Optimal performance</span></div>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, #0ea5e920 0%, #0ea5e905 100%); border: 1px solid #0ea5e930; color: #0ea5e9; box-shadow: 0 4px 12px #0ea5e915;">
+      <i class="fa-solid fa-server text-[16px]"></i>
+    </div>
+  </div>
+
+  <!-- Database -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Database Status</span>
+      <span class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">
+        {% if db_ok %}
+          <span class="bp-badge bp-badge-success text-[10px]"><i class="fa-solid fa-circle-check me-1"></i>Healthy</span>
+        {% else %}
+          <span class="bp-badge bp-badge-error text-[10px]"><i class="fa-solid fa-circle-xmark me-1"></i>Unhealthy</span>
+        {% endif %}
+      </span>
+      <div class="mt-2"><span class="text-[10px] text-slate-500 font-medium truncate" title="{{ db_msg }}">{{ db_msg }}</span></div>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, {% if db_ok %}#22c55e20 0%, #22c55e05 100%); border: 1px solid #22c55e30; color: #22c55e; box-shadow: 0 4px 12px #22c55e15;{% else %}#ef444420 0%, #ef444405 100%); border: 1px solid #ef444430; color: #ef4444; box-shadow: 0 4px 12px #ef444415;{% endif %}">
+      <i class="fa-solid fa-database text-[16px]"></i>
+    </div>
+  </div>
+
+  <!-- Cache -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 hover:-translate-y-0.5 transition-all duration-300 group">
+    <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+      <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Cache Status</span>
+      <span class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">
+        {% if cache_ok %}
+          <span class="bp-badge bp-badge-success text-[10px]"><i class="fa-solid fa-circle-check me-1"></i>Healthy</span>
+        {% else %}
+          <span class="bp-badge bp-badge-error text-[10px]"><i class="fa-solid fa-circle-xmark me-1"></i>Unhealthy</span>
+        {% endif %}
+      </span>
+      <div class="mt-2"><span class="text-[10px] text-slate-500 font-medium truncate" title="{{ cache_msg }}">{{ cache_msg }}</span></div>
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, {% if cache_ok %}#22c55e20 0%, #22c55e05 100%); border: 1px solid #22c55e30; color: #22c55e; box-shadow: 0 4px 12px #22c55e15;{% else %}#ef444420 0%, #ef444405 100%); border: 1px solid #ef444430; color: #ef4444; box-shadow: 0 4px 12px #ef444415;{% endif %}">
+      <i class="fa-solid fa-bolt text-[16px]"></i>
+    </div>
+  </div>
+</div>
+
+<!-- CHARTS -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <div class="bp-card-header-title">Server Load (24h)</div>
+    </div>
+    <div class="bp-card-body p-4">
+      <div style="height:250px;">
+        <canvas id="loadChart"></canvas>
+      </div>
+    </div>
+  </div>
+  
+  <div class="bp-card">
+    <div class="bp-card-header">
+      <div class="bp-card-header-title">Geographical Traffic (Top 5)</div>
+    </div>
+    <div class="bp-card-body p-4">
+      <div style="height:250px;">
+        <canvas id="geoChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const loadCtx = document.getElementById('loadChart').getContext('2d');
+  new Chart(loadCtx, {
+    type: 'line',
+    data: {
+      labels: {{ load_labels|safe }},
+      datasets: [{
+        label: 'CPU Load (%)',
+        data: {{ load_data|safe }},
+        borderColor: '#0B3C5D',
+        backgroundColor: 'rgba(11, 60, 93, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        y: { beginAtZero: true, max: 100 }
+      }
+    }
+  });
+
+  const geoCtx = document.getElementById('geoChart').getContext('2d');
+  new Chart(geoCtx, {
+    type: 'doughnut',
+    data: {
+      labels: {{ country_labels|safe }},
+      datasets: [{
+        data: {{ country_data|safe }},
+        backgroundColor: [
+          '#0B3C5D',
+          '#328CC1',
+          '#D9B310',
+          '#1D2731',
+          '#9E9E9E'
+        ],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right' }
+      }
+    }
+  });
+</script>
+
+{% endblock %}

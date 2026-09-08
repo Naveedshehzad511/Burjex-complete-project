@@ -1,0 +1,56 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}Add User{% endblock %}
+{% block um_body %}
+<div class="max-w-2xl mx-auto py-6">
+  <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+    <!-- Header -->
+    <div class="px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+          <i class="fa-solid fa-user-plus text-lg"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg text-slate-900 dark:text-white leading-tight">Create New User</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Enter the required information to register a new account.</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Form -->
+    <form method="post" class="p-6">
+      {% csrf_token %}
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Full Name</label>
+          <input name="name" placeholder="e.g. John Doe" class="w-full h-11 px-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm" required />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Email Address</label>
+          <input type="email" name="email" placeholder="e.g. email@example.com" class="w-full h-11 px-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm" required />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Phone Number</label>
+          <input name="phone" placeholder="+1 234 567 8900" class="w-full h-11 px-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm" required />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Country</label>
+          <input name="country" placeholder="e.g. United Kingdom" class="w-full h-11 px-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm" required />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Initial Password</label>
+          <input type="password" name="password" placeholder="••••••••" class="w-full h-11 px-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm" required />
+        </div>
+      </div>
+      
+      <div class="mt-8 flex items-center justify-end gap-3 pt-5 border-t border-slate-100 dark:border-slate-800">
+        <a href="{% url 'admin-user-list' %}" class="h-10 px-5 rounded-lg text-sm font-semibold flex items-center justify-center transition-all btn-cancel">Cancel</a>
+        <button type="submit" class="h-10 px-6 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all btn-add">
+          <i class="fa-solid fa-plus"></i>
+          Create User
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

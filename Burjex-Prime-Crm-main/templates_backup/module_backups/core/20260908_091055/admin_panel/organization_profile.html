@@ -1,0 +1,72 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Organization Profile{% endblock %}
+{% block admin_content %}
+<div class="max-w-6xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-900">Organization Profile</h1>
+    <p class="text-sm text-slate-500 mt-1">Manage global organization identity and contact details used across website, client portal, and admin.</p>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="space-y-5">
+    {% csrf_token %}
+    <div class="bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="text-lg font-semibold mb-3">Organization Identity</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Organization ID</label>
+          <div class="mt-1 flex gap-2">
+            <input id="org_id" readonly value="{{ s.organization_id }}" class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-slate-50">
+            <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('org_id').value)" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Copy</button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Domain</label>
+          <div class="mt-1 flex gap-2">
+            <input id="org_domain" name="domain" readonly value="{{ s.domain }}" class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-slate-50">
+            <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('org_domain').value)" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="text-lg font-semibold mb-3">Company Details</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input name="application_name" value="{{ s.application_name }}" placeholder="Application Name" required class="border border-slate-300 rounded-lg px-3 py-2">
+        <input name="company_name" value="{{ s.company_name }}" placeholder="Company Name" required class="border border-slate-300 rounded-lg px-3 py-2">
+        <input name="registration_number" value="{{ s.registration_number }}" placeholder="Registration Number" class="border border-slate-300 rounded-lg px-3 py-2">
+        <input type="email" name="support_email" value="{{ s.support_email }}" placeholder="Support Email" class="border border-slate-300 rounded-lg px-3 py-2">
+        <input name="primary_phone" value="{{ s.primary_phone }}" placeholder="Primary Phone" class="border border-slate-300 rounded-lg px-3 py-2">
+        <input type="file" name="logo" class="border border-slate-300 rounded-lg px-3 py-2">
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="text-lg font-semibold mb-3">URLs</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <input type="url" name="website_url" value="{{ s.website_url }}" placeholder="Website URL" class="border border-slate-300 rounded-lg px-3 py-2">
+        <input type="url" name="client_area_url" value="{{ s.client_area_url }}" placeholder="Client Area URL" class="border border-slate-300 rounded-lg px-3 py-2">
+        <input name="application_timezone" value="{{ s.application_timezone }}" placeholder="Timezone (e.g. UTC)" class="border border-slate-300 rounded-lg px-3 py-2">
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="text-lg font-semibold mb-3">Legal Information</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input name="business_license" value="{{ s.business_license }}" placeholder="Business License" class="border border-slate-300 rounded-lg px-3 py-2">
+        <input name="incorporation_country" value="{{ s.incorporation_country }}" placeholder="Incorporation Country" class="border border-slate-300 rounded-lg px-3 py-2">
+      </div>
+      <textarea name="registered_address" rows="3" placeholder="Registered Address" class="mt-4 w-full border border-slate-300 rounded-lg px-3 py-2">{{ s.registered_address }}</textarea>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="text-lg font-semibold mb-3">Confirm Changes</h2>
+      <div class="flex flex-col md:flex-row gap-3">
+        <input type="password" name="admin_password" required placeholder="Enter admin password to save" class="w-full md:max-w-sm border border-slate-300 rounded-lg px-3 py-2">
+        <button class="rounded-lg bg-indigo-600 px-5 py-2.5 text-white font-semibold hover:bg-indigo-700">Save Changes</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+

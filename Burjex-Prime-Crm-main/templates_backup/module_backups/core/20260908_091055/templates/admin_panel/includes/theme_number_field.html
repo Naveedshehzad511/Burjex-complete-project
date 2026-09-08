@@ -1,0 +1,13 @@
+<label class="bp-form-group">
+  <span class="bp-form-label">{{ label }}</span>
+  <input
+    type="number"
+    name="{{ name }}"
+    value="{{ value|default:'' }}"
+    min="{{ min }}"
+    max="{{ max }}"
+    placeholder="{{ placeholder }}"
+    class="bp-input"
+    data-preview-field
+  />
+</label>

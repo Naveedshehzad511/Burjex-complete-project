@@ -1,0 +1,255 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}KYC Review{% endblock %}
+{% block admin_content %}
+<div class="max-w-6xl mx-auto space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold text-slate-900">KYC review</h1>
+      <p class="text-sm text-slate-500 mt-1">{{ u.email }} · ID {{ u.id }}</p>
+    </div>
+    <a href="{% url 'admin-docs-pending' %}?status={{ list_status }}" class="text-sm font-medium text-indigo-700 hover:underline">Back to queue</a>
+  </div>
+
+  {% include "admin_panel/includes/status_filter_boxes.html" with url_name="admin-docs-pending" list_status=list_status status_counts=status_counts query_ex_status=query_ex_status %}
+
+  <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+    <h2 class="text-lg font-semibold text-slate-800 mb-4">User information</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+      <div><span class="text-slate-500">Full name</span><div class="font-medium">{{ u.profile_display_name }}</div></div>
+      <div><span class="text-slate-500">Email</span><div class="font-medium">{{ u.email }}</div></div>
+      <div><span class="text-slate-500">Phone</span><div class="font-medium">{{ u.phone|default:"—" }}</div></div>
+      <div><span class="text-slate-500">Country</span><div class="font-medium">{{ u.country|default:"—" }}</div></div>
+      <div><span class="text-slate-500">Registration</span><div class="font-medium">{{ u.date_joined|date:"Y-m-d H:i" }}</div></div>
+      <div><span class="text-slate-500">Current KYC</span>
+        <div class="font-medium">
+          {% if u.kyc_status == "APPROVED" %}<span class="text-emerald-600">Approved</span>
+          {% elif u.kyc_status == "REJECTED" %}<span class="text-rose-600">Rejected</span>
+          {% else %}<span class="text-amber-600">Pending</span>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+    <h2 class="text-lg font-semibold text-slate-800 mb-4">Profile vs document name</h2>
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      <input type="hidden" name="from_status" value="{{ list_status }}" />
+      <input type="hidden" name="action" value="save_document_name" />
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div class="rounded-lg bg-slate-50 border border-slate-100 p-4">
+          <div class="text-slate-500 text-xs uppercase tracking-wide">Profile name</div>
+          <div class="font-semibold text-slate-900 mt-1">{{ profile_name }}</div>
+        </div>
+        <div class="rounded-lg bg-slate-50 border border-slate-100 p-4">
+          <label class="text-slate-500 text-xs uppercase tracking-wide block">Name on ID document</label>
+          <input name="full_name_on_document" value="{{ doc_name }}" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="As shown on CNIC / passport" />
+          <button type="submit" class="mt-2 text-xs font-semibold text-indigo-700 hover:underline">Save name for matching</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-sm font-medium">
+        {% if name_unknown %}
+          <span class="text-amber-700">Enter document name to enable matching.</span>
+        {% elif name_match %}
+          <span class="text-emerald-600">Match — names align</span>
+        {% else %}
+          <span class="text-rose-600">No match — review carefully</span>
+        {% endif %}
+      </div>
+    </form>
+   <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-8">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-800 mb-4">Identity Documents</h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Front -->
+        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="font-semibold text-slate-800 text-sm">CNIC / ID Front</div>
+            <div class="text-xs font-medium">
+              {% if u.kyc_identity_front_status == "verified" %}<span class="px-2 py-1 rounded-md bg-emerald-100 text-emerald-700">Verified</span>
+              {% elif u.kyc_identity_front_status == "rejected" %}<span class="px-2 py-1 rounded-md bg-rose-100 text-rose-700">Rejected</span>
+              {% elif u.kyc_identity_front_status == "pending" %}<span class="px-2 py-1 rounded-md bg-amber-100 text-amber-700">Pending</span>
+              {% else %}<span class="px-2 py-1 rounded-md bg-slate-100 text-slate-700">Incomplete</span>{% endif %}
+            </div>
+          </div>
+          <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Document Type: identity_front</div>
+          
+          {% if identity and identity.front_file %}
+            <div class="border border-slate-200 rounded-lg overflow-hidden bg-slate-50 h-56 flex items-center justify-center relative group">
+              {% if front_exists %}
+                {% with ext=identity.front_file.url|lower|slice:"-4:" %}
+                  {% if ext == ".pdf" %}
+                    <div class="text-slate-400 flex flex-col items-center">
+                      <i class="fa-solid fa-file-pdf text-5xl mb-3 text-indigo-300"></i>
+                      <span class="text-sm font-medium text-slate-600">PDF Document</span>
+                    </div>
+                  {% else %}
+                    <img src="{{ identity.front_file.url }}" alt="ID front" class="w-full h-full object-cover" />
+                  {% endif %}
+                {% endwith %}
+                <div class="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                  <a href="{{ identity.front_file.url }}" target="_blank" rel="noopener" class="bg-white text-slate-800 px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:bg-slate-50 transition-colors">
+                    <i class="fa-solid fa-arrow-up-right-from-square mr-1.5"></i> Open File
+                  </a>
+                </div>
+              {% else %}
+                <div class="text-slate-400 flex flex-col items-center">
+                  <i class="fa-solid fa-triangle-exclamation text-4xl mb-2 text-rose-300"></i>
+                  <span class="text-sm font-medium text-slate-500">File missing on server</span>
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
+              <form method="post" class="flex-1">{% csrf_token %}<input type="hidden" name="from_status" value="{{ list_status }}" /><input type="hidden" name="action" value="approve_identity_front"><button type="submit" class="w-full h-9 rounded-lg bg-emerald-500 hover:bg-emerald-600 shadow-sm text-white text-xs font-bold transition-colors"><i class="fa-solid fa-check mr-1.5"></i>Approve</button></form>
+              <button type="button" onclick="openRejectModal('reject_identity_front')" class="flex-1 h-9 rounded-lg bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-700 hover:text-rose-600 text-xs font-bold transition-colors"><i class="fa-solid fa-xmark mr-1.5"></i>Reject</button>
+            </div>
+          {% else %}
+            <div class="border-2 border-dashed border-slate-200 rounded-lg h-56 flex items-center justify-center text-slate-400 bg-slate-50/50">
+              <div class="text-center">
+                <i class="fa-regular fa-image text-3xl mb-2 text-slate-300"></i>
+                <p class="text-sm font-medium">Not uploaded</p>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Back -->
+        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="font-semibold text-slate-800 text-sm">CNIC / ID Back</div>
+            <div class="text-xs font-medium">
+              {% if u.kyc_identity_back_status == "verified" %}<span class="px-2 py-1 rounded-md bg-emerald-100 text-emerald-700">Verified</span>
+              {% elif u.kyc_identity_back_status == "rejected" %}<span class="px-2 py-1 rounded-md bg-rose-100 text-rose-700">Rejected</span>
+              {% elif u.kyc_identity_back_status == "pending" %}<span class="px-2 py-1 rounded-md bg-amber-100 text-amber-700">Pending</span>
+              {% else %}<span class="px-2 py-1 rounded-md bg-slate-100 text-slate-700">Incomplete</span>{% endif %}
+            </div>
+          </div>
+          <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Document Type: identity_back</div>
+          
+          {% if identity and identity.back_file %}
+            <div class="border border-slate-200 rounded-lg overflow-hidden bg-slate-50 h-56 flex items-center justify-center relative group">
+              {% if back_exists %}
+                {% with ext=identity.back_file.url|lower|slice:"-4:" %}
+                  {% if ext == ".pdf" %}
+                    <div class="text-slate-400 flex flex-col items-center">
+                      <i class="fa-solid fa-file-pdf text-5xl mb-3 text-indigo-300"></i>
+                      <span class="text-sm font-medium text-slate-600">PDF Document</span>
+                    </div>
+                  {% else %}
+                    <img src="{{ identity.back_file.url }}" alt="ID back" class="w-full h-full object-cover" />
+                  {% endif %}
+                {% endwith %}
+                <div class="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                  <a href="{{ identity.back_file.url }}" target="_blank" rel="noopener" class="bg-white text-slate-800 px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:bg-slate-50 transition-colors">
+                    <i class="fa-solid fa-arrow-up-right-from-square mr-1.5"></i> Open File
+                  </a>
+                </div>
+              {% else %}
+                <div class="text-slate-400 flex flex-col items-center">
+                  <i class="fa-solid fa-triangle-exclamation text-4xl mb-2 text-rose-300"></i>
+                  <span class="text-sm font-medium text-slate-500">File missing on server</span>
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
+              <form method="post" class="flex-1">{% csrf_token %}<input type="hidden" name="from_status" value="{{ list_status }}" /><input type="hidden" name="action" value="approve_identity_back"><button type="submit" class="w-full h-9 rounded-lg bg-emerald-500 hover:bg-emerald-600 shadow-sm text-white text-xs font-bold transition-colors"><i class="fa-solid fa-check mr-1.5"></i>Approve</button></form>
+              <button type="button" onclick="openRejectModal('reject_identity_back')" class="flex-1 h-9 rounded-lg bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-700 hover:text-rose-600 text-xs font-bold transition-colors"><i class="fa-solid fa-xmark mr-1.5"></i>Reject</button>
+            </div>
+          {% else %}
+            <div class="border-2 border-dashed border-slate-200 rounded-lg h-56 flex items-center justify-center text-slate-400 bg-slate-50/50">
+              <div class="text-center">
+                <i class="fa-regular fa-image text-3xl mb-2 text-slate-300"></i>
+                <p class="text-sm font-medium">Not uploaded</p>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h2 class="text-lg font-semibold text-slate-800 mb-4">Proof of Address</h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="font-semibold text-slate-800 text-sm">Address Document</div>
+            <div class="text-xs font-medium">
+              {% if u.kyc_address_status == "verified" %}<span class="px-2 py-1 rounded-md bg-emerald-100 text-emerald-700">Verified</span>
+              {% elif u.kyc_address_status == "rejected" %}<span class="px-2 py-1 rounded-md bg-rose-100 text-rose-700">Rejected</span>
+              {% elif u.kyc_address_status == "pending" %}<span class="px-2 py-1 rounded-md bg-amber-100 text-amber-700">Pending</span>
+              {% else %}<span class="px-2 py-1 rounded-md bg-slate-100 text-slate-700">Incomplete</span>{% endif %}
+            </div>
+          </div>
+          <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Document Type: address_proof</div>
+          
+          {% if address and address.document_file %}
+            <div class="border border-slate-200 rounded-lg overflow-hidden bg-slate-50 h-56 flex items-center justify-center relative group">
+              {% if address_exists %}
+                {% with ext=address.document_file.url|lower|slice:"-4:" %}
+                  {% if ext == ".pdf" %}
+                    <div class="text-slate-400 flex flex-col items-center">
+                      <i class="fa-solid fa-file-pdf text-5xl mb-3 text-indigo-300"></i>
+                      <span class="text-sm font-medium text-slate-600">PDF Document</span>
+                    </div>
+                  {% else %}
+                    <img src="{{ address.document_file.url }}" alt="Address proof" class="w-full h-full object-cover" />
+                  {% endif %}
+                {% endwith %}
+                <div class="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                  <a href="{{ address.document_file.url }}" target="_blank" rel="noopener" class="bg-white text-slate-800 px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:bg-slate-50 transition-colors">
+                    <i class="fa-solid fa-arrow-up-right-from-square mr-1.5"></i> Open File
+                  </a>
+                </div>
+              {% else %}
+                <div class="text-slate-400 flex flex-col items-center">
+                  <i class="fa-solid fa-triangle-exclamation text-4xl mb-2 text-rose-300"></i>
+                  <span class="text-sm font-medium text-slate-500">File missing on server</span>
+                </div>
+              {% endif %}
+            </div>
+            
+            <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
+              <form method="post" class="flex-1">{% csrf_token %}<input type="hidden" name="from_status" value="{{ list_status }}" /><input type="hidden" name="action" value="approve_address"><button type="submit" class="w-full h-9 rounded-lg bg-emerald-500 hover:bg-emerald-600 shadow-sm text-white text-xs font-bold transition-colors"><i class="fa-solid fa-check mr-1.5"></i>Approve</button></form>
+              <button type="button" onclick="openRejectModal('reject_address')" class="flex-1 h-9 rounded-lg bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-700 hover:text-rose-600 text-xs font-bold transition-colors"><i class="fa-solid fa-xmark mr-1.5"></i>Reject</button>
+            </div>
+          {% else %}
+            <div class="border-2 border-dashed border-slate-200 rounded-lg h-56 flex items-center justify-center text-slate-400 bg-slate-50/50">
+              <div class="text-center px-4">
+                <i class="fa-regular fa-image text-3xl mb-2 text-slate-300"></i>
+                <p class="text-sm font-medium">No utility bill / bank statement / driving license / address document uploaded.</p>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div id="rejectModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+      <h3 class="text-lg font-semibold text-slate-900">Reject KYC</h3>
+      <p class="text-sm text-slate-500 mt-1">Provide a clear reason — it will be emailed to the client.</p>
+      <form method="post" class="mt-4 space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="from_status" value="{{ list_status }}" />
+        <input type="hidden" name="action" id="rejectActionInput" value="reject_address" />
+        <textarea name="reject_reason" rows="4" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Document not clear, name mismatch, expired document" required></textarea>
+        <div class="flex justify-end gap-2">
+          <button type="button" onclick="document.getElementById('rejectModal').classList.add('hidden')" class="px-4 py-2 text-sm rounded-lg border border-slate-200">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-sm rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700">Submit reject</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script>
+    function openRejectModal(actionName) {
+      document.getElementById("rejectActionInput").value = actionName;
+      document.getElementById("rejectModal").classList.remove("hidden");
+    }
+  </script>
+</div>
+{% endblock %}
+

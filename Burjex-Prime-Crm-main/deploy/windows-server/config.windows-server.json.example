@@ -1,0 +1,39 @@
+{
+  "Mt5Server": "YOUR_MT5_SERVER_IP:443",
+  "Mt5Login": 0,
+  "Mt5Password": "CHANGE_ME",
+
+  "_comment_FeedUrl": "SAME-MACHINE (recommended): stack publishes ingest on host :4300. Bridge on host → http://127.0.0.1:4300 (script appends /ingest). Do NOT use host.docker.internal here — bridge runs on Windows host, not inside a container.",
+  "FeedUrl": "http://127.0.0.1:4300",
+  "FeedToken": "CHANGE_ME_must_match_MT5_FEED_TOKEN_in_env",
+
+  "_comment_BridgeApi": "SAME-MACHINE: gateway on host :4100. /v1 prefix REQUIRED.",
+  "BridgeApiUrl": "http://127.0.0.1:4100/v1",
+  "BridgeToken": "CHANGE_ME_must_match_BRIDGE_TOKEN_in_env",
+  "BtTenantId": "demo_or_tenant_uuid_from_btrader_admin",
+  "BtApiUrl": "http://127.0.0.1:4100/v1",
+
+  "ReconcileEnabled": false,
+  "GroupsReconcileEnabled": false,
+  "PushCandles": true,
+  "HistoryBars": 1500,
+  "HistoryMaxDays": 90,
+  "HistoryChunkDays": 7,
+  "CandleSeedSymbols": "EURUSD,GBPUSD,USDJPY,USDCHF,AUDUSD,USDCAD,NZDUSD,XAUUSD,XAGUSD,BTCUSD",
+  "_comment_ChartSourceMap": "Force ChartRequest+TickLast onto the MT5 instrument traders compare in Terminal (canonical app symbol on the left).",
+  "ChartSourceMap": "XAUUSD=XAUUSD.s",
+  "EnableClasses": "FOREX,METALS,CRYPTO,INDICES,COMMODITIES,STOCKS",
+  "HedgeEnabled": false,
+  "Mt5CoverLogin": 0,
+  "SymbolSuffixStrip": "",
+  "CandleRefreshSec": 20,
+
+  "TickFlushMs": 50,
+  "TickHttpTimeoutSec": 8,
+  "CandleHttpTimeoutSec": 15,
+  "CandleRefreshSec": 45,
+  "CandlePostPaceMs": 80,
+  "CandleSeedDelaySec": 30,
+
+  "_comment_HYBRID": "If CRM/BTrader stay on Linux VPS 187.127.215.195 and only MT5+bridge move here, set FeedUrl/BridgeApiUrl/BtApiUrl to http://THAT_VPS_IP:4300 and :4100/v1 instead of 127.0.0.1. Also set FEED_ALLOWED_IPS on the VPS to this Windows Server public IP."
+}

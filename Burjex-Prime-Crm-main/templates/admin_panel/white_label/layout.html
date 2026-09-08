@@ -1,0 +1,66 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Layout Settings — White Label{% endblock %}
+
+{% block admin_content %}
+<div class="bp-s-368">
+  <div class="bp-page-header">
+    <div>
+      <h1 class="bp-page-title">Layout Settings</h1>
+      <p class="bp-page-subtitle">Optional numeric overrides. Leave empty to use sidebar UI defaults.</p>
+    </div>
+  </div>
+
+  {% include "admin_panel/white_label/includes/subnav.html" %}
+
+  <div class="bp-card bp-s-369">
+    <div class="bp-card-header">
+      <h2 class="bp-card-header-title">Dimensions &amp; Spacing</h2>
+    </div>
+    <div class="bp-card-body">
+      <form class="bp-s-370" method="post">
+        {% csrf_token %}
+
+        <div class="bp-form-group bp-s-127">
+          <label class="bp-form-label">Sidebar Position</label>
+          <select name="sidebar_position" class="bp-input">
+            <option value="left" {% if profile.sidebar_position == "left" %}selected{% endif %}>Left</option>
+            <option value="right" {% if profile.sidebar_position == "right" %}selected{% endif %}>Right</option>
+          </select>
+        </div>
+
+        <div class="bp-form-group bp-s-127">
+          <label class="bp-form-label">Sidebar Width (px)</label>
+          <input type="number" name="sidebar_width_px" value="{{ profile.sidebar_width_px|default:'' }}"
+            min="200" max="400" placeholder="272" class="bp-input" />
+          <span class="bp-form-hint">Default: 272px</span>
+        </div>
+
+        <div class="bp-form-group bp-s-127">
+          <label class="bp-form-label">Mobile Header Height (px)</label>
+          <input type="number" name="header_height_px" value="{{ profile.header_height_px|default:'' }}"
+            min="48" max="96" placeholder="56" class="bp-input" />
+        </div>
+
+        <div class="bp-form-group bp-s-127">
+          <label class="bp-form-label">Menu Icon Size (px)</label>
+          <input type="number" name="menu_icon_size_px" value="{{ profile.menu_icon_size_px|default:'' }}"
+            min="16" max="36" placeholder="22" class="bp-input" />
+        </div>
+
+        <div class="bp-form-group bp-s-127">
+          <label class="bp-form-label">Border Radius (px)</label>
+          <input type="number" name="border_radius_px" value="{{ profile.border_radius_px|default:'' }}"
+            min="4" max="24" placeholder="10" class="bp-input" />
+        </div>
+
+        <div class="bp-s-371">
+          <button type="submit" class="bp-btn bp-btn-primary">
+            <i class="fa-solid fa-floppy-disk fa-sm" aria-hidden="true"></i>
+            Save Layout
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

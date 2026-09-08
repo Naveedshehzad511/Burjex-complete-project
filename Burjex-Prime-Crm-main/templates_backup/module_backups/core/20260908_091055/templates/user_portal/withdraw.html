@@ -1,0 +1,139 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Withdrawal - Burjex Prime{% endblock %}
+
+{% block user_content %}
+<h1 class="portal-page-heading">{{ title }}</h1>
+<div class="portal-card">
+  <div
+    class="grid {% if gateways|length == 1 %}grid-cols-1{% else %}grid-cols-2{% endif %} sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    {% for g in gateways %}
+    {% if g.client_can_use %}
+    <a href="?gateway={{ g.id }}" class="rounded-xl p-5 text-center transition hover:shadow-md"
+      style="border:2px solid {% if selected_gateway and selected_gateway.id == g.id %}var(--portal-brand-primary){% else %}var(--portal-border){% endif %};background:var(--portal-surface-bg);box-shadow:{% if selected_gateway and selected_gateway.id == g.id %}0 0 0 3px rgba(11,60,93,0.12){% else %}none{% endif %};">
+      {% else %}
+      <div class="rounded-xl p-5 text-center"
+        style="border:1px solid var(--portal-border);background:var(--portal-muted-bg);opacity:0.75;">
+        {% endif %}
+        <div class="w-12 h-12 mx-auto rounded-full flex items-center justify-center overflow-hidden"
+          style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+          {% if g.icon %}
+          <img src="{{ g.icon.url }}" alt="{{ g.name }}" class="w-full h-full object-cover" />
+          {% else %}
+          <span class="text-xs font-bold" style="color:var(--portal-brand-primary);">{{ g.name|slice:":2"|upper }}</span>
+          {% endif %}
+        </div>
+        <div class="font-semibold mt-2 text-sm" style="color:var(--portal-brand-primary);">{{ g.name }}</div>
+        {% if g.display_badge %}
+        <div class="text-[10px] uppercase tracking-wide mt-1" style="color:#92400e;">{{ g.display_badge }}</div>
+        {% endif %}
+        <div class="text-xs mt-1" style="color:var(--portal-text-muted);">Min: {{ g.min_amount }} {{ g.currency }}</div>
+        <div class="text-xs" style="color:var(--portal-text-muted);">Processing: {{ g.processing_time|default:"-" }}
+        </div>
+        {% if not g.client_can_use %}
+        <div class="text-xs font-medium mt-2" style="color:#92400e;">Method temporarily under maintenance</div>
+        {% endif %}
+        {% if g.client_can_use %}
+    </a>{% else %}
+  </div>{% endif %}
+  {% empty %}
+  <div class="text-sm col-span-4" style="color:var(--portal-text-muted);">No withdrawal methods available.</div>
+  {% endfor %}
+</div>
+
+{% if selected_gateway and not selected_gateway.client_can_use %}
+<div class="portal-alert portal-alert--warning mb-4">
+  This withdrawal method is temporarily under maintenance. Please choose another method or contact support.
+</div>
+{% endif %}
+
+{% if selected_gateway and selected_gateway.client_can_use %}
+<form method="post" class="space-y-5 max-w-2xl mx-auto mt-6">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  <input type="hidden" name="gateway" value="{{ selected_gateway.id }}" />
+  <input type="hidden" name="request_uid" value="{{ request_uid }}" />
+  <input type="hidden" name="withdraw_from" value="wallet" />
+
+  <div class="flex items-center justify-between mb-4 pb-3" style="border-bottom:1px solid var(--portal-border);">
+    <div class="text-sm font-semibold" style="color:var(--portal-text-main);">Withdrawal Method</div>
+    <div class="text-sm font-bold" style="color:var(--portal-brand-primary);">{{ selected_gateway.name }}</div>
+  </div>
+
+  <div class="rounded-xl p-5 space-y-4"
+    style="background:var(--portal-muted-bg); border:1px solid var(--portal-border);">
+    <div class="font-semibold text-sm mb-1" style="color:var(--portal-brand-primary);">Account Details</div>
+
+    {% if selected_method == "BANK" %}
+    {% if approved_bank_accounts %}
+    <div id="bankDropdownFields">
+      <label class="portal-form-label">Select Verified Bank Account</label>
+      {{ form.bank_account }}{{ form.bank_account.errors }}
+    </div>
+    {% else %}
+    <div class="portal-alert portal-alert--warning">
+      <p class="text-sm">No verified bank accounts found. Please add and verify a bank account on your
+        <a href="{% url 'user-compliance' %}" class="font-medium underline"
+          style="color:var(--portal-brand-primary);">KYC page</a>
+        before requesting a bank withdrawal.</p>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if selected_method == "CRYPTO" %}
+    {% if approved_crypto_addresses %}
+    <div id="cryptoDropdownFields">
+      <label class="portal-form-label">Select Verified Crypto Address</label>
+      {{ form.crypto_address }}{{ form.crypto_address.errors }}
+    </div>
+    {% else %}
+    <div class="portal-alert portal-alert--warning">
+      <p class="text-sm">No verified crypto addresses found. Please add and verify a wallet on your
+        <a href="{% url 'user-compliance' %}" class="font-medium underline"
+          style="color:var(--portal-brand-primary);">KYC page</a>
+        before requesting a crypto withdrawal.</p>
+    </div>
+    {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+    <div>
+      <label class="portal-form-label">Amount</label>
+      {{ form.amount }}{{ form.amount.errors }}
+    </div>
+    <div>
+      <label class="portal-form-label">Currency</label>
+      {{ form.currency }}{{ form.currency.errors }}
+    </div>
+  </div>
+
+  <div>
+    <label class="portal-form-label">Notes</label>
+    {{ form.notes }}{{ form.notes.errors }}
+  </div>
+
+  {% if otp_required %}
+  <div class="rounded-xl p-4 mt-2" style="background:rgba(225,29,72,0.05); border:1px solid rgba(225,29,72,0.15);">
+    <label class="portal-form-label" style="color:#e11d48;">Withdrawal OTP</label>
+    <input type="text" name="otp_code" maxlength="6" class="portal-input" placeholder="Enter 6-digit OTP"{% if otp_mode %} required{% endif %} />
+    <p class="text-xs mt-1" style="color:var(--portal-text-muted);">OTP verification is enabled by admin security
+      settings.</p>
+  </div>
+  {% endif %}
+
+  <div class="pt-2">
+    {% if selected_method == "BANK" and not approved_bank_accounts or selected_method == "CRYPTO" and not approved_crypto_addresses %}
+    <button class="portal-btn-primary w-full py-3 text-base font-bold shadow-md" type="submit" disabled style="opacity:.5;cursor:not-allowed;">
+      Submit Withdrawal
+    </button>
+    {% else %}
+    <button class="portal-btn-primary w-full py-3 text-base font-bold shadow-md" type="submit">
+      Submit Withdrawal
+    </button>
+    {% endif %}
+  </div>
+</form>
+{% endif %}
+</div>
+{% endblock %}

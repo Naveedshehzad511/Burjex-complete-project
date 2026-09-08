@@ -1,0 +1,314 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}User Portal Theme{% endblock %}
+
+{% block admin_content %}
+<div class="pb-10 portal-theme-page" id="user-portal-theme-page">
+  <div class="bp-page-header bp-s-6 flex items-start justify-between gap-4">
+    <div>
+      <h1 class="bp-page-title"><i class="fa-solid fa-palette bp-s-17"></i>User Portal Theme</h1>
+      <p class="bp-page-subtitle">Manage the client portal look from one place. Empty fields inherit the current CRM defaults.</p>
+    </div>
+    <a href="{% url 'admin-system-management-dashboard' %}" class="bp-btn bp-btn-outline h-9 w-9 p-0 flex items-center justify-center shrink-0 mt-1" title="Back to System Management">
+      <i class="fa-solid fa-arrow-left"></i>
+    </a>
+  </div>
+
+  <form method="post" class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-6">
+    {% csrf_token %}
+
+    <div class="space-y-5">
+      <div class="bp-card">
+        <div class="bp-card-header"><span class="bp-card-header-title">Brand Colours</span></div>
+        <div class="bp-card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+          {% include "admin_panel/includes/theme_color_field.html" with name="light_primary_color" label="Light primary" value=theme.light_primary_color fallback=default_light %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_primary_color" label="Dark primary" value=theme.dark_primary_color fallback=default_dark %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="page_bg_color" label="Page background" value=theme.page_bg_color fallback="#FFFFFF" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="text_color" label="Body text" value=theme.text_color fallback="#0F172A" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="muted_text_color" label="Muted text" value=theme.muted_text_color fallback="#64748B" %}
+          <div class="md:col-span-2 border-t border-slate-200 pt-3 mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Dark Mode</div>
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_page_bg_color" label="Dark page background" value=theme.dark_page_bg_color fallback="#0D1526" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_text_color" label="Dark body text" value=theme.dark_text_color fallback="#E2E8F4" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_muted_text_color" label="Dark muted text" value=theme.dark_muted_text_color fallback="#7F93AB" %}
+        </div>
+      </div>
+
+      <div class="bp-card">
+        <div class="bp-card-header"><span class="bp-card-header-title">Sidebar</span></div>
+        <div class="bp-card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+          {% include "admin_panel/includes/theme_color_field.html" with name="sidebar_bg_color" label="Background" value=theme.sidebar_bg_color fallback="#FFFFFF" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="sidebar_text_color" label="Text" value=theme.sidebar_text_color fallback="#102033" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="sidebar_hover_color" label="Hover" value=theme.sidebar_hover_color fallback="#F4F7FB" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="sidebar_active_color" label="Active" value=theme.sidebar_active_color fallback=default_light %}
+          {% include "admin_panel/includes/theme_number_field.html" with name="sidebar_width_px" label="Sidebar width" value=theme.sidebar_width_px min="220" max="360" placeholder="272" %}
+          {% include "admin_panel/includes/theme_number_field.html" with name="logo_size_px" label="Logo size" value=theme.logo_size_px min="24" max="72" placeholder="40" %}
+          <div class="md:col-span-2 border-t border-slate-200 pt-3 mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Dark Mode</div>
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_sidebar_bg_color" label="Dark background" value=theme.dark_sidebar_bg_color fallback="#0B1220" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_sidebar_text_color" label="Dark text" value=theme.dark_sidebar_text_color fallback="#E8EEF7" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_sidebar_hover_color" label="Dark hover" value=theme.dark_sidebar_hover_color fallback="#111C2E" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_sidebar_active_color" label="Dark active" value=theme.dark_sidebar_active_color fallback=default_dark %}
+        </div>
+      </div>
+
+      <div class="bp-card">
+        <div class="bp-card-header"><span class="bp-card-header-title">Topbar and Mobile Controls</span></div>
+        <div class="bp-card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+          {% include "admin_panel/includes/theme_color_field.html" with name="topbar_bg_color" label="Topbar background" value=theme.topbar_bg_color fallback="#FFFFFF" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="topbar_border_color" label="Topbar border" value=theme.topbar_border_color fallback="#E2E8F0" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="topbar_title_color" label="Topbar title" value=theme.topbar_title_color fallback="#0F172A" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="mobile_button_color" label="Mobile menu/close button" value=theme.mobile_button_color fallback=default_light %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="mobile_button_text_color" label="Mobile button icon" value=theme.mobile_button_text_color fallback="#FFFFFF" %}
+          <div class="md:col-span-2 border-t border-slate-200 pt-3 mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Dark Mode</div>
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_topbar_bg_color" label="Dark topbar background" value=theme.dark_topbar_bg_color fallback="#0B1220" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_topbar_border_color" label="Dark topbar border" value=theme.dark_topbar_border_color fallback="#263246" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_topbar_title_color" label="Dark topbar title" value=theme.dark_topbar_title_color fallback="#E2E8F4" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_mobile_button_color" label="Dark mobile button" value=theme.dark_mobile_button_color fallback=default_dark %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_mobile_button_text_color" label="Dark mobile button icon" value=theme.dark_mobile_button_text_color fallback="#FFFFFF" %}
+        </div>
+      </div>
+
+      <div class="bp-card">
+        <div class="bp-card-header"><span class="bp-card-header-title">Buttons</span></div>
+        <div class="bp-card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+          {% include "admin_panel/includes/theme_color_field.html" with name="button_color" label="Button background" value=theme.button_color fallback=default_light %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="button_text_color" label="Button text" value=theme.button_text_color fallback="#FFFFFF" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="button_hover_color" label="Button hover" value=theme.button_hover_color fallback=default_light %}
+          <div class="md:col-span-3 border-t border-slate-200 pt-3 mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Dark Mode</div>
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_button_color" label="Dark button background" value=theme.dark_button_color fallback=default_dark %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_button_text_color" label="Dark button text" value=theme.dark_button_text_color fallback="#FFFFFF" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_button_hover_color" label="Dark button hover" value=theme.dark_button_hover_color fallback=default_dark %}
+        </div>
+      </div>
+
+      <div class="bp-card">
+        <div class="bp-card-header"><span class="bp-card-header-title">Cards and Tables</span></div>
+        <div class="bp-card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+          {% include "admin_panel/includes/theme_color_field.html" with name="card_bg_color" label="Card background" value=theme.card_bg_color fallback="#FFFFFF" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="card_border_color" label="Card border" value=theme.card_border_color fallback="#E2E8F0" %}
+          {% include "admin_panel/includes/theme_number_field.html" with name="border_radius_px" label="Border radius" value=theme.border_radius_px min="0" max="24" placeholder="10" %}
+          <label class="bp-form-group">
+            <span class="bp-form-label">Card shadow</span>
+            <input class="bp-input font-mono" name="card_shadow" value="{{ theme.card_shadow }}" placeholder="0 4px 14px rgba(15, 23, 42, 0.05)" data-preview-field />
+          </label>
+          {% include "admin_panel/includes/theme_color_field.html" with name="table_header_bg_color" label="Table header" value=theme.table_header_bg_color fallback="#F8FAFC" %}
+          <label class="bp-form-group">
+            <span class="bp-form-label">Table row hover</span>
+            <input class="bp-input font-mono" name="table_row_hover_color" value="{{ theme.table_row_hover_color }}" placeholder="rgba(15, 23, 42, 0.02)" data-preview-field />
+          </label>
+          <div class="md:col-span-2 border-t border-slate-200 pt-3 mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Dark Mode</div>
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_card_bg_color" label="Dark card background" value=theme.dark_card_bg_color fallback="#111C2E" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_card_border_color" label="Dark card border" value=theme.dark_card_border_color fallback="#263246" %}
+          {% include "admin_panel/includes/theme_color_field.html" with name="dark_table_header_bg_color" label="Dark table header" value=theme.dark_table_header_bg_color fallback="#162840" %}
+          <label class="bp-form-group">
+            <span class="bp-form-label">Dark table row hover</span>
+            <input class="bp-input font-mono" name="dark_table_row_hover_color" value="{{ theme.dark_table_row_hover_color }}" placeholder="rgba(255, 255, 255, 0.04)" data-preview-field />
+          </label>
+        </div>
+      </div>
+
+      <div class="bp-card">
+        <div class="bp-card-header"><span class="bp-card-header-title">Typography</span></div>
+        <div class="bp-card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label class="bp-form-group md:col-span-2">
+            <span class="bp-form-label">Font family</span>
+            <input class="bp-input" name="font_family" value="{{ theme.font_family }}" placeholder="Inter, system-ui, sans-serif" data-preview-field />
+          </label>
+          {% include "admin_panel/includes/theme_number_field.html" with name="body_font_size_px" label="Body size" value=theme.body_font_size_px min="12" max="18" placeholder="14" %}
+          {% include "admin_panel/includes/theme_number_field.html" with name="h1_font_size_px" label="Page title size" value=theme.h1_font_size_px min="18" max="34" placeholder="22" %}
+          {% include "admin_panel/includes/theme_number_field.html" with name="h2_font_size_px" label="Section title size" value=theme.h2_font_size_px min="15" max="28" placeholder="18" %}
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button type="submit" class="bp-btn bp-btn-primary">
+          <i class="fa-solid fa-floppy-disk bp-s-17"></i>Save user theme
+        </button>
+        <button type="submit" name="theme_action" value="admin_defaults" class="bp-btn bp-btn-outline">
+          <i class="fa-solid fa-wand-magic-sparkles bp-s-17"></i>Use admin defaults
+        </button>
+        <span class="text-xs text-slate-500">Saved changes apply to the client portal immediately.</span>
+      </div>
+    </div>
+
+    <aside class="space-y-4 xl:sticky xl:top-24 self-start">
+      <div class="bp-card">
+        <div class="bp-card-header"><span class="bp-card-header-title">Live Preview</span></div>
+        <div class="bp-card-body">
+          <div class="flex items-center gap-2 mb-3">
+            <button type="button" class="bp-btn bp-btn-sm bp-btn-primary" data-preview-mode="light">Light</button>
+            <button type="button" class="bp-btn bp-btn-sm bp-btn-outline" data-preview-mode="dark">Dark</button>
+          </div>
+          <div class="portal-theme-preview" data-preview>
+            <div class="preview-sidebar">
+              <div class="preview-brand">BP</div>
+              <div class="preview-nav active">Dashboard</div>
+              <div class="preview-nav">My Wallet</div>
+            </div>
+            <div class="preview-main">
+              <div class="preview-topbar">
+                <span>Dashboard</span>
+                <button type="button" class="preview-mobile-btn"><i class="fa-solid fa-moon"></i></button>
+              </div>
+              <div class="preview-card">
+                <div class="preview-title">Account overview</div>
+                <p>Sample client portal card.</p>
+                <button type="button" class="preview-action">Primary action</button>
+              </div>
+              <div class="preview-table-head">Table header preview</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </form>
+</div>
+
+<style>
+  .portal-theme-page .bp-card { border-radius: 8px; }
+  .portal-theme-preview { display:grid; grid-template-columns: 110px 1fr; overflow:hidden; border:1px solid #e2e8f0; border-radius:10px; min-height:260px; background:#fff; }
+  .preview-sidebar { padding:12px; background:#fff; color:#102033; display:flex; flex-direction:column; gap:8px; }
+  .preview-brand { font-weight:800; margin-bottom:8px; }
+  .preview-nav { padding:8px; border-radius:8px; font-size:12px; color:inherit; opacity:.86; }
+  .preview-nav.active { background:#4f46e5; color:#fff; opacity:1; }
+  .preview-main { background:#fff; color:#0f172a; min-width:0; }
+  .preview-topbar { height:44px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; padding:0 12px; font-weight:800; }
+  .preview-mobile-btn { width:32px; height:32px; border-radius:8px; border:1px solid #e2e8f0; display:inline-flex; align-items:center; justify-content:center; color:#4f46e5; background:#fff; }
+  .preview-card { margin:14px; padding:14px; border:1px solid #e2e8f0; border-radius:10px; box-shadow:0 4px 14px rgba(15,23,42,.05); background:#fff; }
+  .preview-title { font-weight:800; margin-bottom:4px; }
+  .preview-card p { margin:0 0 12px; color:#64748b; font-size:13px; }
+  .preview-action { border:0; border-radius:8px; padding:8px 12px; color:#fff; background:#4f46e5; font-weight:700; font-size:12px; }
+  .preview-table-head { margin:0 14px 14px; padding:10px 12px; border-radius:8px; background:#f8fafc; font-size:12px; font-weight:800; color:#64748b; }
+</style>
+
+<script>
+(function () {
+  var root = document.getElementById("user-portal-theme-page");
+  if (!root) return;
+  var defaults = {
+    light_primary_color: "{{ default_light }}",
+    dark_primary_color: "{{ default_dark }}",
+    dark_page_bg_color: "#0B1220",
+    dark_text_color: "#E8EEF7",
+    dark_muted_text_color: "#A8B4C7",
+    dark_sidebar_bg_color: "#0B1220",
+    dark_sidebar_text_color: "#E8EEF7",
+    dark_sidebar_hover_color: "#111C2E",
+    dark_sidebar_active_color: "{{ default_dark }}",
+    dark_topbar_bg_color: "#0B1220",
+    dark_topbar_border_color: "#263246",
+    dark_topbar_title_color: "#E2E8F4",
+    dark_button_color: "{{ default_dark }}",
+    dark_button_text_color: "#FFFFFF",
+    dark_button_hover_color: "{{ default_dark }}",
+    dark_card_bg_color: "#111C2E",
+    dark_card_border_color: "#263246",
+    dark_table_header_bg_color: "#162840",
+    dark_table_row_hover_color: "rgba(255, 255, 255, 0.04)",
+    dark_mobile_button_color: "{{ default_dark }}",
+    dark_mobile_button_text_color: "#FFFFFF",
+    sidebar_bg_color: "#FFFFFF",
+    sidebar_text_color: "#102033",
+    sidebar_hover_color: "#F4F7FB",
+    sidebar_active_color: "{{ default_light }}",
+    topbar_bg_color: "#FFFFFF",
+    topbar_border_color: "#E2E8F0",
+    topbar_title_color: "#0F172A",
+    button_color: "{{ default_light }}",
+    button_text_color: "#FFFFFF",
+    button_hover_color: "{{ default_light }}",
+    card_bg_color: "#FFFFFF",
+    card_border_color: "#E2E8F0",
+    page_bg_color: "#FFFFFF",
+    text_color: "#0F172A",
+    muted_text_color: "#64748B",
+    mobile_button_color: "{{ default_light }}",
+    mobile_button_text_color: "#FFFFFF",
+    table_header_bg_color: "#F8FAFC",
+    table_row_hover_color: "rgba(15, 23, 42, 0.02)",
+    card_shadow: "0 4px 14px rgba(15, 23, 42, 0.05)",
+    border_radius_px: "10",
+    font_family: "Inter, system-ui, sans-serif",
+    body_font_size_px: "14",
+    h1_font_size_px: "22"
+  };
+  var previewMode = "light";
+  function field(name) { return root.querySelector('[name="' + name + '"]'); }
+  function val(name) {
+    var el = field(name);
+    return (el && el.value.trim()) || defaults[name] || "";
+  }
+  function syncPicker(picker) {
+    var target = field(picker.dataset.syncColor);
+    if (target) target.value = picker.value.toUpperCase();
+    applyPreview();
+  }
+  function syncText(text) {
+    var picker = root.querySelector('[data-sync-color="' + text.name + '"]');
+    if (picker && /^#[0-9a-fA-F]{6}$/.test(text.value.trim())) picker.value = text.value.trim();
+    applyPreview();
+  }
+  function applyPreview() {
+    var p = root.querySelector("[data-preview]");
+    if (!p) return;
+    var dark = previewMode === "dark";
+    var names = {
+      page: dark ? "dark_page_bg_color" : "page_bg_color",
+      text: dark ? "dark_text_color" : "text_color",
+      muted: dark ? "dark_muted_text_color" : "muted_text_color",
+      sidebarBg: dark ? "dark_sidebar_bg_color" : "sidebar_bg_color",
+      sidebarText: dark ? "dark_sidebar_text_color" : "sidebar_text_color",
+      sidebarActive: dark ? "dark_sidebar_active_color" : "sidebar_active_color",
+      topbarBg: dark ? "dark_topbar_bg_color" : "topbar_bg_color",
+      topbarBorder: dark ? "dark_topbar_border_color" : "topbar_border_color",
+      topbarTitle: dark ? "dark_topbar_title_color" : "topbar_title_color",
+      mobileBg: dark ? "dark_mobile_button_color" : "mobile_button_color",
+      mobileText: dark ? "dark_mobile_button_text_color" : "mobile_button_text_color",
+      cardBg: dark ? "dark_card_bg_color" : "card_bg_color",
+      cardBorder: dark ? "dark_card_border_color" : "card_border_color",
+      buttonBg: dark ? "dark_button_color" : "button_color",
+      buttonText: dark ? "dark_button_text_color" : "button_text_color",
+      tableHead: dark ? "dark_table_header_bg_color" : "table_header_bg_color"
+    };
+    p.style.fontFamily = val("font_family");
+    p.style.background = val(names.page);
+    p.style.color = val(names.text);
+    p.querySelector(".preview-sidebar").style.background = val(names.sidebarBg);
+    p.querySelector(".preview-sidebar").style.color = val(names.sidebarText);
+    p.querySelector(".preview-nav.active").style.background = val(names.sidebarActive);
+    p.querySelector(".preview-topbar").style.background = val(names.topbarBg);
+    p.querySelector(".preview-topbar").style.borderBottomColor = val(names.topbarBorder);
+    p.querySelector(".preview-topbar").style.color = val(names.topbarTitle);
+    p.querySelector(".preview-mobile-btn").style.background = val(names.mobileBg);
+    p.querySelector(".preview-mobile-btn").style.color = val(names.mobileText);
+    p.querySelector(".preview-card").style.background = val(names.cardBg);
+    p.querySelector(".preview-card").style.borderColor = val(names.cardBorder);
+    p.querySelector(".preview-card").style.borderRadius = val("border_radius_px") + "px";
+    p.querySelector(".preview-card").style.boxShadow = val("card_shadow");
+    p.querySelector(".preview-card p").style.color = val(names.muted);
+    p.querySelector(".preview-action").style.background = val(names.buttonBg);
+    p.querySelector(".preview-action").style.color = val(names.buttonText);
+    p.querySelector(".preview-table-head").style.background = val(names.tableHead);
+    p.querySelector(".preview-table-head").style.color = val(names.muted);
+    p.querySelector(".preview-title").style.fontSize = val("h1_font_size_px") + "px";
+    p.querySelector(".preview-card p").style.fontSize = val("body_font_size_px") + "px";
+  }
+  root.querySelectorAll("[data-sync-color]").forEach(function (picker) {
+    picker.addEventListener("input", function () { syncPicker(picker); });
+  });
+  root.querySelectorAll("[data-preview-field], input[type='text'], input[type='number']").forEach(function (el) {
+    el.addEventListener("input", function () { syncText(el); });
+  });
+  root.querySelectorAll("[data-preview-mode]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      previewMode = btn.getAttribute("data-preview-mode") === "dark" ? "dark" : "light";
+      root.querySelectorAll("[data-preview-mode]").forEach(function (b) {
+        b.classList.toggle("bp-btn-primary", b === btn);
+        b.classList.toggle("bp-btn-outline", b !== btn);
+      });
+      applyPreview();
+    });
+  });
+  applyPreview();
+})();
+</script>
+{% endblock %}

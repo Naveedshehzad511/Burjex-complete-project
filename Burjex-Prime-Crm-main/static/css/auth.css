@@ -1,0 +1,73 @@
+/**
+ * Shared auth pages: signup, forgot password, complements login.css
+ */
+
+.auth-page-shell {
+  --auth-text-size: 14px;
+  --auth-heading-size: 28px;
+}
+
+.auth-page-shell .login-panel__welcome {
+  font-size: calc(var(--auth-text-size) * 0.85);
+}
+
+.auth-page-shell .login-panel__company {
+  font-size: clamp(1.5rem, 4.5vw, 2.25rem);
+}
+
+.form-control {
+  border-radius: 10px;
+  padding: 12px;
+  border: 1px solid #eee;
+  width: 100%;
+  font-size: var(--auth-text-size, 14px);
+  background: #fafafa;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: rgba(11, 60, 93, 0.35);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(11, 60, 93, 0.08);
+}
+
+.btn-primary-auth {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: #fff;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.12s ease;
+}
+
+.btn-primary-auth:hover {
+  filter: brightness(1.05);
+}
+
+.btn-primary-auth:active {
+  transform: scale(0.99);
+}
+
+.auth-card-title {
+  font-size: clamp(1.25rem, 3.5vw, 1.75rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* intl-tel-input alignment */
+.iti {
+  width: 100%;
+}
+
+.iti__flag-container {
+  border-radius: 10px 0 0 10px;
+}
+
+.auth-phone-input {
+  border-radius: 10px;
+}

@@ -1,0 +1,179 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}IB Levels{% endblock %}
+{% block admin_content %}
+<div class="ib-levels-page">
+
+<div class="bp-page-header bp-s-6">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-layer-group bp-s-140"></i>IB Levels</h1>
+    <p class="bp-page-subtitle">Manage progression tiers, caps, and defaults.</p>
+  </div>
+  <a href="{% url 'admin-ib-level-add' %}" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all">
+    <i class="fa-solid fa-plus"></i> Add Level
+  </a>
+</div>
+
+<div class="bp-grid-5 bp-s-6">
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important; transition: border-color 0.2s, transform 0.2s;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important;  font-weight: 500 !important; margin: 0 !important; white-space: normal !important; text-transform: none !important; line-height: 1.1;">
+        Total Levels
+      </div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important;  margin: 0 !important; line-height: 1.2 !important;">
+        {{ total_levels }}
+      </div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; min-width: 38px !important; border-radius: 50% !important; background: #64748b26 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important;  margin-left: 0.5rem;">
+      <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+    </div>
+  </div>
+
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important; transition: border-color 0.2s, transform 0.2s;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important;  font-weight: 500 !important; margin: 0 !important; white-space: normal !important; text-transform: none !important; line-height: 1.1;">
+        Direct Levels
+      </div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important;  margin: 0 !important; line-height: 1.2 !important;">
+        {{ direct_n }}
+      </div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; min-width: 38px !important; border-radius: 50% !important; background: #0ea5e926 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #0ea5e9 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i>
+    </div>
+  </div>
+
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important; transition: border-color 0.2s, transform 0.2s;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important;  font-weight: 500 !important; margin: 0 !important; white-space: normal !important; text-transform: none !important; line-height: 1.1;">
+        Progression
+      </div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important;  margin: 0 !important; line-height: 1.2 !important;">
+        {{ prog_n }}
+      </div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; min-width: 38px !important; border-radius: 50% !important; background: #10b98126 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #10b981 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-arrow-trend-up" aria-hidden="true"></i>
+    </div>
+  </div>
+
+  <div class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important; transition: border-color 0.2s, transform 0.2s;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important;  font-weight: 500 !important; margin: 0 !important; white-space: normal !important; text-transform: none !important; line-height: 1.1;">
+        Total IBs
+      </div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important;  margin: 0 !important; line-height: 1.2 !important;">
+        {{ total_ibs }}
+      </div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; min-width: 38px !important; border-radius: 50% !important; background: #8b5cf626 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #8b5cf6 !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-users" aria-hidden="true"></i>
+    </div>
+  </div>
+
+  <a href="{% url 'admin-ib-level-approval' %}" class="bp-kpi-card-dosra bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700" style="display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding: 0.75rem 1rem !important;  border-radius: 12px !important;  box-shadow: none !important; transition: border-color 0.2s, transform 0.2s; color: inherit; text-decoration: none;">
+    <div style="display: flex !important; flex-direction: column !important; gap: 0.25rem !important; align-items: flex-start !important; text-align: left !important; flex: 1 !important; flex: 1 !important; min-width: 0 !important;">
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.75rem !important;  font-weight: 500 !important; margin: 0 !important; white-space: normal !important; text-transform: none !important; line-height: 1.1;">
+        Pending Approvals
+      </div>
+      <div style="font-size: 1.2rem !important; font-weight: 700 !important;  margin: 0 !important; line-height: 1.2 !important;">
+        {{ pending_approvals }}
+      </div>
+      <div class="text-slate-500 dark:text-slate-400" style="font-size: 0.65rem !important;  margin-top: 0.5rem !important; font-weight: 500 !important; white-space: normal !important; line-height: 1.1;"><i class="fa-solid fa-arrow-right"></i> Review now</div>
+    </div>
+    <div style="width: 38px !important; height: 38px !important; min-width: 38px !important; border-radius: 50% !important; background: #f59e0b26 !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important; color: #f59e0b !important; margin-left: 0.5rem;">
+      <i class="fa-solid fa-clock" aria-hidden="true"></i>
+    </div>
+  </a>
+</div>
+
+<div class="bp-card bp-s-6">
+  <div class="bp-card-body">
+    <form class="grid grid-cols-2 md:grid-cols-3 gap-4 items-end w-full" method="get">
+      <div class="w-full min-w-0">
+        <label class="bp-form-label">Search</label>
+        <input type="text" name="q" value="{{ filters.q }}" placeholder="Level name…" class="bp-input w-full">
+      </div>
+      <div class="w-full min-w-0">
+        <label class="bp-form-label">Level Type</label>
+        <select name="level_type" class="bp-input w-full">
+          <option value="">All</option>
+          {% for v,l in level_types %}
+            <option value="{{ v }}" {% if filters.level_type == v %}selected{% endif %}>{{ l }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-span-2 md:col-span-1 flex flex-row items-center gap-2 w-full mt-2 md:mt-0">
+        <button type="submit" class="bp-btn bp-btn-primary btn-gradient border-0 text-white shadow-sm hover:shadow-md transition-all w-full md:w-auto flex justify-center">
+          <i class="fa-solid fa-magnifying-glass me-1"></i> Filter
+        </button>
+        <a href="{% url 'admin-ib-levels' %}" class="bp-btn bp-btn-outline w-full md:w-auto flex justify-center">
+          <i class="fa-solid fa-rotate-left me-1"></i> Reset
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="bp-card">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title"><i class="fa-solid fa-list-ol bp-s-17"></i>IB Levels List</span>
+  </div>
+  <div class="bp-card-body bp-s-48">
+    <div class="overflow-x-auto w-full">
+      <table class="bp-table min-w-full whitespace-nowrap">
+        <thead>
+          <tr>
+            <th>Seq</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Window</th>
+            <th>Lots / Deposit / Ref</th>
+            <th>Comm %</th>
+            <th>Active</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for lv in levels %}
+            <tr>
+              <td>{{ lv.sequence }}</td>
+              <td><strong>{{ lv.name }}</strong></td>
+              <td>{{ lv.get_level_type_display }}</td>
+              <td>{{ lv.get_metric_window_display }}</td>
+              <td>{{ lv.target_lots }} / {{ lv.target_deposit }} / {{ lv.min_referrals }}</td>
+              <td>{{ lv.commission_percentage }}%</td>
+              <td>
+                {% if lv.is_active %}
+                  <span class="bp-badge bp-badge-success">Active</span>
+                {% else %}
+                  <span class="bp-badge bp-badge-neutral">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="bp-s-148">
+                <a href="{% url 'admin-ib-level-edit' lv.id %}" class="bp-btn bp-btn-outline bp-btn-xs">
+                  <i class="fa-solid fa-pen"></i> Edit
+                </a>
+                <form method="post" action="{% url 'admin-ib-level-delete' lv.id %}" class="inline bp-s-149" onsubmit="return confirm('Delete this level?');">
+                  {% csrf_token %}
+                  <button type="submit" class="bp-btn bp-btn-danger bp-btn-xs">
+                    <i class="fa-solid fa-trash"></i> Delete
+                  </button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td class="bp-s-150" colspan="8">
+                <i class="fa-solid fa-layer-group bp-s-151"></i>
+                No levels yet. Add your first tier.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div>
+{% endblock %}

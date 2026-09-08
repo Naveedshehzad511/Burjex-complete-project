@@ -1,0 +1,107 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}IB Manual Wallet Adjustments{% endblock %}
+
+{% block admin_content %}
+<div class="bp-page-header bp-s-6">
+  <div>
+    <h1 class="bp-page-title"><i class="fa-solid fa-sliders bp-s-140"></i>IB Manual Wallet Adjustments</h1>
+    <p class="bp-page-subtitle">Manually adjust (credit or debit) introducing broker wallets</p>
+  </div>
+</div>
+
+<div class="bp-grid-3">
+  <!-- Adjustment Form Card -->
+  <div class="bp-card" style="grid-column: span 1;">
+    <div class="bp-card-header">
+      <span class="bp-card-header-title"><i class="fa-solid fa-plus-circle bp-s-80"></i>New Adjustment</span>
+    </div>
+    <div class="bp-card-body">
+      <form method="post" action="{% url 'admin-manual-rebate-adjustment' %}">
+        {% csrf_token %}
+        
+        <div class="bp-form-group">
+          <label class="bp-form-label">Select Introducing Broker (IB)</label>
+          <select name="ib_user_id" class="bp-input" required>
+            <option value="" disabled selected>-- Select IB --</option>
+            {% for u in ib_users %}
+              <option value="{{ u.id }}">{{ u.email }} ({% if u.first_name or u.last_name %}{{ u.display_name }}{% else %}No Name{% endif %})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="bp-form-group">
+          <label class="bp-form-label">Adjustment Type</label>
+          <select name="adjustment_type" class="bp-input" required>
+            <option value="credit">Credit (Adds to Available Commission)</option>
+            <option value="debit">Debit (Deducts from Available Commission)</option>
+          </select>
+        </div>
+
+        <div class="bp-form-group">
+          <label class="bp-form-label">Amount (USD)</label>
+          <input type="number" name="amount" step="0.01" min="0.01" class="bp-input" placeholder="e.g. 150.00" required>
+        </div>
+
+        <div class="bp-form-group">
+          <label class="bp-form-label">Reason / Remarks</label>
+          <textarea name="notes" class="bp-input" rows="3" placeholder="Explain the adjustment (e.g. commission recalculation rebate difference)" required></textarea>
+        </div>
+
+        <button type="submit" class="bp-btn bp-btn-primary w-full" style="width: 100%;" onclick="return confirm('Are you sure you want to apply this manual adjustment?');">
+          <i class="fa-solid fa-check bp-s-5"></i>Apply Adjustment
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Recent Adjustments Log Card -->
+  <div class="bp-card bp-s-89" style="grid-column: span 2;">
+    <div class="bp-card-header">
+      <span class="bp-card-header-title"><i class="fa-solid fa-clock-rotate-left bp-s-80"></i>Recent Adjustments Log</span>
+    </div>
+    <div class="bp-card-body bp-s-48">
+      <div class="overflow-x-auto w-full">
+        <table class="bp-table min-w-full whitespace-nowrap">
+          <thead>
+            <tr>
+              <th>Date / Time</th>
+              <th>IB User</th>
+              <th>Type</th>
+              <th>Amount</th>
+              <th>Reason</th>
+              <th>Processed By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in recent_adjustments %}
+              <tr>
+                <td>{{ log.created_at|date:"Y-m-d H:i" }}</td>
+                <td><strong>{{ log.actor.email }}</strong></td>
+                <td>
+                  {% if log.tx_type == "IB_WITHDRAW" %}
+                    <span class="bp-badge bp-badge-success">Credit</span>
+                  {% else %}
+                    <span class="bp-badge bp-badge-error">Debit</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <strong>${{ log.amount|floatformat:2 }}</strong>
+                </td>
+                <td class="text-sm">{{ log.notes }}</td>
+                <td>{{ log.processed_by.email|default:"System" }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--bp-text-muted); padding: 16px;">
+                  No manual adjustments recorded.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

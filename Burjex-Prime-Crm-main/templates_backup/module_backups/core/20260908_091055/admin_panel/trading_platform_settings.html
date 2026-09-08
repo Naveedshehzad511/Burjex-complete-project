@@ -1,0 +1,132 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Platform Information{% endblock %}
+{% block admin_content %}
+<div class="max-w-6xl mx-auto space-y-6">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-xl font-semibold text-slate-900">Platform Information</h1>
+      <p class="text-sm text-slate-500 mt-1">Create and manage dynamic trading platforms shown in the user portal.</p>
+    </div>
+    <a href="{% url 'admin-system-management-dashboard' %}" class="h-9 w-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-colors shadow-sm shrink-0 mt-1" title="Back to System Management">
+      <i class="fa-solid fa-arrow-left"></i>
+    </a>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save">
+    <input type="hidden" name="platform_id" value="{{ edit_platform.id|default:'' }}">
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Icon</label>
+        <input type="file" name="icon" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">Name</label>
+        <input name="name" value="{{ edit_platform.name|default:'' }}" placeholder="MetaTrader 5" class="w-full border border-slate-300 rounded-lg px-3 py-2" required>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-xs text-slate-500 mb-1">Tagline</label>
+        <input name="tagline" value="{{ edit_platform.tagline|default:'' }}" placeholder="Trade anytime, anywhere" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-xs text-slate-500 mb-1">Web Terminal Link</label>
+        <input type="url" name="web_terminal_link" value="{{ edit_platform.web_terminal_link|default:'' }}" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+      </div>
+      <div class="space-y-1">
+        <label class="text-xs text-slate-500 mb-1 block">iOS Link / File</label>
+        <div class="flex gap-2">
+          <input type="url" name="ios_link" value="{{ edit_platform.ios_link|default:'' }}" placeholder="iOS Link" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+          <input type="file" name="ios_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+        </div>
+        {% if edit_platform.ios_file %}
+          <div class="text-xs text-slate-500">Current: <a href="{{ edit_platform.ios_file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ edit_platform.ios_file.name }}</a></div>
+        {% endif %}
+      </div>
+      <div class="space-y-1">
+        <label class="text-xs text-slate-500 mb-1 block">Android Link / File</label>
+        <div class="flex gap-2">
+          <input type="url" name="android_link" value="{{ edit_platform.android_link|default:'' }}" placeholder="Android Link" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+          <input type="file" name="android_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+        </div>
+        {% if edit_platform.android_file %}
+          <div class="text-xs text-slate-500">Current: <a href="{{ edit_platform.android_file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ edit_platform.android_file.name }}</a></div>
+        {% endif %}
+      </div>
+      <div class="space-y-1">
+        <label class="text-xs text-slate-500 mb-1 block">Windows Link / File</label>
+        <div class="flex gap-2">
+          <input type="url" name="windows_link" value="{{ edit_platform.windows_link|default:'' }}" placeholder="Windows Link" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+          <input type="file" name="windows_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+        </div>
+        {% if edit_platform.windows_file %}
+          <div class="text-xs text-slate-500">Current: <a href="{{ edit_platform.windows_file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ edit_platform.windows_file.name }}</a></div>
+        {% endif %}
+      </div>
+      <div class="space-y-1">
+        <label class="text-xs text-slate-500 mb-1 block">MacOS Link / File</label>
+        <div class="flex gap-2">
+          <input type="url" name="mac_link" value="{{ edit_platform.mac_link|default:'' }}" placeholder="MacOS Link" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+          <input type="file" name="mac_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+        </div>
+        {% if edit_platform.mac_file %}
+          <div class="text-xs text-slate-500">Current: <a href="{{ edit_platform.mac_file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ edit_platform.mac_file.name }}</a></div>
+        {% endif %}
+      </div>
+      <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" name="is_active" {% if edit_platform and edit_platform.is_active %}checked{% elif not edit_platform %}checked{% endif %}>
+        Active
+      </label>
+    </div>
+
+    <div class="flex justify-end gap-2">
+      {% if edit_platform %}
+      <a href="{% url 'admin-trading-platform-settings' %}" class="rounded-lg border border-slate-300 px-4 py-2 text-sm">Cancel Edit</a>
+      {% endif %}
+      <button class="rounded-lg bg-indigo-600 px-5 py-2 text-white font-semibold hover:bg-indigo-700">
+        {% if edit_platform %}Update Platform{% else %}Save Platform{% endif %}
+      </button>
+    </div>
+  </form>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for platform in platforms %}
+    <div class="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3">
+      <div class="flex items-center gap-3">
+        {% if platform.icon %}
+        <img src="{{ platform.icon.url }}" alt="{{ platform.name }}" class="h-12 w-12 object-contain rounded-lg border border-slate-200 bg-slate-50 p-1">
+        {% else %}
+        <div class="h-12 w-12 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-[10px] text-slate-500">ICON</div>
+        {% endif %}
+        <div>
+          <div class="font-semibold text-slate-900">{{ platform.name }}</div>
+          <div class="text-xs text-slate-500">{{ platform.tagline|default:"No tagline" }}</div>
+        </div>
+      </div>
+      <div class="text-xs">
+        {% if platform.is_active %}
+        <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-semibold">Active</span>
+        {% else %}
+        <span class="px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-semibold">Inactive</span>
+        {% endif %}
+      </div>
+      <div class="flex gap-2 mt-auto">
+        <a href="{% url 'admin-trading-platform-settings' %}?edit={{ platform.id }}" class="flex-1 text-center rounded-lg border border-slate-300 px-3 py-2 text-sm">Edit</a>
+        <form method="post" class="flex-1">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="platform_id" value="{{ platform.id }}">
+          <button type="submit" class="w-full rounded bg-rose-600 text-white px-3 py-2 text-sm font-semibold hover:bg-rose-700">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% empty %}
+    <div class="md:col-span-2 xl:col-span-3 bg-white border border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-500">
+      No platform available
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+

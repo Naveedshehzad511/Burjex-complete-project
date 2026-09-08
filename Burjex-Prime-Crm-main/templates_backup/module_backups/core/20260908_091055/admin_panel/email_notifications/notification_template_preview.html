@@ -1,0 +1,83 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Preview Template: {{ tpl.name }}{% endblock %}
+{% block admin_content %}
+<div class="max-w-5xl mx-auto space-y-6">
+  <div class="flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <a href="{% url 'admin-notification-templates' %}" class="text-slate-400 hover:text-slate-600 transition-colors">
+        <i class="fa-solid fa-arrow-left"></i>
+      </a>
+      <div>
+        <h1 class="text-xl font-semibold text-slate-900">Template Preview</h1>
+        <p class="text-sm text-slate-500 mt-0.5">{{ tpl.name }} ({{ tpl.event_key }})</p>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-2">
+      <a href="{% url 'admin-notification-template-edit' tpl.pk %}" class="bg-white border border-slate-200 text-slate-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-slate-50 transition-colors">
+        <i class="fa-solid fa-pen-to-square mr-1"></i> Edit Template
+      </a>
+      <form method="post" action="{% url 'admin-notification-template-test' tpl.pk %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-700 transition-colors inline-flex items-center gap-1.5">
+          <i class="fa-solid fa-paper-plane"></i> Send test
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+    <div class="bg-slate-50 border-b border-slate-200 p-4">
+      <div class="space-y-1.5">
+        <div class="flex gap-2">
+          <span class="text-xs font-semibold text-slate-400 uppercase w-20">Subject:</span>
+          <span class="text-sm font-medium text-slate-900">{{ subject }}</span>
+        </div>
+        <div class="flex gap-2">
+          <span class="text-xs font-semibold text-slate-400 uppercase w-20">Recipient:</span>
+          <span class="text-sm text-slate-600">{{ user.email }} (Mock Data)</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="p-8 bg-[#f8fafc] flex justify-center">
+      <div class="bg-white shadow-lg rounded-lg max-w-full overflow-auto bp-s-78">
+        {{ html_body|safe }}
+      </div>
+    </div>
+    
+    <div class="bg-slate-50 border-t border-slate-200 p-4">
+      <h3 class="text-xs font-semibold text-slate-400 uppercase mb-2">Technical Details</h3>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <p class="text-[10px] text-slate-400">Event Key</p>
+          <p class="text-xs font-mono text-slate-700">{{ tpl.event_key }}</p>
+        </div>
+        <div>
+          <p class="text-[10px] text-slate-400">Category</p>
+          <p class="text-xs text-slate-700">{{ tpl.get_category_display }}</p>
+        </div>
+        <div>
+          <p class="text-[10px] text-slate-400">Status</p>
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium {% if tpl.is_active %}bg-emerald-100 text-emerald-800{% else %}bg-slate-100 text-slate-800{% endif %}">
+            {{ tpl.is_active|yesno:"Active,Inactive" }}
+          </span>
+        </div>
+        <div>
+          <p class="text-[10px] text-slate-400">Last Updated</p>
+          <p class="text-xs text-slate-700">{{ tpl.updated_at|date:"Y-m-d H:i" }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
+    <i class="fa-solid fa-circle-info text-amber-500 mt-0.5"></i>
+    <div class="text-sm text-amber-800">
+      <p class="font-semibold">Preview Note</p>
+      <p class="mt-0.5 opacity-90">This preview uses sample data. Placeholders like <code class="text-xs bg-amber-100 px-1 rounded">{{ user_name }}</code> and <code class="text-xs bg-amber-100 px-1 rounded">{{ otp }}</code> are replaced with mock values to demonstrate the layout. The actual layout wrapper (logo, footer) is also included.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

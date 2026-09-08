@@ -1,0 +1,330 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Pending Deposit - Admin Panel{% endblock %}
+
+{% block admin_content %}
+  <div id="loading-spinner" class="hidden fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm items-center justify-center">
+    <div class="bg-white dark:bg-slate-900 px-6 py-4 rounded-xl shadow-2xl flex flex-col items-center gap-3">
+      <div class="w-8 h-8 border-4 border-indigo-100 dark:border-indigo-900/50 border-t-indigo-600 dark:border-t-indigo-500 rounded-full animate-spin"></div>
+      <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Processing...</span>
+    </div>
+  </div>
+
+  <!-- Global Approve Modal -->
+  <div id="global-approve-modal" class="hidden fixed inset-0 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" style="z-index: 9999;">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col transform transition-all" onclick="event.stopPropagation()">
+      <div class="px-6 py-5 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center shrink-0">
+            <i class="fa-solid fa-check text-xl"></i>
+          </div>
+          <h3 class="text-lg font-bold text-slate-900 dark:text-white">Approve Deposit</h3>
+        </div>
+      </div>
+      <div class="p-6 text-slate-600 dark:text-slate-400">
+        <p>Do you really want to approve the deposit of <strong class="text-emerald-600 dark:text-emerald-400">$<span id="approve-amount"></span></strong>?</p>
+        <p class="text-sm mt-2">Deposit ID: #<span id="approve-id"></span></p>
+      </div>
+      <div class="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+        <button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" onclick="closeModal('global-approve-modal')">Cancel</button>
+        <button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-600 transition-colors" onclick="confirmGlobalApprove()">Yes, Approve</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Reject Modal -->
+  <div id="global-reject-modal" class="hidden fixed inset-0 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" style="z-index: 9999;">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col transform transition-all" onclick="event.stopPropagation()">
+      <div class="px-6 py-5 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-600 flex items-center justify-center shrink-0">
+            <i class="fa-solid fa-ban text-xl"></i>
+          </div>
+          <h3 class="text-lg font-bold text-slate-900 dark:text-white">Reject <span id="reject-label"></span></h3>
+        </div>
+      </div>
+      <div class="p-6 space-y-4">
+        <p class="text-slate-600 dark:text-slate-400 text-sm">Please provide a reason for rejecting this deposit. This will be sent to the client.</p>
+        <div>
+          <label for="reject_reason_input" class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Reason <span class="text-rose-500">*</span></label>
+          <textarea id="reject_reason_input" rows="3" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all placeholder:text-slate-400" placeholder="e.g. Screenshot unreadable, amount mismatch..."></textarea>
+          <p id="reject-error" class="hidden text-rose-500 text-xs mt-1 font-medium"><i class="fa-solid fa-circle-exclamation mr-1"></i> Reject reason is required.</p>
+        </div>
+      </div>
+      <div class="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+        <button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" onclick="closeModal('global-reject-modal')">Cancel</button>
+        <button type="button" class="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-rose-500 hover:bg-rose-600 transition-colors" onclick="confirmGlobalReject()">Reject Deposit</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    #loading-spinner.active { display: flex !important; }
+  </style>
+
+  <script>
+    let currentForm = null;
+
+    function openModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove("hidden");
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add("hidden");
+    }
+
+    function openApproveModal(id, amountStr, btnEl) {
+      currentForm = btnEl.closest("form");
+      const amt = amountStr ? amountStr : "";
+      document.getElementById('approve-amount').innerText = amt;
+      document.getElementById('approve-id').innerText = id;
+      openModal('global-approve-modal');
+    }
+
+    function confirmGlobalApprove() {
+      if (currentForm && currentForm.dataset.submitting) return;
+      if (currentForm) currentForm.dataset.submitting = 'true';
+      
+      const btn = document.querySelector('#global-approve-modal button.bg-emerald-500');
+      if (btn) {
+          btn.disabled = true;
+          btn.innerText = "Processing...";
+          btn.classList.add("opacity-75", "cursor-not-allowed");
+      }
+      
+      closeModal('global-approve-modal');
+      const spinner = document.getElementById("loading-spinner");
+      if (spinner) spinner.classList.add("active");
+      if (currentForm) currentForm.submit();
+    }
+
+    function openRejectModal(label, btnEl) {
+      currentForm = btnEl.closest("form");
+      document.getElementById('reject-label').innerText = label;
+      document.getElementById('reject_reason_input').value = "";
+      document.getElementById('reject-error').classList.add("hidden");
+      openModal('global-reject-modal');
+    }
+
+    function confirmGlobalReject() {
+      if (currentForm && currentForm.dataset.submitting) return;
+      
+      const val = document.getElementById('reject_reason_input').value.trim();
+      if (!val) {
+        document.getElementById('reject-error').classList.remove("hidden");
+        return;
+      }
+      
+      if (currentForm) {
+        currentForm.dataset.submitting = 'true';
+        const input = currentForm.querySelector('input[name="reject_reason"]');
+        if (input) input.value = val;
+        
+        const btn = document.querySelector('#global-reject-modal button.bg-rose-500');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerText = "Processing...";
+            btn.classList.add("opacity-75", "cursor-not-allowed");
+        }
+        
+        closeModal('global-reject-modal');
+        const spinner = document.getElementById("loading-spinner");
+        if (spinner) spinner.classList.add("active");
+        currentForm.submit();
+      }
+    }
+  </script>
+
+  <!-- Page Header -->
+  <div class="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+        <i class="fa-solid fa-money-bill-transfer"></i>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-slate-900 dark:text-white">Pending Deposits</h1>
+      </div>
+    </div>
+    <div class="w-full lg:w-auto">
+      {% include "admin_panel/includes/status_filter_boxes.html" with url_name="admin-pending-deposit" list_status=list_status status_counts=status_counts query_ex_status=query_ex_status %}
+    </div>
+  </div>
+
+  <!-- Table card -->
+  <script>
+    let debounceTimer;
+    function debounceSubmit() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        document.getElementById('depositFilterForm').submit();
+      }, 500);
+    }
+  </script>
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden mb-6">
+
+    <div class="overflow-x-auto w-full">
+      <table class="w-full text-left border-collapse text-sm whitespace-nowrap">
+        <thead>
+          <tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Date</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Client</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Gateway</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Amount</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Ref</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider">Notes</th>
+            <th class="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+          {% for t in transactions %}
+            <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors group">
+              <td class="px-4 py-3 text-slate-500 font-medium text-xs">{{ t.created_at|date:"Y-m-d H:i" }}</td>
+              <td class="px-4 py-3">
+                <div class="font-bold text-slate-900 dark:text-white">{{ t.actor.get_full_name|default:t.actor.email }}</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">{{ t.actor.email }}</div>
+                
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400 font-medium">{{ t.payment_gateway.name|default:"-" }}</td>
+              <td class="px-4 py-3 font-bold text-emerald-600 dark:text-emerald-400">{{ t.amount }} <span class="text-xs font-normal">{{ t.currency }}</span></td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs font-mono">{{ t.reference|default:"-" }}</td>
+              <td class="px-4 py-3 text-slate-500 text-xs max-w-[150px] truncate" title="{{ t.user_notes }}">{{ t.user_notes|truncatechars:60|default:"-" }}</td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-2">
+                  <button type="button" class="h-7 px-3 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" onclick="openModal('deposit-modal-{{ t.id }}')">Review</button>
+                  
+                  {% if list_status == "pending" %}
+                    <form method="post" class="inline-block m-0 p-0">
+                      {% csrf_token %}
+                      <input type="hidden" name="tx_id" value="{{ t.id }}" />
+                      <input type="hidden" name="action" value="approve" />
+                      <button type="button" class="h-7 px-3 rounded text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-white transition-colors" onclick="openApproveModal('{{ t.id }}', '{{ t.amount }}', this);">Approve</button>
+                    </form>
+                    <form method="post" class="inline-block m-0 p-0">
+                      {% csrf_token %}
+                      <input type="hidden" name="tx_id" value="{{ t.id }}" />
+                      <input type="hidden" name="action" value="reject" />
+                      <input type="hidden" name="reject_reason" value="" />
+                      <button type="button" class="h-7 px-3 rounded text-xs font-semibold bg-rose-500 hover:bg-rose-600 text-white transition-colors" onclick="openRejectModal('Deposit #{{ t.id }}', this);">Reject</button>
+                    </form>
+                  {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase {% if t.status == 'REJECTED' %}bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800{% else %}bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800{% endif %}">{{ t.get_status_display }}</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+
+            <!-- Deposit Review Modal -->
+            <div id="deposit-modal-{{ t.id }}" class="hidden fixed inset-0 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" style="z-index: 9999;">
+              <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]" onclick="event.stopPropagation()">
+                <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+                  <div>
+                    <div class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Deposit Request</div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white">#{{ t.id }}</h3>
+                  </div>
+                  <button type="button" class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors" onclick="closeModal('deposit-modal-{{ t.id }}')">
+                    <i class="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+
+                <div class="p-6 overflow-y-auto flex-1 min-h-0">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="space-y-6">
+                      <div>
+                        <h4 class="text-xs font-bold uppercase tracking-widest text-indigo-500 mb-3 flex items-center gap-2"><i class="fa-solid fa-user"></i> Client Profile</h4>
+                        <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-2 text-sm border border-slate-100 dark:border-slate-700">
+                          <div class="flex justify-between"><span class="text-slate-500">Name:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ t.actor.get_full_name|default:t.actor.email }}</span></div>
+                          <div class="flex justify-between"><span class="text-slate-500">Email:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ t.actor.email }}</span></div>
+                          <div class="flex justify-between"><span class="text-slate-500">KYC:</span> <span class="font-semibold text-slate-900 dark:text-white uppercase">{{ t.actor.kyc_status }}</span></div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 class="text-xs font-bold uppercase tracking-widest text-emerald-500 mb-3 flex items-center gap-2"><i class="fa-solid fa-file-invoice-dollar"></i> Deposit Details</h4>
+                        <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-2 text-sm border border-slate-100 dark:border-slate-700">
+                          <div class="flex justify-between"><span class="text-slate-500">Amount:</span> <span class="font-bold text-emerald-600 dark:text-emerald-400 text-lg">{{ t.amount }} <span class="text-xs font-normal">{{ t.currency }}</span></span></div>
+                          <div class="flex justify-between"><span class="text-slate-500">Gateway:</span> <span class="font-semibold text-slate-900 dark:text-white">{{ t.payment_gateway.name|default:"-" }}</span></div>
+                          <div class="flex justify-between"><span class="text-slate-500">Reference:</span> <span class="font-mono text-slate-900 dark:text-white">{{ t.reference|default:"-" }}</span></div>
+                          <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                            <span class="block text-xs text-slate-500 mb-1">Notes:</span>
+                            <div class="text-slate-700 dark:text-slate-300 italic">{{ t.user_notes|default:"-" }}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 class="text-xs font-bold uppercase tracking-widest text-purple-500 mb-3 flex items-center gap-2"><i class="fa-solid fa-image"></i> Payment Screenshot</h4>
+                      {% if t.payment_screenshot %}
+                        <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-2 border border-slate-100 dark:border-slate-700 flex flex-col items-center">
+                          <img class="max-h-64 object-contain rounded-lg mb-3" src="{{ t.payment_screenshot.url }}" alt="Screenshot" />
+                          <a class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1" href="{{ t.payment_screenshot.url }}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open in new tab</a>
+                        </div>
+                      {% else %}
+                        <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-8 border border-slate-100 dark:border-slate-700 border-dashed flex flex-col items-center justify-center text-slate-400">
+                          <i class="fa-solid fa-image text-3xl mb-2 text-slate-300 dark:text-slate-600"></i>
+                          <span class="text-sm">No screenshot uploaded</span>
+                        </div>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between">
+                  <button type="button" class="h-10 px-6 rounded-lg text-sm font-semibold btn-cancel transition-colors" onclick="closeModal('deposit-modal-{{ t.id }}')">Close</button>
+
+                  {% if list_status == "pending" %}
+                    <div class="flex items-center gap-3">
+                      <form method="post" class="m-0 p-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="tx_id" value="{{ t.id }}" />
+                        <input type="hidden" name="action" value="reject" />
+                        <input type="hidden" name="reject_reason" value="" />
+                        <button type="button" class="h-10 px-6 rounded-lg text-sm font-semibold bg-rose-500 hover:bg-rose-600 text-white transition-colors shadow-sm" onclick="openRejectModal('Deposit #{{ t.id }}', this);">Reject</button>
+                      </form>
+                      <form method="post" class="m-0 p-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="tx_id" value="{{ t.id }}" />
+                        <input type="hidden" name="action" value="approve" />
+                        <button type="button" class="h-10 px-6 rounded-lg text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white transition-colors shadow-sm" onclick="openApproveModal('{{ t.id }}', '{{ t.amount }}', this);">Approve</button>
+                      </form>
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            <script>
+              (function() {
+                var modal = document.getElementById('deposit-modal-{{ t.id }}');
+                if (modal) {
+                  modal.addEventListener('click', function(e) {
+                    if (e.target === modal) { modal.classList.add('hidden'); }
+                  });
+                }
+              })();
+            </script>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="flex items-center justify-center gap-3 py-6">
+                  <div class="w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                    <i class="fa-solid fa-folder-open"></i>
+                  </div>
+                  <h3 class="text-xs font-bold text-slate-900 dark:text-white">
+                    {% if list_status == "pending" %}No pending deposits found.{% elif list_status == "approved" %}No approved deposits found.{% else %}No rejected deposits found.{% endif %}
+                  </h3>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <style>
+    /* Modal open helper */
+    [id^="deposit-modal-"]:not(.hidden) { display: flex !important; }
+  </style>
+{% endblock %}

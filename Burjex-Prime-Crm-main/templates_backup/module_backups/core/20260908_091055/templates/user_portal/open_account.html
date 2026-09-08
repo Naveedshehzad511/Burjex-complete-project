@@ -1,0 +1,322 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Open Trading Account{% endblock %}
+
+{% block user_content %}
+<style>
+  .oa-field {
+    width: 100%;
+    border: 1px solid var(--portal-border);
+    border-radius: calc(var(--portal-radius, 12px) - 4px);
+    padding: 10px 12px;
+    font-size: 14px;
+    background: var(--portal-surface-bg);
+    color: var(--portal-text-main);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .oa-field:focus {
+    border-color: var(--portal-brand-primary);
+    box-shadow: 0 0 0 3px rgba(11, 60, 93, 0.1);
+  }
+
+  .oa-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  @media (max-width: 640px) {
+    .oa-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .oa-kind-btn {
+    border: 2px solid var(--portal-border);
+    border-radius: var(--portal-radius, 12px);
+    padding: 14px 16px;
+    font-weight: 700;
+    font-size: 15px;
+    background: var(--portal-surface-bg);
+    color: var(--portal-text-muted);
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s, color 0.15s;
+  }
+
+  .oa-kind-btn:hover {
+    border-color: var(--portal-brand-primary);
+    color: var(--portal-text-main);
+  }
+
+  .oa-kind-btn.is-on {
+    border-color: var(--portal-brand-primary);
+    background: var(--portal-brand-primary);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(11, 31, 58, 0.2);
+  }
+
+  .oa-kind-btn:focus-visible {
+    outline: 2px solid var(--portal-brand-primary);
+    outline-offset: 2px;
+  }
+
+  .oa-info-cell {
+    border-radius: calc(var(--portal-radius, 12px) - 4px);
+    border: 1px solid var(--portal-border);
+    background: var(--portal-surface-bg);
+    padding: 10px 12px;
+  }
+</style>
+
+<h1 class="portal-page-heading">Open Trading Account</h1>
+<p class="portal-page-subtitle">Choose your account tier and options.</p>
+
+{% if account_types %}
+<div class="portal-card max-w-2xl">
+  <form method="post" class="space-y-5" id="openAccountForm" autocomplete="off">
+    {% csrf_token %}
+    <input type="hidden" name="account_kind" id="id_account_kind" value="{{ initial_kind|default:'real' }}">
+    <input type="hidden" name="currency" id="id_currency" value="USD">
+    <input type="hidden" name="trading_platform" id="id_trading_platform" value="MT5">
+
+    <div>
+      <label class="portal-form-label" for="id_account_type">Account Type</label>
+      <select class="oa-field mt-1" id="id_account_type" name="account_type" required>
+        {% for t in account_types %}
+        <option value="{{ t.id }}" data-description="{{ t.description }}" data-min-deposit="{{ t.min_deposit }}"
+            data-leverages="{{ t.leverage_options|join:',' }}" data-currency="{{ t.default_currency }}"
+            data-max-leverage="{{ t.max_leverage }}"
+            data-platform="{% if t.supports_btrader %}BTrader{% elif t.supports_match_trader %}Match-Trader{% else %}MT5{% endif %}"
+            data-platform-code="{% if t.supports_btrader %}BTRADER{% elif t.supports_match_trader %}MATCH_TRADER{% else %}MT5{% endif %}"
+            data-demo-selectable="{% if t.demo_selectable %}true{% else %}false{% endif %}"
+            data-live-selectable="{% if t.live_selectable %}true{% else %}false{% endif %}"
+            data-min-demo-balance="{{ t.min_demo_balance }}" data-max-demo-balance="{{ t.max_demo_balance }}"
+            data-suitable-for="{{ t.suitable_for }}"
+            {% if forloop.first %}selected{% endif %}>{{ t.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="rounded-xl p-4" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
+      <div class="text-sm font-semibold mb-2" style="color:var(--portal-text-main);">Account Information</div>
+      <p class="text-sm mb-3" style="color:var(--portal-text-muted);" id="accountDescription"></p>
+      <div class="oa-grid text-sm">
+        <div class="oa-info-cell" id="wrapPlatform">
+          <div class="portal-stat-label">Platform</div>
+          <div class="font-semibold" style="color:var(--portal-text-main);" id="accountPlatform">MT5</div>
+        </div>
+        <div class="oa-info-cell hidden" id="wrapMinDeposit">
+          <div class="portal-stat-label">Minimum Deposit</div>
+          <div class="font-semibold" style="color:var(--portal-text-main);" id="accountMinDeposit">—</div>
+        </div>
+        <div class="oa-info-cell">
+          <div class="portal-stat-label">Max Leverage (tier)</div>
+          <div class="font-semibold" style="color:var(--portal-text-main);" id="accountLeverageCap">—</div>
+        </div>
+        <div class="oa-info-cell">
+          <div class="portal-stat-label">Suitable For</div>
+          <div class="font-semibold" style="color:var(--portal-text-main);" id="accountSuitableFor">—</div>
+        </div>
+      </div>
+
+      <div class="mt-4 pt-4 hidden" style="border-top:1px solid var(--portal-border);" id="demoBalanceSection">
+        <div class="portal-section-heading mb-2">Starting Balance (Demo)</div>
+        <p class="text-sm text-slate-500 mb-2" id="demoBalanceHint">Enter a starting balance.</p>
+        <div class="flex items-center gap-2 max-w-xs">
+          <span class="text-slate-500 text-sm font-medium" id="demoBalanceCurrency"></span>
+          <input type="number" step="0.01" class="oa-field w-full" name="initial_demo_balance" id="id_initial_demo_balance" required>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <label class="portal-form-label" for="id_leverage">Leverage</label>
+      <select class="oa-field mt-1" id="id_leverage" name="leverage" required></select>
+    </div>
+
+    <div>
+      <label class="portal-form-label" for="mainPassword">Trading Password</label>
+      <div class="relative mt-1">
+        <input id="mainPassword" class="oa-field pr-12" type="password" name="main_password"
+          placeholder="Trading password" required minlength="8" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}" title="Must contain at least one number and one uppercase and lowercase letter, and at least 8 or more characters" />
+        <button type="button" data-toggle-pass="mainPassword"
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold"
+          style="color:var(--portal-text-muted);">Show</button>
+      </div>
+    </div>
+
+
+
+    <div>
+      <label class="portal-form-label" for="investorPassword">Investor Password</label>
+      <div class="relative mt-1">
+        <input id="investorPassword" class="oa-field pr-12" type="password" name="investor_password"
+          placeholder="Investor password" required minlength="8" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}" title="Must contain at least one number and one uppercase and lowercase letter, and at least 8 or more characters" />
+        <button type="button" data-toggle-pass="investorPassword"
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold"
+          style="color:var(--portal-text-muted);">Show</button>
+      </div>
+    </div>
+
+
+
+    <button type="submit" class="portal-btn-primary w-full py-3 text-base font-bold">Create Trading Account</button>
+  </form>
+</div>
+{% else %}
+<div class="portal-card" style="color:var(--portal-text-muted);">No active account types are available.</div>
+{% endif %}
+
+{% if created_account %}
+<div class="portal-alert portal-alert--success mt-5">
+  <span>✓</span>
+  <div>
+    <div class="font-semibold mb-1">Trading account created</div>
+    <div class="text-sm">Account: <strong>{{ created_account.account_number }}</strong></div>
+    <div class="text-sm">Trading password: <strong>{{ created_account.main_password }}</strong></div>
+    <div class="text-sm">Investor password: <strong>{{ created_account.investor_password }}</strong></div>
+    <div class="text-sm">Server: {{ created_account.server }}</div>
+    <div class="text-sm">Leverage: 1:{{ created_account.leverage }}</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="portal-card mt-5">
+  <div class="portal-card-header">
+    <div class="portal-card-title">My Trading Accounts</div>
+  </div>
+  <div class="portal-table-wrap overflow-x-auto w-full" style="box-shadow:none;border-radius:8px;">
+    <table class="portal-table min-w-full whitespace-nowrap">
+      <thead>
+        <tr>
+          <th>Account #</th>
+          <th>Account</th>
+          <th>Currency</th>
+          <th>Leverage</th>
+          <th>Status</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in my_accounts %}
+        <tr>
+          <td class="font-semibold" style="color:var(--portal-brand-primary);">{{ r.account_number }}</td>
+          <td>{{ r.account_type }}</td>
+          <td>{{ r.currency }}</td>
+          <td>1:{{ r.leverage }}</td>
+          <td>{{ r.status }}</td>
+          <td style="color:var(--portal-text-muted);">{{ r.created_at|date:"Y-m-d H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" style="text-align:center;color:var(--portal-text-muted);padding:1.5rem 1rem;">No trading
+            accounts yet.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var kindInput = document.getElementById("id_account_kind");
+    var accountTypeSelect = document.getElementById("id_account_type");
+    var leverageSelect = document.getElementById("id_leverage");
+    var currencyInput = document.getElementById("id_currency");
+    var tradingPlatformInput = document.getElementById("id_trading_platform");
+    var accountDescription = document.getElementById("accountDescription");
+    var accountMinDeposit = document.getElementById("accountMinDeposit");
+    var accountLeverageCap = document.getElementById("accountLeverageCap");
+    var accountPlatform = document.getElementById("accountPlatform");
+    var wrapMinDeposit = document.getElementById("wrapMinDeposit");
+    var demoBalanceSection = document.getElementById("demoBalanceSection");
+    var kindHintReal = document.getElementById("kindHintReal");
+    var kindHintDemo = document.getElementById("kindHintDemo");
+    var demoCustomWrap = document.getElementById("demoCustomAmountWrap");
+    var btnReal = document.getElementById("btnKindReal");
+    var btnDemo = document.getElementById("btnKindDemo");
+    function escapeHtml(v) { return String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
+    function getKind() { return (kindInput && kindInput.value === "demo") ? "demo" : "real"; }
+    function setKind(kind) {
+      if (!kindInput) return;
+      kindInput.value = kind === "demo" ? "demo" : "real";
+      if (btnReal) { btnReal.classList.toggle("is-on", kind !== "demo"); btnReal.setAttribute("aria-pressed", kind !== "demo" ? "true" : "false"); }
+      if (btnDemo) { btnDemo.classList.toggle("is-on", kind === "demo"); btnDemo.setAttribute("aria-pressed", kind === "demo" ? "true" : "false"); }
+      if (kindHintReal) kindHintReal.classList.toggle("hidden", kind === "demo");
+      if (kindHintDemo) kindHintDemo.classList.toggle("hidden", kind !== "demo");
+      if (wrapMinDeposit) wrapMinDeposit.classList.toggle("hidden", kind === "demo");
+      if (demoBalanceSection) demoBalanceSection.classList.toggle("hidden", kind !== "demo");
+      filterAccountTypesForKind(); updateAccountPanel();
+    }
+    function filterAccountTypesForKind() {
+      if (!accountTypeSelect) return;
+      var demo = getKind() === "demo"; var firstVisible = -1;
+      for (var i = 0; i < accountTypeSelect.options.length; i++) {
+        var o = accountTypeSelect.options[i];
+        var ok = demo ? o.getAttribute("data-demo-selectable") === "true" : o.getAttribute("data-live-selectable") === "true";
+        o.hidden = !ok; o.disabled = !ok; if (ok && firstVisible < 0) firstVisible = i;
+      }
+      if (firstVisible >= 0 && accountTypeSelect.selectedOptions.length && accountTypeSelect.selectedOptions[0].disabled) accountTypeSelect.selectedIndex = firstVisible;
+    }
+    function updateAccountPanel() {
+      if (!accountTypeSelect) return;
+      var opt = accountTypeSelect.options[accountTypeSelect.selectedIndex];
+      while (opt && opt.disabled) { opt = accountTypeSelect.options[opt.index + 1]; }
+      if (!opt || opt.disabled) return;
+      var description = opt.getAttribute("data-description") || "";
+      var minDeposit = opt.getAttribute("data-min-deposit") || "0";
+      var currency = opt.getAttribute("data-currency") || "USD";
+      var suitableFor = opt.getAttribute("data-suitable-for") || "";
+      var maxLeverage = opt.getAttribute("data-max-leverage") || "100";
+      var platform = opt.getAttribute("data-platform") || "MT5";
+      var platformCode = opt.getAttribute("data-platform-code") || "MT5";
+      var leveragesRaw = (opt.getAttribute("data-leverages") || "").trim();
+      var leverageOptions = leveragesRaw ? leveragesRaw.split(",").filter(Boolean) : ["100"];
+      var isDemo = getKind() === "demo";
+      var minDemoBal = opt.getAttribute("data-min-demo-balance") || "100.00";
+      var maxDemoBal = opt.getAttribute("data-max-demo-balance") || "100000.00";
+      
+      var accountSuitableFor = document.getElementById("accountSuitableFor");
+      if (accountDescription) accountDescription.textContent = description || "No description for this account type.";
+      if (!isDemo && accountMinDeposit) accountMinDeposit.textContent = minDeposit + " " + currency;
+      if (accountLeverageCap) accountLeverageCap.textContent = "Up to 1:" + maxLeverage;
+      if (accountSuitableFor) accountSuitableFor.textContent = suitableFor || "All Traders";
+      if (accountPlatform) accountPlatform.textContent = platform;
+      if (currencyInput) currencyInput.value = currency;
+      if (tradingPlatformInput) tradingPlatformInput.value = platformCode;
+      
+      var initialDemoInput = document.getElementById("id_initial_demo_balance");
+      if (initialDemoInput) {
+        initialDemoInput.min = minDemoBal;
+        initialDemoInput.max = maxDemoBal;
+        if (!initialDemoInput.value || parseFloat(initialDemoInput.value) < parseFloat(minDemoBal)) {
+          initialDemoInput.value = minDemoBal;
+        }
+      }
+      var demoBalHint = document.getElementById("demoBalanceHint");
+      if (demoBalHint) demoBalHint.textContent = "Enter a starting balance between " + minDemoBal + " and " + maxDemoBal + ".";
+      var demoBalCurr = document.getElementById("demoBalanceCurrency");
+      if (demoBalCurr) demoBalCurr.textContent = currency;
+      
+      if (leverageSelect) {
+        var cv = leverageSelect.value; leverageSelect.innerHTML = leverageOptions.map(function (lev) { return '<option value="' + escapeHtml(lev) + '">1:' + escapeHtml(lev) + '</option>'; }).join("");
+        if (cv && leverageOptions.indexOf(cv) >= 0) leverageSelect.value = cv;
+      }
+    }
+    if (btnReal) btnReal.addEventListener("click", function () { setKind("real"); });
+    if (btnDemo) btnDemo.addEventListener("click", function () { setKind("demo"); });
+    var init = (kindInput && kindInput.value === "demo") ? "demo" : "real";
+    setKind(init);
+    if (accountTypeSelect) accountTypeSelect.addEventListener("change", updateAccountPanel);
+    document.querySelectorAll('input[name="demo_balance_preset"]').forEach(function (r) {
+      r.addEventListener("change", function () { if (!demoCustomWrap) return; var c = document.getElementById("demoBalCustomRadio"); demoCustomWrap.classList.toggle("hidden", !c || !c.checked); });
+    });
+    document.querySelectorAll("[data-toggle-pass]").forEach(function (btn) {
+      btn.addEventListener("click", function () { var input = document.getElementById(btn.getAttribute("data-toggle-pass")); if (!input) return; input.type = input.type === "password" ? "text" : "password"; btn.textContent = input.type === "password" ? "Show" : "Hide"; });
+    });
+  })();
+</script>
+{% endblock %}

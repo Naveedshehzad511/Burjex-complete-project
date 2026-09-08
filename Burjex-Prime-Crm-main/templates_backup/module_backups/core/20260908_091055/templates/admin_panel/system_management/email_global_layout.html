@@ -1,0 +1,329 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Global email layout{% endblock %}
+{% block admin_content %}
+<div class="max-w-3xl mx-auto pb-12 px-3 sm:px-4">
+  <nav class="text-sm text-slate-500 mb-4">
+    <a href="{% url 'admin-system-email-templates' %}" class="text-indigo-600 hover:underline">Email Templates</a>
+    <span class="mx-2 text-slate-300">/</span>
+    <span class="text-slate-700 font-medium">Global layout</span>
+  </nav>
+
+  <header class="mb-8">
+    <h1 class="text-xl sm:text-3xl font-semibold text-slate-900 tracking-tight">Global email layout</h1>
+    <p class="text-slate-600 text-sm sm:text-base mt-2 leading-relaxed max-w-2xl">
+      This frame wraps every <strong>transactional</strong> email: branded header, your template’s body in the middle, then disclaimer and contact details.
+      <strong>Company name</strong> comes from <a href="{% url 'admin-organization-profile' %}" class="text-indigo-600 font-medium hover:underline">System Settings → Company / Organization profile</a>.
+      Use <strong>Header branding</strong> below for the email logo and header colors; if no email logo is set, the layout falls back to the legacy layout logo, then the organization profile logo, then company name only.
+    </p>
+  </header>
+
+  <ol class="hidden sm:flex items-start gap-4 mb-8 text-xs text-slate-600" aria-hidden="true">
+    <li class="flex-1 flex gap-2 items-center rounded-xl bg-indigo-600/5 border border-indigo-600/10 px-3 py-2">
+      <span class="flex size-6 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-bold">1</span>
+      <span>Header &amp; logo</span>
+    </li>
+    <li class="flex-1 flex gap-2 items-center rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
+      <span class="flex size-6 items-center justify-center rounded-full bg-slate-300 text-white text-[10px] font-bold">2</span>
+      <span>Template body</span>
+    </li>
+    <li class="flex-1 flex gap-2 items-center rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
+      <span class="flex size-6 items-center justify-center rounded-full bg-slate-300 text-white text-[10px] font-bold">3</span>
+      <span>Footer &amp; legal</span>
+    </li>
+  </ol>
+
+  <form method="post" enctype="multipart/form-data" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden" id="email-global-layout-form">
+    <div class="p-5 sm:p-6 space-y-8">
+      {% csrf_token %}
+
+      <section aria-labelledby="lay-general">
+        <h2 id="lay-general" class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">Layout &amp; URL</h2>
+        <div class="space-y-5">
+          <label class="flex items-start gap-3 cursor-pointer rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3.5">
+            <input type="checkbox" name="wrap_enabled" {% if layout.wrap_enabled %}checked{% endif %} class="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600" />
+            <span>
+              <span class="block text-sm font-semibold text-slate-800">Use this layout for outgoing emails</span>
+              <span class="block text-xs text-slate-500 mt-0.5">Turn off only if you send plain, unwrapped HTML from every template.</span>
+            </span>
+          </label>
+          <div>
+            <label for="id_site_base" class="block text-sm font-semibold text-slate-800 mb-1.5">Public site URL</label>
+            <p class="text-xs text-slate-500 mb-2">Used so images in emails use absolute links. Example: <code class="text-[11px] bg-slate-100 px-1 rounded">https://yourbroker.com</code></p>
+            <input id="id_site_base" type="url" name="site_base_url" value="{{ layout.site_base_url }}"
+              class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/20 outline-none" placeholder="https://yourdomain.com" />
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="lay-header-branding" class="pt-6 border-t border-slate-100">
+        <h2 id="lay-header-branding" class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Header branding</h2>
+        <p class="text-xs text-slate-500 mb-4">Stored in <code class="text-[11px] bg-slate-100 px-1 rounded">email_template_settings</code>. Applies to all wrapped templates (password reset, signup, KYC, deposits, withdrawals, and the rest).</p>
+        <div class="space-y-5">
+          <div>
+            <label for="id_company_name_override" class="block text-sm font-semibold text-slate-800 mb-1.5">Company name (email branding)</label>
+            <p class="text-xs text-slate-500 mb-2">Optional override for all emails. Leave empty to use Organization Profile company name.</p>
+            <input id="id_company_name_override" type="text" name="company_name_override" value="{{ tpl_settings.company_name_override }}"
+              class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/20 outline-none" placeholder="Your Company Name" />
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-slate-800 mb-1.5">Email logo upload</label>
+            <p class="text-xs text-slate-500 mb-3">PNG, JPG, or SVG. Maximum file size 2MB. Preview updates when you choose a file (save to apply).</p>
+            <div id="email-logo-preview-wrap" class="mb-3 {% if not tpl_settings.email_logo %}hidden{% endif %}">
+              <div class="inline-flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <span class="text-xs font-medium text-slate-600">Preview</span>
+                <img id="email-logo-preview" src="{% if tpl_settings.email_logo %}{{ tpl_settings.email_logo.url }}{% endif %}" alt="Email logo preview" class="max-h-20 max-w-[240px] object-contain bg-white rounded-lg border border-slate-100 p-2" />
+              </div>
+            </div>
+            <input type="file" name="email_logo" id="id_email_logo" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
+              class="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-[#094a72]" />
+            {% if tpl_settings.email_logo %}
+            <label class="flex items-center gap-2 mt-3 text-sm text-slate-600 cursor-pointer">
+              <input type="checkbox" name="clear_email_logo" value="on" class="rounded border-slate-300 text-indigo-600" />
+              Remove current email logo
+            </label>
+            {% endif %}
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="id_logo_position" class="block text-sm font-semibold text-slate-800 mb-1.5">Logo position</label>
+              <select id="id_logo_position" name="logo_position"
+                class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/20 outline-none bg-white">
+                {% for val, label in logo_position_choices %}
+                <option value="{{ val }}" {% if tpl_settings.logo_position == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label for="id_logo_size" class="block text-sm font-semibold text-slate-800 mb-1.5">Logo size</label>
+              <select id="id_logo_size" name="logo_size"
+                class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/20 outline-none bg-white">
+                {% for val, label in logo_size_choices %}
+                <option value="{{ val }}" {% if tpl_settings.logo_size == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label for="id_header_color" class="block text-sm font-semibold text-slate-800 mb-1.5">Header background color</label>
+            <p class="text-xs text-slate-500 mb-2">Default (<code class="text-[11px] bg-slate-100 px-1 rounded">#0B1C3F</code>).</p>
+            <div class="flex flex-wrap items-center gap-3">
+              <input type="color" id="id_header_color_picker" value="{{ tpl_settings.header_color|default:'#0B1C3F' }}"
+                class="h-10 w-14 cursor-pointer rounded-lg border border-slate-200 bg-white p-0.5" aria-label="Pick header color" />
+              <input type="text" id="id_header_color" name="header_color" value="{{ tpl_settings.header_color }}"
+                maxlength="7" pattern="^#[0-9A-Fa-f]{6}$"
+                class="w-36 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-mono focus:ring-2 focus:ring-indigo-600/20 outline-none" placeholder="#0B1C3F" />
+            </div>
+          </div>
+          <div>
+            <label for="id_text_color" class="block text-sm font-semibold text-slate-800 mb-1.5">Header text color</label>
+            <p class="text-xs text-slate-500 mb-2">Company name on the header bar. Default white (<code class="text-[11px] bg-slate-100 px-1 rounded">#FFFFFF</code>).</p>
+            <div class="flex flex-wrap items-center gap-3">
+              <input type="color" id="id_text_color_picker" value="{{ tpl_settings.text_color|default:'#FFFFFF' }}"
+                class="h-10 w-14 cursor-pointer rounded-lg border border-slate-200 bg-white p-0.5" aria-label="Pick header text color" />
+              <input type="text" id="id_text_color" name="text_color" value="{{ tpl_settings.text_color }}"
+                maxlength="7" pattern="^#[0-9A-Fa-f]{6}$"
+                class="w-36 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-mono focus:ring-2 focus:ring-indigo-600/20 outline-none" placeholder="#FFFFFF" />
+            </div>
+          </div>
+          <div>
+            <label for="id_button_color" class="block text-sm font-semibold text-slate-800 mb-1.5">Button color</label>
+            <p class="text-xs text-slate-500 mb-2">Global color used for primary email buttons/links with <code class="text-[11px] bg-slate-100 px-1 rounded">.email-btn</code>.</p>
+            <div class="flex flex-wrap items-center gap-3">
+              <input type="color" id="id_button_color_picker" value="{{ tpl_settings.button_color|default:'#0B3C5D' }}"
+                class="h-10 w-14 cursor-pointer rounded-lg border border-slate-200 bg-white p-0.5" aria-label="Pick button color" />
+              <input type="text" id="id_button_color" name="button_color" value="{{ tpl_settings.button_color }}"
+                maxlength="7" pattern="^#[0-9A-Fa-f]{6}$"
+                class="w-36 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-mono focus:ring-2 focus:ring-indigo-600/20 outline-none" placeholder="#0B3C5D" />
+            </div>
+          </div>
+          <label class="flex items-start gap-3 cursor-pointer rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3.5">
+            <input type="checkbox" name="show_company_name" {% if tpl_settings.show_company_name %}checked{% endif %} class="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600" />
+            <span>
+              <span class="block text-sm font-semibold text-slate-800">Show company name with logo</span>
+              <span class="block text-xs text-slate-500 mt-0.5">When off, only the logo appears in the header (when a logo is set). If no logo is uploaded, the company name is always shown.</span>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <section aria-labelledby="lay-live-preview" class="pt-6 border-t border-slate-100">
+        <h2 id="lay-live-preview" class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Live preview</h2>
+        <p class="text-xs text-slate-500 mb-3">Branding changes preview instantly below (save to apply globally).</p>
+        <div class="rounded-xl border border-slate-200 overflow-hidden">
+          <div id="email-live-header" class="px-4 py-5 text-center" style="background: {{ tpl_settings.header_color|default:'#0B1C3F' }};">
+            <img id="email-live-logo" src="{% if tpl_settings.email_logo %}{{ tpl_settings.email_logo.url }}{% endif %}" alt="" class="{% if not tpl_settings.email_logo %}hidden{% endif %} max-h-14 max-w-[240px] mx-auto mb-2 object-contain bg-white rounded p-1" />
+            <div id="email-live-company" class="font-semibold text-base" style="color: {{ tpl_settings.text_color|default:'#FFFFFF' }};">
+              {{ tpl_settings.company_name_override|default:"Company Name" }}
+            </div>
+          </div>
+          <div class="p-4 bg-white">
+            <p class="text-sm text-slate-700 mb-3">Hello John, your request has been updated.</p>
+          </div>
+          <!-- Live Footer Preview -->
+          <div class="px-4 py-5 bg-slate-50 border-t border-slate-200 text-center text-xs text-slate-500">
+            <div id="email-live-risk" class="mb-3 whitespace-pre-wrap">{{ layout.risk_disclaimer|default:"" }}</div>
+            <div class="text-[11px] space-y-1">
+              <div id="email-live-addr" class="whitespace-pre-wrap">{{ layout.company_address|default:"" }}</div>
+              <div class="pt-1">
+                <span id="email-live-sup" class="text-indigo-600">{{ layout.support_email|default:"" }}</span>
+                <span class="mx-1 opacity-50">•</span>
+                <span id="email-live-web" class="text-indigo-600">{{ layout.website_url|default:"" }}</span>
+              </div>
+            </div>
+            <div id="email-live-footer-html" class="mt-3 text-[10px] text-slate-400 whitespace-pre-wrap">{{ layout.footer_html|default:"" }}</div>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="lay-brand-extra" class="pt-6 border-t border-slate-100">
+        <h2 id="lay-brand-extra" class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">Optional header HTML</h2>
+        <div>
+          <label for="id_header_html" class="block text-sm font-semibold text-slate-800 mb-1.5">Snippet below the logo</label>
+          <p class="text-xs text-slate-500 mb-2">Shown under the logo (and under the optional company name line). Supports {% verbatim %}{{company_name}}{% endverbatim %}, {% verbatim %}{{company_logo}}{% endverbatim %}, etc. If you use {% verbatim %}{{company_name}}{% endverbatim %} here, the layout will <strong>not</strong> add a second company name under the logo when “Show company name with logo” is on—so the name appears once. Logo: upload under <strong>Header branding</strong> above (or legacy layout / organization profile).</p>
+          <textarea id="id_header_html" name="header_html" rows="3"
+            class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-mono text-[13px] focus:ring-2 focus:ring-indigo-600/20 outline-none">{{ layout.header_html }}</textarea>
+        </div>
+      </section>
+
+      <section aria-labelledby="lay-footer" class="pt-6 border-t border-slate-100">
+        <h2 id="lay-footer" class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">Footer &amp; compliance</h2>
+        <div class="space-y-5">
+          <div>
+            <label for="id_risk" class="block text-sm font-semibold text-slate-800 mb-1.5">Risk disclaimer</label>
+            <textarea id="id_risk" name="risk_disclaimer" rows="3"
+              class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm leading-relaxed focus:ring-2 focus:ring-indigo-600/20 outline-none">{{ layout.risk_disclaimer }}</textarea>
+          </div>
+          <div>
+            <label for="id_addr" class="block text-sm font-semibold text-slate-800 mb-1.5">Registered address</label>
+            <textarea id="id_addr" name="company_address" rows="2"
+              class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/20 outline-none">{{ layout.company_address }}</textarea>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="id_sup" class="block text-sm font-semibold text-slate-800 mb-1.5">Support email</label>
+              <input id="id_sup" type="email" name="support_email" value="{{ layout.support_email }}"
+                class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/20 outline-none" placeholder="support@yourbroker.com" />
+            </div>
+            <div>
+              <label for="id_web" class="block text-sm font-semibold text-slate-800 mb-1.5">Website</label>
+              <input id="id_web" type="url" name="website_url" value="{{ layout.website_url }}"
+                class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-600/20 outline-none" placeholder="https://yourbroker.com" />
+            </div>
+          </div>
+          <div>
+            <label for="id_footer_html" class="block text-sm font-semibold text-slate-800 mb-1.5">Optional footer HTML</label>
+            <p class="text-xs text-slate-500 mb-2">Appended after the disclaimer block—use for unsubscribe links or regulatory text.</p>
+            <textarea id="id_footer_html" name="footer_html" rows="3"
+              class="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-mono text-[13px] focus:ring-2 focus:ring-indigo-600/20 outline-none">{{ layout.footer_html }}</textarea>
+          </div>
+        </div>
+      </section>
+
+      <div class="flex flex-wrap gap-2 pt-4 border-t border-slate-100">
+        <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-indigo-600 text-white px-6 py-2.5 text-sm font-semibold shadow-md shadow-[#0B3C5D]/15 hover:bg-[#094a72] transition">Save settings</button>
+        <a href="{% url 'admin-system-email-templates' %}" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Back to templates</a>
+      </div>
+    </div>
+  </form>
+</div>
+<script>
+(function () {
+  var input = document.getElementById('id_email_logo');
+  var preview = document.getElementById('email-logo-preview');
+  var wrap = document.getElementById('email-logo-preview-wrap');
+  var maxBytes = 2 * 1024 * 1024;
+  if (input && preview && wrap) {
+    input.addEventListener('change', function () {
+      var f = this.files && this.files[0];
+      if (!f) return;
+      if (f.size > maxBytes) {
+        alert('Email logo must be 2MB or smaller.');
+        this.value = '';
+        return;
+      }
+      var ok = /\.(png|jpe?g|svg)$/i.test(f.name);
+      if (!ok) {
+        alert('Please choose a PNG, JPG, or SVG file.');
+        this.value = '';
+        return;
+      }
+      preview.src = URL.createObjectURL(f);
+      wrap.classList.remove('hidden');
+    });
+  }
+  function bindColorPicker(pickerId, hexId, fallback) {
+    var picker = document.getElementById(pickerId);
+    var hexInput = document.getElementById(hexId);
+    if (!picker || !hexInput) return;
+    function normHex(v) {
+      v = (v || '').trim();
+      if (/^#[0-9A-Fa-f]{6}$/.test(v)) return v;
+      return fallback;
+    }
+    picker.addEventListener('input', function () {
+      hexInput.value = picker.value.toUpperCase();
+    });
+    hexInput.addEventListener('input', function () {
+      if (/^#[0-9A-Fa-f]{6}$/.test(hexInput.value.trim())) {
+        picker.value = hexInput.value.trim().length === 7 ? hexInput.value.trim() : normHex(hexInput.value);
+      }
+    });
+    picker.value = normHex(hexInput.value);
+  }
+  bindColorPicker('id_header_color_picker', 'id_header_color', '#0B1C3F');
+  bindColorPicker('id_text_color_picker', 'id_text_color', '#FFFFFF');
+  bindColorPicker('id_button_color_picker', 'id_button_color', '#0B3C5D');
+
+  function syncLivePreview() {
+    var header = document.getElementById('email-live-header');
+    var company = document.getElementById('email-live-company');
+    var logo = document.getElementById('email-live-logo');
+    var showName = (document.querySelector('input[name="show_company_name"]') || {}).checked;
+    var name = (document.getElementById('id_company_name_override') || {}).value || 'Company Name';
+    var hc = (document.getElementById('id_header_color') || {}).value || '#0B1C3F';
+    var tc = (document.getElementById('id_text_color') || {}).value || '#FFFFFF';
+    var bc = (document.getElementById('id_button_color') || {}).value || '#0B3C5D';
+    if (header) header.style.background = hc;
+    if (company) {
+      company.style.color = tc;
+      company.textContent = name;
+      company.style.display = showName ? 'block' : 'none';
+    }
+    if (logo) {
+      logo.style.display = logo.getAttribute('src') ? 'inline-block' : 'none';
+    }
+
+    // Footer variables
+    var risk = (document.getElementById('id_risk') || {}).value || '';
+    var addr = (document.getElementById('id_addr') || {}).value || '';
+    var sup = (document.getElementById('id_sup') || {}).value || '';
+    var web = (document.getElementById('id_web') || {}).value || '';
+    var fhtml = (document.getElementById('id_footer_html') || {}).value || '';
+
+    var riskEl = document.getElementById('email-live-risk');
+    if (riskEl) riskEl.textContent = risk;
+    
+    var addrEl = document.getElementById('email-live-addr');
+    if (addrEl) addrEl.textContent = addr;
+    
+    var supEl = document.getElementById('email-live-sup');
+    if (supEl) supEl.textContent = sup;
+    
+    var webEl = document.getElementById('email-live-web');
+    if (webEl) webEl.textContent = web;
+
+    var fhtmlEl = document.getElementById('email-live-footer-html');
+    if (fhtmlEl) fhtmlEl.innerHTML = fhtml;
+  }
+
+  ['id_company_name_override', 'id_header_color', 'id_text_color', 'id_button_color', 'id_risk', 'id_addr', 'id_sup', 'id_web', 'id_footer_html'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', syncLivePreview);
+  });
+  var showNameEl = document.querySelector('input[name="show_company_name"]');
+  if (showNameEl) showNameEl.addEventListener('change', syncLivePreview);
+  syncLivePreview();
+})();
+</script>
+{% endblock %}
+

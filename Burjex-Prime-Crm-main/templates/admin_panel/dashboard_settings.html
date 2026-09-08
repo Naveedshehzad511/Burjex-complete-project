@@ -1,0 +1,57 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}CRM Dashboard Settings{% endblock %}
+
+{% block admin_content %}
+  <div class="max-w-4xl bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+    <h1 class="text-xl font-semibold mb-5">CRM Dashboard Settings</h1>
+    <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      {% csrf_token %}
+      <label><input type="checkbox" name="show_my_accounts" {% if s.show_my_accounts %}checked{% endif %}> Show My Accounts</label>
+      <label><input type="checkbox" name="show_balance" {% if s.show_balance %}checked{% endif %}> Show Balance</label>
+      <label><input type="checkbox" name="show_trading_accounts" {% if s.show_trading_accounts %}checked{% endif %}> Show Trading Accounts</label>
+      <label><input type="checkbox" name="show_buttons" {% if s.show_buttons %}checked{% endif %}> Show Buttons</label>
+      <label><input type="checkbox" name="show_profile_menu" {% if s.show_profile_menu %}checked{% endif %}> Show Profile Menu</label>
+      <label><input type="checkbox" name="enable_open_new_account" {% if s.enable_open_new_account %}checked{% endif %}> Enable Open New Account</label>
+      <label><input type="checkbox" name="enable_deposit_button" {% if s.enable_deposit_button %}checked{% endif %}> Enable Deposit Button</label>
+      <label><input type="checkbox" name="enable_withdraw_button" {% if s.enable_withdraw_button %}checked{% endif %}> Enable Withdraw Button</label>
+      <label><input type="checkbox" name="enable_trade_button" {% if s.enable_trade_button %}checked{% endif %}> Enable Trade Button</label>
+      <label><input type="checkbox" name="enable_real_demo_tabs" {% if s.enable_real_demo_tabs %}checked{% endif %}> Enable Real/Demo Tabs</label>
+      <label><input type="checkbox" name="enable_account_dropdown_menu" {% if s.enable_account_dropdown_menu %}checked{% endif %}> Enable Account Dropdown Menu</label>
+      <label><input type="checkbox" name="enforce_wallet_only_withdrawal" {% if s.enforce_wallet_only_withdrawal %}checked{% endif %}> Wallet-only withdrawal UX (dashboard labels, hide per-account withdraw; client withdrawals are always taken from Wallet)</label>
+
+      <div class="md:col-span-2 pt-3 text-slate-700 font-semibold">Sidebar</div>
+      <label><input type="checkbox" name="show_sidebar_dashboard" {% if s.show_sidebar_dashboard %}checked{% endif %}> Show Dashboard</label>
+      <label><input type="checkbox" name="show_sidebar_regulations" {% if s.show_sidebar_regulations %}checked{% endif %}> Show Regulations</label>
+      <label><input type="checkbox" name="show_sidebar_my_fund" {% if s.show_sidebar_my_fund %}checked{% endif %}> Show My Fund</label>
+      <label><input type="checkbox" name="show_sidebar_ib_programme" {% if s.show_sidebar_ib_programme %}checked{% endif %}> Show IB Programme</label>
+      <label><input type="checkbox" name="show_sidebar_my_wallet" {% if s.show_sidebar_my_wallet %}checked{% endif %}> Show My Wallet</label>
+      <label><input type="checkbox" name="show_sidebar_trading" {% if s.show_sidebar_trading %}checked{% endif %}> Show Trading</label>
+      <label><input type="checkbox" name="show_sidebar_competition" {% if s.show_sidebar_competition %}checked{% endif %}> Show Competition</label>
+      <label><input type="checkbox" name="show_sidebar_trade_and_win" {% if s.show_sidebar_trade_and_win %}checked{% endif %}> Show Trade & Win</label>
+      <label><input type="checkbox" name="show_sidebar_news" {% if s.show_sidebar_news %}checked{% endif %}> Show News</label>
+      <label><input type="checkbox" name="show_sidebar_my_data" {% if s.show_sidebar_my_data %}checked{% endif %}> Show My Data</label>
+      <label><input type="checkbox" name="show_sidebar_support" {% if s.show_sidebar_support %}checked{% endif %}> Show Support</label>
+
+      <div class="md:col-span-2 pt-3 text-slate-700 font-semibold">IB Programme Submenu</div>
+      <label><input type="checkbox" name="enable_ib_dashboard" {% if s.enable_ib_dashboard %}checked{% endif %}> IB Dashboard</label>
+      <label><input type="checkbox" name="enable_ib_my_clients" {% if s.enable_ib_my_clients %}checked{% endif %}> My Clients</label>
+      <label><input type="checkbox" name="enable_ib_tree_chart" {% if s.enable_ib_tree_chart %}checked{% endif %}> IB Tree Chart</label>
+      <label><input type="checkbox" name="enable_ib_my_commission" {% if s.enable_ib_my_commission %}checked{% endif %}> My Commission</label>
+      <label><input type="checkbox" name="enable_ib_withdraw" {% if s.enable_ib_withdraw %}checked{% endif %}> IB Withdraw</label>
+      <label><input type="checkbox" name="enable_team_deposit_report" {% if s.enable_team_deposit_report %}checked{% endif %}> Team Deposit Report</label>
+      <label><input type="checkbox" name="enable_team_withdraw_report" {% if s.enable_team_withdraw_report %}checked{% endif %}> Team Withdraw Report</label>
+
+      <div class="md:col-span-2 pt-3 text-slate-700 font-semibold">My Data Submenu</div>
+      <label><input type="checkbox" name="enable_deposit_report" {% if s.enable_deposit_report %}checked{% endif %}> Deposit Report</label>
+      <label><input type="checkbox" name="enable_withdraw_report" {% if s.enable_withdraw_report %}checked{% endif %}> Withdraw Report</label>
+      <label><input type="checkbox" name="enable_internal_transfers_report" {% if s.enable_internal_transfers_report %}checked{% endif %}> Internal Transfers</label>
+      <label><input type="checkbox" name="enable_deal_report" {% if s.enable_deal_report %}checked{% endif %}> Deal Report</label>
+      <label><input type="checkbox" name="enable_summary_report" {% if s.enable_summary_report %}checked{% endif %}> Summary Report</label>
+      <div class="md:col-span-2 pt-2">
+        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Save Settings</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+

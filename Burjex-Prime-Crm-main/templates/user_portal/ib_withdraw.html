@@ -1,0 +1,152 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Withdraw Commission - Burjex Prime{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">Withdraw IB Commission</h1>
+  <p class="portal-page-subtitle">Submit a request to withdraw your earned commission balance.</p>
+
+  <div class="grid grid-cols-1 gap-6">
+    <!-- Withdrawal Form -->
+    <div class="max-w-2xl mx-auto w-full">
+      <div class="portal-card">
+        <div class="portal-card-header">
+          <div class="portal-card-title">New Withdrawal Request</div>
+        </div>
+
+        <div class="mb-6 p-4 rounded-xl flex items-center justify-between" style="background:var(--portal-muted-bg); border:1px solid var(--portal-border);">
+          <div>
+            <div class="text-xs uppercase tracking-wider font-semibold" style="color:var(--portal-text-muted);">Available Commission</div>
+            <div class="text-3xl font-bold mt-1" style="color:var(--portal-brand-primary);">${{ available_balance|floatformat:2 }}</div>
+          </div>
+          <div class="text-xs text-right" style="color:var(--portal-text-muted);">
+            Minimum: $10.00 USD
+          </div>
+        </div>
+
+        <form method="post" action="{% url 'user-ib-withdraw-request' %}" class="space-y-4">
+          {% csrf_token %}
+
+          <div>
+            <label class="portal-form-label" for="id_method">Withdrawal Method</label>
+            <select name="method" id="id_method" class="portal-input w-full" required onchange="handleMethodChange()">
+              <option value="" disabled selected>-- Select Method --</option>
+              {% if settings.enable_withdraw_internal %}
+                <option value="internal">Internal Transfer (to Wallet or Trading Account)</option>
+              {% endif %}
+              {% if settings.enable_withdraw_bank %}
+                {% for bank in approved_bank_accounts %}
+                  <option value="bank_{{ bank.id }}">Bank: {{ bank.bank_name }} - {{ bank.account_number|default:bank.iban }} ({{ bank.account_name }})</option>
+                {% endfor %}
+              {% endif %}
+              {% if settings.enable_withdraw_crypto %}
+                {% for crypto in approved_crypto_addresses %}
+                  <option value="crypto_{{ crypto.id }}">Crypto: {{ crypto.network }} - {{ crypto.wallet_address }}</option>
+                {% endfor %}
+              {% endif %}
+            </select>
+            {% if settings.enable_withdraw_bank and not approved_bank_accounts or settings.enable_withdraw_crypto and not approved_crypto_addresses %}
+              <p class="text-xs mt-2" style="color:var(--portal-text-muted);">
+                Don't see your preferred method? Please add and verify it on your <a href="{% url 'user-compliance' %}" class="underline" style="color:var(--portal-brand-primary);">KYC page</a>.
+              </p>
+            {% endif %}
+          </div>
+
+          <div id="internal-alert-box" class="portal-alert portal-alert--info hidden mt-4">
+            <strong>Note:</strong> Selecting Internal Transfer will redirect you to the main <strong>Internal Transfer</strong> page to move funds directly from your IB Wallet to your trading accounts or main wallet.
+          </div>
+
+          <div>
+            <label class="portal-form-label" for="id_amount">Amount (USD)</label>
+            <input type="number" name="amount" id="id_amount" step="0.01" min="10" max="{{ available_balance|stringformat:'.2f' }}" class="portal-input w-full" required placeholder="Enter amount to withdraw" />
+          </div>
+
+          <div>
+            <label class="portal-form-label" for="id_notes">User Note (Optional)</label>
+            <textarea name="notes" id="id_notes" rows="2" class="portal-input w-full text-sm" placeholder="Optional comments for admin..."></textarea>
+          </div>
+
+          <button class="portal-btn-primary w-full mt-4" type="submit" id="submit-btn">
+            Submit Request
+          </button>
+        </form>
+      </div>
+    </div>
+
+
+
+  <!-- Recent Requests -->
+  <div class="portal-card mt-6">
+    <div class="portal-card-header">
+      <div class="portal-card-title">Recent Withdrawal History</div>
+    </div>
+    <div class="portal-table-wrap overflow-x-auto w-full">
+      <table class="portal-table min-w-full whitespace-nowrap">
+        <thead>
+          <tr>
+            <th>Date Requested</th>
+            <th>Type/Method</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Payout Details</th>
+            <th>Admin Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in recent_withdrawals %}
+            <tr>
+              <td>{{ tx.created_at|date:"Y-m-d H:i" }}</td>
+              <td class="font-semibold text-sm">{{ tx.reference|default:"Commission Withdraw" }}</td>
+              <td class="font-bold">${{ tx.amount|floatformat:2 }}</td>
+              <td>
+                {% if tx.status == "PENDING" %}
+                  <span class="portal-badge portal-badge--warning">Pending</span>
+                {% elif tx.status == "APPROVED" or tx.status == "COMPLETED" %}
+                  <span class="portal-badge portal-badge--success">Approved</span>
+                {% elif tx.status == "REJECTED" %}
+                  <span class="portal-badge portal-badge--danger">Rejected</span>
+                {% else %}
+                  <span class="portal-badge">{{ tx.status }}</span>
+                {% endif %}
+              </td>
+              <td class="font-mono text-xs max-w-xs truncate" title="{{ tx.account_details }}">{{ tx.account_details|linebreaksbr }}</td>
+              <td class="text-sm text-rose-600">
+                {% if tx.status == "REJECTED" and tx.reject_reason %}
+                  Reason: {{ tx.reject_reason }}
+                {% elif tx.notes %}
+                  {{ tx.notes }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6" class="text-center py-4" style="color:var(--portal-text-muted);">No withdrawals requested yet.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function handleMethodChange() {
+      var method = document.getElementById("id_method").value;
+      var alertBox = document.getElementById("internal-alert-box");
+      var submitBtn = document.getElementById("submit-btn");
+
+      if (method === "internal") {
+        alertBox.style.display = "block";
+        submitBtn.textContent = "Go to Internal Transfer";
+      } else {
+        alertBox.style.display = "none";
+        submitBtn.textContent = "Submit Request";
+      }
+    }
+    // Initialize display state
+    document.addEventListener("DOMContentLoaded", function() {
+      handleMethodChange();
+    });
+  </script>
+{% endblock %}

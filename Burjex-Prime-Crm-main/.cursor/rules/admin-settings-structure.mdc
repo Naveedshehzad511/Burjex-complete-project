@@ -1,0 +1,24 @@
+---
+description: Keep admin settings in proper modules
+alwaysApply: true
+---
+
+# Admin Settings Structure Rule
+
+- Place every setting in its logical admin module only.
+- Do not add random settings into unrelated sections.
+- Keep related settings together under one dedicated area.
+- Avoid duplicate setting screens for the same feature.
+- Reuse existing modules before creating new settings pages.
+
+## Required module placement
+
+- Email templates: `Admin -> Email Templates`.
+- Email event mapping/automation: `Admin -> Email Settings`.
+- UI/theme controls: `System Management -> Theme & UI`.
+- Trading account/group/leverage/platform controls: `System Management` dedicated sections.
+
+## Change safety
+
+- If a setting already exists, update it in place.
+- If placement is unclear, use `System Management Dashboard` as the source of truth.

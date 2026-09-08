@@ -1,0 +1,94 @@
+{% extends "user_portal/base.html" %}
+{% block title %}Legal Agreements{% endblock %}
+{% block user_content %}
+  <div class="flex items-center gap-4">
+    {% if s.icon %}
+      <img src="{{ s.icon.url }}" alt="Legal icon" class="h-12 w-12 rounded-xl object-cover" style="border:1px solid var(--portal-border);">
+    {% endif %}
+    <div>
+      <h1 class="portal-page-heading">{{ s.name|default:"Legal Agreements" }}</h1>
+      {% if s.tagline %}<p class="portal-page-subtitle mb-0">{{ s.tagline }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="portal-card">
+      <div class="portal-card-header"><div class="portal-card-title">Essential Documents</div></div>
+      <div class="grid grid-cols-2 gap-2">
+        {% for d in grouped_docs.ESSENTIAL %}
+          <a target="_blank" rel="noopener" href="{{ d.link }}"
+             class="flex items-center gap-2 text-sm font-medium hover:underline"
+             style="color:var(--portal-brand-primary);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+            {{ d.title }}
+          </a>
+        {% empty %}
+          <p class="text-sm col-span-2" style="color:var(--portal-text-muted);">No documents available.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="portal-card">
+      <div class="portal-card-header"><div class="portal-card-title">Trading Policies</div></div>
+      <div class="grid grid-cols-2 gap-2">
+        {% for d in grouped_docs.TRADING %}
+          <a target="_blank" rel="noopener" href="{{ d.link }}"
+             class="flex items-center gap-2 text-sm font-medium hover:underline"
+             style="color:var(--portal-brand-primary);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+            {{ d.title }}
+          </a>
+        {% empty %}
+          <p class="text-sm col-span-2" style="color:var(--portal-text-muted);">No documents available.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="portal-card">
+      <div class="portal-card-header"><div class="portal-card-title">Regional Policies</div></div>
+      <div class="grid grid-cols-2 gap-2">
+        {% for d in grouped_docs.REGIONAL %}
+          <a target="_blank" rel="noopener" href="{{ d.link }}"
+             class="flex items-center gap-2 text-sm font-medium hover:underline"
+             style="color:var(--portal-brand-primary);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+            {{ d.title }}
+          </a>
+        {% empty %}
+          <p class="text-sm col-span-2" style="color:var(--portal-text-muted);">No documents available.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="portal-card">
+      <div class="portal-card-header"><div class="portal-card-title">Additional Policies</div></div>
+      <div class="grid grid-cols-2 gap-2">
+        {% for d in grouped_docs.ADDITIONAL %}
+          <a target="_blank" rel="noopener" href="{{ d.link }}"
+             class="flex items-center gap-2 text-sm font-medium hover:underline"
+             style="color:var(--portal-brand-primary);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+            {{ d.title }}
+          </a>
+        {% empty %}
+          <p class="text-sm col-span-2" style="color:var(--portal-text-muted);">No documents available.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  {% if grouped_docs.CUSTOM %}
+  <div class="portal-card mt-4">
+    <div class="portal-card-header"><div class="portal-card-title">Custom Documents</div></div>
+    <div class="grid grid-cols-2 gap-2">
+      {% for d in grouped_docs.CUSTOM %}
+        <div class="rounded-lg p-3" style="border:1px solid var(--portal-border);">
+          <a target="_blank" rel="noopener" href="{{ d.link }}"
+             class="font-medium text-sm hover:underline"
+             style="color:var(--portal-brand-primary);">{{ d.title }}</a>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}

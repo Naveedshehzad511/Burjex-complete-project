@@ -1,0 +1,90 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Compliance Reviews{% endblock %}
+
+{% block admin_content %}
+<div class="bp-page-header bp-s-6">
+    <div>
+      <h1 class="bp-page-title"><i class="fa-solid fa-list-check bp-s-140"></i>Compliance Reviews</h1>
+      <p class="bp-page-subtitle">Review and verify client identity, address, and banking details.</p>
+    </div>
+  </div>
+
+  <div class="bp-card">
+    <div class="bp-card-body p-4 bg-slate-50/50 dark:bg-slate-900/20 border-b border-slate-100 dark:border-slate-800">
+      <div class="flex flex-wrap gap-2">
+        <a href="?tab=identity" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if tab == 'identity' %}bg-indigo-600 text-white shadow-sm{% else %}bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700{% endif %}">Identity</a>
+        <a href="?tab=address" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if tab == 'address' %}bg-indigo-600 text-white shadow-sm{% else %}bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700{% endif %}">Address</a>
+        <a href="?tab=bank" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if tab == 'bank' %}bg-indigo-600 text-white shadow-sm{% else %}bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700{% endif %}">Bank</a>
+        <a href="?tab=crypto" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {% if tab == 'crypto' %}bg-indigo-600 text-white shadow-sm{% else %}bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700{% endif %}">Crypto</a>
+      </div>
+    </div>
+
+    <div class="bp-card-body p-0">
+      <div class="overflow-x-auto w-full">
+        <table class="bp-table min-w-full text-sm">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Details</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+              <tr>
+                <td class="font-bold text-slate-800 dark:text-slate-200">{{ r.user.email }}</td>
+                <td class="text-slate-600 dark:text-slate-400">
+                  {% if tab == "identity" %}
+                    <span class="font-medium text-slate-800 dark:text-slate-200">{{ r.document_type }}</span>{% if r.expiry_date %} <span class="text-xs text-slate-500 block">Expiry: {{ r.expiry_date }}</span>{% endif %}
+                  {% elif tab == "address" %}
+                    <span class="font-medium text-slate-800 dark:text-slate-200">{{ r.document_type }}</span>
+                  {% elif tab == "bank" %}
+                    <div class="flex flex-col text-xs gap-0.5">
+                      <span class="font-medium text-slate-800 dark:text-slate-200 text-sm">{{ r.bank_name }}</span>
+                      <span>Name: {{ r.account_name }}</span>
+                      <span>Account: <span class="font-mono text-slate-700 dark:text-slate-300">{{ r.account_number }}</span></span>
+                    </div>
+                  {% else %}
+                    <div class="flex flex-col text-xs gap-0.5">
+                      <span class="font-medium text-slate-800 dark:text-slate-200 text-sm">{{ r.network }}</span>
+                      <span class="font-mono text-slate-700 dark:text-slate-300 break-all">{{ r.wallet_address }}</span>
+                    </div>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if r.status == 'APPROVED' %}
+                    <span class="bp-badge bp-badge-success">Approved</span>
+                  {% elif r.status == 'PENDING' %}
+                    <span class="bp-badge bp-badge-warning">Pending</span>
+                  {% elif r.status == 'REJECTED' %}
+                    <span class="bp-badge bp-badge-error">Rejected</span>
+                  {% else %}
+                    <span class="bp-badge bp-badge-neutral">{{ r.status }}</span>
+                  {% endif %}
+                </td>
+                <td class="whitespace-nowrap text-slate-600 dark:text-slate-400">{{ r.created_at|date:"Y-m-d H:i" }}</td>
+                <td>
+                  <div class="flex flex-row items-center gap-1.5 flex-wrap">
+                    <a href="{% url 'admin-user-kyc-view' r.user.id %}" class="bp-btn bp-btn-outline px-3 py-1 text-xs h-auto"><i class="fa-solid fa-eye me-1"></i> View</a>
+                    <form method="post" class="inline m-0 flex flex-row items-center gap-1.5">
+                      {% csrf_token %}
+                      <input type="hidden" name="id" value="{{ r.id }}" />
+                      <button name="action" value="approve" class="bp-btn bg-emerald-500 hover:bg-emerald-600 text-white border-0 px-3 py-1 text-xs h-auto shadow-sm transition-colors"><i class="fa-solid fa-check me-1"></i> Approve</button>
+                      <button name="action" value="reject" class="bp-btn bg-rose-500 hover:bg-rose-600 text-white border-0 px-3 py-1 text-xs h-auto shadow-sm transition-colors"><i class="fa-solid fa-xmark me-1"></i> Reject</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="p-8 text-center text-slate-500"><i class="fa-solid fa-folder-open text-2xl mb-2 block text-slate-300"></i>No pending reviews found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+

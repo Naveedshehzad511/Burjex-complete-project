@@ -1,0 +1,118 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Enterprise Security{% endblock %}
+{% block admin_content %}
+<div class="enterprise-security-page">
+
+<div class="bp-page-header" style="margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="bp-page-title" style="display:flex; align-items:center;">
+      <i class="fa-solid fa-shield-halved" style="background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-right: 0.5rem;"></i>
+      Enterprise Security Settings
+    </h1>
+    <p class="bp-page-subtitle">Centralized lockout thresholds and security email toggles. IP allowlists use environment variables (see project settings).</p>
+  </div>
+</div>
+
+<div class="bp-card" style="max-width: 48rem; margin-bottom: 1.5rem; border-top: 4px solid #6366f1;">
+  <div class="bp-card-header" style="border-bottom: 1px solid var(--bp-border);">
+    <div class="bp-card-header-title" style="display: flex; align-items: center; gap: 0.5rem;">
+      <div style="width: 2rem; height: 2rem; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #f59e0b20 0%, #f59e0b05 100%); color: #f59e0b; border: 1px solid #f59e0b30;">
+        <i class="fa-solid fa-sliders" style="font-size: 0.875rem;"></i>
+      </div>
+      <span style="font-size: 1.125rem; font-weight: 700;">Security Configuration</span>
+    </div>
+  </div>
+  <div class="bp-card-body" style="padding: 1.5rem;">
+    <form method="post">
+      {% csrf_token %}
+
+      <div style="margin-bottom: 2rem;">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+          <div style="width: 1.75rem; height: 1.75rem; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #ef444420 0%, #ef444405 100%); color: #ef4444; border: 1px solid #ef444430;">
+            <i class="fa-solid fa-lock" style="font-size: 0.75rem;"></i>
+          </div>
+          Lockout Thresholds
+        </h3>
+        <div class="bp-grid-2" style="gap: 1.25rem; padding: 1.25rem; border-radius: 0.75rem; border: 1px solid var(--bp-border); background: var(--bp-surface-2);">
+          <div class="bp-form-group" style="margin: 0;">
+            <label class="bp-form-label" style="display: flex; align-items: center; gap: 0.375rem; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">
+              <i class="fa-solid fa-ban" style="color: #f43f5e;"></i>
+              Failed Login Max (per IP)
+            </label>
+            <input type="number" name="failed_login_max_attempts" value="{{ obj.failed_login_max_attempts }}" class="bp-input">
+          </div>
+          <div class="bp-form-group" style="margin: 0;">
+            <label class="bp-form-label" style="display: flex; align-items: center; gap: 0.375rem; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">
+              <i class="fa-solid fa-clock" style="color: #f59e0b;"></i>
+              Lockout Duration (seconds)
+            </label>
+            <input type="number" name="failed_login_lockout_seconds" value="{{ obj.failed_login_lockout_seconds }}" class="bp-input">
+          </div>
+          <div class="bp-form-group" style="margin: 0;">
+            <label class="bp-form-label" style="display: flex; align-items: center; gap: 0.375rem; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">
+              <i class="fa-solid fa-triangle-exclamation" style="color: #f97316;"></i>
+              Suspicious Failures / IP (24h)
+            </label>
+            <input type="number" name="suspicious_failures_per_ip" value="{{ obj.suspicious_failures_per_ip }}" class="bp-input">
+          </div>
+          <div class="bp-form-group" style="margin: 0;">
+            <label class="bp-form-label" style="display: flex; align-items: center; gap: 0.375rem; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">
+              <i class="fa-solid fa-chart-line" style="color: #3b82f6;"></i>
+              Risk Alert Threshold (score)
+            </label>
+            <input type="number" name="risk_alert_threshold" value="{{ obj.risk_alert_threshold }}" class="bp-input">
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+          <div style="width: 1.75rem; height: 1.75rem; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #10b98120 0%, #10b98105 100%); color: #10b981; border: 1px solid #10b98130;">
+            <i class="fa-solid fa-envelope-circle-check" style="font-size: 0.75rem;"></i>
+          </div>
+          Email Alert Toggles
+        </h3>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <label style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border: 1px solid var(--bp-border); border-radius: 0.75rem; cursor: pointer; background: var(--bp-surface);">
+            <div style="flex-shrink: 0;">
+              <input type="checkbox" name="email_security_alerts" {% if obj.email_security_alerts %}checked{% endif %} class="bp-checkbox" style="width: 1.25rem; height: 1.25rem;">
+            </div>
+            <div style="width: 2.5rem; height: 2.5rem; border-radius: 50%; background: rgba(99,102,241,0.1); display: flex; align-items: center; justify-content: center;">
+              <i class="fa-solid fa-shield" style="color: #6366f1; font-size: 1.125rem;"></i>
+            </div>
+            <span style="font-size: 0.875rem; font-weight: 700; color: var(--bp-text);">Email security alerts</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border: 1px solid var(--bp-border); border-radius: 0.75rem; cursor: pointer; background: var(--bp-surface);">
+            <div style="flex-shrink: 0;">
+              <input type="checkbox" name="withdrawal_submitted_alert" {% if obj.withdrawal_submitted_alert %}checked{% endif %} class="bp-checkbox" style="width: 1.25rem; height: 1.25rem;">
+            </div>
+            <div style="width: 2.5rem; height: 2.5rem; border-radius: 50%; background: rgba(16,185,129,0.1); display: flex; align-items: center; justify-content: center;">
+              <i class="fa-solid fa-money-bill-transfer" style="color: #10b981; font-size: 1.125rem;"></i>
+            </div>
+            <span style="font-size: 0.875rem; font-weight: 700; color: var(--bp-text);">Withdrawal submitted confirmation email</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border: 1px solid var(--bp-border); border-radius: 0.75rem; cursor: pointer; background: var(--bp-surface);">
+            <div style="flex-shrink: 0;">
+              <input type="checkbox" name="login_new_device_alert" {% if obj.login_new_device_alert %}checked{% endif %} class="bp-checkbox" style="width: 1.25rem; height: 1.25rem;">
+            </div>
+            <div style="width: 2.5rem; height: 2.5rem; border-radius: 50%; background: rgba(14,165,233,0.1); display: flex; align-items: center; justify-content: center;">
+              <i class="fa-solid fa-laptop" style="color: #0ea5e9; font-size: 1.125rem;"></i>
+            </div>
+            <span style="font-size: 0.875rem; font-weight: 700; color: var(--bp-text);">New device login email</span>
+          </label>
+        </div>
+      </div>
+
+      <div style="padding-top: 1.25rem; margin-top: 1.5rem; border-top: 1px solid var(--bp-border); display: flex; justify-content: flex-end;">
+        <button type="submit" class="bp-btn btn-gradient" style="padding: 0.625rem 1.5rem; font-size: 0.875rem; font-weight: 700; letter-spacing: 0.025em; border-radius: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-floppy-disk"></i>
+          Save Configuration
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+</div>
+{% endblock %}

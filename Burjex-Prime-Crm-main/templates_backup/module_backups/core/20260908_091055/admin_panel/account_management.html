@@ -1,0 +1,50 @@
+{% extends "admin_panel/base.html" %}
+
+{% block title %}Account Management{% endblock %}
+
+{% block admin_content %}
+  <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto">
+    <div class="p-4 border-b border-slate-200">
+      <h1 class="text-xl font-semibold">Account Management</h1>
+      <p class="text-sm text-slate-600">Trading, deposit, withdraw permissions and leverage control.</p>
+    </div>
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-slate-700">
+        <tr>
+          <th class="text-left px-3 py-2">User</th>
+          <th class="text-left px-3 py-2">MT5 ID</th>
+          <th class="text-left px-3 py-2">Type</th>
+          <th class="text-left px-3 py-2">Leverage</th>
+          <th class="text-left px-3 py-2">Permissions</th>
+          <th class="text-left px-3 py-2">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in accounts %}
+          <tr class="border-t border-slate-100">
+            <td class="px-3 py-2">{{ a.user.email }}</td>
+            <td class="px-3 py-2">{{ a.login_id }}</td>
+            <td class="px-3 py-2">{{ a.account_label|default:a.group.name }}</td>
+            <td class="px-3 py-2">{{ a.leverage }}x</td>
+            <td class="px-3 py-2">Trade: {{ a.trading_enabled|yesno:"On,Off" }}, Deposit: {{ a.deposit_enabled|yesno:"On,Off" }}, Withdraw: {{ a.withdraw_enabled|yesno:"On,Off" }}</td>
+            <td class="px-3 py-2">
+              <form method="post" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="account_id" value="{{ a.id }}">
+                <input type="hidden" name="action" value="enable_trading">
+                <button class="text-xs px-2 py-1 border rounded">Enable Trading</button>
+              </form>
+              <form method="post" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="account_id" value="{{ a.id }}">
+                <input type="hidden" name="action" value="disable_trading">
+                <button class="text-xs px-2 py-1 border rounded">Disable Trading</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
+

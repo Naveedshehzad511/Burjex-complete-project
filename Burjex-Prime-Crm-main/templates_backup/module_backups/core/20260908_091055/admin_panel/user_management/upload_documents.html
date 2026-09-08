@@ -1,0 +1,28 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}Upload User Documents{% endblock %}
+{% block um_body %}
+  <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 max-w-xl">
+    <form method="post" enctype="multipart/form-data" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Select Client</label>
+        <select name="client_id" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" required>
+          <option value="">—</option>
+          {% for c in clients %}
+            <option value="{{ c.id }}">{{ c.email }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Proof of Identity</label>
+        <input type="file" name="proof_identity" class="w-full text-sm" required accept=".jpg,.jpeg,.png,.pdf" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Proof of Address</label>
+        <input type="file" name="proof_address" class="w-full text-sm" required accept=".jpg,.jpeg,.png,.pdf" />
+      </div>
+      <p class="text-xs text-slate-500">Allowed formats: JPG, PNG, PDF. Max size: 5MB per file.</p>
+      <button type="submit" class="bg-indigo-600 text-white rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-indigo-700">Submit</button>
+    </form>
+  </div>
+{% endblock %}

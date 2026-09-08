@@ -1,0 +1,52 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Trading - Burjex Prime{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">Trading</h1>
+  <p class="portal-page-subtitle max-w-2xl">Platforms and connectivity are managed by your broker. Live status updates when administrators save integration settings.</p>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for p in crm_trading_platforms %}
+    <div class="portal-card flex flex-col">
+      <div class="flex items-start justify-between gap-2 mb-3">
+        <div class="font-semibold" style="color:var(--portal-text-main);">{{ p.label }}</div>
+        {% if p.enabled %}
+          {% if p.badge == "active" %}
+            <span class="portal-badge portal-badge--green shrink-0">Active</span>
+          {% elif p.badge == "configurable" %}
+            <span class="portal-badge portal-badge--amber shrink-0">Configurable</span>
+          {% else %}
+            <span class="portal-badge portal-badge--slate shrink-0">Inactive</span>
+          {% endif %}
+        {% else %}
+          <span class="portal-badge portal-badge--slate shrink-0">Inactive</span>
+        {% endif %}
+      </div>
+      <div class="portal-stat-label">Server</div>
+      <div class="font-medium text-sm mb-3" style="color:var(--portal-text-main);">{{ p.server_name|default:"—" }}</div>
+      {% if p.status_message %}
+        <p class="text-xs mb-3" style="color:var(--portal-text-muted);">{{ p.status_message }}</p>
+      {% endif %}
+      {% if p.quick_notes %}
+        <p class="text-xs mb-4 flex-1 leading-relaxed" style="color:var(--portal-text-muted);">{{ p.quick_notes|truncatechars:200 }}</p>
+      {% else %}
+        <div class="flex-1"></div>
+      {% endif %}
+      <div class="pt-3" style="border-top:1px solid var(--portal-border);">
+        {% if p.enabled and p.api_server_url %}
+          <a href="{{ p.api_server_url }}" target="_blank" rel="noopener noreferrer" class="portal-btn-primary w-full text-center">
+            Open / Web terminal
+          </a>
+        {% else %}
+          <span class="text-xs text-center block" style="color:var(--portal-text-muted);">Web link unavailable — contact support.</span>
+        {% endif %}
+      </div>
+    </div>
+    {% empty %}
+    <div class="portal-card col-span-full text-center" style="color:var(--portal-text-muted);">
+      Trading platform information is not configured yet.
+    </div>
+    {% endfor %}
+  </div>
+{% endblock %}

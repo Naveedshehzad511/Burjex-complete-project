@@ -1,0 +1,56 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Brand profiles — White label{% endblock %}
+{% block admin_content %}
+<div class="max-w-4xl space-y-6 pb-10">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-900">Brand profiles</h1>
+    <p class="text-sm text-slate-600 mt-1">Switch the active profile to change what clients see on <code class="text-xs bg-slate-100 px-1 rounded">/user/</code>. Configure each profile’s theme under Theme / Layout after activating.</p>
+  </div>
+  {% include "admin_panel/white_label/includes/subnav.html" %}
+
+  <form method="post" class="flex flex-wrap gap-2 items-end bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create" />
+    <label class="flex-1 min-w-[200px] text-sm">
+      <span class="text-slate-600">New profile name</span>
+      <input type="text" name="name" placeholder="e.g. EU entity" class="mt-1 w-full border rounded-lg px-3 py-2" />
+    </label>
+    <button type="submit" class="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-semibold">Add profile</button>
+  </form>
+
+  <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-left text-slate-600">
+        <tr>
+          <th class="px-4 py-2 border-b">Name</th>
+          <th class="px-4 py-2 border-b">Slug</th>
+          <th class="px-4 py-2 border-b">Active</th>
+          <th class="px-4 py-2 border-b"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in profiles %}
+          <tr class="border-t border-slate-100">
+            <td class="px-4 py-2 font-medium">{{ p.name }}</td>
+            <td class="px-4 py-2 text-slate-600">{{ p.slug }}</td>
+            <td class="px-4 py-2">{% if p.is_active_for_portal %}<span class="text-emerald-700 font-semibold">Yes</span>{% else %}—{% endif %}</td>
+            <td class="px-4 py-2 text-right">
+              {% if not p.is_active_for_portal %}
+              <form method="post" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="activate" />
+                <input type="hidden" name="profile_id" value="{{ p.id }}" />
+                <button type="submit" class="text-sm font-semibold text-indigo-600 hover:underline">Set active</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="px-4 py-6 text-slate-600">No profiles.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

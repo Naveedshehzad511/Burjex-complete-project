@@ -1,0 +1,99 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Deal Report - Burjex Prime{% endblock %}
+{% block portal_shell_page_title %}Deal Report{% endblock %}
+{% block portal_shell_mobile_title %}Deal Report{% endblock %}
+
+{% block user_content %}
+  <div class="portal-stat-grid mb-5">
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Balance</div>
+      <div class="portal-stat-value">{{ summary.balance }}</div>
+    </div>
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Equity</div>
+      <div class="portal-stat-value">{{ summary.equity }}</div>
+    </div>
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Profit</div>
+      <div class="portal-stat-value" style="color:{% if summary.profit >= 0 %}#10b981{% else %}#ef4444{% endif %};">{{ summary.profit }}</div>
+    </div>
+    <div class="portal-stat-card">
+      <div class="portal-stat-label">Free Margin</div>
+      <div class="portal-stat-value">{{ summary.free_margin }}</div>
+    </div>
+  </div>
+
+  <div class="portal-card mb-5">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+      <div>
+        <label class="portal-form-label">MT5 ID</label>
+        <select name="account" class="portal-input">
+          <option value="">All</option>
+          {% for a in accounts %}
+            <option value="{{ a.id }}" {% if filters.account == a.id|stringformat:"s" %}selected{% endif %}>{{ a.login_id }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="portal-form-label">From</label>
+        <input type="date" name="from" value="{{ filters.from }}" class="portal-input" />
+      </div>
+      <div>
+        <label class="portal-form-label">To</label>
+        <input type="date" name="to" value="{{ filters.to }}" class="portal-input" />
+      </div>
+      <div>
+        <label class="portal-form-label">Search</label>
+        <input type="text" name="q" value="{{ filters.q }}" placeholder="Search symbol or login" class="portal-input" />
+      </div>
+      <div class="flex gap-2">
+        <button class="portal-btn-primary" type="submit">Submit</button>
+        <button class="portal-btn-secondary" type="button">Excel</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="portal-table-wrap overflow-x-auto w-full">
+    <table class="portal-table min-w-full whitespace-nowrap">
+      <thead>
+        <tr>
+          <th>Date & Time</th><th>Trading Account</th><th>Deal ID</th><th>Symbol</th><th>Buy/Sell</th>
+          <th>Volume</th><th>Open Price</th><th>Close Price</th><th>Profit/Loss</th><th>Commission</th><th>Swap</th><th>Trade Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in deals %}
+          <tr>
+            <td style="color:var(--portal-text-muted);">{{ r.time|date:"Y-m-d H:i:s" }}</td>
+            <td>{{ r.login_id }}</td>
+            <td>{{ r.ticket }}</td>
+            <td>{{ r.symbol|default:"-" }}</td>
+            <td>
+              <span class="portal-badge {% if r.type == 'Buy' %}portal-badge--blue{% elif r.type == 'Sell' %}portal-badge--amber{% else %}portal-badge--slate{% endif %}">
+                {{ r.type }}
+              </span>
+            </td>
+            <td>{{ r.volume }}</td>
+            <td>{{ r.open_price|default:"-" }}</td>
+            <td>{{ r.close_price|default:"-" }}</td>
+            <td>
+              <span class="portal-badge {% if r.profit > 0 %}portal-badge--green{% elif r.profit < 0 %}portal-badge--red{% else %}portal-badge--slate{% endif %}">
+                {{ r.profit|default:"0.00" }}
+              </span>
+            </td>
+            <td>{{ r.commission|default:"0.00" }}</td>
+            <td>{{ r.swap|default:"0.00" }}</td>
+            <td>
+              <span class="portal-badge {% if r.status == 'Open' %}portal-badge--amber{% elif r.status == 'Closed' %}portal-badge--green{% else %}portal-badge--slate{% endif %}">
+                {{ r.status }}
+              </span>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="12" style="text-align:center;color:var(--portal-text-muted);padding:1.5rem 1rem;">No deals found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

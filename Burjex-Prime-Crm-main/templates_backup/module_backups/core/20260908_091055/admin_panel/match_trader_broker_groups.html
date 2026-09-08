@@ -1,0 +1,50 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Match-Trader broker groups{% endblock %}
+{% block admin_content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold text-slate-900">Match-Trader broker groups</h1>
+    <p class="text-sm text-slate-500 mt-1">Add the exact group names from your Match-Trader environment. These appear in the CRM account type wizard for mandatory platform mapping.</p>
+    <p class="text-xs text-slate-500 mt-1"><a href="{% url 'admin-group-list' %}" class="text-indigo-600 font-medium hover:underline">← MT5 group management</a> · <a href="{% url 'admin-account-type-list' %}" class="text-indigo-600 font-medium hover:underline">Account types</a></p>
+  </div>
+
+  <form method="post" class="bg-white border rounded-xl p-4 space-y-3">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add">
+    <div>
+      <label class="text-xs text-slate-600">Group name (Match-Trader)</label>
+      <input name="name" required class="w-full border rounded-lg px-3 py-2 text-sm font-mono" placeholder="standard">
+    </div>
+    <div>
+      <label class="text-xs text-slate-600">Description (optional)</label>
+      <input name="description" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Internal note">
+    </div>
+    <button type="submit" class="bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold">Save group</button>
+  </form>
+
+  <div class="bg-white border rounded-xl overflow-hidden">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-left">
+        <tr><th class="p-2">Category</th><th class="p-2">Name</th><th class="p-2">CRM group</th><th class="p-2">Status</th><th class="p-2"></th></tr>
+      </thead>
+      <tbody>
+        {% for g in rows %}
+        <tr class="border-t">
+          <td class="p-2 text-slate-600">{{ g.get_sync_category_display }}</td>
+          <td class="p-2 font-mono">{{ g.name }}</td>
+          <td class="p-2 text-slate-700">{% if g.crm_group %}{{ g.crm_group.name }}{% else %}<span class="text-slate-400">—</span>{% endif %}</td>
+          <td class="p-2">{% if g.is_active %}<span class="text-emerald-700">Active</span>{% else %}<span class="text-slate-500">Inactive</span>{% endif %}</td>
+          <td class="p-2 flex flex-wrap gap-2">
+            <form method="post" class="inline">{% csrf_token %}<input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="{{ g.id }}"><button type="submit" class="rounded bg-slate-600 text-white px-3 py-1 text-xs font-semibold hover:bg-slate-700">Toggle</button></form>
+            <form method="post" class="inline" onsubmit="return confirm('Delete this catalog entry?');">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ g.id }}"><button type="submit" class="rounded bg-rose-600 text-white px-3 py-1 text-xs font-semibold hover:bg-rose-700">Delete</button></form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="p-4 text-slate-500">No Match-Trader groups yet. Add names that match your broker configuration, or sync from the Match-Trader integration page.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

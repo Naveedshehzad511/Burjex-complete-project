@@ -1,0 +1,118 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Audit Log{% endblock %}
+{% block admin_content %}
+
+<div class="bp-page-header" style="margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="bp-page-title" style="display:flex; align-items:center;">
+      <i class="fa-solid fa-scroll" style="background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-right: 0.5rem;"></i>
+      Audit Log
+    </h1>
+    <p class="bp-page-subtitle">Track all system actions, actor activity, and security events.</p>
+  </div>
+</div>
+
+<div class="bp-card mb-6 shadow-xl shadow-indigo-500/5 border-t-4 border-t-indigo-500">
+  <div class="bp-card-body p-6">
+    <form class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-end">
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Action</label>
+        <input name="action" value="{{ filters.action }}" class="bp-input bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500/20" placeholder="e.g. login, update...">
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Entity Type</label>
+        <input name="entity" value="{{ filters.entity }}" class="bp-input bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500/20" placeholder="e.g. user, deposit...">
+      </div>
+      <div class="flex flex-row items-center gap-3">
+        <button type="submit" class="bp-btn btn-gradient w-full sm:w-auto px-5 py-2.5 font-bold tracking-wide rounded-lg flex items-center justify-center gap-2">
+          <i class="fa-solid fa-magnifying-glass"></i> Apply Filter
+        </button>
+        <a href="?" class="bp-btn bp-btn-outline w-full sm:w-auto px-5 py-2.5 font-bold text-center rounded-lg flex items-center justify-center gap-2 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <i class="fa-solid fa-rotate-left"></i> Reset
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="bp-card shadow-lg border-slate-200 dark:border-slate-800">
+  <div class="bp-card-header bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
+    <div class="bp-card-header-title flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #10b98120 0%, #10b98105 100%); color: #10b981; border: 1px solid #10b98130;">
+        <i class="fa-solid fa-list-check text-sm"></i>
+      </div>
+      <span class="text-lg font-bold text-slate-800 dark:text-slate-100">Event Records</span>
+    </div>
+  </div>
+  <div class="bp-card-body p-0">
+    <div class="overflow-x-auto w-full">
+      <table class="bp-table min-w-full text-sm">
+        <thead>
+          <tr>
+            <th><i class="fa-regular fa-clock me-1"></i>Time</th>
+            <th><i class="fa-solid fa-tower-broadcast me-1"></i>Channel</th>
+            <th><i class="fa-solid fa-bolt me-1"></i>Action</th>
+            <th><i class="fa-solid fa-cube me-1"></i>Entity</th>
+            <th><i class="fa-solid fa-user me-1"></i>Actor</th>
+            <th><i class="fa-solid fa-network-wired me-1"></i>IP Address</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in page_obj.object_list %}
+          <tr>
+            <td><span class="bp-small" style="font-family:monospace;">{{ row.created_at|date:"Y-m-d H:i" }}</span></td>
+            <td>
+              {% if row.channel == "admin" %}
+                <span class="bp-badge bp-badge-primary">{{ row.channel }}</span>
+              {% elif row.channel == "api" %}
+                <span class="bp-badge bp-badge-info">{{ row.channel }}</span>
+              {% elif row.channel == "system" %}
+                <span class="bp-badge bp-badge-neutral">{{ row.channel }}</span>
+              {% else %}
+                <span class="bp-badge bp-badge-neutral">{{ row.channel }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if "delete" in row.action|lower or "remove" in row.action|lower %}
+                <span class="bp-badge bp-badge-error">{{ row.action }}</span>
+              {% elif "create" in row.action|lower or "add" in row.action|lower or "approve" in row.action|lower %}
+                <span class="bp-badge bp-badge-success">{{ row.action }}</span>
+              {% elif "update" in row.action|lower or "edit" in row.action|lower or "change" in row.action|lower %}
+                <span class="bp-badge bp-badge-warning">{{ row.action }}</span>
+              {% elif "login" in row.action|lower or "logout" in row.action|lower %}
+                <span class="bp-badge bp-badge-info">{{ row.action }}</span>
+              {% else %}
+                <span class="bp-badge bp-badge-neutral">{{ row.action }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <span>{{ row.entity_type }}</span>
+              {% if row.entity_id %}<span class="bp-caption" style="color:var(--bp-text-muted);">&nbsp;#{{ row.entity_id }}</span>{% endif %}
+            </td>
+            <td>
+              <span><i class="fa-regular fa-circle-user me-1" style="color:var(--bp-primary);"></i>{{ row.actor.email|default:row.actor_email|default:"—" }}</span>
+            </td>
+            <td><span class="bp-small" style="font-family:monospace;color:var(--bp-text-muted);">{{ row.ip|default:"—" }}</span></td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" style="text-align:center;padding:2.5rem 1rem;">
+              <div style="color:var(--bp-text-muted);">
+                <i class="fa-solid fa-inbox fa-2x mb-2 d-block"></i>
+                <span>No audit entries found.</span>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="bp-card-footer flex flex-row items-center justify-between flex-wrap gap-2">
+    <span class="text-xs text-slate-500">
+      <i class="fa-solid fa-database me-1"></i>{{ page_obj }}
+    </span>
+  </div>
+</div>
+
+{% endblock %}

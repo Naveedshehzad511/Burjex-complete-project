@@ -1,0 +1,17 @@
+{% load i18n %}
+<div class="relative">
+  <details class="group">
+    <summary class="list-none cursor-pointer text-xs font-semibold border border-slate-300 rounded-md px-2 py-1 bg-white text-slate-700 inline-flex items-center gap-1">
+      {{ request.LANGUAGE_CODE|upper|default:"EN" }} <span>▼</span>
+    </summary>
+    <div class="absolute right-0 mt-1 w-36 rounded-lg border border-slate-200 bg-white shadow-lg z-50 py-1">
+      <form method="post" action="{% url 'set_language' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button name="language" value="en" class="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">English</button>
+        <button name="language" value="ur" class="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Urdu</button>
+        <button name="language" value="ar" class="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Arabic</button>
+      </form>
+    </div>
+  </details>
+</div>

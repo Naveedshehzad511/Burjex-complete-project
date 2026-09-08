@@ -1,0 +1,28 @@
+{% extends "sales_panel/base.html" %}
+
+{% block title %}Sales Reports - Sales CRM{% endblock %}
+{% block admin_shell_page_title %}Sales Reports{% endblock %}
+
+{% block admin_content %}
+  {% include "sales_panel/includes/table_page_styles.html" %}
+  <div class="sp-page">
+    <div class="sp-page__head">
+      <h2>Sales reports</h2>
+      <p>Jump to detailed reports in the admin reporting suite. You stay in the sales shell until you follow a link below.</p>
+    </div>
+    <div class="sp-hub-grid">
+      <a class="sp-hub-tile" href="{% url 'admin-report-deposit' %}?type=deposit">
+        <div class="sp-hub-tile__title"><i class="fa-solid fa-sack-dollar" aria-hidden="true"></i>Deposits</div>
+        <div class="sp-hub-tile__sub">Deposit volume and history</div>
+      </a>
+      <a class="sp-hub-tile" href="{% url 'admin-report-clients' %}">
+        <div class="sp-hub-tile__title"><i class="fa-solid fa-users" aria-hidden="true"></i>Clients</div>
+        <div class="sp-hub-tile__sub">Client-level report</div>
+      </a>
+      <a class="sp-hub-tile" href="{% url 'admin-report-transactions' %}">
+        <div class="sp-hub-tile__title"><i class="fa-solid fa-receipt" aria-hidden="true"></i>Transactions</div>
+        <div class="sp-hub-tile__sub">All transaction types</div>
+      </a>
+    </div>
+  </div>
+{% endblock %}

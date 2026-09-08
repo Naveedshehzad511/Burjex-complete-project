@@ -1,0 +1,431 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}{% if scope == "DEPOSIT" %}Deposit{% else %}Withdrawal{% endif %} Methods{% endblock %}
+{% block admin_content %}
+<div class="max-w-7xl mx-auto space-y-6">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h1 class="text-xl font-semibold text-slate-900">{% if scope == "DEPOSIT" %}Deposit{% else %}Withdrawal{% endif %} Methods</h1>
+      <p class="text-sm text-slate-600 mt-1">Configure methods, visibility, fees, and client experience.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="javascript:history.back()" class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center gap-2 text-sm font-medium transition-colors">
+        <i class="fa-solid fa-arrow-left"></i> Back
+      </a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+    <!-- Total -->
+    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 group">
+      <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+        <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Total Methods</span>
+        <span class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ stats.total }}</span>
+      </div>
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.2) 0%, rgba(79, 70, 229, 0.05) 100%); border: 1px solid rgba(79, 70, 229, 0.3); color: #4f46e5; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);">
+        <i class="fa-solid fa-list text-[16px]"></i>
+      </div>
+    </div>
+  
+    <!-- Active -->
+    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 group">
+      <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+        <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Active</span>
+        <span class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ stats.active }}</span>
+      </div>
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.05) 100%); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);">
+        <i class="fa-solid fa-bolt text-[16px]"></i>
+      </div>
+    </div>
+  
+    <!-- Inactive -->
+    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 group">
+      <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+        <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Inactive</span>
+        <span class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ stats.inactive }}</span>
+      </div>
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, rgba(148, 163, 184, 0.2) 0%, rgba(148, 163, 184, 0.05) 100%); border: 1px solid rgba(148, 163, 184, 0.3); color: #94a3b8; box-shadow: 0 4px 12px rgba(148, 163, 184, 0.15);">
+        <i class="fa-solid fa-eye-slash text-[16px]"></i>
+      </div>
+    </div>
+  
+    <!-- Maintenance -->
+    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 group">
+      <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+        <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Maintenance</span>
+        <span class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ stats.maintenance }}</span>
+      </div>
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%); border: 1px solid rgba(245, 158, 11, 0.3); color: #f59e0b; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);">
+        <i class="fa-solid fa-screwdriver-wrench text-[16px]"></i>
+      </div>
+    </div>
+  
+    <!-- Categories -->
+    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] p-4 flex items-center justify-between relative overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 group">
+      <div class="flex flex-col min-w-0 flex-1 pr-3 z-10 text-left justify-center">
+        <span class="text-slate-500 dark:text-slate-400 font-bold text-[10px] tracking-wider uppercase leading-tight mb-1 truncate">Categories</span>
+        <span class="text-slate-900 dark:text-white font-extrabold text-xl leading-none tracking-tight">{{ stats.categories }}</span>
+      </div>
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 transition-transform duration-500 group-hover:scale-110 shadow-sm" style="background: linear-gradient(135deg, rgba(14, 165, 233, 0.2) 0%, rgba(14, 165, 233, 0.05) 100%); border: 1px solid rgba(14, 165, 233, 0.3); color: #0ea5e9; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.15);">
+        <i class="fa-solid fa-layer-group text-[16px]"></i>
+      </div>
+    </div>
+  </div>
+
+  <details class="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[1rem] shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden" {% if edit_obj %}open{% endif %}>
+    <summary class="cursor-pointer select-none px-6 py-5 font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-between list-none [&::-webkit-details-marker]:hidden bg-slate-50/50 dark:bg-slate-800/30 group-open:border-b border-slate-100 dark:border-slate-700/50">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center shadow-sm">
+          <i class="fa-solid {% if edit_obj %}fa-pen{% else %}fa-plus{% endif %}"></i>
+        </div>
+        <span class="text-base tracking-tight">{% if edit_obj %}Edit {% if scope == "DEPOSIT" %}Deposit{% else %}Withdrawal{% endif %} Method{% else %}Add New {% if scope == "DEPOSIT" %}Deposit{% else %}Withdrawal{% endif %} Method{% endif %}</span>
+      </div>
+      <div class="text-slate-400 group-open:-rotate-180 transition-transform duration-300">
+        <i class="fa-solid fa-chevron-down"></i>
+      </div>
+    </summary>
+    <div class="p-6">
+      <form method="post" enctype="multipart/form-data" action="{{ request.path }}" class="space-y-8 text-sm" id="gatewayForm">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="{% if edit_obj %}edit{% else %}add{% endif %}">
+        <input type="hidden" name="gateway_id" value="{{ edit_obj.id|default:'' }}">
+        <input type="hidden" name="scope" value="{{ scope }}">
+        <input type="hidden" name="gateway_type" id="gateway_type_hidden" value="{{ edit_obj.gateway_type|default:'LOCAL' }}">
+        <input type="hidden" name="payment_method" id="payment_method_hidden" value="{{ edit_obj.payment_method|default:'BANK' }}">
+
+        <div class="flex flex-wrap gap-2 text-xs">
+          <span class="px-2 py-1 rounded-full bg-indigo-600/10 text-indigo-600 font-semibold">1. Settings</span>
+          <span class="px-2 py-1 rounded-full bg-slate-100 text-slate-700">2. Limits &amp; Filters</span>
+          <span class="px-2 py-1 rounded-full bg-slate-100 text-slate-700">3. Payment Details &amp; User Fields</span>
+          <span class="px-2 py-1 rounded-full bg-slate-100 text-slate-700">4. Instructions</span>
+        </div>
+
+        <section>
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Basic information</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input required name="name" value="{{ edit_obj.name|default:'' }}" placeholder="Name" class="border rounded-lg px-3 py-2">
+            <input required name="code" value="{{ edit_obj.code|default:'' }}" placeholder="Code (unique)" class="border rounded-lg px-3 py-2">
+            <select name="scope" class="border rounded-lg px-3 py-2">
+              <option value="DEPOSIT" {% if edit_obj.scope == "DEPOSIT" or not edit_obj and scope == "DEPOSIT" %}selected{% endif %}>Deposit</option>
+              <option value="WITHDRAW" {% if edit_obj.scope == "WITHDRAW" or not edit_obj and scope == "WITHDRAW" %}selected{% endif %}>Withdraw</option>
+              <option value="BOTH" {% if edit_obj.scope == "BOTH" %}selected{% endif %}>Both</option>
+            </select>
+            <input name="category" value="{{ edit_obj.category|default:'' }}" placeholder="Category" class="border rounded-lg px-3 py-2 md:col-span-2">
+            <textarea name="description" rows="2" placeholder="Description" class="border rounded-lg px-3 py-2 md:col-span-3">{{ edit_obj.description|default:'' }}</textarea>
+            <input type="file" name="icon" class="border rounded-lg px-3 py-2 md:col-span-2">
+            <div class="md:col-span-3 flex flex-wrap gap-4">
+              <span class="text-xs font-semibold text-slate-600 self-center">Status</span>
+              <label class="inline-flex items-center gap-2"><input type="radio" name="visibility_status" value="ACTIVE" {% if not edit_obj or edit_obj.visibility_status == "ACTIVE" %}checked{% endif %}> Active</label>
+              <label class="inline-flex items-center gap-2"><input type="radio" name="visibility_status" value="INACTIVE" {% if edit_obj.visibility_status == "INACTIVE" %}checked{% endif %}> Inactive</label>
+              <label class="inline-flex items-center gap-2"><input type="radio" name="visibility_status" value="MAINTENANCE" {% if edit_obj.visibility_status == "MAINTENANCE" %}checked{% endif %}> Maintenance</label>
+            </div>
+            {% if scope == "DEPOSIT" %}
+            <input type="hidden" id="method_type_select" value="LOCAL">
+            <select id="manual_method_select" class="border rounded-lg px-3 py-2 manual-only md:col-span-1">
+              <option value="Local Bank" data-payment-method="BANK" selected>Local Bank</option>
+              <option value="JazzCash" data-payment-method="BANK">JazzCash</option>
+              <option value="EasyPaisa" data-payment-method="BANK">EasyPaisa</option>
+            </select>
+            {% else %}
+            <select name="withdraw_payment_method" class="border rounded-lg px-3 py-2 md:col-span-3">
+              <option value="BANK" {% if edit_obj.payment_method == "BANK" %}selected{% endif %}>Bank</option>
+              <option value="CRYPTO" {% if edit_obj.payment_method == "CRYPTO" %}selected{% endif %}>Crypto</option>
+              <option value="WALLET" {% if edit_obj.payment_method == "WALLET" %}selected{% endif %}>Wallet</option>
+            </select>
+            {% endif %}
+          </div>
+        </section>
+
+        <section>
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Fees &amp; limits</h3>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <select name="fee_type" class="border rounded-lg px-3 py-2">
+              <option value="NONE" {% if edit_obj.fee_type == "NONE" or not edit_obj %}selected{% endif %}>Fee: None</option>
+              <option value="FIXED" {% if edit_obj.fee_type == "FIXED" %}selected{% endif %}>Fixed</option>
+              <option value="PERCENT" {% if edit_obj.fee_type == "PERCENT" %}selected{% endif %}>Percentage</option>
+            </select>
+            <input name="fee_value" value="{{ edit_obj.fee_value|default:'0' }}" placeholder="Fee value" class="border rounded-lg px-3 py-2">
+            <input type="number" step="0.01" name="min_amount" value="{{ edit_obj.min_amount|default:'0' }}" placeholder="Min amount" class="border rounded-lg px-3 py-2">
+            <input type="number" step="0.01" name="max_amount" value="{{ edit_obj.max_amount|default:'0' }}" placeholder="Max amount" class="border rounded-lg px-3 py-2">
+            {% if scope == "WITHDRAW" %}
+            <input type="number" step="0.01" name="daily_withdraw_limit" value="{{ edit_obj.daily_withdraw_limit|default:'0' }}" placeholder="Daily limit (0=off)" class="border rounded-lg px-3 py-2 md:col-span-2">
+            {% endif %}
+          </div>
+        </section>
+
+        {% if scope == "DEPOSIT" %}
+        <section>
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Deposit currency</h3>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input name="currency" value="{{ edit_obj.currency|default:'USD' }}" placeholder="Currency" class="border rounded-lg px-3 py-2">
+            <input name="exchange_rate" value="{{ edit_obj.exchange_rate|default:'1' }}" placeholder="Exchange rate" class="border rounded-lg px-3 py-2">
+            <select name="rate_mode" class="border rounded-lg px-3 py-2">
+              <option value="FIXED" {% if edit_obj.rate_mode == "FIXED" or not edit_obj %}selected{% endif %}>Rate mode: Fixed</option>
+              <option value="MARKET" {% if edit_obj.rate_mode == "MARKET" %}selected{% endif %}>Market</option>
+            </select>
+            <input name="rate_markup" value="{{ edit_obj.rate_markup|default:'0' }}" placeholder="Rate markup" class="border rounded-lg px-3 py-2">
+          </div>
+        </section>
+        {% else %}
+        <section>
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Currency</h3>
+          <input name="currency" value="{{ edit_obj.currency|default:'USD' }}" placeholder="Currency" class="border rounded-lg px-3 py-2 w-full max-w-xs">
+        </section>
+        {% endif %}
+
+        <section>
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Processing</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {% if scope == "DEPOSIT" %}
+            <select name="processing_mode" class="border rounded-lg px-3 py-2">
+              <option value="INSTANT" {% if edit_obj.processing_mode == "INSTANT" or not edit_obj %}selected{% endif %}>Processing: Instant</option>
+              <option value="MANUAL" {% if edit_obj.processing_mode == "MANUAL" %}selected{% endif %}>Manual</option>
+            </select>
+            {% endif %}
+            <input name="processing_time" value="{{ edit_obj.processing_time|default:'' }}" placeholder="Processing time display" class="border rounded-lg px-3 py-2 md:col-span-2">
+            <input name="charges" value="{{ edit_obj.charges|default:'' }}" placeholder="Legacy charges label" class="border rounded-lg px-3 py-2 md:col-span-3">
+          </div>
+        </section>
+
+        {% if scope == "DEPOSIT" %}
+        <section class="manual-config-only">
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Limits &amp; filters</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <textarea name="country_filters" rows="2" placeholder="Country filters (one per line)" class="border rounded-lg px-3 py-2">{{ edit_obj.country_filters|default:'' }}</textarea>
+            <textarea name="allowed_account_types" rows="2" placeholder="Account types (one per line)" class="border rounded-lg px-3 py-2">{{ edit_obj.allowed_account_types|default:'' }}</textarea>
+            <input name="kyc_level" value="{{ edit_obj.kyc_level|default:'' }}" placeholder="KYC level" class="border rounded-lg px-3 py-2">
+            <label class="inline-flex items-center gap-2"><input type="checkbox" name="first_time_deposit_only" {% if edit_obj.first_time_deposit_only %}checked{% endif %}> First time deposit only</label>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            <div class="rounded-lg border border-slate-200 p-3">
+              <div class="font-semibold text-xs text-slate-600 mb-2 uppercase">User flags</div>
+              <div class="flex flex-wrap gap-3">
+                <label class="inline-flex items-center gap-2"><input type="checkbox" name="flag_vip" {% if edit_obj.flag_vip %}checked{% endif %}> VIP</label>
+                <label class="inline-flex items-center gap-2"><input type="checkbox" name="flag_high_value" {% if edit_obj.flag_high_value %}checked{% endif %}> High Value</label>
+                <label class="inline-flex items-center gap-2"><input type="checkbox" name="flag_problem_user" {% if edit_obj.flag_problem_user %}checked{% endif %}> Problem User</label>
+                <label class="inline-flex items-center gap-2"><input type="checkbox" name="flag_watch_list" {% if edit_obj.flag_watch_list %}checked{% endif %}> Watch List</label>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 p-3">
+              <div class="font-semibold text-xs text-slate-600 mb-2 uppercase">Risk tags</div>
+              <div class="flex flex-wrap gap-3">
+                <label class="inline-flex items-center gap-2"><input type="checkbox" name="risk_withdrawal" {% if edit_obj.risk_withdrawal %}checked{% endif %}> Withdrawal</label>
+                <label class="inline-flex items-center gap-2"><input type="checkbox" name="risk_trading" {% if edit_obj.risk_trading %}checked{% endif %}> Trading</label>
+                <label class="inline-flex items-center gap-2"><input type="checkbox" name="risk_fraud" {% if edit_obj.risk_fraud %}checked{% endif %}> Fraud</label>
+                <label class="inline-flex items-center gap-2"><input type="checkbox" name="risk_chargeback" {% if edit_obj.risk_chargeback %}checked{% endif %}> Chargeback</label>
+                <label class="inline-flex items-center gap-2"><input type="checkbox" name="risk_kyc" {% if edit_obj.risk_kyc %}checked{% endif %}> KYC</label>
+                <label class="inline-flex items-center gap-2"><input type="checkbox" name="risk_suspicious" {% if edit_obj.risk_suspicious %}checked{% endif %}> Suspicious</label>
+                <label class="inline-flex items-center gap-2"><input type="checkbox" name="risk_pep" {% if edit_obj.risk_pep %}checked{% endif %}> PEP</label>
+              </div>
+            </div>
+          </div>
+        </section>
+        {% endif %}
+
+        <section>
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Display</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input type="number" name="display_order" value="{{ edit_obj.display_order|default:0 }}" placeholder="Display order" class="border rounded-lg px-3 py-2">
+            <input name="display_badge" value="{{ edit_obj.display_badge|default:'' }}" placeholder="Display badge text" class="border rounded-lg px-3 py-2 md:col-span-2">
+          </div>
+        </section>
+
+        {% if scope == "DEPOSIT" %}
+        <section class="manual-config-only">
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Payment proof</h3>
+          <label class="inline-flex items-center gap-2"><input type="checkbox" name="require_payment_proof" {% if edit_obj.require_payment_proof %}checked{% endif %}> Require payment proof</label>
+        </section>
+        {% endif %}
+
+        {% if scope == "WITHDRAW" %}
+        <section>
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Security &amp; whitelisting</h3>
+          <div class="flex flex-wrap gap-4">
+            <label class="inline-flex items-center gap-2"><input type="checkbox" name="whitelist_required" {% if edit_obj.whitelist_required %}checked{% endif %}> Whitelist required</label>
+            <label class="inline-flex items-center gap-2"><input type="checkbox" name="auto_approve_withdraw" {% if edit_obj.auto_approve_withdraw %}checked{% endif %}> Auto approve</label>
+            <label class="inline-flex items-center gap-2"><input type="checkbox" name="requires_kyc_for_method" {% if edit_obj.requires_kyc_for_method %}checked{% endif %}> Requires KYC</label>
+            <label class="inline-flex items-center gap-2"><input type="checkbox" name="requires_2fa_for_method" {% if edit_obj.requires_2fa_for_method %}checked{% endif %}> Requires 2FA</label>
+          </div>
+        </section>
+        <section>
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Limits</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input type="number" name="max_pending_per_user" value="{{ edit_obj.max_pending_per_user|default:0 }}" placeholder="Max pending per user (0=off)" class="border rounded-lg px-3 py-2">
+            <input type="number" name="cooldown_minutes" value="{{ edit_obj.cooldown_minutes|default:0 }}" placeholder="Cooldown minutes" class="border rounded-lg px-3 py-2">
+          </div>
+        </section>
+        {% endif %}
+
+        {% if scope == "DEPOSIT" %}
+        <section class="manual-config-only">
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Payment details &amp; user fields</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input name="bank_name" value="{{ edit_obj.bank_name|default:'' }}" placeholder="Bank name" class="border rounded-lg px-3 py-2 bank-only">
+            <input name="account_name" value="{{ edit_obj.account_name|default:'' }}" placeholder="Account name" class="border rounded-lg px-3 py-2 bank-only">
+            <input name="account_number" value="{{ edit_obj.account_number|default:'' }}" placeholder="Account number" class="border rounded-lg px-3 py-2 bank-only">
+            <input name="iban" value="{{ edit_obj.iban|default:'' }}" placeholder="IBAN" class="border rounded-lg px-3 py-2 bank-only">
+            <input name="swift_code" value="{{ edit_obj.swift_code|default:'' }}" placeholder="SWIFT" class="border rounded-lg px-3 py-2 bank-only">
+            <textarea name="custom_fields" rows="3" placeholder="Custom fields (one per line)" class="border rounded-lg px-3 py-2 md:col-span-3">{{ edit_obj.custom_fields|join:"\n" }}</textarea>
+            <textarea name="user_fields" rows="3" placeholder="User fields (one per line)" class="border rounded-lg px-3 py-2 md:col-span-3">{{ edit_obj.user_fields|join:"\n" }}</textarea>
+            <label class="inline-flex items-center gap-2 md:col-span-1"><input type="checkbox" name="require_transaction_id" {% if edit_obj.require_transaction_id %}checked{% endif %}> Require transaction ID</label>
+          </div>
+        </section>
+        {% endif %}
+
+        {% if scope == "DEPOSIT" %}
+        <section class="manual-config-only">
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-3">Instructions</h3>
+          <textarea name="instruction_steps" rows="4" placeholder="Step based instructions (one step per line)" class="border rounded-lg px-3 py-2 w-full">{% if edit_obj %}{{ edit_obj.instruction_steps|default:edit_obj.instructions }}{% endif %}</textarea>
+        </section>
+        {% endif %}
+
+        <div class="flex gap-2 pt-2">
+          <button type="submit" class="bg-indigo-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-indigo-700">{% if edit_obj %}Update{% else %}Add{% endif %} method</button>
+          {% if edit_obj %}<a href="{{ request.path }}" class="px-5 py-2 rounded-lg border border-slate-200">Cancel edit</a>{% endif %}
+        </div>
+      </form>
+      {% if scope == "DEPOSIT" %}
+      <script>
+        (function () {
+          const typeSel = document.getElementById("method_type_select");
+          const manualSel = document.getElementById("manual_method_select");
+          const hiddenType = document.getElementById("gateway_type_hidden");
+          const hiddenMethod = document.getElementById("payment_method_hidden");
+          if (!typeSel || !hiddenType || !hiddenMethod) return;
+          function syncPreset() {
+            typeSel.value = "LOCAL";
+          }
+          function applyType() {
+            const isThird = false;
+            const manualMethod = manualSel && manualSel.selectedOptions.length
+              ? (manualSel.selectedOptions[0].dataset.paymentMethod || "BANK")
+              : hiddenMethod.value || "BANK";
+            document.querySelectorAll(".local-only").forEach(el => el.style.display = isThird ? "none" : "");
+            document.querySelectorAll(".bank-only").forEach(el => el.style.display = isThird ? "none" : "");
+            document.querySelectorAll(".manual-only").forEach(el => el.style.display = isThird ? "none" : "");
+            document.querySelectorAll(".manual-config-only").forEach(el => el.style.display = isThird ? "none" : "");
+            document.querySelectorAll(".thirdparty-only").forEach(el => el.style.display = isThird ? "" : "none");
+            document.querySelectorAll(".match2pay-only").forEach(el => el.style.display = isThird ? "" : "none");
+            hiddenType.value = "LOCAL";
+            hiddenMethod.value = manualMethod;
+            if (!isThird && manualSel && !document.querySelector("input[name=category]").value) {
+              document.querySelector("input[name=category]").value = manualSel.value || "";
+            }
+          }
+          syncPreset();
+          applyType();
+          if (manualSel) {
+            manualSel.addEventListener("change", function () {
+              const cat = document.querySelector("input[name=category]");
+              if (cat && !cat.value.trim()) cat.value = manualSel.value || "";
+              applyType();
+            });
+          }
+        })();
+      </script>
+      {% endif %}
+    </div>
+  </details>
+
+  <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1rem] shadow-sm overflow-hidden mt-6">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm text-left">
+        <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-700 uppercase tracking-wider text-[10px] font-bold">
+          <tr>
+            <th class="px-6 py-4">Order</th>
+            <th class="px-6 py-4">Method</th>
+            <th class="px-6 py-4">Type</th>
+            <th class="px-6 py-4">Category</th>
+            <th class="px-6 py-4">Currency</th>
+            <th class="px-6 py-4">Min / Max</th>
+            <th class="px-6 py-4">Status</th>
+            <th class="px-6 py-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+          {% for g in rows %}
+            <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+              <td class="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium">{{ g.display_order }}</td>
+              <td class="px-6 py-4">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-slate-900 dark:text-white">{{ g.name }}</span>
+                  {% if g.display_badge %}
+                    <span class="text-[10px] bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">{{ g.display_badge }}</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td class="px-6 py-4 text-slate-600 dark:text-slate-300">{% if g.gateway_type == "THIRD_PARTY" %}Third Party{% else %}Manual{% endif %}</td>
+              <td class="px-6 py-4 text-slate-600 dark:text-slate-300">{{ g.category|default:"—" }}</td>
+              <td class="px-6 py-4">
+                <span class="text-xs font-bold px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md text-slate-700 dark:text-slate-300">{{ g.currency }}</span>
+              </td>
+              <td class="px-6 py-4 text-slate-600 dark:text-slate-300">{{ g.min_amount }} / {{ g.max_amount }}</td>
+              <td class="px-6 py-4">
+                {% if g.visibility_status == "ACTIVE" %}
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/30"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active</span>
+                {% elif g.visibility_status == "MAINTENANCE" %}
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-800/30"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Maintenance</span>
+                {% else %}
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Inactive</span>
+                {% endif %}
+              </td>
+              <td class="px-6 py-4 text-right">
+                <div class="flex items-center justify-end gap-2">
+                  <a href="{{ request.path }}?edit={{ g.id }}" class="flex items-center justify-center px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:bg-indigo-500 hover:text-white transition-colors border border-indigo-100 dark:border-indigo-800/30" title="Edit">
+                    Edit
+                  </a>
+                  
+                  <form method="post" action="{{ request.path }}" class="inline m-0">{% csrf_token %}
+                    <input type="hidden" name="action" value="set_visibility">
+                    <input type="hidden" name="gateway_id" value="{{ g.id }}">
+                    <input type="hidden" name="visibility" value="ACTIVE">
+                    <button type="submit" class="flex items-center justify-center px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-500 hover:text-white transition-colors border border-emerald-100 dark:border-emerald-800/30" title="Set Active">
+                      Active
+                    </button>
+                  </form>
+
+                  <form method="post" action="{{ request.path }}" class="inline m-0">{% csrf_token %}
+                    <input type="hidden" name="action" value="set_visibility">
+                    <input type="hidden" name="gateway_id" value="{{ g.id }}">
+                    <input type="hidden" name="visibility" value="MAINTENANCE">
+                    <button type="submit" class="flex items-center justify-center px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 font-bold text-xs hover:bg-amber-500 hover:text-white transition-colors border border-amber-100 dark:border-amber-800/30" title="Set Maintenance">
+                      Maint.
+                    </button>
+                  </form>
+
+                  <form method="post" action="{{ request.path }}" class="inline m-0">{% csrf_token %}
+                    <input type="hidden" name="action" value="set_visibility">
+                    <input type="hidden" name="gateway_id" value="{{ g.id }}">
+                    <input type="hidden" name="visibility" value="INACTIVE">
+                    <button type="submit" class="flex items-center justify-center px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-500 hover:text-white transition-colors border border-slate-200 dark:border-slate-700" title="Hide">
+                      Hide
+                    </button>
+                  </form>
+
+                  <form method="post" action="{{ request.path }}" class="inline m-0" onsubmit="return confirm('Are you sure you want to completely delete this method?');">{% csrf_token %}
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="gateway_id" value="{{ g.id }}">
+                    <button type="submit" class="flex items-center justify-center w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/20 text-rose-500 font-bold text-xs hover:bg-rose-500 hover:text-white transition-colors border border-rose-100 dark:border-rose-800/30" title="Delete">
+                      <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                <div class="flex flex-col items-center justify-center gap-2">
+                  <i class="fa-regular fa-folder-open text-4xl mb-2 text-slate-300 dark:text-slate-600"></i>
+                  <p class="font-medium text-base">No payment methods found</p>
+                  <p class="text-xs">Click "Add Method" above to create your first one.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

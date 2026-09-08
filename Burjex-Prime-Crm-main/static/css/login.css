@@ -1,0 +1,286 @@
+/**
+ * Staff + client login — shared brokerage layout
+ * Fonts: Inter (UI), Poppins (headings)
+ */
+
+.login-shell {
+  --login-accent: #0b3c5d;
+  --login-accent-dark: #072a42;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 1024px) {
+  .login-shell {
+    flex-direction: row;
+  }
+}
+
+/* Left panel */
+.login-panel-left {
+  position: relative;
+  flex: 1;
+  min-height: min(46vh, 400px);
+  overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .login-panel-left {
+    flex: none;
+    width: 44%;
+    max-width: 560px;
+    min-height: 100vh;
+  }
+}
+
+@media (min-width: 1280px) {
+  .login-panel-left {
+    width: 42%;
+  }
+}
+
+.login-panel__watermark-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Faded background logo — size + horizontal placement */
+.login-bg-logo {
+  position: absolute;
+  top: 50%;
+  height: auto;
+  width: auto;
+  max-height: min(52vh, 440px);
+  object-fit: contain;
+  filter: drop-shadow(0 4px 28px rgba(0, 0, 0, 0.2));
+}
+
+.login-bg-logo--center {
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.login-bg-logo--left {
+  left: clamp(0.75rem, 6vw, 2.5rem);
+  transform: translate(0, -50%);
+}
+
+.login-bg-logo--right {
+  left: auto;
+  right: clamp(0.75rem, 6vw, 2.5rem);
+  transform: translate(0, -50%);
+}
+
+.logo-small {
+  max-width: 30%;
+}
+
+.logo-medium {
+  max-width: 50%;
+}
+
+.logo-large {
+  max-width: 70%;
+}
+
+@media (max-width: 1023px) {
+  .logo-small {
+    max-width: min(42%, 200px);
+  }
+
+  .logo-medium {
+    max-width: min(58%, 280px);
+  }
+
+  .logo-large {
+    max-width: min(72%, 320px);
+  }
+
+  .login-bg-logo {
+    max-height: min(38vh, 320px);
+  }
+}
+
+/* Welcome + company — bottom stack */
+.login-panel__welcome-stack {
+  position: absolute;
+  left: clamp(1rem, 4vw, 2.25rem);
+  right: auto;
+  bottom: clamp(1.25rem, 4vw, 2.5rem);
+  max-width: calc(100% - 2rem);
+  z-index: 1;
+}
+
+.login-panel__welcome {
+  margin: 0 0 0.35rem;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: clamp(0.8125rem, 2.2vw, 0.9375rem);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.login-panel__company {
+  font-family: "Poppins", "Inter", system-ui, sans-serif;
+  font-size: clamp(1.5rem, 4.5vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: rgba(255, 255, 255, 0.96);
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
+}
+
+@media (max-width: 1023px) {
+  .login-panel__welcome-stack {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    text-align: center;
+    width: calc(100% - 2rem);
+  }
+}
+
+/* Right: form */
+.login-panel-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  min-height: min(58vh, auto);
+}
+
+@media (min-width: 1024px) {
+  .login-panel-right {
+    min-height: 100vh;
+  }
+}
+
+.login-card {
+  width: 100%;
+  max-width: 26rem;
+}
+
+.login-input {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  font-family: "Inter", system-ui, sans-serif;
+  background: #fafafa;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.login-input:focus {
+  outline: none;
+  border-color: rgba(11, 60, 93, 0.35);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(11, 60, 93, 0.1);
+}
+
+.login-btn-primary {
+  display: block;
+  width: 100%;
+  padding: 0.8125rem 1rem;
+  border: none;
+  border-radius: 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  font-family: "Inter", system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(
+    135deg,
+    var(--login-accent, #0b3c5d) 0%,
+    #124a73 45%,
+    var(--login-accent-dark, #072a42) 100%
+  );
+  box-shadow: 0 4px 14px rgba(11, 60, 93, 0.28);
+  transition: filter 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+
+.login-btn-primary:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 6px 20px rgba(11, 60, 93, 0.35);
+}
+
+.login-btn-primary:active {
+  transform: scale(0.99);
+}
+
+.login-link-muted {
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+/* Client login page mobile polish */
+.client-login-page .login-panel__company {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.99);
+  margin-bottom: 0.35rem;
+}
+
+.client-login-page .login-input {
+  min-height: 44px;
+}
+
+.client-login-page .login-btn-primary {
+  margin-top: 0.15rem;
+}
+
+.client-login-page .client-login-form {
+  margin-top: 0.1rem;
+}
+
+@media (max-width: 414px) {
+  .client-login-page .login-panel-left {
+    min-height: 28vh;
+  }
+  .client-login-page .login-panel__welcome-stack {
+    bottom: 0.85rem;
+  }
+  .client-login-page .login-bg-logo {
+    max-height: min(26vh, 150px);
+  }
+  .client-login-page .login-panel-right {
+    justify-content: flex-start;
+    padding: 0.75rem 0.85rem 1rem;
+    min-height: auto;
+  }
+  .client-login-page .client-login-card {
+    max-width: none;
+    margin-top: -4px;
+  }
+  .client-login-page .client-login-card > div {
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .client-login-page .login-link-muted {
+    margin-top: 0.25rem;
+  }
+}
+
+@media (max-width: 375px) {
+  .client-login-page .login-panel-left {
+    min-height: 24vh;
+  }
+  .client-login-page .login-bg-logo {
+    max-height: min(22vh, 132px);
+  }
+}
+
+@media (max-width: 320px) {
+  .client-login-page .client-login-card > div {
+    padding: 14px;
+  }
+}

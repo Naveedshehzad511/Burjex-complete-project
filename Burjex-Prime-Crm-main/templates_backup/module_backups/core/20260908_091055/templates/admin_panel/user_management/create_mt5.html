@@ -1,0 +1,58 @@
+{% extends "admin_panel/user_management/um_layout.html" %}
+{% block um_title %}Create MT5 Account{% endblock %}
+{% block um_body %}
+<div class="max-w-2xl">
+  <div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+        <i class="fa-solid fa-server"></i>
+      </div>
+      <div>
+        <h2 class="text-sm font-bold text-slate-900 dark:text-white">Provision New MT5 Account</h2>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Create a new live trading account for a client.</p>
+      </div>
+    </div>
+    
+    <div class="p-6">
+      <form method="post" class="space-y-5">
+        {% csrf_token %}
+        
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Select Client</label>
+          <select name="client_id" class="w-full h-11 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" required>
+            <option value="" disabled selected>— Select a client profile —</option>
+            {% for c in clients %}
+            <option value="{{ c.id }}" class="py-1">{{ c.email }} — {{ c.display_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Select Group</label>
+          <select name="group_id" class="w-full h-11 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" required>
+            <option value="" disabled selected>— Select an MT5 group —</option>
+            {% for g in groups %}
+            <option value="{{ g.id }}" class="py-1">{{ g.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Select Leverage</label>
+          <select name="leverage" class="w-full h-11 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" required>
+            {% for l in leverages %}
+            <option value="{{ l }}" class="py-1">1:{{ l }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        
+        <div class="pt-2">
+          <button type="submit" class="w-full sm:w-auto h-11 px-6 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors shadow-sm shadow-indigo-600/20 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-plus"></i> Create Account
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

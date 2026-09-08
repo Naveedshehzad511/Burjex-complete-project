@@ -1,0 +1,260 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Legal Agreements{% endblock %}
+{% block admin_content %}
+<div class="max-w-6xl mx-auto space-y-6">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-xl font-semibold text-slate-900">Legal Agreements</h1>
+      <p class="text-sm text-slate-500 mt-1">Configure legal links for client portal, profile, and footer access.</p>
+    </div>
+    <a href="{% url 'admin-system-management-dashboard' %}" class="h-9 w-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-colors shadow-sm shrink-0 mt-1" title="Back to System Management">
+      <i class="fa-solid fa-arrow-left"></i>
+    </a>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="space-y-5">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save">
+    <div class="bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="text-lg font-semibold mb-3">General</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <input type="file" name="icon" class="border border-slate-300 rounded-lg px-3 py-2">
+        <input name="name" value="{{ s.name }}" placeholder="Name" class="border border-slate-300 rounded-lg px-3 py-2">
+        <input name="tagline" value="{{ s.tagline }}" placeholder="Tagline" class="border border-slate-300 rounded-lg px-3 py-2">
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="text-lg font-semibold mb-3">Essential Documents</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">Terms & Conditions</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="terms_conditions_url" value="{{ document_objects.terms_conditions_url.link }}" placeholder="Terms & Conditions URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="terms_conditions_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.terms_conditions_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.terms_conditions_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.terms_conditions_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">Privacy Policy</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="privacy_policy_url" value="{{ document_objects.privacy_policy_url.link }}" placeholder="Privacy Policy URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="privacy_policy_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.privacy_policy_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.privacy_policy_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.privacy_policy_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">Client Agreement</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="client_agreement_url" value="{{ document_objects.client_agreement_url.link }}" placeholder="Client Agreement URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="client_agreement_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.client_agreement_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.client_agreement_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.client_agreement_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">Risk Disclosure</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="risk_disclosure_url" value="{{ document_objects.risk_disclosure_url.link }}" placeholder="Risk Disclosure URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="risk_disclosure_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.risk_disclosure_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.risk_disclosure_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.risk_disclosure_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">AML Policy</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="aml_policy_url" value="{{ document_objects.aml_policy_url.link }}" placeholder="AML Policy URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="aml_policy_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.aml_policy_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.aml_policy_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.aml_policy_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">Cookie Policy</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="cookie_policy_url" value="{{ document_objects.cookie_policy_url.link }}" placeholder="Cookie Policy URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="cookie_policy_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.cookie_policy_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.cookie_policy_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.cookie_policy_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+                <div class="space-y-1 md:col-span-2">
+          <label class="text-sm font-medium text-slate-700">Disclaimer</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="disclaimer_url" value="{{ document_objects.disclaimer_url.link }}" placeholder="Disclaimer URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="disclaimer_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.disclaimer_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.disclaimer_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.disclaimer_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="text-lg font-semibold mb-3">Trading Policies</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">Bonus Policy</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="bonus_policy_url" value="{{ document_objects.bonus_policy_url.link }}" placeholder="Bonus Policy URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="bonus_policy_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.bonus_policy_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.bonus_policy_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.bonus_policy_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">Withdrawal Policy</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="withdrawal_policy_url" value="{{ document_objects.withdrawal_policy_url.link }}" placeholder="Withdrawal Policy URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="withdrawal_policy_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.withdrawal_policy_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.withdrawal_policy_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.withdrawal_policy_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">Deposit Policy</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="deposit_policy_url" value="{{ document_objects.deposit_policy_url.link }}" placeholder="Deposit Policy URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="deposit_policy_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.deposit_policy_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.deposit_policy_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.deposit_policy_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="text-lg font-semibold mb-3">Regional Policies</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">US Client Policy</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="us_client_policy_url" value="{{ document_objects.us_client_policy_url.link }}" placeholder="US Client Policy URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="us_client_policy_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.us_client_policy_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.us_client_policy_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.us_client_policy_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">EU/UK Policy</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="eu_uk_policy_url" value="{{ document_objects.eu_uk_policy_url.link }}" placeholder="EU/UK Policy URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="eu_uk_policy_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.eu_uk_policy_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.eu_uk_policy_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.eu_uk_policy_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="text-lg font-semibold mb-3">Additional Policies</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">Complaints Policy</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="complaints_policy_url" value="{{ document_objects.complaints_policy_url.link }}" placeholder="Complaints Policy URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="complaints_policy_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.complaints_policy_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.complaints_policy_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.complaints_policy_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+                <div class="space-y-1">
+          <label class="text-sm font-medium text-slate-700">Conflict of Interest</label>
+          <div class="flex gap-2 items-center">
+            <input type="url" name="conflict_of_interest_url" value="{{ document_objects.conflict_of_interest_url.link }}" placeholder="Conflict of Interest URL" class="border border-slate-300 rounded-lg px-3 py-2 w-full">
+            <input type="file" name="conflict_of_interest_url_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+          </div>
+          {% if document_objects.conflict_of_interest_url.file %}
+            <div class="text-xs text-slate-500 mt-1">
+              Current file: <a href="{{ document_objects.conflict_of_interest_url.file.url }}" target="_blank" class="text-indigo-600 hover:underline">{{ document_objects.conflict_of_interest_url.file.name }}</a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="flex justify-end">
+      <button class="rounded-lg bg-indigo-600 px-5 py-2.5 text-white font-semibold hover:bg-indigo-700">Save Settings</button>
+    </div>
+  </form>
+
+  <div class="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+    <h2 class="text-lg font-semibold">Custom Legal Documents</h2>
+    <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add_custom">
+      <input name="custom_title" placeholder="Document Name" class="border border-slate-300 rounded-lg px-3 py-2">
+      <input type="url" name="custom_link" placeholder="Link (Optional)" class="border border-slate-300 rounded-lg px-3 py-2">
+      <input type="file" name="custom_file" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100">
+      <button class="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50">Add Document</button>
+    </form>
+    <div class="space-y-2">
+      {% for doc in custom_docs %}
+      <div class="flex flex-wrap items-center justify-between gap-2 border border-slate-200 rounded-lg p-3">
+        <div>
+          <div class="font-semibold text-slate-900">{{ doc.title }}</div>
+          {% if doc.link %}
+            <a href="{{ doc.link }}" target="_blank" rel="noopener" class="text-sm text-indigo-600 hover:underline block">{{ doc.link }}</a>
+          {% endif %}
+          {% if doc.file %}
+            <a href="{{ doc.file.url }}" target="_blank" rel="noopener" class="text-sm text-emerald-600 hover:underline block">Uploaded File: {{ doc.file.name }}</a>
+          {% endif %}
+        </div>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="delete_custom">
+          <input type="hidden" name="id" value="{{ doc.id }}">
+          <button type="submit" class="rounded-lg bg-rose-600 text-white px-3 py-1.5 text-sm font-semibold hover:bg-rose-700">Delete</button>
+        </form>
+      </div>
+      {% empty %}
+      <div class="text-sm text-slate-500">No custom documents added.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+

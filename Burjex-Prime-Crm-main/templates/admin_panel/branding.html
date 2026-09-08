@@ -1,0 +1,174 @@
+{% extends "admin_panel/base.html" %}
+{% load static %}
+
+{% block title %}Settings — Branding{% endblock %}
+
+{% block admin_content %}
+  <div class="bp-page-header">
+    <div>
+      <h1 class="bp-page-title"><i class="fa-solid fa-palette bp-s-3"></i>Branding</h1>
+      <p class="bp-page-subtitle">Separate <strong>admin</strong> and <strong>user</strong> auth branding (login, signup, forgot password, portal naming). Portal file assets below. General uploads: PNG, JPG, JPEG, SVG, WEBP — max 2MB (login uploads allow WEBP).</p>
+    </div>
+  </div>
+
+  <div class="bp-tabs bp-s-6">
+    <a
+      href="?tab=admin"
+      class="bp-tab {% if active_branding_tab == 'admin' %}active{% endif %}"
+    ><i class="fa-solid fa-shield-halved bp-s-5"></i>Admin auth branding</a>
+    <a
+      href="?tab=user"
+      class="bp-tab {% if active_branding_tab == 'user' %}active{% endif %}"
+    ><i class="fa-solid fa-user-circle bp-s-5"></i>User auth branding</a>
+  </div>
+
+  {% if active_branding_tab == "admin" %}
+    <form class="bp-s-7" method="post" enctype="multipart/form-data" id="authBrandingForm">
+      {% csrf_token %}
+      <div class="bp-card bp-s-6">
+        <div class="bp-card-header">
+          <span class="bp-card-header-title"><i class="fa-solid fa-shield-halved bp-s-8"></i>Admin auth branding</span>
+        </div>
+        <div class="bp-card-body">
+          {% include "admin_panel/includes/auth_branding_scope_form.html" with scope="admin" obj=admin_auth %}
+        </div>
+      </div>
+    </form>
+  {% else %}
+    <form class="bp-s-7" method="post" enctype="multipart/form-data" id="authBrandingForm">
+      {% csrf_token %}
+      <div class="bp-card bp-s-6">
+        <div class="bp-card-header">
+          <span class="bp-card-header-title"><i class="fa-solid fa-user-circle bp-s-8"></i>User auth branding</span>
+        </div>
+        <div class="bp-card-body">
+          {% include "admin_panel/includes/auth_branding_scope_form.html" with scope="user" obj=user_auth %}
+        </div>
+      </div>
+    </form>
+  {% endif %}
+
+  <form class="bp-s-9" method="post" enctype="multipart/form-data" id="brandingForm">
+    {% csrf_token %}
+    <input type="hidden" name="return_tab" value="{{ active_branding_tab }}" />
+
+    <div class="bp-card">
+      <div class="bp-card-header">
+        <span class="bp-card-header-title"><i class="fa-solid fa-lock bp-s-8"></i>Admin login branding</span>
+      </div>
+      <div class="bp-card-body">
+        <p class="bp-caption bp-s-10">Optional full-screen background and title fields. Auth panel (welcome, watermark) is controlled in <strong>Admin auth branding</strong>. Applies to <code class="bp-s-11">/admin/login/</code>.</p>
+        <div class="bp-grid-2 bp-s-6">
+          {% for row in login_admin_rows %}
+            {% include "admin_panel/includes/login_branding_field.html" %}
+          {% endfor %}
+        </div>
+        <div class="bp-grid-2">
+          <div class="bp-form-group bp-s-12">
+            <label class="bp-form-label" for="lb_admin_login_title">Admin login title</label>
+            <input type="text" id="lb_admin_login_title" name="lb_admin_login_title" value="{{ login_lb.admin_login_title }}" placeholder="Staff Sign In" class="bp-input" />
+          </div>
+          <div class="bp-form-group bp-s-12">
+            <label class="bp-form-label" for="lb_admin_login_subtitle">Admin login subtitle</label>
+            <input type="text" id="lb_admin_login_subtitle" name="lb_admin_login_subtitle" value="{{ login_lb.admin_login_subtitle }}" placeholder="Secure access to your broker CRM" class="bp-input" />
+          </div>
+          <div class="bp-form-group">
+            <label class="bp-form-label" for="lb_admin_button_color">Sign-in button colour</label>
+            <input class="bp-s-13" type="color" id="lb_admin_button_color" name="lb_admin_button_color" value="{{ login_lb.admin_button_color|default:'#0B3C5D' }}" />
+          </div>
+          <div class="bp-form-group bp-s-12">
+            <label class="bp-form-label" for="lb_admin_background_overlay">Background overlay (CSS colour / rgba)</label>
+            <input type="text" id="lb_admin_background_overlay" name="lb_admin_background_overlay" value="{{ login_lb.admin_background_overlay }}" placeholder="rgba(15, 23, 42, 0.55)" class="bp-input bp-s-14" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bp-card">
+      <div class="bp-card-header">
+        <span class="bp-card-header-title"><i class="fa-solid fa-right-to-bracket bp-s-8"></i>User login branding</span>
+      </div>
+      <div class="bp-card-body">
+        <p class="bp-caption bp-s-10">Optional full-screen background and title fields. Auth panel is under <strong>User auth branding</strong>. Applies to <code class="bp-s-11">/user/login/</code> and <code class="bp-s-11">/login/</code>.</p>
+        <div class="bp-grid-2 bp-s-6">
+          {% for row in login_user_rows %}
+            {% include "admin_panel/includes/login_branding_field.html" %}
+          {% endfor %}
+        </div>
+        <div class="bp-grid-2">
+          <div class="bp-form-group bp-s-12">
+            <label class="bp-form-label" for="lb_user_login_title">User login title</label>
+            <input type="text" id="lb_user_login_title" name="lb_user_login_title" value="{{ login_lb.user_login_title }}" placeholder="Welcome back" class="bp-input" />
+          </div>
+          <div class="bp-form-group bp-s-12">
+            <label class="bp-form-label" for="lb_user_login_subtitle">User login subtitle</label>
+            <input type="text" id="lb_user_login_subtitle" name="lb_user_login_subtitle" value="{{ login_lb.user_login_subtitle }}" placeholder="Sign in to your client portal" class="bp-input" />
+          </div>
+          <div class="bp-form-group">
+            <label class="bp-form-label" for="lb_user_button_color">Sign-in button colour</label>
+            <input class="bp-s-13" type="color" id="lb_user_button_color" name="lb_user_button_color" value="{{ login_lb.user_button_color|default:'#0B3C5D' }}" />
+          </div>
+          <div class="bp-form-group bp-s-12">
+            <label class="bp-form-label" for="lb_user_background_overlay">Background overlay (CSS colour / rgba)</label>
+            <input type="text" id="lb_user_background_overlay" name="lb_user_background_overlay" value="{{ login_lb.user_background_overlay }}" placeholder="rgba(15, 23, 42, 0.45)" class="bp-input bp-s-14" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bp-card">
+      <div class="bp-card-header">
+        <span class="bp-card-header-title"><i class="fa-solid fa-image bp-s-8"></i>Admin portal branding</span>
+      </div>
+      <div class="bp-card-body">
+        <p class="bp-caption bp-s-6">Admin sidebar, admin login, and header. Recommended: logo 300×100, favicon 32×32, login logo 300×120.</p>
+        <div class="bp-grid-2">
+          {% for row in admin_branding_rows %}
+            {% include "admin_panel/includes/branding_field.html" %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="bp-card">
+      <div class="bp-card-header">
+        <span class="bp-card-header-title"><i class="fa-solid fa-users bp-s-8"></i>User portal branding</span>
+      </div>
+      <div class="bp-card-body">
+        <p class="bp-caption bp-s-6">Client dashboard, login, and signup. Legacy optional logo from UI → Sidebar is still used as an extra fallback after user portal logos.</p>
+        <div class="bp-grid-2">
+          {% for row in user_branding_rows %}
+            {% include "admin_panel/includes/branding_field.html" %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="bp-s-15">
+      <button type="submit" class="bp-btn bp-btn-primary bp-btn-lg">
+        <i class="fa-solid fa-floppy-disk bp-s-5"></i>Save branding
+      </button>
+    </div>
+  </form>
+
+  <script>
+    (function () {
+      document.querySelectorAll("[data-branding-input]").forEach(function (input) {
+        var target = document.getElementById(input.getAttribute("data-preview-id"));
+        if (!target) return;
+        var slot = input.closest("[data-branding-slot]");
+        input.addEventListener("change", function () {
+          var f = input.files && input.files[0];
+          if (!f) return;
+          var url = URL.createObjectURL(f);
+          target.src = url;
+          target.classList.remove("hidden");
+          if (slot) {
+            var lbl = slot.querySelector(".no-preview-label");
+            if (lbl) lbl.classList.add("hidden");
+          }
+        });
+      });
+    })();
+  </script>
+{% endblock %}

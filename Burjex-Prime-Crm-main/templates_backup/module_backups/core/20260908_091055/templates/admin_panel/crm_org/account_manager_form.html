@@ -1,0 +1,109 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block admin_shell_header_title %}
+<h1 class="admin-topbar-page-title text-slate-900">{{ page_title }}</h1>
+{% endblock %}
+{% block admin_content %}
+<div class="max-w-3xl mx-auto px-2 pb-12">
+  <a href="{% url 'admin-account-managers' %}" class="text-sm text-indigo-600 hover:underline">← Back to account managers</a>
+  <form method="post" class="mt-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+    {% csrf_token %}
+    <div class="grid md:grid-cols-2 gap-3">
+      <div><label class="block text-sm font-medium mb-1">First name</label><input name="first_name" value="{{ manager.first_name|default:'' }}" class="w-full rounded-lg border border-slate-200 px-3 py-2" /></div>
+      <div><label class="block text-sm font-medium mb-1">Last name</label><input name="last_name" value="{{ manager.last_name|default:'' }}" class="w-full rounded-lg border border-slate-200 px-3 py-2" /></div>
+    </div>
+    <div><label class="block text-sm font-medium mb-1">Username</label><input name="username" value="{{ manager.username|default:'' }}" class="w-full rounded-lg border border-slate-200 px-3 py-2" {% if manager %}readonly class="bg-slate-50"{% endif %} required /></div>
+    <div><label class="block text-sm font-medium mb-1">Email</label><input type="email" name="email" value="{{ manager.email|default:'' }}" class="w-full rounded-lg border border-slate-200 px-3 py-2" required /></div>
+    <div><label class="block text-sm font-medium mb-1">{% if manager %}Reset password (optional){% else %}Password{% endif %}</label><input type="password" name="password" class="w-full rounded-lg border border-slate-200 px-3 py-2" {% if not manager %}required{% endif %} /></div>
+    <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="is_active" {% if not manager or manager.is_active %}checked{% endif %} /> Active</label>
+
+    <div class="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-2">
+      <h3 class="text-sm font-semibold text-slate-800">Portal permissions</h3>
+      <p class="text-xs text-slate-500">Disabled items are hidden on the manager dashboard and API.</p>
+      <div class="grid sm:grid-cols-2 gap-2 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" name="perm_view_clients" {% if perm and perm.view_clients %}checked{% endif %} /> View clients list</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="perm_view_deposit" {% if perm and perm.view_deposit %}checked{% endif %} /> View deposits</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="perm_view_withdrawal" {% if perm and perm.view_withdrawal %}checked{% endif %} /> View withdrawals</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="perm_view_volume" {% if perm and perm.view_volume %}checked{% endif %} /> View trading volume</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="perm_view_balance" {% if perm and perm.view_balance %}checked{% endif %} /> View balance</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="perm_view_trades" {% if perm and perm.view_trades %}checked{% endif %} /> View trades</label>
+        <label class="flex items-center gap-2 sm:col-span-2"><input type="checkbox" name="perm_view_personal_info" {% if perm and perm.view_personal_info %}checked{% endif %} /> View personal info (name / email on tables)</label>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-2">Assign clients</label>
+      <p class="text-xs text-slate-500 mb-2">Only clients you select are visible to this manager. (Client, Trader, Copier roles.)</p>
+      <div class="max-h-56 overflow-y-auto rounded-lg border border-slate-200 p-2 space-y-1 text-sm">
+        {% for c in eligible_clients %}
+        <label class="flex items-center gap-2 py-0.5">
+          <input type="checkbox" name="client_ids" value="{{ c.id }}" {% if c.id in assigned_ids %}checked{% endif %} />
+          <span>{{ c.email }} <span class="text-slate-400">({{ c.get_role_display }})</span></span>
+        </label>
+        {% empty %}
+        <p class="text-slate-500 text-sm p-2">No eligible users in the first 800 records. Create clients first.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-3">
+      <h3 class="text-sm font-semibold text-slate-800">KPI target (optional)</h3>
+      <p class="text-xs text-slate-500">Progress uses <strong>assigned clients</strong> for this account manager only.</p>
+      <label class="inline-flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" name="manager_target_enabled" {% if active_manager_target %}checked{% endif %} />
+        Enable KPI target
+      </label>
+      <div class="grid md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Target type</label>
+          <select name="manager_target_type" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="deposit" {% if not active_manager_target or active_manager_target.target_type == 'deposit' %}selected{% endif %}>Deposit</option>
+            <option value="volume" {% if active_manager_target and active_manager_target.target_type == 'volume' %}selected{% endif %}>Volume (lots)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Target value</label>
+          <input type="number" name="manager_target_value" step="any" min="0"
+            value="{% if active_manager_target %}{{ active_manager_target.target_value }}{% endif %}"
+            class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-xs font-medium text-slate-600 mb-1">Period</label>
+          <select name="manager_target_period" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="monthly" {% if not active_manager_target or active_manager_target.period == 'monthly' %}selected{% endif %}>Monthly</option>
+            <option value="weekly" {% if active_manager_target and active_manager_target.period == 'weekly' %}selected{% endif %}>Weekly</option>
+            <option value="daily" {% if active_manager_target and active_manager_target.period == 'daily' %}selected{% endif %}>Daily</option>
+          </select>
+        </div>
+      </div>
+      <label class="inline-flex items-center gap-2 text-sm">
+        <input type="checkbox" name="manager_target_custom_range" {% if active_manager_target and active_manager_target.start_date %}checked{% endif %} />
+        Fixed date range
+      </label>
+      <div class="grid md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-slate-600 mb-1">Start</label>
+          <input type="date" name="manager_target_start" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value="{% if active_manager_target and active_manager_target.start_date %}{{ active_manager_target.start_date|date:'Y-m-d' }}{% endif %}" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-600 mb-1">End</label>
+          <input type="date" name="manager_target_end" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value="{% if active_manager_target and active_manager_target.end_date %}{{ active_manager_target.end_date|date:'Y-m-d' }}{% endif %}" />
+        </div>
+      </div>
+    </div>
+
+    <button class="w-full rounded-lg bg-indigo-600 text-white py-2.5 font-semibold">{% if manager %}Save{% else %}Create{% endif %}</button>
+  </form>
+
+  {% if manager %}
+  <form method="post" class="mt-4 rounded-xl border border-rose-100 bg-rose-50/50 p-4">
+    {% csrf_token %}
+    <input type="hidden" name="clear_manager_target" value="1" />
+    <p class="text-sm text-slate-600 mb-2">Clear active KPI target for this manager.</p>
+    <button type="submit" class="rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-800">Clear target</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

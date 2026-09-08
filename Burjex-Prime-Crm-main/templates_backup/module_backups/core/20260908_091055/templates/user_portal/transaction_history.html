@@ -1,0 +1,40 @@
+{% extends "user_portal/base.html" %}
+
+{% block title %}Transaction History - User Portal{% endblock %}
+
+{% block user_content %}
+  <h1 class="portal-page-heading">Transaction History</h1>
+
+  <div class="portal-table-wrap overflow-x-auto w-full">
+    <table class="portal-table min-w-full whitespace-nowrap">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Amount</th>
+          <th>Status</th>
+          <th>Gateway</th>
+          <th>Ref</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in transactions %}
+          <tr>
+            <td style="color:var(--portal-text-muted);">{{ t.created_at|date:"Y-m-d H:i" }}</td>
+            <td>{{ t.tx_type }}</td>
+            <td class="font-semibold">{{ t.amount }} {{ t.currency }}</td>
+            <td>{{ t.status }}</td>
+            <td>{{ t.payment_gateway.name|default:"-" }}</td>
+            <td style="color:var(--portal-text-muted);">{{ t.reference|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" style="text-align:center;color:var(--portal-text-muted);padding:2rem 1rem;">
+              No transactions yet.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

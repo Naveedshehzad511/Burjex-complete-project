@@ -1,0 +1,53 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}{{ row.get_provider_display }}{% endblock %}
+{% block admin_content %}
+<div class="max-w-3xl mx-auto space-y-6 pb-10 px-2">
+  <a href="{% url 'admin-integrations-compliance' %}" class="text-sm text-indigo-600 hover:underline">← Compliance</a>
+  <h1 class="text-xl font-semibold text-slate-900">{{ row.get_provider_display }}</h1>
+  <form method="post" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-5">
+    {% csrf_token %}
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="enabled" {% if row.enabled %}checked{% endif %} class="rounded border-slate-300" />
+      <span class="text-sm font-medium text-slate-800">Enable integration</span>
+    </label>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Integration name</label>
+      <input type="text" name="integration_name" value="{{ row.integration_name }}"
+        class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">API key</label>
+      <input type="text" name="api_key" value="{{ row.api_key }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+    </div>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Secret key</label>
+      <input type="password" name="secret_key" value="" placeholder="{% if row.secret_key %}•••• (leave blank to keep){% endif %}"
+        class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+    </div>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Webhook URL</label>
+      <input type="url" name="webhook_url" value="{{ row.webhook_url }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Callback / API base URL (for connection test)</label>
+      <input type="url" name="callback_url" value="{{ row.callback_url }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+    </div>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Environment</label>
+      <select name="environment" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">
+        {% for val,label in env_choices %}
+        <option value="{{ val }}" {% if row.environment == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if row.last_test_at %}
+    <p class="text-xs text-slate-500">Last test: {% if row.last_test_ok %}<span class="text-emerald-700">Connected</span>{% else %}<span class="text-red-600">Failed</span>{% endif %} — {{ row.last_test_detail|truncatechars:200 }} · {{ row.last_test_at }}</p>
+    {% endif %}
+    <div class="flex flex-wrap gap-2">
+      <button type="submit" name="action" value="save" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium">Save configuration</button>
+      <button type="submit" name="action" value="test" class="rounded-lg border border-slate-300 px-4 py-2 text-sm">Test API connection</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+

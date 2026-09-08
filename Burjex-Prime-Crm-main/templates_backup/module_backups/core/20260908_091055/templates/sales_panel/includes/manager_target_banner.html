@@ -1,0 +1,104 @@
+{% load humanize %}
+{% if sales_manager_mode and manager_target.has_target %}
+<div
+  id="manager-target-root"
+  class="mt-target-shell"
+  data-poll-url="{% url 'sales-manager-target-progress-api' %}"
+  data-initial="{{ manager_target.percent|default:0 }}"
+>
+  <div class="mt-target-hero">
+    <div class="mt-target-hero__head">
+      <div>
+        <div class="mt-target-kicker">{{ manager_target.period_label }} target progress</div>
+        <div class="mt-target-range">{{ manager_target.period_range }}</div>
+      </div>
+      <div class="mt-target-pct" data-field="percent">{{ manager_target.percent|floatformat:1 }}%</div>
+    </div>
+    <p class="mt-target-line" data-field="line_summary">{{ manager_target.line_summary }}</p>
+    <div class="mt-target-track" data-field="track" data-tier="{{ manager_target.bar_tier }}">
+      <div class="mt-target-fill" data-field="fill" style="width: {{ manager_target.percent|floatformat:1 }}%;"></div>
+    </div>
+    <div class="mt-target-meta">
+      <span data-field="remaining_label">
+        {% if manager_target.target_type == 'volume' %}
+          <strong>{{ manager_target.remaining_display }}</strong> lots remaining
+        {% else %}
+          <strong>${{ manager_target.remaining|floatformat:2|intcomma }}</strong> remaining
+        {% endif %}
+      </span>
+      <span data-field="achieved" class="mt-target-celebrate {% if not manager_target.achieved %}hidden{% endif %}">🎉 Target achieved</span>
+    </div>
+  </div>
+  <div class="mt-target-card">
+    <h3 class="mt-target-card__title">Manager performance</h3>
+    <ul class="mt-target-card__list">
+      <li><span>Target</span><strong data-field="card_target">{% if manager_target.target_type == 'volume' %}{{ manager_target.display_target }} lots{% else %}{{ manager_target.display_target }}{% endif %}</strong></li>
+      <li><span>Completed</span><strong data-field="card_done">{% if manager_target.target_type == 'volume' %}{{ manager_target.display_current }} lots{% else %}{{ manager_target.display_current }}{% endif %}</strong></li>
+      <li><span>Remaining</span><strong data-field="card_rem">{{ manager_target.remaining_display }}{% if manager_target.target_type == 'volume' %} lots{% endif %}</strong></li>
+      <li><span>Completion</span><strong data-field="card_pct">{{ manager_target.percent|floatformat:1 }}%</strong></li>
+    </ul>
+  </div>
+</div>
+<script>
+(function () {
+  var root = document.getElementById("manager-target-root");
+  if (!root) return;
+  var url = root.getAttribute("data-poll-url");
+  if (!url) return;
+  function tierForPct(p) {
+    if (p >= 100) return "green";
+    if (p >= 70) return "green";
+    if (p >= 40) return "orange";
+    return "red";
+  }
+  function apply(data) {
+    if (!data || !data.has_target) return;
+    var p = Math.min(100, Math.max(0, data.percent || 0));
+    var tier = data.bar_tier || tierForPct(p);
+    var fill = root.querySelector("[data-field='fill']");
+    var track = root.querySelector("[data-field='track']");
+    if (fill) {
+      fill.style.width = p + "%";
+      requestAnimationFrame(function () { fill.classList.add("mt-target-fill--pulse"); });
+      setTimeout(function () { fill.classList.remove("mt-target-fill--pulse"); }, 600);
+    }
+    if (track) track.setAttribute("data-tier", tier);
+    var pctEl = root.querySelector("[data-field='percent']");
+    if (pctEl) pctEl.textContent = (Math.round(p * 10) / 10) + "%";
+    var line = root.querySelector("[data-field='line_summary']");
+    if (line && data.line_summary) line.textContent = data.line_summary;
+    var rem = root.querySelector("[data-field='remaining_label']");
+    if (rem) {
+      if (data.target_type === "volume") {
+        rem.innerHTML = "<strong>" + data.remaining_display + "</strong> lots remaining";
+      } else {
+        rem.innerHTML = "<strong>$" + Number(data.remaining).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "</strong> remaining";
+      }
+    }
+    var cel = root.querySelector("[data-field='achieved']");
+    if (cel) {
+      if (data.achieved) cel.classList.remove("hidden");
+      else cel.classList.add("hidden");
+    }
+    var ct = root.querySelector("[data-field='card_target']");
+    if (ct) ct.textContent = data.target_type === "volume" ? (data.display_target + " lots") : data.display_target;
+    var cd = root.querySelector("[data-field='card_done']");
+    if (cd) cd.textContent = data.target_type === "volume" ? (data.display_current + " lots") : data.display_current;
+    var cr = root.querySelector("[data-field='card_rem']");
+    if (cr) cr.textContent = data.remaining_display + (data.target_type === "volume" ? " lots" : "");
+    var cp = root.querySelector("[data-field='card_pct']");
+    if (cp) cp.textContent = (Math.round(p * 10) / 10) + "%";
+  }
+  setInterval(function () {
+    fetch(url, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(apply)
+      .catch(function () {});
+  }, 25000);
+})();
+</script>
+{% elif sales_manager_mode %}
+<div class="mt-target-shell mt-target-shell--empty">
+  <p class="text-sm text-slate-500">No performance target is set. Your admin can configure a monthly, weekly, or daily deposit or volume target.</p>
+</div>
+{% endif %}

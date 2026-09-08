@@ -1,0 +1,74 @@
+{% extends "admin_panel/base.html" %}
+{% block admin_content %}
+<div class="max-w-4xl mx-auto">
+  <h1 class="text-xl font-semibold text-slate-900">Sidebar Settings</h1>
+  <p class="text-sm text-slate-500 mt-2">Sidebar customization settings will appear here.</p>
+</div>
+{% endblock %}
+
+{% extends "admin_panel/base.html" %}
+
+{% block title %}UI Settings - Sidebar{% endblock %}
+
+{% block admin_content %}
+  <div class="max-w-4xl bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+    <h1 class="text-xl font-semibold mb-2">UI Settings → Sidebar</h1>
+    <p class="text-sm text-slate-600 mb-6">Colours and typography for the client portal sidebar. Logos are managed under <a href="{% url 'admin-branding-logo' %}" class="text-indigo-600 font-medium underline">Settings → Branding</a> (user dashboard logo). An older sidebar-only logo file in the database may still apply as a fallback if present.</p>
+
+    <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      {% csrf_token %}
+
+      <label class="block">
+        <span class="text-slate-700 font-medium">Sidebar Background Color</span>
+        <input type="text" name="sidebar_bg_color" value="{{ ui.sidebar_bg_color }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2" />
+      </label>
+
+      <label class="block">
+        <span class="text-slate-700 font-medium">Sidebar Text Color</span>
+        <input type="text" name="sidebar_text_color" value="{{ ui.sidebar_text_color }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2" />
+      </label>
+
+      <label class="block">
+        <span class="text-slate-700 font-medium">Sidebar Hover Color</span>
+        <input type="text" name="sidebar_hover_color" value="{{ ui.sidebar_hover_color }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2" />
+      </label>
+
+      <label class="block">
+        <span class="text-slate-700 font-medium">Sidebar Active Color</span>
+        <input type="text" name="sidebar_active_color" value="{{ ui.sidebar_active_color }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2" />
+      </label>
+
+      <label class="block">
+        <span class="text-slate-700 font-medium">Sidebar Width (px)</span>
+        <input type="number" name="sidebar_width" value="{{ ui.sidebar_width }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2" />
+      </label>
+
+      <label class="block">
+        <span class="text-slate-700 font-medium">Font Size (px)</span>
+        <input type="number" name="font_size" value="{{ ui.font_size }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2" />
+      </label>
+
+      <label class="block md:col-span-2">
+        <span class="text-slate-700 font-medium">Font Family / Style</span>
+        <input type="text" name="font_family" value="{{ ui.font_family }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2" />
+      </label>
+
+      <label class="block">
+        <span class="text-slate-700 font-medium">Branding logo size (px)</span>
+        <input type="number" name="logo_size_px" value="{{ ui.logo_size_px }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2" />
+      </label>
+
+      <label class="block flex items-center gap-2">
+        <input type="checkbox" name="animation_enabled" {% if ui.animation_enabled %}checked{% endif %} />
+        <span class="text-slate-700 font-medium">Animation On</span>
+      </label>
+
+      <div class="md:col-span-2 pt-2">
+        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:opacity-95">
+          Save Sidebar Settings
+        </button>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+

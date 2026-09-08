@@ -1,0 +1,49 @@
+{% extends "sales_panel/base.html" %}
+
+{% block title %}Follow Ups - Sales CRM{% endblock %}
+{% block admin_shell_page_title %}Follow Ups{% endblock %}
+
+{% block admin_content %}
+  {% include "sales_panel/includes/table_page_styles.html" %}
+  <div class="sp-page">
+    <div class="sp-page__head">
+      <h2>Follow ups</h2>
+      <p>Leads in <strong>Qualified</strong> status—your primary follow-up queue.</p>
+    </div>
+    <div class="sp-card">
+      {% if leads %}
+        <div class="sp-table-wrap">
+          <table class="sp-table">
+            <thead>
+              <tr>
+                <th>Lead</th>
+                <th>Phone</th>
+                <th>Campaign</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for lead in leads %}
+                <tr>
+                  <td>
+                    <strong>{{ lead.full_name|default:"—" }}</strong><br>
+                    <span style="color:#64748b;font-size:0.75rem;">{{ lead.email|default:"—" }}</span>
+                  </td>
+                  <td>{{ lead.phone|default:"—" }}</td>
+                  <td>{{ lead.campaign.name|default:"—" }}</td>
+                  <td>{{ lead.created_at|date:"M j, Y" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="sp-empty">No qualified leads in the pipeline.</p>
+      {% endif %}
+    </div>
+    <p style="margin-top:1rem;font-size:0.8rem;">
+      {# Admin Follow Up List page disabled; use User List filters instead. #}
+      {# <a href="{% url 'admin-follow-up' %}" style="color:#0b3c5d;font-weight:600;">Admin follow-up list -></a> #}
+    </p>
+  </div>
+{% endblock %}

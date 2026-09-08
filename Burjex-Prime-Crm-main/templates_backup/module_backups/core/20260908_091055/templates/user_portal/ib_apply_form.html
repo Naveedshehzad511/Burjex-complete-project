@@ -1,0 +1,57 @@
+{% extends "user_portal/base.html" %}
+{% block title %}Apply for IB - Burjex Prime{% endblock %}
+{% block user_content %}
+  <div class="portal-card max-w-lg">
+    <div class="portal-card-header"><div class="portal-card-title">IB Application</div></div>
+    <p class="text-sm mb-5" style="color:var(--portal-text-muted);">Fields marked <span style="color:#e11d48;">*</span> are required.</p>
+    <form method="post" action="{% url 'user-ib-apply' %}" class="space-y-4">
+      {% csrf_token %}
+      {% for q in questions %}
+      <div>
+        <label class="portal-form-label">{{ q.label }} {% if q.required %}<span style="color:#e11d48;">*</span>{% endif %}</label>
+        
+        {% if q.input_type == 'TEXT' %}
+          <input type="text" name="question_{{ q.id }}" class="portal-input" value="{{ q.posted_val|default:'' }}" {% if q.required %}required{% endif %} />
+        
+        {% elif q.input_type == 'TEXTAREA' %}
+          <textarea name="question_{{ q.id }}" rows="4" class="portal-input" {% if q.required %}required{% endif %}>{{ q.posted_val|default:'' }}</textarea>
+        
+        {% elif q.input_type == 'NUMBER' %}
+          <input type="number" name="question_{{ q.id }}" class="portal-input" value="{{ q.posted_val|default:'' }}" {% if q.required %}required{% endif %} />
+        
+        {% elif q.input_type == 'YES_NO' %}
+          <select name="question_{{ q.id }}" class="portal-input" {% if q.required %}required{% endif %}>
+            <option value="">Select an option</option>
+            <option value="Yes" {% if q.posted_val == 'Yes' %}selected{% endif %}>Yes</option>
+            <option value="No" {% if q.posted_val == 'No' %}selected{% endif %}>No</option>
+          </select>
+        
+        {% elif q.input_type == 'SELECT' %}
+          <select name="question_{{ q.id }}" class="portal-input" {% if q.required %}required{% endif %}>
+            <option value="">Select an option</option>
+            {% for choice in q.choice_lines %}
+              <option value="{{ choice }}" {% if q.posted_val == choice %}selected{% endif %}>{{ choice }}</option>
+            {% endfor %}
+          </select>
+        
+        {% elif q.input_type == 'MULTI' %}
+          <div class="space-y-2 mt-2">
+            {% for choice in q.choice_lines %}
+              <label class="flex items-center space-x-2 text-sm text-slate-700 dark:text-slate-300">
+                <input type="checkbox" name="question_{{ q.id }}" value="{{ choice }}" 
+                  class="rounded border-slate-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                  {% if choice in q.posted_val %}checked{% endif %} />
+                <span>{{ choice }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+      <div class="flex flex-col gap-3 pt-2">
+        <button type="submit" class="portal-btn-primary w-full py-3 font-bold">Submit application</button>
+        <a href="{% url 'user-ib-dashboard' %}" class="portal-btn-secondary w-full py-3 font-semibold text-center">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

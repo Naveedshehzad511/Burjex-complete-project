@@ -1,0 +1,45 @@
+---
+description: Deploy runtime changes immediately to Windows production (5.226.139.8)
+alwaysApply: true
+---
+
+# Deploy Live (Windows Server)
+
+Standing instruction (Urdu): **"ab jo bhe change krna direct deployed krty jana"** — after any runtime-affecting change, deploy immediately. Never leave server-side fixes local-only.
+
+## Target
+
+| | |
+|---|---|
+| **Server** | `5.226.139.8` (Windows) |
+| **Path** | `C:\burjex` |
+| **Retired** | `187.127.215.195` — **never deploy** unless user explicitly asks |
+
+Config: `deploy/windows-server/DEPLOY_TARGET.env`
+
+## Deploy workflow
+
+1. **Push code:** WinRM / hotpatch only the affected trees to `C:\burjex` (CRM, gateway, market-data, bridge as relevant).
+2. **Restart stack:** Use `deploy/windows-server/` helpers — they always pass `--env-file deploy/.env.prod.ip`:
+   - `.\up.ps1` — build + start
+   - `.\recreate.ps1 <service>` — force recreate one service
+   - `.\restart.ps1 <service>` — restart
+   - **Never** run raw `docker compose up/restart/recreate` without `--env-file` (causes market-data crash-loop).
+3. **Bridge:** After `mt5_bridge` changes, restart NSSM service `BurjexMt5Bridge` on the server.
+
+## What to redeploy
+
+| Changed | Redeploy |
+|---|---|
+| Django CRM | `.\recreate.ps1 crm-web` or `.\up.ps1 --build` |
+| BTrader gateway / ws / engine | matching `btrader-*` service via `.\recreate.ps1` |
+| market-data / feed | `.\recreate.ps1 btrader-market-data` |
+| MT5 bridge | hotpatch + restart bridge service |
+
+## Flutter / mobile
+
+When Flutter or mobile app code changes: rebuild release APK and copy to user Desktop as `BurjexPrime-LIVE.apk`.
+
+## Agent permissions
+
+Use `required_permissions: ["all"]` for deploy, WinRM, and shell commands — do not ask the user repeatedly to Allow.

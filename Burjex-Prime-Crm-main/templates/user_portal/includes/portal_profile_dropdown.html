@@ -1,0 +1,61 @@
+{% comment %}
+  Portal profile menu: avatar trigger + dropdown (name, email, IP, verification, logout).
+  Optional: compact=1 for tighter mobile header.
+{% endcomment %}
+{% with u=request.user %}
+<div class="portal-profile-root relative shrink-0 text-[var(--portal-text-main,#0f172a)]" data-portal-profile-root>
+  <button
+    type="button"
+    class="portal-profile-trigger flex items-center justify-center rounded-full border-2 border-white/30 shadow-md ring-2 ring-slate-200/80 hover:ring-[var(--portal-brand-primary,#0B3C5D)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--portal-brand-primary,#0B3C5D)] focus-visible:ring-offset-2 transition-all duration-200 {% if compact %}w-9 h-9{% else %}w-10 h-10{% endif %} {% if u.avatar %}p-0 overflow-hidden bg-slate-100{% else %}text-white bg-[var(--portal-brand-primary,#0B3C5D)]{% endif %}"
+    data-portal-profile-trigger
+    aria-expanded="false"
+    aria-haspopup="true"
+    aria-controls="portalProfilePanel_{{ compact|yesno:'m,d' }}"
+  >
+    <span class="sr-only">Open account menu</span>
+    {% if u.avatar %}
+      <img src="{{ u.avatar.url }}" alt="" class="w-full h-full object-cover" width="40" height="40" decoding="async" />
+    {% else %}
+      <svg class="{% if compact %}w-[1.125rem] h-[1.125rem]{% else %}w-5 h-5{% endif %}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+      </svg>
+    {% endif %}
+  </button>
+  <div
+    id="portalProfilePanel_{{ compact|yesno:'m,d' }}"
+    class="portal-profile-panel absolute right-0 z-[90] mt-2 w-[min(100vw-2rem,280px)] origin-top-right scale-95 opacity-0 invisible pointer-events-none transition-all duration-200 ease-out rounded-xl border border-slate-200/90 bg-white py-2 shadow-xl shadow-slate-900/10"
+    data-portal-profile-panel
+    role="menu"
+    aria-hidden="true"
+  >
+    <div class="px-4 py-3 border-b border-slate-100">
+      <p class="text-sm font-semibold text-slate-900 truncate" title="{% firstof u.get_full_name u.display_name u.email %}">{% firstof u.get_full_name u.display_name u.email %}</p>
+      <p class="text-xs text-slate-500 truncate mt-0.5" title="{{ u.email }}">{{ u.email }}</p>
+    </div>
+    <div class="px-4 py-2.5 space-y-2 text-xs text-slate-600">
+      <div class="flex justify-between gap-2">
+        <span class="text-slate-500 shrink-0">IP address</span>
+        <span class="font-mono text-slate-800 text-right break-all">{{ portal_client_ip|default:"—" }}</span>
+      </div>
+      <div class="flex justify-between items-center gap-2">
+        <span class="text-slate-500">Verification</span>
+        {% if u.is_verified %}
+          <span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-800 px-2 py-0.5 text-[11px] font-semibold border border-emerald-200">Verified</span>
+        {% else %}
+          <span class="inline-flex items-center rounded-full bg-amber-50 text-amber-900 px-2 py-0.5 text-[11px] font-semibold border border-amber-200">Pending</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="px-2 pt-1 pb-2 border-t border-slate-100">
+      <a
+        href="{% url 'logout' %}"
+        class="flex items-center justify-center gap-2 w-full rounded-lg bg-[var(--portal-brand-primary,#0B3C5D)] text-white text-sm font-semibold py-2.5 px-3 hover:opacity-95 active:scale-[0.98] transition shadow-sm [&_svg]:shrink-0"
+        role="menuitem"
+      >
+        <span class="text-white" aria-hidden="true">{% include "user_portal/includes/svg_icon.html" with name="logout" %}</span>
+        <span>Log out</span>
+      </a>
+    </div>
+  </div>
+</div>
+{% endwith %}
