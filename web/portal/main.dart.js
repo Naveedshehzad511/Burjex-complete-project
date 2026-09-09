@@ -60564,7 +60564,7 @@ $1(a){var s,r,q,p,o,n,m=this,l={},k=m.a
 if(a.a>=k.r)return
 s=m.b.$1(a)
 if(s!=null){if(s.e!=k.db)m.c.$1(s)
-return}if(k.db!=null&&!k.ga47())k.MG()
+return}if(k.db!=null)k.MG()
 l.a=null
 for(r=k.a.Q,q=r.length,p=m.d,o=0;o<r.length;r.length===q||(0,A.D)(r),++o){n=r[o]
 if(p.$2(n,a)){l.a=n.a
