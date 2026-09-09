@@ -51,7 +51,7 @@ class _ToastHostState extends State<ToastHost> {
       _toasts.add(t);
       if (_toasts.length > _maxVisible) _toasts.removeAt(0);
     });
-    Timer(const Duration(seconds: 2), () => _remove(t));
+    Timer(const Duration(milliseconds: 900), () => _remove(t));
   }
 
   void _remove(ToastData t) {

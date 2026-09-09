@@ -76,10 +76,6 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     _volCtrl.text = clamped.toStringAsFixed(2);
     _volCtrl.selection = TextSelection.collapsed(offset: _volCtrl.text.length);
   }
-  // Positions drawn instantly on fill (ms), before the server round-trip; pruned
-  // once the background reconcile picks them up.
-  final List<Position> _justOpened = [];
-
   /// Place a market or pending order; one-click for market.
   Future<void> _place(String side, {required OrderType type, double? price}) async {
     final accountId = ref.read(activeAccountIdProvider);
@@ -105,24 +101,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       if (res['accepted'] == true) {
         ref.invalidate(accountsProvider);
         ref.invalidate(openPositionsProvider);
-        // Draw the entry line immediately from the fill (no wait for the refetch).
-        final fp = res['fillPrice'];
-        if (market && fp != null) {
-          setState(() => _justOpened.add(Position(
-                id: 'opt-${DateTime.now().microsecondsSinceEpoch}',
-                accountId: accountId,
-                side: side,
-                status: 'OPEN',
-                volume: vol,
-                openPrice: (fp as num).toDouble(),
-                profit: 0,
-                swap: 0,
-                symbol: _symbol,
-                digits: 5,
-                openedAt: DateTime.now(),
-              )));
-        }
         SoundService.instance.tradeOpen();
+        // Positions / orders come from the server refetch above — no local overlay.
         final detail = market ? 'Filled @ ${res['fillPrice'] ?? '—'}' : '${type.label} @ ${price?.toStringAsFixed(5) ?? '—'}';
         ToastHost.show('$side $_symbol  ${vol.toStringAsFixed(2)}', detail, accent: accent);
       } else {
@@ -260,10 +240,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     // Chart price line tracks the BID (MT5 convention, matches the bid-based bars).
     final livePrice = quote?.bid;
     final serverPos = ref.watch(openPositionsProvider).valueOrNull ?? const <Position>[];
-    // Drop optimistic entries once the background reconcile (~5s) has them.
-    final now = DateTime.now();
-    _justOpened.removeWhere((o) => now.difference(o.openedAt).inSeconds > 6);
-    final positions = [...serverPos, ..._justOpened];
+    final positions = serverPos;
     final tc = Theme.of(context).extension<TradeColors>()!;
 
     // MT5-style overlays: entry / SL / TP for each open position on this symbol.

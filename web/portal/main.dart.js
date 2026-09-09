@@ -34651,6 +34651,19 @@ bxInv(){return $.bxRo===!0},
 bxInvMsg(a){var s=null
 if(a==null)return
 try{a.Z(t.J).f.eF(A.im(s,s,s,s,s,B.D,s,A.B("Trading is disabled on this account.",s,s,s,s,s,s,s,s),s,B.aK,s,s,s,s,s,s,s,s,s,s))}catch(s){}},
+bxRef(a){var s
+try{if(a==null||a.e==null)return
+s=$.jv()
+a.gdA().dK(s)
+s=$.eU()
+a.gdA().dK(s)
+s=$.r4()
+a.gdA().dK(s)
+s=$.l6()
+a.gdA().dK(s)
+s=$.bfH()
+a.gdA().dK(s)
+try{a.ah(0,$.TF().gcd(),t.nK).k5(0,B.dT)}catch(s){}}catch(s){}},
 bFS(a,b){var s,r,q,p
 if(!a.ah(0,$.r2(),t.FB).b)return!1
 s=A.cK(a.ah(0,$.eU(),t.Q5))
@@ -34670,10 +34683,8 @@ To(a,b,c){var s=0,r=A.q(t.H),q
 var $async$To=A.r(function(d,e){if(d===1)return A.m(e,r)
 for(;;)switch(s){case 0:s=2
 return A.i(a.ah(0,$.r2().gcd(),t.nT).BT(b,c),$async$To)
-case 2:q=$.eU()
-if(a.e==null)A.a1(A.a2(u.w))
-a.gdA().dK(q)
-new A.baf(a,b).$0()
+case 2:A.bxRef(a)
+if(b!=null)new A.baf(a,b).$0()
 return A.n(null,r)}})
 return A.o($async$To,r)},
 beV(a){var s
@@ -56919,9 +56930,7 @@ A.b9H.prototype={
 $1(a){return B.dT},
 $S:432}
 A.bat.prototype={
-$1(a){var s=a.aG($.r4(),t.r4),r=t.nH,q=a.aG($.TF(),r)
-if(J.cP(q))return s
-return A.bsO(s,new A.bas(q),r,r)},
+$1(a){return a.aG($.r4(),t.r4)},
 $S:433}
 A.bas.prototype={
 $1(a){var s=J.dY(a,new A.baq(),t.N).fj(0),r=A.Y(a,t.WF)
@@ -57134,6 +57143,7 @@ o=new A.fl(null,null,p)
 n=t.N
 m=new A.pC(q,new A.b9y(s),new A.b9z(r),o,A.aU(n),A.C(t.S,n),A.aU(n),B.dO)
 m.a7y()
+try{A.bxRef(a)}catch(s){}
 l.a=null
 a.TV(new A.b9A(l,new A.cT(o,p.i("cT<1>")).lD(new A.b9B(l,a)),m))
 return m},
@@ -57186,12 +57196,14 @@ break A}s=s.h(e,"symbol")
 d=A.f(s==null?"":s)
 c=d.length===0?a:J.t(b.b.ah(0,$.m4(),t.iS),d)
 b.b.ah(0,$.afm().gcd(),t._l).aeD(0,e,c)
+break A}if(a0 instanceof A.Jt){s=b.a
+p=s.a
+if(p!=null)p.aB(0)
+s.a=A.cA(B.rY,new A.b9x(b.b))
 break A}break A}},
 $S:182}
 A.b9x.prototype={
-$0(){var s=$.jv(),r=this.a.e
-r===$&&A.a()
-r.dK(s)},
+$0(){try{A.bxRef(this.a)}catch(s){}},
 $S:0}
 A.b9A.prototype={
 $0(){var s,r=this.a.a
@@ -57934,23 +57946,14 @@ p=4
 s=7
 return A.i(a6.ah(0,$.iy(),t.W).qD("/orders",i.ed()),$async$zA)
 case 7:h=b7
-if(J.c(J.t(h,"accepted"),!0)){a0=$.eU()
+if(J.c(J.t(h,"accepted"),!0)){A.bxRef(a6)
+a0=$.eU()
 if(a6.e==null)A.a1(A.a2(u.w))
 a6.gdA().dK(a0)
 a0=$.jv()
 if(a6.e==null)A.a1(A.a2(u.w))
 a6.gdA().dK(a0)
-if(!j){a0=J.t(h,"orderId")
-g=A.f(a0==null?"":a0)
-if(J.bn(g)!==0){f=b5===B.i6||b5===B.kp
-a0=a6.ah(0,a8,a)
-a1=A.Zu(b5)
-a2=f?null:b2
-a3=f?b2:null
-Date.now()
-e=new A.dt(g,a0,b0,a1,k,a2,a3,b3,b4,b1)
-a3=a6.ah(0,$.TF().gcd(),t.nK)
-a3.k5(0,new A.aMC(e).$1(A.d6.prototype.gbT.call(a3,0)))}a0=$.r4()
+a0=$.r4()
 if(a6.e==null)A.a1(A.a2(u.w))
 a6.gdA().dK(a0)
 a6.ah(0,a0.gjH(),t.cT).bE(0,new A.aMD(n),t.P).hQ(new A.aME())}d=J.t(h,"fillPrice")
@@ -58095,11 +58098,9 @@ break}}n.u(new A.aMp(n,a3,a4,a5))
 p=4
 s=7
 return A.i(l.ah(0,$.iy(),t.W).x_("/positions/"+a3,A.ac(["slPrice",a4,"tpPrice",a5],t.N,t.u)),$async$yz)
-case 7:a1=$.jv()
-if(l.e==null)A.a1(A.a2(u.w))
-l.gdA().dK(a1)
+case 7:A.bxRef(l)
 s=8
-return A.i(l.ah(0,a1.gjH(),t.Em),$async$yz)
+return A.i(l.ah(0,$.jv().gjH(),t.Em),$async$yz)
 case 8:$.l5().D_()
 if(n.c==null){s=1
 break}n.u(new A.aMq(n,a3))
@@ -58147,7 +58148,8 @@ J.c_(j,g,b)}J.c_(j,"slPrice",a0)
 J.c_(j,"tpPrice",a1)
 s=7
 return A.i(h.x_("/orders/"+a,j),$async$yy)
-case 7:j=$.r4()
+case 7:A.bxRef(d)
+j=$.r4()
 if(d.e==null)A.a1(A.a2(u.w))
 d.gdA().dK(j)
 s=8
@@ -58218,10 +58220,7 @@ if(c6.Q)b=s?c7:d.c
 else b=c7
 a=A.cK(c9.aG($.jv(),t.Op))
 if(a==null)a=B.dS
-f=c6.at
-B.b.f3(f,new A.aNF(new A.c1(Date.now(),0,!1)))
 a0=A.Y(a,t.C9)
-B.b.O(a0,f)
 f=t.wa.a(A.v(d0).c.h(0,A.bB(t.Ty)))
 f.toString
 a1=A.b([],t.qh)
@@ -58234,10 +58233,8 @@ b2=b0==="BUY"?a6:a5
 b3=B.d.P(a9.f,2)
 b4=a9.a
 a1.push(new A.iA(b1,b2,b0+" "+b3,b4,B.j_))
-b5=a4.h(0,b4)
-b0=b5!=null
-b6=b0?b5.a:a9.w
-b7=b0?b5.b:a9.x
+b6=a9.w
+b7=a9.x
 if(b6!=null)a1.push(new A.iA(b6,a7,"SL",b4,B.dk))
 if(b7!=null)a1.push(new A.iA(b7,a8,"TP",b4,B.dK))}a0=A.cK(c9.aG($.TH(),t.r4))
 a0=J.ap(a0==null?B.dT:a0)
@@ -58253,16 +58250,12 @@ if(b8==null)b8=a4.w
 if(b8==null)continue
 a6=a4.c
 a9=a4.a
-b9=a3.h(0,a9)
-b0=b9==null
-b1=b0?c7:b9.a
-if(b1==null)b1=b8
+b1=b8
 a6=a6.toUpperCase()==="BUY"?f:a5
 b2=a4.d
 a1.push(new A.iA(b1,a6,A.cJ(b2,"_"," ")+" "+B.d.P(a4.f,2),a9,B.bM))
-a6=!b0
-c0=a6?b9.b:a4.x
-c1=a6?b9.c:a4.y
+c0=a4.x
+c1=a4.y
 c2=A.cJ(b2,"_"," ").toLowerCase()
 if(c0!=null)a1.push(new A.iA(c0,a7,"SL \xb7 "+c2,a9,B.ct))
 if(c1!=null)a1.push(new A.iA(c1,a8,"TP \xb7 "+c2,a9,B.cG))}c3=new A.aNM(c6,m)
@@ -58333,11 +58326,7 @@ J.cr(r,this.a)
 return r},
 $S:81}
 A.aMD.prototype={
-$1(a){var s,r=this.a
-if(r.c==null)return
-s=J.dY(a,new A.aMA(),t.N).fj(0)
-r=r.gba().ah(0,$.TF().gcd(),t.nK)
-r.k5(0,new A.aMB(s).$1(A.d6.prototype.gbT.call(r,0)))},
+$1(a){},
 $S:191}
 A.aMA.prototype={
 $1(a){return a.a},
@@ -58354,8 +58343,7 @@ A.aME.prototype={
 $1(a){},
 $S:40}
 A.aMF.prototype={
-$0(){var s=this,r=s.a
-return r.at.push(new A.eO("opt-"+1000*Date.now(),s.b,s.c,s.d,A.cV(s.e),null,null,0,0,r.gba().ah(0,$.eb(),t.N),5,new A.c1(Date.now(),0,!1)))},
+$0(){},
 $S:0}
 A.aMN.prototype={
 $1(a){var s=null,r=this.a
@@ -58567,9 +58555,7 @@ A.aMy.prototype={
 $0(){return this.a.Ek(this.b,this.c.a)},
 $S:0}
 A.aMp.prototype={
-$0(){var s=this,r=new A.a9q(s.c,s.d)
-s.a.ax.n(0,s.b,r)
-return r},
+$0(){},
 $S:0}
 A.aMq.prototype={
 $0(){return this.a.ax.H(0,this.b)},
@@ -58578,9 +58564,7 @@ A.aMr.prototype={
 $0(){return this.a.ax.H(0,this.b)},
 $S:0}
 A.aMl.prototype={
-$0(){var s=this,r=new A.a9x(s.c,s.d,s.e)
-s.a.ay.n(0,s.b,r)
-return r},
+$0(){},
 $S:0}
 A.aMm.prototype={
 $1(a){return a.a===this.a},
@@ -59432,9 +59416,7 @@ for(;;)switch(s){case 0:p=q.a.gba()
 o=$.jv()
 if(p.e==null)A.a1(A.a2(u.w))
 p.gdA().dK(o)
-o=$.eU()
-if(p.e==null)A.a1(A.a2(u.w))
-p.gdA().dK(o)
+A.bxRef(p)
 return A.n(null,r)}})
 return A.o($async$$0,r)},
 $S:2}
@@ -59663,17 +59645,8 @@ p.S()
 p.u()},
 $S:0}
 A.bxCls.prototype={
-$0(){var s,r,q=this.a
-try{if(q.w!=null)A.b0(q.w,!1).bq(null)}catch(s){}try{r=q.a.gba()
-q=$.jv()
-if(r.e==null)A.a1(A.a2(u.w))
-r.gdA().dK(q)
-q=$.eU()
-if(r.e==null)A.a1(A.a2(u.w))
-r.gdA().dK(q)
-q=$.r4()
-if(r.e==null)A.a1(A.a2(u.w))
-r.gdA().dK(q)}catch(s){}},
+$0(){var s,q=this.a
+try{if(q.w!=null)A.b0(q.w,!1).bq(null)}catch(s){}try{A.bxRef(q.a.gba())}catch(s){}},
 $S:0}
 A.aZs.prototype={
 $2(a,b){var s=null,r=A.bjx(s,s,s,s,s,s,s,s,s,s,s,s,B.el,s,s,s,s,s,s,s)
@@ -59852,7 +59825,8 @@ q=3
 m=o.b
 s=6
 return A.i(m.ah(0,$.iy(),t.W).AS(0,"/orders/"+o.c.a),$async$$0)
-case 6:l=$.r4()
+case 6:A.bxRef(m)
+l=$.r4()
 if(m.e==null)A.a1(A.a2(u.w))
 m.gdA().dK(l)
 s=7
@@ -59982,18 +59956,14 @@ p=4
 s=7
 return A.i(a9.ah(0,$.iy(),t.W).qD("/orders",g.ed()),$async$A0)
 case 7:f=b4
-if(J.c(J.t(f,"accepted"),!0)){a1=$.eU()
+if(J.c(J.t(f,"accepted"),!0)){A.bxRef(a9)
+a1=$.eU()
 if(a9.e==null)A.a1(A.a2(u.w))
 a9.gdA().dK(a1)
 e=m.x===B.cy
 if(e){a1=$.jv()
 if(a9.e==null)A.a1(A.a2(u.w))
-a9.gdA().dK(a1)}else{a1=J.t(f,"orderId")
-d=A.f(a1==null?"":a1)
-if(J.bn(d)!==0){c=B.c.m(A.Zu(m.x),"STOP")
-b=A.cz(m.z.a.a)
-a1=a9.ah(0,$.TF().gcd(),t.nK)
-a1.k5(0,new A.b4t(m,d,h,b2,i,c,b).$1(A.d6.prototype.gbT.call(a1,0)))}a1=$.r4()
+a9.gdA().dK(a1)}a1=$.r4()
 if(a9.e==null)A.a1(A.a2(u.w))
 a9.gdA().dK(a1)
 a9.ah(0,a1.gjH(),t.cT).bE(0,new A.b4u(m),t.P).hQ(new A.b4v())}$.l5().D_()
@@ -60102,11 +60072,7 @@ A.b4r.prototype={
 $1(a){return a.b===this.a},
 $S:64}
 A.b4u.prototype={
-$1(a){var s,r=this.a
-if(r.c==null)return
-s=J.dY(a,new A.b4p(),t.N).fj(0)
-r=r.gba().ah(0,$.TF().gcd(),t.nK)
-r.k5(0,new A.b4q(s).$1(A.d6.prototype.gbT.call(r,0)))},
+$1(a){},
 $S:191}
 A.b4p.prototype={
 $1(a){return a.a},
@@ -60224,27 +60190,10 @@ $S:16}
 A.qt.prototype={
 ga1j(a){var s=this.r
 return s==null||s.length===0?"bt_watchlist":"bt_watchlist_"+s},
-GR(){var s=0,r=A.q(t.H),q=this,p,o,n
-var $async$GR=A.r(function(a,b){if(a===1)return A.m(b,r)
-for(;;)switch(s){case 0:s=2
-return A.i(A.dw(),$async$GR)
-case 2:p=b
-o=q.ga1j(0)
-n=t.g.a(J.t(p.a,o))
-n=n==null?null:J.zs(n,t.N)
-o=n==null?null:n.eT(n)
-q.sbT(0,t.Xb.a(o))
-return A.n(null,r)}})
-return A.o($async$GR,r)},
+GR(){this.sbT(0,null)
+return A.n(null,A.q(t.H))},
 rY(a){return this.azE(a)},
-azE(a){var s=0,r=A.q(t.H),q=this
-var $async$rY=A.r(function(b,c){if(b===1)return A.m(c,r)
-for(;;)switch(s){case 0:s=3
-return A.i(A.dw(),$async$rY)
-case 3:s=2
-return A.i(c.fR("StringList",q.ga1j(0),a),$async$rY)
-case 2:return A.n(null,r)}})
-return A.o($async$rY,r)},
+azE(a){return A.n(null,A.q(t.H))},
 pN(a,b,c){var s,r=this.f
 if(r==null)r=A.Y(c,t.N)
 if(J.kc(r,b))return
@@ -62306,7 +62255,7 @@ this.ak()},
 aDX(a,b){var s=this
 if(s.c==null)return
 s.u(new A.b4f(s,b))
-A.cA(B.fm,new A.b4g(s,b))},
+A.cA(B.fl,new A.b4g(s,b))},
 a52(a,b){if(this.c==null)return
 this.u(new A.b4h(this,b))},
 F(a){var s,r,q,p,o=null,n=A.bf(a,o,t.w).w,m=this.a.c,l=t.p,k=A.b([],l)
@@ -137741,13 +137690,13 @@ B.aht=new A.od(4,"remove")
 B.a58=new A.od(5,"timeout")
 B.a59=new A.Cr(null,null,null,null,null,null,null,null,null,null,null,null,null,null)
 B.ach=new A.ad("Order updated",null,null,null,null,null,null,null,null,null,null)
-B.a5a=new A.jZ(B.ach,null,null,null,null,null,null,null,null,null,null,null,null,B.aK,!1,null,null,null,B.D,null)
+B.a5a=new A.jZ(B.ach,null,null,null,null,null,null,null,null,null,null,null,null,B.fl,!1,null,null,null,B.D,null)
 B.abk=new A.ad("Order cancelled",null,null,null,null,null,null,null,null,null,null)
-B.a5b=new A.jZ(B.abk,null,null,null,null,null,null,null,null,null,null,null,null,B.aK,!1,null,null,null,B.D,null)
+B.a5b=new A.jZ(B.abk,null,null,null,null,null,null,null,null,null,null,null,null,B.fl,!1,null,null,null,B.D,null)
 B.acC=new A.ad("Referral link copied",null,null,null,null,null,null,null,null,null,null)
 B.a5c=new A.jZ(B.acC,null,null,null,null,null,null,null,null,null,null,null,null,B.aK,!1,null,null,null,B.D,null)
 B.abI=new A.ad("SL / TP updated",null,null,null,null,null,null,null,null,null,null)
-B.a5d=new A.jZ(B.abI,null,null,null,null,null,null,null,null,null,null,null,null,B.aK,!1,null,null,null,B.D,null)
+B.a5d=new A.jZ(B.abI,null,null,null,null,null,null,null,null,null,null,null,null,B.fl,!1,null,null,null,B.D,null)
 B.ad2=new A.ad("No live price \u2014 trading paused until the feed updates",null,null,null,null,null,null,null,null,null,null)
 B.a5e=new A.jZ(B.ad2,null,null,null,null,null,null,null,null,null,null,null,null,B.aK,!1,null,null,null,B.D,null)
 B.ac7=new A.ad(u.G,null,null,null,null,null,null,null,null,null,null)

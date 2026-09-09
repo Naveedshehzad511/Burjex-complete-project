@@ -19,13 +19,13 @@ class WatchlistNotifier extends StateNotifier<List<String>?> {
       accountId == null || accountId!.isEmpty ? 'bt_watchlist' : 'bt_watchlist_$accountId';
 
   Future<void> _load() async {
-    final p = await SharedPreferences.getInstance();
-    state = p.getStringList(_key);
+    // Watchlist is the server trading-group symbol set. Do not restore a
+    // phone-local list — on every open / account switch the UI uses group codes.
+    state = null;
   }
 
   Future<void> _persist(List<String> v) async {
-    final p = await SharedPreferences.getInstance();
-    await p.setStringList(_key, v);
+    // Intentionally not written to disk.
   }
 
   void add(String symbol, List<String> all) {

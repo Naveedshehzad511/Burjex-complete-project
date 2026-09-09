@@ -25,6 +25,7 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
     onAuthExpired: () => api.refreshAccessToken(),
     onReconnected: () {
       ref.invalidate(openPositionsProvider);
+      ref.invalidate(accountsProvider);
     },
   );
   sock.connect();
@@ -57,6 +58,7 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
           _staleTimer?.cancel();
           _staleTimer = Timer(const Duration(milliseconds: 120), () {
             ref.invalidate(openPositionsProvider);
+            ref.invalidate(accountsProvider);
           });
           break;
         }
@@ -70,6 +72,11 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
         final q = sym.isEmpty ? null : ref.read(quotesProvider)[sym];
         ref.read(livePositionNotifierProvider.notifier).set(data, fallbackQuote: q);
       case OrderFrame():
+        _staleTimer?.cancel();
+        _staleTimer = Timer(const Duration(milliseconds: 120), () {
+          ref.invalidate(openPositionsProvider);
+          ref.invalidate(accountsProvider);
+        });
         break;
     }
   });
