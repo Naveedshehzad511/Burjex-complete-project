@@ -398,6 +398,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
                   'slPrice': double.tryParse(sl.text),
                   'tpPrice': double.tryParse(tp.text),
                 });
+                SoundService.instance.tradeOpen();
                 if (ctx.mounted) Navigator.pop(ctx);
                 await refresh();
               },
