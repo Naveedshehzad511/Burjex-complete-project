@@ -37165,8 +37165,8 @@ case 1:return A.n(q,r)}})
 return A.o($async$bdd,r)},
 bjp(a){return A.er(0,0,B.d.aJ((isNaN(a)||a==1/0||a==-1/0?0:a)*1000))},
 bbr(){var s=A.bw("/+$",!0,!1,!1)
-return A.cJ("https://api.duafx.com",s,"")},
-bt3(){return"wss://ws.duafx.com"},
+return A.cJ("https://portal.burjexprime.net",s,"")},
+bt3(){return"wss://portal.burjexprime.net"},
 bGN(){return new A.c1(Date.now(),0,!1)},
 bFx(a,b,c,d){var s,r,q,p,o,n=A.C(d,c.i("z<0>"))
 for(s=c.i("I<0>"),r=0;r<1;++r){q=a[r]
@@ -37522,7 +37522,7 @@ switch(A.b9().a){case 0:case 1:return A.Xl()
 case 2:return A.iC(A.b([A.LI(B.Fv),A.Xk()],t.mo),t.H)
 case 3:case 4:case 5:return A.e1(null,t.H)}},
 bgx(){var s=A.bw("/+$",!0,!1,!1)
-return A.cJ("https://crm.duafx.com/api/v1",s,"")},
+return A.cJ("https://crm.burjexprime.net/api/v1",s,"")},
 uC(a,b,c){var s=0,r=A.q(t.N),q,p,o,n,m,l,k,j,i,h,g,f,e
 var $async$uC=A.r(function(d,a0){if(d===1)return A.m(a0,r)
 for(;;)switch(s){case 0:e=A.ce(a,!1,t.IZ)
