@@ -240,6 +240,12 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        // Trade is a tab, not a pushed page, so an implied back arrow would be
+        // dead weight on first open.
+        automaticallyImplyLeading: false,
+        centerTitle: true,
+        title: Text('${money(fpl)} ${acc?.currency ?? 'USD'}',
+            style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: plColor, fontFeatures: const [FontFeature.tabularFigures()])),
         actions: [
           IconButton(
             tooltip: 'Add',
@@ -262,20 +268,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
       body: RefreshIndicator(
         onRefresh: refresh,
         child: ListView(children: [
-          // ── Floating P/L headline; the currency stays black so only the
-          // figure carries the profit/loss colour. ──
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
-            child: Text.rich(
-              TextSpan(children: [
-                TextSpan(text: money(fpl), style: TextStyle(color: plColor)),
-                TextSpan(text: ' ${acc?.currency ?? 'USD'}', style: const TextStyle(color: Colors.black)),
-              ]),
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()]),
-            ),
-          ),
+          const SizedBox(height: 8),
           // ── Account summary rows ──
           if (acc != null)
             Padding(
@@ -377,8 +370,8 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
   Widget _row(String k, String v, {Color? color}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(k, style: TextStyle(color: Theme.of(context).hintColor, fontSize: 14)),
-          Text(v, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
+          Text(k, style: TextStyle(color: Theme.of(context).hintColor, fontSize: 19)),
+          Text(v, style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
         ]),
       );
 
@@ -432,17 +425,17 @@ class _TradeTile extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       title: Row(children: [
-        Text(display, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(display, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
         const SizedBox(width: 6),
         Text('${p.side} ${p.volume.toStringAsFixed(2)}',
-            style: TextStyle(color: p.side == 'BUY' ? tc.buy : tc.sell, fontSize: 12, fontWeight: FontWeight.w600)),
+            style: TextStyle(color: p.side == 'BUY' ? tc.buy : tc.sell, fontSize: 19, fontWeight: FontWeight.w700)),
       ]),
       subtitle: Text(
         '@ ${price(p.openPrice, p.digits)}   SL ${p.slPrice != null ? price(p.slPrice!, p.digits) : '—'} · TP ${p.tpPrice != null ? price(p.tpPrice!, p.digits) : '—'}',
-        style: const TextStyle(fontSize: 11, fontFeatures: [FontFeature.tabularFigures()]),
+        style: const TextStyle(fontSize: 17.5, fontFeatures: [FontFeature.tabularFigures()]),
       ),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text(money(pl), style: TextStyle(color: plColor, fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()])),
+        Text(money(pl), style: TextStyle(fontSize: 23, color: plColor, fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()])),
         const SizedBox(width: 4),
         Icon(Icons.chevron_right, size: 20, color: Theme.of(context).hintColor),
       ]),
