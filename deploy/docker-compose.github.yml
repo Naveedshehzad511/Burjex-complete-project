@@ -35,7 +35,7 @@ services:
       - ${BURJEX_WEB_TRADER}:/srv/btrader-trader:ro
       - ${BURJEX_WEB_PORTAL}:/srv/burjex-portal:ro
     depends_on: [crm-web, btrader-gateway, btrader-ws, btrader-market-data]
-    networks: [edge]
+    networks: [edge, live_edge]
 
   crm-postgres:
     image: postgres:16-alpine
@@ -258,3 +258,6 @@ networks:
   btrader_internal:
     name: burjex_net_bt
     driver: bridge
+  live_edge:
+    external: true
+    name: burjex_edge

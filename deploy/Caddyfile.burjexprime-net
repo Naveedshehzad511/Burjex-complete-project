@@ -2,7 +2,7 @@
 # Proxies to the isolated GitHub stack ports. Does not change duafx.com sites.
 
 (net_to_host) {
-	reverse_proxy host.docker.internal:{args[0]} {
+	reverse_proxy bxnet_caddy:{args[0]} {
 		header_up Host {host}
 		header_up X-Real-IP {remote_host}
 		header_up X-Forwarded-For {remote_host}
