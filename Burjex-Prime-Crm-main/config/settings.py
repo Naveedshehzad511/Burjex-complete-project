@@ -76,6 +76,24 @@ for _origin in _env_csv("DJANGO_CSRF_TRUSTED_ORIGINS"):
 CSRF_COOKIE_SECURE = _env_bool("DJANGO_COOKIE_SECURE", False)
 SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE
 CSRF_COOKIE_HTTPONLY = False
+# Cookies ignore port. Live CRM on :8000 and this stack on :6800 share 5.226.139.8,
+# so unique names stop the other stack's csrftoken from causing CSRF 403s.
+_csrf_name = (os.environ.get("DJANGO_CSRF_COOKIE_NAME") or "").strip()
+_sess_name = (os.environ.get("DJANGO_SESSION_COOKIE_NAME") or "").strip()
+_cookie_blob = " ".join(
+    [
+        os.environ.get("DJANGO_CSRF_COOKIE_NAME") or "",
+        os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS") or "",
+        os.environ.get("SITE_BASE_URL") or "",
+        os.environ.get("BASE_DOMAIN") or "",
+        os.environ.get("CRM_HOST") or "",
+    ]
+).lower()
+if "burjexprime.net" in _cookie_blob or ":6800" in _cookie_blob:
+    _csrf_name = _csrf_name or "bxnet_csrftoken"
+    _sess_name = _sess_name or "bxnet_sessionid"
+CSRF_COOKIE_NAME = _csrf_name or "csrftoken"
+SESSION_COOKIE_NAME = _sess_name or "sessionid"
 
 
 # Application definition

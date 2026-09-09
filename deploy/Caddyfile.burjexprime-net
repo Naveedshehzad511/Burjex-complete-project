@@ -1,5 +1,7 @@
 # Appended to live Caddyfile.ip — TLS for burjexprime.net only.
-# Proxies to the isolated GitHub stack ports. Does not change duafx.com sites.
+# Only hostnames that currently have DNS A records. Names without DNS
+# (api/ws/app/feed/www) make Caddy fail the TLS handshake (no certificate).
+# Proxies to the isolated GitHub stack. Does not change duafx.com sites.
 
 (net_to_host) {
 	reverse_proxy bxnet_caddy:{args[0]} {
@@ -21,37 +23,38 @@ crm.burjexprime.net {
 	import net_to_host 6800
 }
 
-api.burjexprime.net {
-	import tls_headers
-	import net_to_host 6100
-}
-
-ws.burjexprime.net {
-	import tls_headers
-	import net_to_host 6101
-}
-
-admin.burjexprime.net {
-	import tls_headers
-	import net_to_host 6200
-}
-
-app.burjexprime.net {
-	import tls_headers
-	import net_to_host 6400
-}
-
+# Portal SPA plus same-origin B-Trader API/WS so the HTTPS page is not mixed-content.
 portal.burjexprime.net {
 	import tls_headers
-	import net_to_host 6500
+	@portal_ws {
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	handle @portal_ws {
+		import net_to_host 6101
+	}
+	handle /v1/* {
+		import net_to_host 6100
+	}
+	handle {
+		import net_to_host 6500
+	}
 }
 
-feed.burjexprime.net {
+# Admin SPA plus same-origin API/WS (api.burjexprime.net / ws.burjexprime.net have no DNS yet).
+admin.burjexprime.net {
 	import tls_headers
-	import net_to_host 6300
-}
-
-burjexprime.net, www.burjexprime.net {
-	import tls_headers
-	redir https://portal.burjexprime.net{uri}
+	@admin_ws {
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	handle @admin_ws {
+		import net_to_host 6101
+	}
+	handle /v1/* {
+		import net_to_host 6100
+	}
+	handle {
+		import net_to_host 6200
+	}
 }

@@ -172,6 +172,8 @@ services:
       API_PORT: '4100'
       DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+      CHART_PROVIDER: ${CHART_PROVIDER:-internal}
+      BROKER_UTC_OFFSET_SEC: ${BROKER_UTC_OFFSET_SEC:-10800}
     command: >-
       sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
       cd /app/apps/gateway-api && exec node dist/main.js"
@@ -211,7 +213,7 @@ services:
       btrader-postgres: { condition: service_healthy }
       btrader-redis: { condition: service_healthy }
       btrader-gateway: { condition: service_started }
-    networks: [btrader_internal]
+    networks: [btrader_internal, edge]
 
   btrader-market-data:
     build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: market-data } }
@@ -228,6 +230,13 @@ services:
       MT5_FEED_TOKEN: ${MT5_FEED_TOKEN:-}
       MT5_SYMBOL_SUFFIX: ${MT5_SYMBOL_SUFFIX:-}
       MT5_MAX_TICK_AGE_MS: ${MT5_MAX_TICK_AGE_MS:-0}
+      CANDLE_FLUSH_SCAN_MS: ${CANDLE_FLUSH_SCAN_MS:-5000}
+      CANDLE_TIP_MIN_MS: ${CANDLE_TIP_MIN_MS:-20000}
+      CANDLE_BATCH_SIZE: ${CANDLE_BATCH_SIZE:-80}
+      CANDLE_MAX_PER_FLUSH: ${CANDLE_MAX_PER_FLUSH:-400}
+      CANDLE_FLUSH_YIELD_MS: ${CANDLE_FLUSH_YIELD_MS:-75}
+      CANDLE_HISTORY_QUEUE_CAP: ${CANDLE_HISTORY_QUEUE_CAP:-40000}
+      BROKER_UTC_OFFSET_SEC: ${BROKER_UTC_OFFSET_SEC:-10800}
     expose: ['4200']
     depends_on:
       btrader-postgres: { condition: service_healthy }

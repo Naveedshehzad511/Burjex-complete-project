@@ -13,7 +13,8 @@
 		header_up Host {host}
 		header_up X-Real-IP {remote_host}
 		header_up X-Forwarded-For {remote_host}
-		header_up X-Forwarded-Proto {scheme}
+		# Keep outer TLS terminator's proto when present (live Caddy → this Caddy).
+		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
 		transport http {
 			dial_timeout 10s
 			read_timeout 120s
@@ -26,7 +27,7 @@
 		header_up Host {host}
 		header_up X-Real-IP {remote_host}
 		header_up X-Forwarded-For {remote_host}
-		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
 		flush_interval -1
 		transport http {
 			dial_timeout 10s
@@ -88,12 +89,15 @@
 		root * /srv/crm/media
 		file_server
 	}
+	# Use container_name, not Compose service name. bxnet_caddy is also on
+	# live burjex_edge where live `crm-web` exists — short names can route
+	# :6800 to duafx CRM (CSRF 403) and :6100 to the live gateway.
 	@crm_ws path /ws/*
 	handle @crm_ws {
-		import ws_proxy crm-web:8000
+		import ws_proxy bxnet_crm_web:8000
 	}
 	handle {
-		import api_proxy crm-web:8000
+		import api_proxy bxnet_crm_web:8000
 	}
 	request_body {
 		max_size 25MB
@@ -107,7 +111,7 @@
 
 :6100 {
 	import ip_headers
-	import api_proxy btrader-gateway:4100
+	import api_proxy bxnet_bt_gateway:4100
 	request_body {
 		max_size 10MB
 	}
@@ -116,7 +120,7 @@
 
 :6101 {
 	import ip_headers
-	import ws_proxy btrader-ws:4101
+	import ws_proxy bxnet_bt_ws:4101
 }
 
 :6200 {
@@ -127,7 +131,7 @@
 	import ip_headers
 	@blocked not remote_ip {$FEED_ALLOWED_IPS:0.0.0.0/0 ::/0}
 	respond @blocked "forbidden" 403
-	import api_proxy btrader-market-data:4200
+	import api_proxy bxnet_bt_market_data:4200
 }
 
 :6400 {

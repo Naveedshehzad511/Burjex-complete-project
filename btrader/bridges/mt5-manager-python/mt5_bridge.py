@@ -710,12 +710,48 @@ def hedge_loop(src, cfg, suffix, stop):
 
 
 def run(cfg):
-    client = BTraderClient(
-        cfg["FeedUrl"],
-        cfg["FeedToken"],
-        tick_timeout=cfg.get("TickHttpTimeoutSec", 8),
-        candle_timeout=cfg.get("CandleHttpTimeoutSec", 15),
-    )
+    tick_timeout = cfg.get("TickHttpTimeoutSec", 8)
+    candle_timeout = cfg.get("CandleHttpTimeoutSec", 15)
+    token = cfg["FeedToken"]
+    urls = [str(cfg["FeedUrl"]).strip()]
+    extra = cfg.get("FeedUrls") or []
+    if isinstance(extra, str):
+        extra = [extra]
+    seen = {urls[0].rstrip("/").lower()}
+    for raw in extra:
+        u = str(raw or "").strip()
+        key = u.rstrip("/").lower()
+        if u and key not in seen:
+            seen.add(key)
+            urls.append(u)
+    clients = [
+        BTraderClient(u, token, tick_timeout=tick_timeout, candle_timeout=candle_timeout)
+        for u in urls
+    ]
+
+    class FanoutClient:
+        def send_ticks(self, batch):
+            for c in clients:
+                c.send_ticks(batch)
+
+        def send_candles(self, symbol, tf, bars):
+            for c in clients:
+                c.send_candles(symbol, tf, bars)
+
+        @property
+        def ticks_sent(self):
+            return sum(c.ticks_sent for c in clients)
+
+        @property
+        def candles_sent(self):
+            return sum(c.candles_sent for c in clients)
+
+        @property
+        def failures(self):
+            return sum(c.failures for c in clients)
+
+    client = FanoutClient()
+    log("INFO", "feed ingest targets=" + ",".join(urls))
     suffix = cfg.get("SymbolSuffixStrip", "")
     stop = threading.Event()
 
