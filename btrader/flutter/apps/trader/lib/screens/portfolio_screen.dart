@@ -240,7 +240,6 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Portfolio'),
         actions: [
           IconButton(
             tooltip: 'Add',
@@ -263,23 +262,20 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
       body: RefreshIndicator(
         onRefresh: refresh,
         child: ListView(children: [
-          // ── Floating P/L header ──
+          // ── Balance headline ──
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
-            child: Column(children: [
-              Text('FLOATING P / L', style: TextStyle(fontSize: 11, letterSpacing: 0.6, color: Theme.of(context).hintColor)),
-              const SizedBox(height: 4),
-              Text('${money(fpl)} ${acc?.currency ?? 'USD'}',
-                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: plColor, fontFeatures: const [FontFeature.tabularFigures()])),
-            ]),
+            child: Text('${money(balanceV)} ${acc?.currency ?? 'USD'}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()])),
           ),
           // ── Account summary rows ──
           if (acc != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(children: [
-                _row('Balance', money(balanceV)),
+                _row('Floating P/L', money(fpl), color: plColor),
                 _row('Equity', money(equityV)),
                 _row('Credit', money(creditV)),
                 _row('Margin', money(marginV)),
@@ -372,11 +368,11 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
     );
   }
 
-  Widget _row(String k, String v) => Padding(
+  Widget _row(String k, String v, {Color? color}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text(k, style: TextStyle(color: Theme.of(context).hintColor, fontSize: 14)),
-          Text(v, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()])),
+          Text(v, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
         ]),
       );
 
