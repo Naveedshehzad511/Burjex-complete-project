@@ -245,7 +245,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
         automaticallyImplyLeading: false,
         centerTitle: true,
         title: Text('${money(fpl)} ${acc?.currency ?? 'USD'}',
-            style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: plColor, fontFeatures: const [FontFeature.tabularFigures()])),
+            style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: plColor, fontFeatures: const [FontFeature.tabularFigures()])),
         actions: [
           IconButton(
             tooltip: 'Add',
@@ -435,7 +435,7 @@ class _TradeTile extends StatelessWidget {
         style: const TextStyle(fontSize: 17, fontFeatures: [FontFeature.tabularFigures()]),
       ),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text(money(pl), style: TextStyle(fontSize: 23, color: plColor, fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()])),
+        Text(money(pl), style: TextStyle(fontSize: 17, color: plColor, fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()])),
         const SizedBox(width: 4),
         Icon(Icons.chevron_right, size: 20, color: Theme.of(context).hintColor),
       ]),
