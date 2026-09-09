@@ -242,6 +242,11 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
       appBar: AppBar(
         title: const Text('Portfolio'),
         actions: [
+          IconButton(
+            tooltip: 'Add',
+            icon: const Icon(Icons.add),
+            onPressed: () {},
+          ),
           PopupMenuButton<_Sort>(
             tooltip: 'Sort trades',
             icon: const Icon(Icons.more_vert),
@@ -265,7 +270,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
             child: Column(children: [
               Text('FLOATING P / L', style: TextStyle(fontSize: 11, letterSpacing: 0.6, color: Theme.of(context).hintColor)),
               const SizedBox(height: 4),
-              Text(money(fpl),
+              Text('${money(fpl)} ${acc?.currency ?? 'USD'}',
                   style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: plColor, fontFeatures: const [FontFeature.tabularFigures()])),
             ]),
           ),
@@ -274,7 +279,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(children: [
-                _row('Balance', '${money(balanceV)} ${acc.currency}'),
+                _row('Balance', money(balanceV)),
                 _row('Equity', money(equityV)),
                 _row('Credit', money(creditV)),
                 _row('Margin', money(marginV)),
