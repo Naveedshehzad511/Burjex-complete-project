@@ -1,10 +1,12 @@
 # Real secrets live only on the server. Only the .example templates are tracked.
 .env.prod
 .env.prod.ip
+.env.github
 .env
 *.env
 !.env.prod.example
 !.env.prod.ip.example
+!.env.github.example
 
 # Local TLS/state if you ever run Caddy outside Docker.
 caddy_data/

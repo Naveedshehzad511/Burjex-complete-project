@@ -1,0 +1,57 @@
+# Appended to live Caddyfile.ip — TLS for burjexprime.net only.
+# Proxies to the isolated GitHub stack ports. Does not change duafx.com sites.
+
+(net_to_host) {
+	reverse_proxy host.docker.internal:{args[0]} {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		flush_interval -1
+		transport http {
+			dial_timeout 10s
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}
+
+crm.burjexprime.net {
+	import tls_headers
+	import net_to_host 6800
+}
+
+api.burjexprime.net {
+	import tls_headers
+	import net_to_host 6100
+}
+
+ws.burjexprime.net {
+	import tls_headers
+	import net_to_host 6101
+}
+
+admin.burjexprime.net {
+	import tls_headers
+	import net_to_host 6200
+}
+
+app.burjexprime.net {
+	import tls_headers
+	import net_to_host 6400
+}
+
+portal.burjexprime.net {
+	import tls_headers
+	import net_to_host 6500
+}
+
+feed.burjexprime.net {
+	import tls_headers
+	import net_to_host 6300
+}
+
+burjexprime.net, www.burjexprime.net {
+	import tls_headers
+	redir https://portal.burjexprime.net{uri}
+}

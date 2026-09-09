@@ -1,0 +1,139 @@
+# Isolated edge for burjexprime.net GitHub stack.
+# Host ports only (live duafx.com already owns :80/:443).
+# auto_https off: TLS for *.burjexprime.net is terminated by live burjex_caddy
+# which reverse-proxies to these ports.
+
+{
+	auto_https off
+	admin off
+}
+
+(api_proxy) {
+	reverse_proxy {args[0]} {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		transport http {
+			dial_timeout 10s
+			read_timeout 120s
+		}
+	}
+}
+
+(ws_proxy) {
+	reverse_proxy {args[0]} {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		flush_interval -1
+		transport http {
+			dial_timeout 10s
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}
+
+(ip_headers) {
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+(flutter_cache) {
+	@immutable path /canvaskit/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	@revalidate not path /canvaskit/*
+	header @revalidate Cache-Control "no-cache"
+}
+
+(spa_site) {
+	import ip_headers
+	root * {args[0]}
+	encode zstd gzip
+	try_files {path} {path}/ /index.html
+	file_server
+	import flutter_cache
+}
+
+(portal_spa) {
+	import ip_headers
+	root * /srv/burjex-portal
+	encode zstd gzip
+	redir /bt /bt/
+	handle_path /bt/* {
+		root * /srv/burjex-portal/bt
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	handle {
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	import flutter_cache
+}
+
+(crm_site) {
+	import ip_headers
+	handle_path /static/* {
+		root * /srv/crm/static
+		file_server
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+	handle_path /media/* {
+		root * /srv/crm/media
+		file_server
+	}
+	@crm_ws path /ws/*
+	handle @crm_ws {
+		import ws_proxy crm-web:8000
+	}
+	handle {
+		import api_proxy crm-web:8000
+	}
+	request_body {
+		max_size 25MB
+	}
+	encode zstd gzip
+}
+
+:6800 {
+	import crm_site
+}
+
+:6100 {
+	import ip_headers
+	import api_proxy btrader-gateway:4100
+	request_body {
+		max_size 10MB
+	}
+	encode zstd gzip
+}
+
+:6101 {
+	import ip_headers
+	import ws_proxy btrader-ws:4101
+}
+
+:6200 {
+	import spa_site /srv/btrader-admin
+}
+
+:6300 {
+	import ip_headers
+	@blocked not remote_ip {$FEED_ALLOWED_IPS:0.0.0.0/0 ::/0}
+	respond @blocked "forbidden" 403
+	import api_proxy btrader-market-data:4200
+}
+
+:6400 {
+	import spa_site /srv/btrader-trader
+}
+
+:6500 {
+	import portal_spa
+}

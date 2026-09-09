@@ -1,0 +1,260 @@
+# Isolated GitHub stack for burjexprime.net
+# Side-by-side with live duafx.com (project "burjex"). Do NOT reuse live
+# container names, volume names, network names, image tags, or 4xxx/80/443 ports.
+#
+#   docker compose -p burjex_net -f deploy/docker-compose.github.yml --env-file deploy/.env.github up -d --build
+#
+# Host ports: 6800 CRM | 6100 REST | 6101 WS | 6200 admin | 6300 ingest | 6400 trader | 6500 portal
+
+name: burjex_net
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: bxnet_caddy
+    <<: *restart
+    ports:
+      - '6800:6800'
+      - '6100:6100'
+      - '6101:6101'
+      - '6200:6200'
+      - '6300:6300'
+      - '6400:6400'
+      - '6500:6500'
+    env_file: .env.github
+    volumes:
+      - ./Caddyfile.github:/etc/caddy/Caddyfile:ro
+      - bxnet_caddy_data:/data
+      - bxnet_caddy_config:/config
+      - bxnet_crm_static:/srv/crm/static:ro
+      - bxnet_crm_media:/srv/crm/media:ro
+      - ${BURJEX_WEB_ADMIN}:/srv/btrader-admin:ro
+      - ${BURJEX_WEB_TRADER}:/srv/btrader-trader:ro
+      - ${BURJEX_WEB_PORTAL}:/srv/burjex-portal:ro
+    depends_on: [crm-web, btrader-gateway, btrader-ws, btrader-market-data]
+    networks: [edge]
+
+  crm-postgres:
+    image: postgres:16-alpine
+    command: postgres -c max_connections=120
+    container_name: bxnet_crm_postgres
+    <<: *restart
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - bxnet_crm_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [crm_internal]
+
+  crm-redis:
+    image: redis:7-alpine
+    container_name: bxnet_crm_redis
+    <<: *restart
+    command: >
+      redis-server --requirepass ${CRM_REDIS_PASSWORD} --appendonly yes
+      --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - bxnet_crm_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${CRM_REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [crm_internal]
+
+  crm-web:
+    build:
+      context: ../Burjex-Prime-Crm-main
+      dockerfile: ../deploy/crm/Dockerfile
+    image: burjex/crm:net
+    container_name: bxnet_crm_web
+    <<: *restart
+    env_file: .env.github
+    command: >-
+      sh -lc "python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${CRM_WEB_WORKERS:-1} --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile -"
+    volumes:
+      - bxnet_crm_static:/app/staticfiles
+      - bxnet_crm_media:/app/media
+      - bxnet_crm_logs:/app/logs
+      - bxnet_crm_backups:/app/storage/backups
+    depends_on:
+      crm-postgres: { condition: service_healthy }
+      crm-redis: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8000/health/ready/']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    networks: [crm_internal, edge]
+
+  crm-worker:
+    build:
+      context: ../Burjex-Prime-Crm-main
+      dockerfile: ../deploy/crm/Dockerfile
+    image: burjex/crm:net
+    container_name: bxnet_crm_worker
+    <<: *restart
+    env_file: .env.github
+    command: celery -A config worker -l info --concurrency=${CELERY_CONCURRENCY:-2}
+    volumes:
+      - bxnet_crm_media:/app/media
+      - bxnet_crm_logs:/app/logs
+      - bxnet_crm_backups:/app/storage/backups
+    depends_on:
+      crm-web: { condition: service_healthy }
+    networks: [crm_internal, edge]
+
+  crm-beat:
+    build:
+      context: ../Burjex-Prime-Crm-main
+      dockerfile: ../deploy/crm/Dockerfile
+    image: burjex/crm:net
+    container_name: bxnet_crm_beat
+    <<: *restart
+    env_file: .env.github
+    command: celery -A config beat -l info --schedule /tmp/celerybeat-schedule
+    depends_on:
+      crm-web: { condition: service_healthy }
+    networks: [crm_internal, edge]
+
+  btrader-postgres:
+    image: postgres:16-alpine
+    container_name: bxnet_bt_postgres
+    <<: *restart
+    environment:
+      POSTGRES_USER: ${BT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${BT_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${BT_POSTGRES_DB}
+    volumes:
+      - bxnet_bt_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${BT_POSTGRES_USER} -d ${BT_POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [btrader_internal]
+
+  btrader-redis:
+    image: redis:7-alpine
+    container_name: bxnet_bt_redis
+    <<: *restart
+    command: >
+      redis-server --requirepass ${BT_REDIS_PASSWORD} --appendonly yes
+      --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - bxnet_bt_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${BT_REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [btrader_internal]
+
+  btrader-gateway:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: gateway-api } }
+    image: burjex/btrader-gateway:net
+    container_name: bxnet_bt_gateway
+    <<: *restart
+    expose: ['4100']
+    env_file: .env.github
+    environment:
+      NODE_ENV: production
+      API_PORT: '4100'
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+    command: >-
+      sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
+      cd /app/apps/gateway-api && exec node dist/main.js"
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+    volumes:
+      - bxnet_bt_uploads:/app/uploads
+    networks: [btrader_internal, edge]
+
+  btrader-ws:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: ws-gateway } }
+    image: burjex/btrader-ws:net
+    container_name: bxnet_bt_ws
+    <<: *restart
+    expose: ['4101']
+    env_file: .env.github
+    environment:
+      NODE_ENV: production
+      WS_PORT: '4101'
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+    depends_on:
+      btrader-redis: { condition: service_healthy }
+    networks: [btrader_internal, edge]
+
+  btrader-engine:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: trading-engine } }
+    image: burjex/btrader-engine:net
+    container_name: bxnet_bt_engine
+    <<: *restart
+    env_file: .env.github
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+      btrader-gateway: { condition: service_started }
+    networks: [btrader_internal]
+
+  btrader-market-data:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: market-data } }
+    image: burjex/btrader-market-data:net
+    container_name: bxnet_bt_market_data
+    <<: *restart
+    env_file: .env.github
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${BTRADER_DATABASE_URL}
+      REDIS_URL: ${BTRADER_REDIS_URL}
+      LP_BRIDGE_DRIVER: ${LP_BRIDGE_DRIVER:-mock}
+      MT5_INGEST_PORT: '4200'
+      MT5_FEED_TOKEN: ${MT5_FEED_TOKEN:-}
+      MT5_SYMBOL_SUFFIX: ${MT5_SYMBOL_SUFFIX:-}
+      MT5_MAX_TICK_AGE_MS: ${MT5_MAX_TICK_AGE_MS:-0}
+    expose: ['4200']
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+      btrader-gateway: { condition: service_started }
+    networks: [btrader_internal, edge]
+
+volumes:
+  bxnet_caddy_data:
+  bxnet_caddy_config:
+  bxnet_crm_pg:
+  bxnet_crm_redis:
+  bxnet_crm_static:
+  bxnet_crm_media:
+  bxnet_crm_logs:
+  bxnet_crm_backups:
+  bxnet_bt_pg:
+  bxnet_bt_redis:
+  bxnet_bt_uploads:
+
+networks:
+  edge:
+    name: burjex_net_edge
+    driver: bridge
+  crm_internal:
+    name: burjex_net_crm
+    driver: bridge
+  btrader_internal:
+    name: burjex_net_bt
+    driver: bridge

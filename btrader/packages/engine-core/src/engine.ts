@@ -2084,7 +2084,7 @@ export class TradingEngine {
           });
         } catch (restoreErr) {
           console.error(
-            \[engine] could not release claim on order \:\,
+            `[engine] could not release claim on order ${o.id}:`,
             (restoreErr as Error).message,
           );
         }
