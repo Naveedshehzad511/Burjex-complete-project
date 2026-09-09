@@ -3860,6 +3860,9 @@ def open_live_account(request):
         if len(main_password) < 8 or len(investor_password) < 8:
             messages.error(request, "Trading and investor passwords must be at least 8 characters.")
             return redirect("user-open-live-account")
+        if main_password == investor_password:
+            messages.error(request, "Trading and investor passwords must be different.")
+            return redirect("user-open-live-account")
 
         max_n = (account_type.max_demo_accounts if is_demo else account_type.max_live_accounts) or 0
         if max_n > 0:

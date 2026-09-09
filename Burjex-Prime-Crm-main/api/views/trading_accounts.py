@@ -247,6 +247,9 @@ class OpenAccountAPIView(APIView):
         if leverage_val not in allowed_leverage_options:
             leverage_val = allowed_leverage_options[0]
 
+        if len(main_password) >= 8 and len(investor_password) >= 8 and main_password == investor_password:
+            return error_response("Trading and investor passwords must be different.")
+
         # Auto-generate passwords when the client (e.g. mobile) omits them.
         if len(main_password) < 8:
             main_password = get_random_string(12, allowed_chars="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
