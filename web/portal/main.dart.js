@@ -59313,8 +59313,8 @@ a=A.iY(A.b([A.eK(b6,b6,b6,B.fu,b6,b6,new A.aZq(),b6,b6,b6,"Add",b6)],t.p),b6,!0,
 a2=A.B("FLOATING P / L",b6,b6,b6,b6,A.aK(b6,b6,A.v(b8).cy,b6,b6,b6,b6,b6,b6,b6,b6,11,b6,b6,b6,b6,b6,!0,b6,0.6,b6,b6,b6,b6,b6,b6),b6,b6,b6)
 a9=$.uH()
 b0=t.p
-a2=A.b([A.cb(b6,A.aC(A.b([A.B(a9.dn(a0)+" "+(c==null||c.e==null?"USD":c.e),b6,b6,b6,b6,A.aK(b6,b6,b6,b6,b6,b6,b6,b6,b6,b6,B.bv,30,b6,b6,B.a_,b6,b6,!0,b6,b6,b6,b6,b6,b6,b6,b6),B.ap,b6,b6)],b0),B.l,B.f,B.j),B.o,b6,b6,b6,b6,b6,b6,B.PW,b6,b6,1/0)],b0)
-if(!f)a2.push(new A.ao(B.dP,A.aC(A.b([b5.zC("Floating P/L",a9.dn(a3)),b5.zC("Equity",a9.dn(a5)),b5.zC("Credit",a9.dn(a1)),b5.zC("Margin",a9.dn(a4)),b5.zC("Free margin",a9.dn(a5-a4))],b0),B.l,B.f,B.j),b6))
+a2=A.b([A.cb(b6,A.aC(A.b([A.aS(A.b([A.B(a9.dn(a3),b6,b6,b6,b6,A.aK(b6,b6,a8,b6,b6,b6,b6,b6,b6,b6,B.bv,30,b6,b6,B.a_,b6,b6,!0,b6,b6,b6,b6,b6,b6,b6,b6),b6,b6,b6),A.B(" "+(c==null||c.e==null?"USD":c.e),b6,b6,b6,b6,A.aK(b6,b6,B.p,b6,b6,b6,b6,b6,b6,b6,B.bv,30,b6,b6,B.a_,b6,b6,!0,b6,b6,b6,b6,b6,b6,b6,b6),b6,b6,b6)],b0),B.l,B.eB,B.j,0)],b0),B.l,B.f,B.j),B.o,b6,b6,b6,b6,b6,b6,B.PW,b6,b6,1/0)],b0)
+if(!f)a2.push(new A.ao(B.dP,A.aC(A.b([b5.zC("Balance",a9.dn(a0)),b5.zC("Equity",a9.dn(a5)),b5.zC("Credit",a9.dn(a1)),b5.zC("Margin",a9.dn(a4)),b5.zC("Free margin",a9.dn(a5-a4))],b0),B.l,B.f,B.j),b6))
 a2.push(B.a0)
 if(m.gC(r)>1){f=A.b([],b0)
 for(m=m.ga6(r);m.q();){a9=m.gJ(m)

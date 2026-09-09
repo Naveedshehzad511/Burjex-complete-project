@@ -262,20 +262,26 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
       body: RefreshIndicator(
         onRefresh: refresh,
         child: ListView(children: [
-          // ── Balance headline ──
+          // ── Floating P/L headline; the currency stays black so only the
+          // figure carries the profit/loss colour. ──
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
-            child: Text('${money(balanceV)} ${acc?.currency ?? 'USD'}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()])),
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(text: money(fpl), style: TextStyle(color: plColor)),
+                TextSpan(text: ' ${acc?.currency ?? 'USD'}', style: const TextStyle(color: Colors.black)),
+              ]),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()]),
+            ),
           ),
           // ── Account summary rows ──
           if (acc != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(children: [
-                _row('Floating P/L', money(fpl), color: plColor),
+                _row('Balance', money(balanceV)),
                 _row('Equity', money(equityV)),
                 _row('Credit', money(creditV)),
                 _row('Margin', money(marginV)),
