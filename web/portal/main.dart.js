@@ -8653,7 +8653,7 @@ s=new A.rb(A.bbM(A.bbk(s+"/v1",B.OP,null,B.t0)),a)
 s.akM(a,null)
 return s},
 nk:function nk(){var _=this
-_.f=_.e=_.c=_.b=_.a=null},
+_.f=_.e=_.d=_.c=_.b=_.a=null},
 rb:function rb(a,b){this.a=a
 this.b=b
 this.c=null},
@@ -34277,7 +34277,7 @@ aWh:function aWh(a){this.a=a},
 aWk:function aWk(a){this.a=a},
 aWl:function aWl(a){this.a=a},
 wY:function wY(a){this.a=a},
-Px:function Px(a,b){var _=this
+Px:function Px(a,b,c,d){var _=this
 _.d=a
 _.e=!0
 _.f=!1
@@ -34285,6 +34285,8 @@ _.w=_.r=null
 _.x=b
 _.z=_.y=null
 _.Q="real"
+_.ax=c
+_.ay=d
 _.c=_.a=null},
 aY1:function aY1(a){this.a=a},
 aXP:function aXP(a,b){this.a=a
@@ -34300,6 +34302,7 @@ aXO:function aXO(a,b){this.a=a
 this.b=b},
 aXR:function aXR(a){this.a=a},
 aXS:function aXS(a){this.a=a},
+aXPwd:function aXPwd(a){this.a=a},
 aXT:function aXT(a){this.a=a},
 aXU:function aXU(a){this.a=a},
 aXV:function aXV(a){this.a=a},
@@ -34625,6 +34628,10 @@ a2f:function a2f(a){this.a=a},
 a2e:function a2e(a,b,c){this.a=a
 this.b=b
 this.c=c},
+bxInv(){return $.bxRo===!0},
+bxInvMsg(a){var s=null
+if(a==null)return
+try{a.Z(t.J).f.eF(A.im(s,s,s,s,s,B.D,s,A.B("Investor password: read-only. Trading is disabled.",s,s,s,s,s,s,s,s),s,B.aK,s,s,s,s,s,s,s,s,s,s))}catch(s){}},
 bFS(a,b){var s,r,q,p
 if(!a.ah(0,$.r2(),t.FB).b)return!1
 s=A.cK(a.ah(0,$.eU(),t.Q5))
@@ -56329,7 +56336,8 @@ q=q.error
 this.a.b.o3(new A.x2("WebAudioError",p,o+": "+s+" (Code: "+A.f(q==null?r:q.code)+")",r))},
 $S:3}
 A.nk.prototype={
-a0(a){this.c=this.b=this.a=null}}
+a0(a){this.d=this.c=this.b=this.a=null
+$.bxRo=!1}}
 A.rb.prototype={
 akM(a,b){var s=this.a.ea$
 s.D(s,new A.Il(new A.agw(this),new A.agx(this),null,null,null))},
@@ -57365,6 +57373,7 @@ s.ah(0,r,q).f=new A.ahV(this)},
 rq(){var s=0,r=A.q(t.H),q=this,p
 var $async$rq=A.r(function(a,b){if(a===1)return A.m(b,r)
 for(;;)switch(s){case 0:q.r.ah(0,$.zq(),t.YS).a0(0)
+$.bxRo=!1
 s=2
 return A.i(A.dw(),$async$rq)
 case 2:p=b
@@ -57374,7 +57383,9 @@ case 3:s=4
 return A.i(p.H(0,"bt_refresh"),$async$rq)
 case 4:s=5
 return A.i(p.H(0,"bt_role"),$async$rq)
-case 5:if(q.c)q.sbT(0,B.iN)
+case 5:s=6
+return A.i(p.H(0,"bt_readonly"),$async$rq)
+case 6:if(q.c)q.sbT(0,B.iN)
 return A.n(null,r)}})
 return A.o($async$rq,r)},
 FV(){var s=0,r=A.q(t.H),q,p=2,o=[],n=this,m,l,k,j,i,h,g,f,e
@@ -57393,6 +57404,8 @@ g=j.ah(0,i,h)
 g.a=l
 g.b=k
 g.c=A.bP(J.t(m.a,"bt_role"))
+g.d=J.t(m.a,"bt_readonly")==="1"
+$.bxRo=g.d===!0
 j.ah(0,i,h)
 n.sbT(0,new A.ld(!0))}else n.sbT(0,B.iN)
 p=2
@@ -57420,11 +57433,12 @@ return A.i(q.rR(o,A.bP(J.t(o,"accountId"))),$async$BT)
 case 3:return A.n(null,r)}})
 return A.o($async$BT,r)},
 rR(a,b){return this.aD2(a,b)},
-aD2(a,b){var s=0,r=A.q(t.H),q=this,p,o,n,m,l,k
+aD2(a,b){var s=0,r=A.q(t.H),q=this,p,o,n,m,l,k,j
 var $async$rR=A.r(function(c,d){if(c===1)return A.m(d,r)
 for(;;)switch(s){case 0:m=J.V(a)
 l=m.h(a,"accessToken")
 k=m.h(a,"refreshToken")
+j=J.c(m.h(a,"readonly"),!0)
 m=m.h(a,"role")
 if(m==null)m="TRADER"
 p=q.r
@@ -57432,6 +57446,8 @@ o=p.ah(0,$.zq(),t.YS)
 o.a=l
 o.b=k
 o.c=m
+o.d=j
+$.bxRo=j
 s=2
 return A.i(A.dw(),$async$rR)
 case 2:n=d
@@ -57441,13 +57457,16 @@ case 3:s=4
 return A.i(n.fR("String","bt_refresh",k),$async$rR)
 case 4:s=5
 return A.i(n.fR("String","bt_role",m),$async$rR)
-case 5:q.sbT(0,new A.ld(!0))
+case 5:s=6
+return A.i(n.fR("String","bt_readonly",j?"1":"0"),$async$rR)
+case 6:q.sbT(0,new A.ld(!0))
 if(b!=null)p.ah(0,$.ix().gcd(),t.lR).k5(0,b)
 return A.n(null,r)}})
 return A.o($async$rR,r)},
 fg(){var s=0,r=A.q(t.H),q=this,p
 var $async$fg=A.r(function(a,b){if(a===1)return A.m(b,r)
 for(;;)switch(s){case 0:q.r.ah(0,$.zq(),t.YS).a0(0)
+$.bxRo=!1
 s=2
 return A.i(A.dw(),$async$fg)
 case 2:p=b
@@ -57457,7 +57476,9 @@ case 3:s=4
 return A.i(p.H(0,"bt_refresh"),$async$fg)
 case 4:s=5
 return A.i(p.H(0,"bt_role"),$async$fg)
-case 5:q.sbT(0,B.iN)
+case 5:s=6
+return A.i(p.H(0,"bt_readonly"),$async$fg)
+case 6:q.sbT(0,B.iN)
 return A.n(null,r)}})
 return A.o($async$fg,r)}}
 A.ahU.prototype={
@@ -57880,7 +57901,9 @@ a8.toString
 a8=t.wa.a(A.v(a8).c.h(0,A.bB(t.Ty)))
 a8.toString
 m=a8
-if(a7==null){A.ol("No account","Select a trading account first",m.d)
+if(A.bxInv()){A.ol("Read-only","Investor password: trading is disabled",m.d)
+s=1
+break}if(a7==null){A.ol("No account","Select a trading account first",m.d)
 s=1
 break}l=b0==="BUY"?m.a:m.b
 k=n.z
@@ -59312,7 +59335,7 @@ a7=new A.aZd(b8,g,a6)
 a8=a3>=0?b7.e:b7.f
 a9=$.uH()
 b0=t.p
-a=A.iY(A.b([A.eK(b6,b6,b6,B.fu,b6,b6,new A.aZq(),b6,b6,b6,"Add",b6)],b0),b6,!1,b6,b6,!0,b6,b6,b6,b6,b6,A.B(a9.dn(a3)+" "+(c==null||c.e==null?"USD":c.e),b6,b6,b6,b6,A.aK(b6,b6,a8,b6,b6,b6,b6,b6,b6,b6,B.bv,19,b6,b6,B.a_,b6,b6,!0,b6,b6,b6,b6,b6,b6,b6,b6),b6,b6,b6),16)
+a=A.iY(A.b([A.eK(b6,b6,b6,B.fu,b6,b6,new A.bxAd(b5),b6,b6,b6,"Add",b6)],b0),b6,!1,b6,b6,!0,b6,b6,b6,b6,b6,A.B(a9.dn(a3)+" "+(c==null||c.e==null?"USD":c.e),b6,b6,b6,b6,A.aK(b6,b6,a8,b6,b6,b6,b6,b6,b6,b6,B.bv,19,b6,b6,B.a_,b6,b6,!0,b6,b6,b6,b6,b6,b6,b6,b6),b6,b6,b6),16)
 a2=A.b([],b0)
 if(!f)a2.push(new A.ao(B.dP,A.aC(A.b([b5.zC("Balance",a9.dn(a0)),b5.zC("Equity",a9.dn(a5)),b5.zC("Credit",a9.dn(a1)),b5.zC("Margin",a9.dn(a4)),b5.zC("Free margin",a9.dn(a5-a4))],b0),B.l,B.f,B.j),b6))
 a2.push(B.a0)
@@ -59632,11 +59655,9 @@ $S:0}
 A.aZ5.prototype={
 $0(){var s=0,r=A.q(t.H),q=1,p=[],o=this,n,m,l,k,j,i
 var $async$$0=A.r(function(a,b){if(a===1){p.push(b)
-s=q}for(;;)switch(s){case 0:j=o.a.Z(t.J).f
-q=3
-m=o.b
-s=6
-return A.i(m.ah(0,$.iy(),t.W).AS(0,"/orders/"+o.c.a),$async$$0)
+s=q}for(;;)switch(s){case 0:if(A.bxInv()){A.bxInvMsg(o.a)
+s=1
+break}j=o.a.Z(t.J).f
 case 6:l=$.r4()
 if(m.e==null)A.a1(A.a2(u.w))
 m.gdA().dK(l)
@@ -60308,19 +60329,19 @@ p.toString
 p=a2.$1(p)
 f=b2.$0()
 b8=b2.$0()
-e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLi(d8),d7,new A.aLj(d8),new A.aLk(d8),new A.aLl(d8,h,a,a5,b3,b4),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7),b8,d7,0,d7,p-f/2,s))}if(d8.db!=null&&d8.dx!=null){s=d8.r
+e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLi(d8),d7,new A.aLj(d8),new A.aLk(d8),new A.aLl(d8,h,a,a5,b3,b4),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,new A.aLi(d8),new A.aLj(d8),new A.aLk(d8),new A.aLl(d8,h,a,a5,b3,b4)),b8,d7,0,d7,p-f/2,s))}if(d8.db!=null&&d8.dx!=null){s=d8.r
 p=d8.dx
 p.toString
 p=a2.$1(p)
 f=b2.$0()
 b8=b2.$0()
-e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLm(d8),d7,new A.aLn(d8),new A.aLo(d8,b3),new A.aLp(d8,h,a,a5,b3),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7),b8,d7,0,d7,p-f/2,s))}if(d8.db!=null&&d8.dy!=null){s=d8.r
+e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLm(d8),d7,new A.aLn(d8),new A.aLo(d8,b3),new A.aLp(d8,h,a,a5,b3),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,new A.aLm(d8),new A.aLn(d8),new A.aLo(d8,b3),new A.aLp(d8,h,a,a5,b3)),b8,d7,0,d7,p-f/2,s))}if(d8.db!=null&&d8.dy!=null){s=d8.r
 p=d8.dy
 p.toString
 p=a2.$1(p)
 f=b2.$0()
 b8=b2.$0()
-e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLq(d8),d7,new A.aLr(d8),new A.aLt(d8,b4),new A.aLu(d8,h,a,a5,b4),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7),b8,d7,0,d7,p-f/2,s))}if(d8.db!=null){s=A.v(d4).ax.k2.cZ(0.96)
+e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLq(d8),d7,new A.aLr(d8),new A.aLt(d8,b4),new A.aLu(d8,h,a,a5,b4),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,new A.aLq(d8),new A.aLr(d8),new A.aLt(d8,b4),new A.aLu(d8,h,a,a5,b4)),b8,d7,0,d7,p-f/2,s))}if(d8.db!=null){s=A.v(d4).ax.k2.cZ(0.96)
 p=A.bb(10)
 f=A.v(d4)
 b8=A.b([],d5)
@@ -60526,22 +60547,24 @@ o=o===B.j_||o===B.bM}else o=!1
 if(o)return B.c.bk(p.c.toUpperCase(),"BUY")}return!0},
 $S:16}
 A.aLU.prototype={
-$1(a){var s,r,q,p,o,n,k,j,i,m=this,l=a.e
+$1(a){var s,r,q,p,o,n,k,j,i,h,m=this,l=a.e
 l.toString
 s=a.f
 r=s===B.bM||s===B.ct||s===B.cG
-if(s!==B.j_&&s!==B.bM){k=m.a.a.x
+o=!1
+h=a
+k=m.a.a.x
 for(j=0;j<k.length;++j){i=k[j]
-if(i.e===l&&(i.f===B.j_||i.f===B.bM)){a=i
-break}}}
+if(i.e===l&&(i.f===B.j_||i.f===B.bM)){h=i
+o=B.c.bk(i.c.toUpperCase(),"BUY")
+break}}
 s=m.b
 q=s.$2(l,r?B.ct:B.dk)
 p=s.$2(l,r?B.cG:B.dK)
-o=B.c.bk(a.c.toUpperCase(),"BUY")
 s=m.a
 n=s.a.f
-if(n==null)n=a.a
-s.u(new A.aLe(s,l,o,r,a,q,p,n,m.d,m.c*0.12))},
+if(n==null)n=h.a
+s.u(new A.aLe(s,l,o,r,h,q,p,n,m.d,m.c*0.12))},
 $S:850}
 A.aLe.prototype={
 $0(){var s,r,q,p,o,n,m,l,k=this,j=k.a
@@ -60662,8 +60685,9 @@ s.CW=r},
 $S:0}
 A.aKW.prototype={
 $0(){var s=this,r=s.b
-if(r===s.c)r=B.bM
-else r=r===s.d?s.e:s.f
+if(r===s.d)r=s.e
+else if(r===s.c)r=B.bM
+else r=s.f
 return s.a.fy=r},
 $S:0}
 A.aKX.prototype={
@@ -60715,7 +60739,15 @@ k.u(new A.aKP(k,new A.fc(l.b.$1(s.a),l.c.$1(s.b)),l.d,l.e))
 return}if(k.a.as!=null){l.f.$1(a.c)
 return}r=k.fy
 if(r!=null){q=l.r
-k.u(new A.aKQ(k,q.$2(r,l.c.$1(a.c.b)),q,l.w,l.x))
+p=a.a
+n=p==null?0:p.b
+p=l.as.b
+o=l.e.a
+o=o.a-o.b
+if(!(p>0&&o!==0))return
+s=r===B.bM?k.k1:r===B.dk||r===B.ct?k.dx:k.dy
+if(s==null)return
+k.u(new A.aKQ(k,q.$2(r,s+-n/p*o),q,l.w,l.x))
 return}if(k.ax!=null&&k.ay!=null){r=k.ay
 r.toString
 p=a.c
@@ -122464,6 +122496,10 @@ if(a==null)a=b.length===0?100:B.b.gM(b)
 m=a
 if(!B.b.m(b,m)){n.u(new A.aXS(n))
 s=1
+break}e=B.c.ai(n.ax.a.a)
+d=B.c.ai(n.ay.a.a)
+if(e.length<8||d.length<8){n.u(new A.aXPwd(n))
+s=1
 break}n.u(new A.aXT(n))
 p=4
 l=n.azQ(a8)
@@ -122471,7 +122507,7 @@ a0=J.t(a8,"default_currency")
 k=J.U(a0==null?"USD":a0)
 a0=t.N
 s=7
-return A.i(n.d.e3("/accounts/open/",A.ac(["account_type",n.y,"account_kind",n.Q,"trading_platform",l,"currency",k,"leverage",m],a0,t.z)),$async$zw)
+return A.i(n.d.e3("/accounts/open/",A.ac(["account_type",n.y,"account_kind",n.Q,"trading_platform",l,"currency",k,"leverage",m,"main_password",e,"investor_password",d],a0,t.z)),$async$zw)
 case 7:j=b1
 if(n.c==null){s=1
 break}n.u(new A.aXU(n))
@@ -122483,12 +122519,14 @@ if(a1.b(i)){a2=J.t(i,"login_id")
 a3=a2==null?J.t(i,"account_number"):a2}else a3=null
 h=a3
 g=a1.b(i)?J.t(i,"main_password"):null
+a7=a1.b(i)?J.t(i,"investor_password"):null
 f=a1.b(i)?J.t(i,"platform"):l
 e=a1.b(i)?J.t(i,"leverage"):m
 if(h!=null){a1=A.f(f)
 a2=A.f(h)
 a4=A.f(e)
-a5=g!=null?"\nPassword: "+A.f(g):""
+a5=g!=null?"\nTrading password: "+A.f(g):""
+if(a7!=null)a5=a5+"\nInvestor password: "+A.f(a7)
 a6="Account opened ("+a1+").\nLogin: "+a2+"\nLeverage: 1:"+a4+a5}else{a1=J.t(j,"message")
 a6=J.U(a1==null?"Account opened":a1)}d=a6
 a1=n.c
@@ -122537,6 +122575,10 @@ p=A.Y(new A.ag(k,new A.aY_(),p),p.i("aw.E"))
 o=k.length===0?l:new A.aY0(m)
 q.push(A.ha(B.TI,l,!1,p,l,o,l,s,t.S))
 q.push(B.aT)
+q.push(A.bT(B.F,!1,m.ax,A.bM("Trading password",l),l,l,l,1,!0,l,l,l,l,B.r,l))
+q.push(B.at)
+q.push(A.bT(B.F,!1,m.ay,A.bM("Investor password (read-only login)",l),l,l,l,1,!0,l,l,l,l,B.r,l))
+q.push(B.aT)
 p=m.f?l:m.gayE()
 o=A.AA(l,l,B.M,l,l,l,l,l,l,B.i,l,l,l,l,l,l,l,l,l,l)
 q.push(new A.b7(1/0,48,A.Az(m.f?B.pl:A.B("+ Open "+r+" Account",l,l,l,l,l,l,l,l),p,o),l))
@@ -122583,6 +122625,9 @@ $0(){return this.a.r="Select an account type"},
 $S:0}
 A.aXS.prototype={
 $0(){return this.a.r="Select a valid leverage"},
+$S:0}
+A.aXPwd.prototype={
+$0(){return this.a.r="Trading and investor passwords must be at least 8 characters"},
 $S:0}
 A.aXT.prototype={
 $0(){var s=this.a
