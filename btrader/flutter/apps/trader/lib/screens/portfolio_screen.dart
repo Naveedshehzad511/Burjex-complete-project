@@ -370,8 +370,8 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
   Widget _row(String k, String v, {Color? color}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(k, style: TextStyle(color: Theme.of(context).hintColor, fontSize: 19)),
-          Text(v, style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
+          Text(k, style: TextStyle(color: Theme.of(context).hintColor, fontSize: 17)),
+          Text(v, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
         ]),
       );
 
@@ -425,14 +425,14 @@ class _TradeTile extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       title: Row(children: [
-        Text(display, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
+        Text(display, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
         const SizedBox(width: 6),
         Text('${p.side} ${p.volume.toStringAsFixed(2)}',
-            style: TextStyle(color: p.side == 'BUY' ? tc.buy : tc.sell, fontSize: 19, fontWeight: FontWeight.w700)),
+            style: TextStyle(color: p.side == 'BUY' ? tc.buy : tc.sell, fontSize: 17, fontWeight: FontWeight.w700)),
       ]),
       subtitle: Text(
         '@ ${price(p.openPrice, p.digits)}   SL ${p.slPrice != null ? price(p.slPrice!, p.digits) : '—'} · TP ${p.tpPrice != null ? price(p.tpPrice!, p.digits) : '—'}',
-        style: const TextStyle(fontSize: 17.5, fontFeatures: [FontFeature.tabularFigures()]),
+        style: const TextStyle(fontSize: 17, fontFeatures: [FontFeature.tabularFigures()]),
       ),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         Text(money(pl), style: TextStyle(fontSize: 23, color: plColor, fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()])),
