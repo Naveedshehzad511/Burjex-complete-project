@@ -370,7 +370,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
   Widget _row(String k, String v, {Color? color}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(k, style: TextStyle(color: Theme.of(context).hintColor, fontSize: 17)),
+          Text(k, style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 17)),
           Text(v, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
         ]),
       );
