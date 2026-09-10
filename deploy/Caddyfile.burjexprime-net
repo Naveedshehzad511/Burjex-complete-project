@@ -23,6 +23,13 @@ crm.burjexprime.net {
 	import net_to_host 6800
 }
 
+# Apex: Google/search lands here. Must have its own TLS site — without it
+# browsers get TLS alert / blank page. Redirect to the trading portal.
+burjexprime.net {
+	import tls_headers
+	redir https://portal.burjexprime.net{uri} 302
+}
+
 # Portal SPA plus same-origin B-Trader API/WS so the HTTPS page is not mixed-content.
 portal.burjexprime.net {
 	import tls_headers
