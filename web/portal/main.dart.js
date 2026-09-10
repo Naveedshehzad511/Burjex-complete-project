@@ -59744,7 +59744,7 @@ o=m.length===0?o:o+m
 m=new A.aZE(a)
 s=q.b
 r=B.d.P(a.f,2)
-A.beZ(s,A.b([new A.jY("Chart",p,!1,new A.aZy(n,a,s)),new A.jY("Add position",p,!1,new A.aZz(s,a)),new A.jY("Modify position",p,!1,new A.aZA(n,s,a,q.c)),new A.jY("Partial close",p,!1,new A.aZB(q.d,a)),new A.jY("Close trade",m,!0,new A.aZC(q.e,a))],t.Fr),p,new A.aZD(a,m),o+"  "+a.d+" "+r)},
+A.beZ(s,A.b(A.bxInv()?[new A.jY("Chart",p,!1,new A.aZy(n,a,s))]:[new A.jY("Chart",p,!1,new A.aZy(n,a,s)),new A.jY("Add position",p,!1,new A.aZz(s,a)),new A.jY("Modify position",p,!1,new A.aZA(n,s,a,q.c)),new A.jY("Partial close",p,!1,new A.aZB(q.d,a)),new A.jY("Close trade",m,!0,new A.aZC(q.e,a))],t.Fr),p,new A.aZD(a,m),o+"  "+a.d+" "+r)},
 $S:267}
 A.aZE.prototype={
 $1(a){var s=t.V0,r=a.aG($.baX(),s),q=a.aG($.m4(),t.iS),p=A.cK(a.aG($.l6(),t.cO))
@@ -60057,7 +60057,7 @@ break
 case 6:case 1:return A.n(q,r)
 case 2:return A.m(o.at(-1),r)}})
 return A.o($async$A0,r)},
-F(a){var s,r,q,p,o,n,m,l,k,j,i,h,g,f=this,e=null,d={},c=f.gba(),b=A.cK(c.aG($.l6(),t.cO))
+F(a){var s,r,q,p,o,n,m,l,k,j,i,h,g,a0,a1,f=this,e=null,d={},c=f.gba(),b=A.cK(c.aG($.l6(),t.cO))
 if(b==null)b=B.fx
 s=c.aG($.m4(),t.iS)
 r=f.w
@@ -60085,24 +60085,26 @@ j=k?e:q.b
 i=s.b
 k=k?e:q.c
 s=s.a
-l.push(A.aS(A.b([new A.PM("SELL",j,p,i,e),B.b2,new A.PM("BUY",k,p,s,e)],m),B.l,B.f,B.j,0))
+a0=A.bxInv()
+a1=a0?A.v(a).cy:null
+l.push(A.aS(A.b([new A.PM("SELL",j,p,a1==null?i:a1,e),B.b2,new A.PM("BUY",k,p,a1==null?s:a1,e)],m),B.l,B.f,B.j,0))
 l.push(B.bE)
 k=A.b([],m)
 for(h=0;h<8;++h){g=B.WF[h]
-k.push(new A.ao(B.Pn,A.V5(A.B(A.Zv(g),e,e,e,e,e,e,e,e),e,new A.b4A(f,g),f.x===g,e),e))}l.push(new A.b7(e,36,A.cR(k,e,e,B.aP,!1),e))
+k.push(new A.ao(B.Pn,A.V5(A.B(A.Zv(g),e,e,e,e,e,e,e,e),e,a0?e:new A.b4A(f,g),f.x===g&&!a0,e),e))}l.push(new A.b7(e,36,A.cR(k,e,e,B.aP,!1),e))
 l.push(B.bE)
 l.push(A.B("Volume (lots)",e,e,e,e,A.aK(e,e,A.v(a).cy,e,e,e,e,e,e,e,e,12,e,e,e,e,e,!0,e,e,e,e,e,e,e,e),e,e,e))
-l.push(A.aS(A.b([A.wd(B.nF,new A.b4B(d,f),e),A.bq(A.bT(B.F,!1,f.gQx(),B.TJ,e,B.bk,e,1,!1,new A.b4C(f),new A.b4D(d,f,a),e,B.a87,B.ap,e),1),A.wd(B.fu,new A.b4E(d,f),e)],m),B.l,B.f,B.j,0))
-if(r!==B.cy)B.b.O(l,A.b([B.a0,A.bT(B.F,!1,f.z,B.TK,e,B.bk,e,1,!1,e,e,e,e,B.r,e)],m))
+l.push(A.aS(A.b([A.wd(B.nF,a0?e:new A.b4B(d,f),e),A.bq(A.bT(B.F,!1,f.gQx(),B.TJ,e,B.bk,e,1,!1,a0?e:new A.b4C(f),a0?e:new A.b4D(d,f,a),e,B.a87,B.ap,e),1),A.wd(B.fu,a0?e:new A.b4E(d,f),e)],m),B.l,B.f,B.j,0))
+if(!a0){if(r!==B.cy)B.b.O(l,A.b([B.a0,A.bT(B.F,!1,f.z,B.TK,e,B.bk,e,1,!1,e,e,e,e,B.r,e)],m))
 l.push(B.a5)
 l.push(A.aS(A.b([A.bq(A.bT(B.F,!1,f.Q,B.uk,e,B.bk,e,1,!1,e,e,e,e,B.r,e),1),B.b2,A.bq(A.bT(B.F,!1,f.as,B.uj,e,B.bk,e,1,!1,e,e,e,e,B.r,e),1)],m),B.l,B.f,B.j,0))
-if(f.x===B.cy)l.push(A.xW(B.J,new A.b4F(f),B.Sm,B.abs,f.ax))
+if(f.x===B.cy)l.push(A.xW(B.J,new A.b4F(f),B.Sm,B.abs,f.ax))}
 l.push(B.a0)
-r=n?"SELL":"SELL "+B.d.P(f.y,2)
-k=!n
-i=A.bq(new A.MQ(r,i,f.ay,k,new A.b4G(f),e),1)
-r=n?"BUY":"BUY "+B.d.P(f.y,2)
-l.push(A.aS(A.b([i,B.b2,A.bq(new A.MQ(r,s,f.ay,k,new A.b4H(f),e),1)],m),B.l,B.f,B.j,0))
+r=n||a0?"SELL":"SELL "+B.d.P(f.y,2)
+k=!n&&!a0
+i=A.bq(new A.MQ(r,a1==null?i:a1,f.ay,k,k?new A.b4G(f):e,e),1)
+r=n||a0?"BUY":"BUY "+B.d.P(f.y,2)
+l.push(A.aS(A.b([i,B.b2,A.bq(new A.MQ(r,a1==null?s:a1,f.ay,k,k?new A.b4H(f):e,e),1)],m),B.l,B.f,B.j,0))
 return A.hz(c,e,A.cR(l,B.d5,e,B.C,!1),e,e,e,e)}}
 A.b4n.prototype={
 $0(){return this.a.y=this.b},
