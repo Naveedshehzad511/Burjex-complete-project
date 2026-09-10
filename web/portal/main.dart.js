@@ -10320,6 +10320,11 @@ bxDel:function bxDel(a,b){this.a=a
 this.b=b},
 bxCls:function bxCls(a){this.a=a},
 bxTO:function bxTO(a){this.a=a},
+bxRm:function bxRm(a,b){this.a=a
+this.b=b},
+bxRmY:function bxRmY(a,b,c){this.a=a
+this.b=b
+this.c=c},
 bxRow:function bxRow(a,b){this.a=a
 this.b=b},
 aZs:function aZs(a,b){this.a=a
@@ -34652,7 +34657,7 @@ this.c=c},
 bxInv(){return $.bxRo===!0},
 bxInvMsg(a){var s=null
 if(a==null)return
-try{a.Z(t.J).f.eF(A.im(s,s,s,s,s,B.D,s,A.B("Investor login — buy & sell are view only.",s,s,s,s,s,s,s,s),s,B.aK,s,s,s,s,s,s,s,s,s,s))}catch(s){}},
+},
 bxRef(a){var s
 try{if(a==null||a.e==null)return
 s=$.jv()
@@ -57934,8 +57939,7 @@ a8.toString
 a8=t.wa.a(A.v(a8).c.h(0,A.bB(t.Ty)))
 a8.toString
 m=a8
-if(A.bxInv()){A.ol("Investor login","Buy & sell disabled in investor mode",m.d)
-s=1
+if(A.bxInv()){s=1
 break}if(a7==null){A.ol("No account","Select a trading account first",m.d)
 s=1
 break}l=b0==="BUY"?m.a:m.b
@@ -58043,8 +58047,7 @@ j.toString
 j=t.wa.a(A.v(j).c.h(0,A.bB(t.Ty)))
 j.toString
 n=j
-if(A.bxInv()){A.ol("Investor login","Buy & sell disabled in investor mode",n.d)
-s=5
+if(A.bxInv()){s=5
 break}q=3
 j=o.gba()
 s=6
@@ -59349,7 +59352,6 @@ a9=$.uH()
 b0=t.p
 a=A.iY(A.b([A.eK(b6,b6,b6,A.cb(b6,A.cB(B.jX,B.M,b6,22),B.o,b6,b6,new A.bY(B.i,b6,b6,A.bb(17),A.b([new A.ca(0,B.a9,B.p.cZ(0.22),B.i3,5)],t.G),b6,B.Q),b6,34,b6,b6,b6,b6,34),b6,b6,new A.bxAd(b5),b6,b6,b6,"Add",b6)],b0),b6,!1,b6,b6,!0,b6,b6,b6,b6,b6,A.B(a9.dn(a3)+" "+(c==null||c.e==null?"USD":c.e),b6,b6,b6,b6,A.aK(b6,b6,a8,b6,b6,b6,b6,b6,b6,b6,B.bv,19,b6,b6,B.a_,b6,b6,!0,b6,b6,b6,b6,b6,b6,b6,b6),b6,b6,b6),16)
 a2=A.b([],b0)
-if(A.bxInv())a2.push(new A.ao(B.du,A.cb(b6,A.B("Investor login — buy & sell disabled",b6,b6,b6,b6,A.aK(b6,b6,B.ml,b6,b6,b6,b6,b6,b6,b6,B.bv,13,b6,b6,b6,b6,b6,!0,b6,b6,b6,b6,b6,b6,b6,b6),b6,b6,b6),B.o,b6,b6,new A.bY(B.ml.cZ(0.12),b6,b6,A.bb(8),b6,b6,B.Q),b6,b6,B.hB,B.d5,b6,b6,1/0),b6))
 if(!f)a2.push(new A.ao(B.dP,A.aC(A.b([b5.zC("Balance",a9.dn(a0)),b5.zC("Equity",a9.dn(a5)),b5.zC("Credit",a9.dn(a1)),b5.zC("Margin",a9.dn(a4)),b5.zC("Free margin",a9.dn(a5-a4))],b0),B.l,B.f,B.j),b6))
 a2.push(B.a0)
 if(m.gC(r)>1){f=A.b([],b0)
@@ -59566,14 +59568,14 @@ n.d=1
 n.e=""
 try{n.b.scw(0,m)
 n.c.scw(0,l)}catch(k){}n.bxCan()
-n.Q=A.ok(B.P3,new A.bxTO(n))
+n.Q=A.ok(new A.aV(2e6),new A.bxTO(n))
 n.u()
 p=4
 s=7
-return A.i(A.To(n.a.gba(),m,l),$async$G)
+return A.i(n.a.gba().ah(0,$.r2().gcd(),t.nT).BT(m,l),$async$G)
 case 7:n.bxCan()
 if(n.y){s=1
-break}p=9
+break}try{A.bxRef(n.a.gba())}catch(k){}p=9
 s=8
 return A.i(new A.baf(n.a.gba(),m).$0(),$async$G)
 case 8:case 9:if(s===9)o.pop()
@@ -59597,7 +59599,7 @@ if(String(e.id)!==m)f.push(e)}f.push({id:m,pw:l,ro:A.bxInv()===!0,name:j,bal:i,c
 n.f=f
 n.S()
 n.d=2
-n.e=A.bxInv()?"Investor login successful":"Login successful"
+n.e="Login successful"
 n.x=!1
 n.u()
 A.ok(B.fl,new A.bxCls(n))
@@ -59610,12 +59612,7 @@ n.bxCan()
 if(!n.y){n.d=3
 n.e="Invalid credentials"
 n.x=!1
-if(b3){h=n.f
-if(h==null)h=[]
-g=[]
-for(k=0;k<h.length;++k){f=h[k]
-if(String(f.id)!==m)g.push(f)}n.f=g
-n.S()}n.u()}s=6
+n.u()}s=6
 break
 case 3:s=2
 break
@@ -59660,7 +59657,7 @@ $2(a,b){var s=null,r=this.a,q=this.b,p=String(q.id==null?"":q.id),o=q.ro===!0,n=
 j=q.bal
 try{i=j==null||j!==j?"":$.uH().dn(j)+" "+k}catch(d){i=j==null?"":A.f(j)+" "+k}h=p===b
 g=o?B.ml:h?B.M:m
-f=A.b([A.B("#"+p+(o?"  ·  Investor":""),s,s,s,s,A.aK(s,s,g,s,s,s,s,s,s,s,B.bv,15,s,s,B.a_,s,s,!0,s,s,s,s,s,s,s,s),s,s,s)],t.p)
+f=A.b([A.B("#"+p,s,s,s,s,A.aK(s,s,g,s,s,s,s,s,s,s,B.bv,15,s,s,B.a_,s,s,!0,s,s,s,s,s,s,s,s),s,s,s)],t.p)
 if(l.length!==0)f.push(A.B(l,s,s,s,s,A.aK(s,s,n,s,s,s,s,s,s,s,s,12.5,s,s,s,s,s,!0,s,s,s,s,s,s,s,s),s,s,s))
 if(i.length!==0)f.push(A.B(i,s,s,s,s,A.aK(s,s,m,s,s,s,s,s,s,s,B.bv,13.5,s,s,s,s,s,!0,s,s,s,s,s,s,s,s),s,s,s))
 e=A.aC(f,B.l,B.f,B.L)
@@ -59675,13 +59672,30 @@ $0(){var s=this.b
 return this.a.G(s.id,s.pw,!0)},
 $S:0}
 A.bxDel.prototype={
-$0(){var s,r,q,p=this.a,o=this.b,n=p.f
+$0(){var s=this.a,r=this.b,q=s.w
+if(q==null){this.bxDo()
+return}A.kb(null,null,!0,null,new A.bxRm(s,r),q,null,!0,!0,t.H)},
+bxDo(){var s,r,q,p=this.a,o=this.b,n=p.f
 if(n==null)n=[]
 s=[]
 for(r=0;r<n.length;++r){q=n[r]
 if(String(q.id)!==String(o))s.push(q)}p.f=s
 p.S()
 p.u()},
+$S:0}
+A.bxRm.prototype={
+$1(a){var s=null,r=this.b
+return A.l9(A.b([A.e8(B.dg,new A.aXQ(a),s),A.e8(A.B("Remove",s,s,s,s,s,s,s,s),new A.bxRmY(this.a,r,a),s)],t.p),A.B("Remove #"+r+" from saved accounts?",s,s,s,s,s,s,s,s),A.B("Remove account",s,s,s,s,s,s,s,s))},
+$S:63}
+A.bxRmY.prototype={
+$0(){var s,r,q,p=this.a,o=this.b,n=p.f
+if(n==null)n=[]
+s=[]
+for(r=0;r<n.length;++r){q=n[r]
+if(String(q.id)!==String(o))s.push(q)}p.f=s
+p.S()
+p.u()
+try{A.b0(this.c,!1).bq(null)}catch(q){}},
 $S:0}
 A.bxCls.prototype={
 $0(){var s,q=this.a
