@@ -43,7 +43,7 @@ class ApiClient {
         handler.next(options);
       },
       onError: (e, handler) async {
-        if (e.response?.statusCode == 401 && _auth.refreshToken != null && !_isRefreshCall(e)) {
+        if (e.response?.statusCode == 401 && _auth.refreshToken != null && !_skipRefreshOn401(e)) {
           final ok = await _refresh();
           if (ok) {
             final req = e.requestOptions;
@@ -63,6 +63,13 @@ class ApiClient {
   final AuthStore _auth;
 
   bool _isRefreshCall(DioException e) => e.requestOptions.path.contains('/auth/refresh');
+
+  bool _skipRefreshOn401(DioException e) {
+    final p = e.requestOptions.path;
+    return p.contains('/auth/refresh') ||
+        p.contains('/auth/login') ||
+        p.contains('/auth/account-login');
+  }
 
   // Single-flight: collapse concurrent 401s into one refresh.
   Future<bool>? _refreshing;

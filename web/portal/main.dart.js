@@ -56476,7 +56476,7 @@ $2(a,b){return this.ad7(a,b)},
 ad7(a,b){var s=0,r=A.q(t.H),q,p=2,o=[],n=this,m,l,k,j,i,h
 var $async$$2=A.r(function(c,d){if(c===1){o.push(d)
 s=p}for(;;)switch(s){case 0:i=a.b
-s=(i==null?null:i.c)===401&&n.a.b.b!=null&&!B.c.m(a.a.cy,"/auth/refresh")?3:4
+s=(i==null?null:i.c)===401&&n.a.b.b!=null&&!B.c.m(a.a.cy,"/auth/refresh")&&!B.c.m(a.a.cy,"/auth/account-login")&&!B.c.m(a.a.cy,"/auth/login")?3:4
 break
 case 3:i=n.a
 s=7
@@ -59568,7 +59568,7 @@ n.d=1
 n.e=""
 try{n.b.scw(0,m)
 n.c.scw(0,l)}catch(k){}n.bxCan()
-n.Q=A.ok(new A.aV(2e6),new A.bxTO(n))
+n.Q=A.ok(new A.aV(3e6),new A.bxTO(n))
 n.u()
 p=4
 s=7
