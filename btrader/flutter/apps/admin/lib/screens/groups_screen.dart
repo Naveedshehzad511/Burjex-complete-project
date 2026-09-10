@@ -176,6 +176,22 @@ class GroupsScreen extends ConsumerWidget {
     String commType = '${g?['commissionType'] ?? 'NONE'}';
     String book = '${g?['defaultBook'] ?? 'B'}';
     bool enabled = g?['enabled'] != false;
+    String executionMode = '${g?['executionMode'] ?? 'MARKET'}' == 'INSTANT' ? 'INSTANT' : 'MARKET';
+    final delayMs = TextEditingController(text: '${g?['executionDelayMs'] ?? 0}');
+    final applyRaw = (g?['executionApplyTo'] is Map)
+        ? Map<String, dynamic>.from(g!['executionApplyTo'] as Map)
+        : <String, dynamic>{};
+    bool applyFlag(String k) => applyRaw[k] != false; // missing ⇒ true
+    final applyTo = <String, bool>{
+      'marketBuy': applyFlag('marketBuy'),
+      'marketSell': applyFlag('marketSell'),
+      'buyLimit': applyFlag('buyLimit'),
+      'sellLimit': applyFlag('sellLimit'),
+      'buyStop': applyFlag('buyStop'),
+      'sellStop': applyFlag('sellStop'),
+      'sl': applyFlag('sl'),
+      'tp': applyFlag('tp'),
+    };
 
     final mappings = <_MappingRow>[
       for (final m in ((g?['symbolMappings'] as List?) ?? []))
@@ -195,7 +211,7 @@ class GroupsScreen extends ConsumerWidget {
               title: Text(isNew ? 'New Trading Group' : 'Edit ${g['name']}'),
               content: SizedBox(
                 width: 720,
-                height: 640,
+                height: 720,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -268,6 +284,62 @@ class GroupsScreen extends ConsumerWidget {
                           labelText: 'Execution slippage (points)',
                           helperText: 'Anti-HFT: worsens every fill for this group. 0 = off.',
                         ),
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: executionMode,
+                        decoration: const InputDecoration(
+                          labelText: 'Execution type',
+                          helperText: 'Instant = fill at client click / level price. Market = delay then fill.',
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'INSTANT', child: Text('Instant execution')),
+                          DropdownMenuItem(value: 'MARKET', child: Text('Market execution')),
+                        ],
+                        onChanged: (v) => setState(() => executionMode = v ?? 'MARKET'),
+                      ),
+                      if (executionMode == 'MARKET') ...[
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: delayMs,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Execution delay (ms)',
+                            helperText: 'Order is placed after exactly this many milliseconds.',
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Text(
+                        'Apply execution to',
+                        style: Theme.of(ctx).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Only checked types use Instant honour or Market delay. Unchecked types fill immediately at market.',
+                        style: TextStyle(fontSize: 12, color: Theme.of(ctx).hintColor),
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 0,
+                        children: [
+                          for (final e in const [
+                            ('marketBuy', 'Buy (market)'),
+                            ('marketSell', 'Sell (market)'),
+                            ('buyLimit', 'Buy Limit'),
+                            ('sellLimit', 'Sell Limit'),
+                            ('buyStop', 'Buy Stop'),
+                            ('sellStop', 'Sell Stop'),
+                            ('sl', 'SL'),
+                            ('tp', 'TP'),
+                          ])
+                            FilterChip(
+                              label: Text(e.$2, style: const TextStyle(fontSize: 12)),
+                              selected: applyTo[e.$1] == true,
+                              onSelected: (v) => setState(() => applyTo[e.$1] = v),
+                            ),
+                        ],
                       ),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -415,6 +487,9 @@ class GroupsScreen extends ConsumerWidget {
                       'defaultLeverage': int.tryParse(leverage.text) ?? 100,
                       'defaultBook': book,
                       'enabled': enabled,
+                      'executionMode': executionMode,
+                      'executionDelayMs': int.tryParse(delayMs.text) ?? 0,
+                      'executionApplyTo': Map<String, bool>.from(applyTo),
                       'symbolMappings': mappings.map((m) => m.toJson()).toList(),
                     };
                     final api = ref.read(apiClientProvider);

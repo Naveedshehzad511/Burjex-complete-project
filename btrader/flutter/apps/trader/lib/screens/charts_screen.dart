@@ -237,8 +237,10 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     final activeIndicators = indicatorCfgs.where((c) => c.enabled).length;
     final drawings = ref.watch(chartDrawingsProvider).where((d) => d.symbol == _symbol).toList();
     final quote = ref.watch(quotesProvider)[_symbol];
-    // Chart price line tracks the BID (MT5 convention, matches the bid-based bars).
-    final livePrice = quote?.bid;
+    // Price line must stay locked to the forming candle close (same bid source).
+    // Prefer the forming bar so the line never drifts ahead of / behind the wick.
+    final forming = ref.watch(formingCandleProvider(req));
+    final livePrice = forming?.c ?? quote?.bid;
     final serverPos = ref.watch(openPositionsProvider).valueOrNull ?? const <Position>[];
     final positions = serverPos;
     final tc = Theme.of(context).extension<TradeColors>()!;

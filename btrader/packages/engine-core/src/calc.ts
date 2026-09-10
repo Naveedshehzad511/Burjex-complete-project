@@ -86,6 +86,55 @@ export function pipValue(volumeLots: number, spec: SymbolCalcSpec, quoteToAcct =
 export type GroupCommissionType = 'NONE' | 'PER_LOT' | 'PER_SIDE' | 'ROUND_TURN' | 'PERCENT';
 export type SymbolPricingMethod = 'SPREAD_ONLY' | 'COMMISSION_ONLY' | 'SPREAD_AND_COMMISSION';
 
+/** Order kinds that can be targeted by TradingGroup.executionApplyTo. */
+export type ExecutionApplyKind =
+  | 'marketBuy'
+  | 'marketSell'
+  | 'buyLimit'
+  | 'sellLimit'
+  | 'buyStop'
+  | 'sellStop'
+  | 'sl'
+  | 'tp';
+
+export type ExecutionApplyTo = Partial<Record<ExecutionApplyKind, boolean>>;
+
+export const DEFAULT_EXECUTION_APPLY: Record<ExecutionApplyKind, boolean> = {
+  marketBuy: true,
+  marketSell: true,
+  buyLimit: true,
+  sellLimit: true,
+  buyStop: true,
+  sellStop: true,
+  sl: true,
+  tp: true,
+};
+
+/** True when Instant honour / Market delay should apply to this kind. */
+export function executionApplies(flags: ExecutionApplyTo | null | undefined, kind: ExecutionApplyKind): boolean {
+  if (!flags || Object.keys(flags).length === 0) return true;
+  const v = flags[kind];
+  return v !== false;
+}
+
+export function pendingTypeToApplyKind(type: string, side: string): ExecutionApplyKind | null {
+  const t = String(type || '').toUpperCase();
+  const s = String(side || '').toUpperCase();
+  if (t === 'BUY_LIMIT') return 'buyLimit';
+  if (t === 'SELL_LIMIT') return 'sellLimit';
+  if (t === 'BUY_STOP') return 'buyStop';
+  if (t === 'SELL_STOP') return 'sellStop';
+  if (t === 'LIMIT') return s === 'BUY' ? 'buyLimit' : 'sellLimit';
+  if (t === 'STOP' || t === 'STOP_LIMIT') return s === 'BUY' ? 'buyStop' : 'sellStop';
+  return null;
+}
+
+export function sleepMs(ms: number): Promise<void> {
+  const n = Math.max(0, Math.floor(ms));
+  if (n <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, n));
+}
+
 export interface GroupPricing {
   markupPoints: number; // extra points applied to the traded side (broker edge)
   slippagePoints: number; // execution slippage penalty (points) worsening every fill
@@ -96,10 +145,14 @@ export interface GroupPricing {
   /** Spread Markup ceiling (points); 0 = fixed at min (no LP-driven growth). */
   maxSpreadPoints?: number;
   pricingMethod?: SymbolPricingMethod;
-  /** #2B: group execution model — 'MARKET' (fill at market) or 'INSTANT' (honour clicked price / requote). Undefined ⇒ MARKET. */
+  /** #2B: group execution model — 'MARKET' (fill at market after delay) or 'INSTANT' (honour clicked / level price). Undefined ⇒ MARKET. */
   executionMode?: 'MARKET' | 'INSTANT';
-  /** #2B: max points the market may move from the client's quote before an INSTANT order requotes; 0 ⇒ fall back to the symbol's slippagePoints. */
+  /** Legacy Instant requote tolerance (points). Instant fills now always honour when apply-to matches. */
   instantDeviationPoints?: number;
+  /** MARKET mode: wait this many ms before filling (for selected apply-to kinds). */
+  executionDelayMs?: number;
+  /** Which order kinds Instant/Market-delay apply to. */
+  executionApplyTo?: ExecutionApplyTo;
 }
 
 export interface SymbolMappingPricing {

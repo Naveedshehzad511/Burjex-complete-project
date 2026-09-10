@@ -106,13 +106,11 @@ enum BookType {
   B
 }
 
-// #2B: how a trading group fills market orders.
-//  MARKET  = fill at the current market price (with the group's execution
-//            slippage); the price the client saw is indicative only.
-//  INSTANT = honour the price the client clicked when the market is still
-//            within tolerance; requote (reject with the new price) when it has
-//            moved beyond `instantDeviationPoints`. Brokers run a hybrid model:
-//            e.g. MARKET on ECN groups, INSTANT on Standard groups.
+// #2B: how a trading group fills orders (per executionApplyTo kinds).
+//  MARKET  = wait executionDelayMs, then fill at the live market price.
+//  INSTANT = honour the client's clicked / pending / SL-TP level price 100%
+//            (no requote). Brokers typically run MARKET on ECN and INSTANT on
+//            Standard / dealing-desk style groups.
 enum ExecutionMode {
   MARKET
   INSTANT
@@ -464,13 +462,22 @@ model TradingGroup {
   commissionType  GroupCommissionType @default(NONE)
   commissionValue Decimal             @default(0) @db.Decimal(18, 6)
 
-  // #2B: execution model for this group. INSTANT honours the clicked price or
-  // requotes; MARKET fills at market. `instantDeviationPoints` is the max the
-  // market may move from the client's quote (in points) before an INSTANT order
-  // is requoted; 0 falls back to the symbol's slippagePoints, and if that is
-  // also 0 any adverse move requotes (broker-safe default).
+  // #2B: execution model for this group.
+  //  INSTANT = fill at the price the client clicked / the pending or SL-TP
+  //            level (no requote) for the order kinds listed in executionApplyTo.
+  //  MARKET  = wait `executionDelayMs` then fill at the live market for those
+  //            kinds (0 ms = immediate market fill).
+  // `instantDeviationPoints` is retained for backwards compatibility; Instant
+  // fills always honour the reference price when the kind is selected.
   executionMode         ExecutionMode @default(MARKET)
   instantDeviationPoints Int          @default(0)
+  /// Intentional fill delay (ms) when executionMode = MARKET and the order kind
+  /// is selected in executionApplyTo. Order is placed after exactly this wait.
+  executionDelayMs      Int           @default(0)
+  /// Which order kinds use Instant honour / Market delay. JSON object with
+  /// boolean keys: marketBuy, marketSell, buyLimit, sellLimit, buyStop,
+  /// sellStop, sl, tp. Empty / missing keys default to true (apply to all).
+  executionApplyTo      Json          @default("{}")
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

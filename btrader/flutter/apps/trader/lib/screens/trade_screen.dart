@@ -100,7 +100,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
       volume: _volume,
       oneClick: oneClick,
       price: _type == OrderType.market
-          ? (_oneClick ? (side == 'BUY' ? q?.ask : q?.bid) : null)
+          ? (side == 'BUY' ? q?.ask : q?.bid)
           : double.tryParse(_price.text),
       stopPrice: _type.api.contains('STOP') ? double.tryParse(_price.text) : null,
       slPrice: double.tryParse(_sl.text),

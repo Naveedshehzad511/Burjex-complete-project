@@ -8,6 +8,27 @@ import { AuditService } from '../audit/audit.service';
 
 const PRICING_METHODS = new Set(['SPREAD_ONLY', 'COMMISSION_ONLY', 'SPREAD_AND_COMMISSION']);
 const COMMISSION_TYPES = new Set(['NONE', 'PER_LOT', 'PER_SIDE', 'ROUND_TURN', 'PERCENT']);
+const EXECUTION_APPLY_KEYS = [
+  'marketBuy',
+  'marketSell',
+  'buyLimit',
+  'sellLimit',
+  'buyStop',
+  'sellStop',
+  'sl',
+  'tp',
+] as const;
+
+/** Normalize admin body → Prisma JSON for TradingGroup.executionApplyTo. */
+function normalizeExecutionApplyTo(raw: unknown): Record<string, boolean> {
+  const src = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const out: Record<string, boolean> = {};
+  for (const k of EXECUTION_APPLY_KEYS) {
+    // Missing key ⇒ true (apply to all by default) so upgrades stay safe.
+    out[k] = src[k] === undefined ? true : !!src[k];
+  }
+  return out;
+}
 
 type MappingInput = {
   lpSymbol?: string;
@@ -134,10 +155,13 @@ export class GroupsController {
         slippagePoints: body.slippagePoints ?? 0,
         commissionType: body.commissionType ?? 'NONE',
         commissionValue: body.commissionValue ?? 0,
-        // #2B: execution model (MARKET default; INSTANT honours click / requotes).
+        // #2B: execution model (MARKET default; INSTANT honours click price 100%).
         executionMode: body.executionMode === 'INSTANT' ? 'INSTANT' : 'MARKET',
         instantDeviationPoints:
           body.instantDeviationPoints != null ? Math.max(0, Number(body.instantDeviationPoints) | 0) : 0,
+        executionDelayMs:
+          body.executionDelayMs != null ? Math.max(0, Number(body.executionDelayMs) | 0) : 0,
+        executionApplyTo: normalizeExecutionApplyTo(body.executionApplyTo),
         clientSymbolSuffix: body.clientSymbolSuffix?.trim() ? body.clientSymbolSuffix.trim() : null,
       },
     });
@@ -167,10 +191,16 @@ export class GroupsController {
       data.clientSymbolSuffix = body.clientSymbolSuffix?.trim() ? body.clientSymbolSuffix.trim() : null;
     }
     if (body.defaultBook !== undefined) data.defaultBook = body.defaultBook === 'A' ? 'A' : 'B';
-    // #2B: execution model + INSTANT requote tolerance.
+    // #2B: execution model + Instant honour / Market delay + per-kind apply flags.
     if (body.executionMode !== undefined) data.executionMode = body.executionMode === 'INSTANT' ? 'INSTANT' : 'MARKET';
     if (body.instantDeviationPoints !== undefined) {
       data.instantDeviationPoints = Math.max(0, Number(body.instantDeviationPoints) | 0);
+    }
+    if (body.executionDelayMs !== undefined) {
+      data.executionDelayMs = Math.max(0, Number(body.executionDelayMs) | 0);
+    }
+    if (body.executionApplyTo !== undefined) {
+      data.executionApplyTo = normalizeExecutionApplyTo(body.executionApplyTo);
     }
     const g = await prisma.tradingGroup.updateMany({ where: { id, tenantId: t.id }, data });
     if (g.count && Array.isArray(body.symbolMappings)) {

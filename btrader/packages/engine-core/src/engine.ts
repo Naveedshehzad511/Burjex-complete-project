@@ -51,6 +51,11 @@ import {
   withdrawableCash,
   GroupPricing,
   OpenPositionView,
+  executionApplies,
+  pendingTypeToApplyKind,
+  sleepMs,
+  type ExecutionApplyKind,
+  type ExecutionApplyTo,
 } from './calc';
 
 const d = (v: Prisma.Decimal | number | string | null | undefined): number =>
@@ -284,7 +289,16 @@ export class TradingEngine {
     sym: NonNullable<SymbolRow>,
     tenantId?: string,
   ): Promise<GroupPricing> {
-    const none: GroupPricing = { markupPoints: 0, slippagePoints: 0, commissionType: 'NONE', commissionValue: 0, executionMode: 'MARKET', instantDeviationPoints: 0 };
+    const none: GroupPricing = {
+      markupPoints: 0,
+      slippagePoints: 0,
+      commissionType: 'NONE',
+      commissionValue: 0,
+      executionMode: 'MARKET',
+      instantDeviationPoints: 0,
+      executionDelayMs: 0,
+      executionApplyTo: {},
+    };
     if (!groupId) return none;
     // Cache group + rules + symbol mappings (changes only on admin edit; ~5s TTL).
     const cached = this._groupCache.get(groupId);
@@ -370,9 +384,11 @@ export class TradingEngine {
       minSpreadPoints,
       maxSpreadPoints,
       pricingMethod,
-      // #2B: execution model — MARKET (fill at market) or INSTANT (honour click / requote).
+      // #2B: execution model — MARKET (delay then fill) or INSTANT (honour click / level).
       executionMode: (group.executionMode as 'MARKET' | 'INSTANT') ?? 'MARKET',
       instantDeviationPoints: group.instantDeviationPoints ?? 0,
+      executionDelayMs: Math.max(0, Number((group as { executionDelayMs?: number }).executionDelayMs ?? 0) | 0),
+      executionApplyTo: ((group as { executionApplyTo?: ExecutionApplyTo }).executionApplyTo ?? {}) as ExecutionApplyTo,
     };
   }
 
@@ -390,8 +406,26 @@ export class TradingEngine {
     // caps the fill at the limit (BUY at or below, SELL at or above). Undefined
     // for market and stop fills, which take the current price with slippage.
     clampWorstPrice?: number,
+    execOpts?: {
+      /** Which executionApplyTo flag to check (defaults from MARKET buy/sell). */
+      applyKind?: ExecutionApplyKind;
+      /** Pending Instant honour price (trigger / limit) when req.price is unset. */
+      honourPrice?: number;
+    },
   ): Promise<ExecutionResult> {
     const accountId = account.id;
+
+    // Trading-group pricing first — Instant honour / Market delay need it before
+    // we read the live book (delay must expire, then we sample the new price).
+    const pricing = await this.groupPricing(account.groupId, sym, tenantId);
+    const applyKind: ExecutionApplyKind =
+      execOpts?.applyKind ?? (req.side === 'BUY' ? 'marketBuy' : 'marketSell');
+    const applies = executionApplies(pricing.executionApplyTo, applyKind);
+
+    if (applies && pricing.executionMode === 'MARKET' && (pricing.executionDelayMs ?? 0) > 0) {
+      await sleepMs(pricing.executionDelayMs!);
+    }
+
     const px =
       req.side === 'BUY'
         ? this.deps.prices.buyPrice(tenantId, req.symbol)
@@ -426,19 +460,11 @@ export class TradingEngine {
       }
     }
 
-    // #2B: the one-click deviation cap and the INSTANT honour/requote decision
-    // are made together below, once the disclosed quote (withMarkup) is known —
-    // both compare against the price the client actually clicked.
-
     const stopReads = latency.start('order.exec.reads');
     // account is passed in from placeOrder — no duplicate fetch.
     // Strict: never open risk we cannot value in the account currency.
     const conv = this.quoteToAccountStrict(tenantId, account.currency, spec.quoteCurrency);
 
-    // Trading-group pricing: widen the client's fill by the group spread markup
-    // (broker edge) and compute the dealing commission. The raw LP price `px` is
-    // used for the A-book cover so the markup stays the broker's profit.
-    const pricing = await this.groupPricing(account.groupId, sym, tenantId);
     // Widen the fill by the news spread while active so fills match the widened
     // quote clients see (still the real price, just a wider — disclosed — spread).
     // When a Symbol Mapping prices this instrument, mapping markup is authoritative —
@@ -453,44 +479,22 @@ export class TradingEngine {
     // The disclosed quote the client sees for this side (LP price + all markups).
     const withMarkup = applyMarkup(req.side, px, totalMarkup, sym.digits);
 
-    // #2B: execution model. The INSTANT honour/requote path applies only to a
-    // client-submitted MARKET order carrying the price the trader clicked; a
-    // pending-order fill (clampWorstPrice != null) or an order with no reference
-    // price always fills at market, whatever the group's mode.
+    // Instant: honour the client's clicked price (or pending/SL honour price)
+    // 100% when this order kind is selected — no requote.
+    const honourRef = req.price ?? execOpts?.honourPrice;
     const instantEligible =
+      applies &&
       pricing.executionMode === 'INSTANT' &&
-      req.type === 'MARKET' &&
-      req.price != null &&
+      honourRef != null &&
       clampWorstPrice == null;
 
     let fillPrice: number;
     if (instantEligible) {
-      // Requote tolerance (points): group override, else the symbol's deviation
-      // cap, else 0 — meaning any adverse move requotes (broker-safe default).
-      const tol =
-        (pricing.instantDeviationPoints && pricing.instantDeviationPoints > 0
-          ? pricing.instantDeviationPoints
-          : sym.slippagePoints) || 0;
-      // Adverse = the current disclosed quote moved against the fill the broker
-      // would have to honour: a BUY now higher than clicked, a SELL now lower.
-      const bound = slippageBound(req.side, req.price!, tol, sym.digits);
-      const adverse = req.side === 'BUY' ? withMarkup > bound : withMarkup < bound;
-      if (adverse) {
-        throw new BtError(BtErrorCode.REQUOTE, 'price moved — please re-confirm the new price', {
-          symbol: sym.symbol,
-          side: req.side,
-          requestedPrice: req.price,
-          newPrice: roundPrice(withMarkup, sym.digits),
-          deviationPoints: tol,
-        });
-      }
-      // Within tolerance: honour exactly the clicked price. INSTANT applies no
-      // group execution slippage — filling at the quoted price is the guarantee.
-      fillPrice = roundPrice(req.price!, sym.digits);
+      fillPrice = roundPrice(honourRef!, sym.digits);
     } else {
-      // MARKET: enforce the one-click deviation cap (when the symbol sets one),
-      // then fill at market, worsened by the group's execution slippage (anti-HFT)
-      // — a BUY fills even higher, a SELL even lower.
+      // MARKET (or Instant not applicable): enforce the one-click deviation cap
+      // (when the symbol sets one), then fill at market, worsened by the group's
+      // execution slippage (anti-HFT) — a BUY fills even higher, a SELL even lower.
       if (req.oneClick && req.price != null && sym.slippagePoints > 0) {
         const bound = slippageBound(req.side, req.price, sym.slippagePoints, sym.digits);
         const worseThanBound = req.side === 'BUY' ? px > bound : px < bound;
@@ -502,10 +506,15 @@ export class TradingEngine {
     // the client set. Applied before commission/margin/position all read it, so
     // the clamped price is used consistently downstream.
     if (clampWorstPrice != null) {
-      const clamped = req.side === 'BUY'
-        ? Math.min(fillPrice, clampWorstPrice)
-        : Math.max(fillPrice, clampWorstPrice);
-      fillPrice = roundPrice(clamped, sym.digits);
+      // Instant on a limit: pin exactly at the limit when apply-to matches.
+      if (applies && pricing.executionMode === 'INSTANT') {
+        fillPrice = roundPrice(clampWorstPrice, sym.digits);
+      } else {
+        const clamped = req.side === 'BUY'
+          ? Math.min(fillPrice, clampWorstPrice)
+          : Math.max(fillPrice, clampWorstPrice);
+        fillPrice = roundPrice(clamped, sym.digits);
+      }
     }
     const commission = dealingCommission(pricing, volume, spec, fillPrice, conv);
     const margin = requiredMargin(volume, spec, fillPrice, account.leverage, conv);
@@ -1340,6 +1349,8 @@ export class TradingEngine {
        * the normal pricing run on top.
        */
       protectiveLevel?: number;
+      /** Which protective kind fired — drives Instant honour / Market delay. */
+      protectiveKind?: 'sl' | 'tp';
     },
   ): Promise<ExecutionResult> {
     const pos = await prisma.position.findFirst({
@@ -1350,10 +1361,27 @@ export class TradingEngine {
     const sym = pos.symbol;
     const spec = specOf(sym);
 
+    const override = opts?.closePriceOverride;
+    const pricing =
+      override == null ? await this.groupPricing(pos.account.groupId, sym, tenantId) : null;
+    const protectiveKind = opts?.protectiveKind;
+    const appliesProtective =
+      pricing != null &&
+      protectiveKind != null &&
+      executionApplies(pricing.executionApplyTo, protectiveKind);
+
+    // Market execution delay for SL/TP when the group selects those kinds.
+    if (
+      appliesProtective &&
+      pricing!.executionMode === 'MARKET' &&
+      (pricing!.executionDelayMs ?? 0) > 0
+    ) {
+      await sleepMs(pricing!.executionDelayMs!);
+    }
+
     // A dealer (admin) close can override the fill price for slippage /
     // compensation; otherwise close at market — a BUY hits bid, a SELL hits ask.
-    const override = opts?.closePriceOverride;
-    const px = (override != null && override > 0)
+    let px = (override != null && override > 0)
       ? override
       : (pos.side === 'BUY'
           ? this.deps.prices.sellPrice(tenantId, sym.symbol)
@@ -1376,14 +1404,18 @@ export class TradingEngine {
     // that side moves the price the adverse way (BUY position → sell lower;
     // SELL position → buy higher).
     let closePx = px2;
-    if (override == null) {
-      const pricing = await this.groupPricing(pos.account.groupId, sym, tenantId);
-      // Apply mapping/group spread markup + anti-HFT slippage so close matches
-      // the client-facing quote (BUY hits worsened bid, SELL hits worsened ask).
-      const closeSide: OrderSide = pos.side === 'BUY' ? 'SELL' : 'BUY';
-      const total = (pricing.markupPoints || 0) + (pricing.slippagePoints || 0);
-      if (total !== 0) {
-        closePx = applyMarkup(closeSide, px2, total, sym.digits);
+    if (override == null && pricing) {
+      // Instant SL/TP: honour the protective level 100% (no markup / slippage).
+      if (appliesProtective && pricing.executionMode === 'INSTANT' && lvl != null && lvl > 0) {
+        closePx = lvl;
+      } else {
+        // Apply mapping/group spread markup + anti-HFT slippage so close matches
+        // the client-facing quote (BUY hits worsened bid, SELL hits worsened ask).
+        const closeSide: OrderSide = pos.side === 'BUY' ? 'SELL' : 'BUY';
+        const total = (pricing.markupPoints || 0) + (pricing.slippagePoints || 0);
+        if (total !== 0) {
+          closePx = applyMarkup(closeSide, px2, total, sym.digits);
+        }
       }
     }
     const closePrice = roundPrice(closePx, sym.digits);
@@ -2031,6 +2063,11 @@ export class TradingEngine {
       }
 
       const clampPrice = isLimitFillType(o.type) && o.price != null ? o.price : undefined;
+      const applyKind = pendingTypeToApplyKind(String(o.type), String(o.side)) ?? undefined;
+      const honourPrice =
+        applyKind === 'buyStop' || applyKind === 'sellStop'
+          ? (o.stopPrice ?? o.price ?? undefined)
+          : (o.price ?? o.stopPrice ?? undefined);
       try {
         const fill = await this.executeMarket(
           tenantId,
@@ -2043,12 +2080,14 @@ export class TradingEngine {
             side: o.side as OrderSide,
             type: 'MARKET',
             volume: o.volume,
+            price: honourPrice ?? undefined,
             slPrice: o.slPrice ?? undefined,
             tpPrice: o.tpPrice ?? undefined,
             source: 'api',
           },
           o.volume,
           clampPrice,
+          { applyKind, honourPrice: honourPrice ?? undefined },
         );
         const filled = await prisma.order.update({
           where: { id: o.id },
@@ -2112,6 +2151,7 @@ export class TradingEngine {
         counters.inc(hit.hit === 'SL' ? 'order.sl_fired' : 'order.tp_fired');
         await this.closePosition(tenantId, p.id, undefined, {
           protectiveLevel: hit.level == null ? undefined : Number(hit.level),
+          protectiveKind: hit.hit === 'SL' ? 'sl' : 'tp',
         }).catch(() => undefined);
       }
     }

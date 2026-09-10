@@ -50,11 +50,19 @@ class BtConfig {
     if (_envApiBase.isNotEmpty) {
       return _envApiBase.replaceAll(RegExp(r'/+$'), '');
     }
+    // Web builds are served behind Caddy on portal/admin.burjexprime.net —
+    // same-origin /v1 (no hardcoded :4100, which breaks HTTPS / mixed content).
+    if (kIsWeb) return Uri.base.origin;
     return 'http://$resolvedHost:$apiPort';
   }
 
   static String get wsUrl {
     if (_envWsUrl.isNotEmpty) return _envWsUrl;
+    if (kIsWeb) {
+      final u = Uri.base;
+      final scheme = u.scheme == 'https' ? 'wss' : 'ws';
+      return '$scheme://${u.host}${u.hasPort ? ':${u.port}' : ''}';
+    }
     return 'ws://$resolvedHost:$wsPort';
   }
 }

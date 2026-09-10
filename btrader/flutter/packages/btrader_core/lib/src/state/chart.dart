@@ -184,7 +184,7 @@ class FormingCandleNotifier extends StateNotifier<FormingCandle?> {
     _ref.listen<Tick?>(
       quotesProvider.select((m) => m[_req.symbol]),
       (_, t) {
-        if (t != null) _onPrice(t.bid);
+        if (t != null) _onPrice(t);
       },
       fireImmediately: true,
     );
@@ -196,11 +196,20 @@ class FormingCandleNotifier extends StateNotifier<FormingCandle?> {
   final ChartReq _req;
   Timer? _timer;
 
-  int get _nowBucket => _req.tf.bucketStart(DateTime.now().millisecondsSinceEpoch ~/ 1000);
+  /// Prefer the tick's market timestamp so the forming bar stays locked to the
+  /// same clock as the server candle buckets (avoids price-line / candle drift
+  /// when the device clock is skewed).
+  int _bucketFor(Tick? t) {
+    var ts = t?.ts ?? 0;
+    if (ts > 1000000000000) ts = ts ~/ 1000; // ms → sec
+    if (ts <= 0) ts = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return _req.tf.bucketStart(ts);
+  }
 
-  void _onPrice(double mid) {
+  void _onPrice(Tick tick) {
+    final mid = tick.bid;
     final cur = state;
-    final b = _nowBucket;
+    final b = _bucketFor(tick);
     if (cur == null) {
       // First tick after opening the chart / changing timeframe. Seed from the
       // server's own current-bucket bar (market-data flushes the partial bar) so
@@ -237,7 +246,8 @@ class FormingCandleNotifier extends StateNotifier<FormingCandle?> {
   void _roll() {
     final cur = state;
     if (cur == null) return;
-    final b = _nowBucket;
+    final tick = _ref.read(quotesProvider)[_req.symbol];
+    final b = _bucketFor(tick);
     if (b > cur.bucket) {
       // Time advanced without a tick → open a flat bar at the last close (MT5
       // shows a doji until the next tick moves it).
