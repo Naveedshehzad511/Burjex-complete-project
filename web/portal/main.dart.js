@@ -60475,8 +60475,8 @@ e=d8.y
 d=A.ber(f,d8.z,e)
 f=J.V(k)
 c=f.gae(k)?0:f.gad(k).e
-b=d8.a.f
-if(b==null)b=c
+b=c
+if(b==null||b===0)b=d8.a.f
 a=d.a-d.b
 if(a===0)a=1
 a0=new A.aM9(k,a)
@@ -60519,7 +60519,7 @@ b5=d8.gaAM()
 b8=d8.a
 b9=b8.d
 c0=b8.e
-c1=b8.f
+c1=b
 c2=b8.r
 c3=b8.w
 c4=d8.db
@@ -60804,9 +60804,8 @@ $1(a){var s,r,q,p,o,n,m=this,l={},k=m.a
 if(a.a>=k.r)return
 s=m.b.$1(a)
 if(s!=null){if(s.e!=k.db)m.c.$1(s)
-return}if(k.db!=null){r=m.b.c
-q=a.b
-if(!(k.dx!=null&&Math.abs(q-r.$1(k.dx))<=36)&&!(k.dy!=null&&Math.abs(q-r.$1(k.dy))<=36)&&!(k.k1!=null&&Math.abs(q-r.$1(k.k1))<=36))k.MG()}
+else if(k.db!=null)k.MG()
+return}if(k.db!=null)k.MG()
 l.a=null
 for(r=k.a.Q,q=r.length,p=m.d,o=0;o<r.length;r.length===q||(0,A.D)(r),++o){n=r[o]
 if(p.$2(n,a)){l.a=n.a
@@ -60823,7 +60822,7 @@ p=s.$1(p)
 q=q.dy
 q.toString
 r=Math.abs(p-s.$1(q))
-return r>=56?56:Math.max(26,r)},
+return r>=56?56:Math.max(44,r)},
 $S:74}
 A.aMd.prototype={
 $1(a){var s=this,r=s.a
