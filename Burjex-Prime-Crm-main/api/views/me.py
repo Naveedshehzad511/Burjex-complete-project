@@ -13,6 +13,10 @@ from api.serializers.common import UserSerializer
 from api.services.treasury_service import wallet_summary
 
 
+# Set once at signup; clients cannot change these via PATCH /me/ afterwards.
+_IDENTITY_FIELDS = ("first_name", "last_name", "phone", "country", "address")
+
+
 class MeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -21,7 +25,8 @@ class MeAPIView(APIView):
             {
                 "user": UserSerializer(request.user, context={"request": request}).data,
                 "wallet": wallet_summary(request.user) if request.user.is_user() else None,
-                "identity_locked": request.user.mt5_accounts.exists(),
+                # Always locked after registration — edit only via admin/support.
+                "identity_locked": True,
             },
             message="Profile retrieved successfully.",
         )
@@ -31,22 +36,22 @@ class MeAPIView(APIView):
         if not ser.is_valid():
             return validation_error_response(ser.errors)
         user = request.user
-        identity_locked = user.mt5_accounts.exists()
-        changed = []
-        for field in ("first_name", "last_name", "phone", "country", "address"):
-            if field in ser.validated_data:
-                if identity_locked:
-                    continue
-                setattr(user, field, ser.validated_data[field])
-                changed.append(field)
-        if changed:
-            user.save(update_fields=changed)
+        blocked = {
+            field: ["Personal details cannot be changed after account creation. Contact support."]
+            for field in _IDENTITY_FIELDS
+            if field in ser.validated_data
+        }
+        if blocked:
+            return validation_error_response(
+                blocked,
+                message="Personal details cannot be changed after account creation.",
+            )
         return success_response(
             {
                 "user": UserSerializer(user, context={"request": request}).data,
-                "identity_locked": identity_locked,
+                "identity_locked": True,
             },
-            message="Profile updated successfully.",
+            message="No profile fields updated.",
         )
 
 

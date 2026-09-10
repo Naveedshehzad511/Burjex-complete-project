@@ -123070,29 +123070,11 @@ break
 case 6:case 1:return A.n(q,r)
 case 2:return A.m(o.at(-1),r)}})
 return A.o($async$zD,r)},
-FU(){var s=0,r=A.q(t.H),q,p=2,o=[],n=this,m,l,k,j
-var $async$FU=A.r(function(a,b){if(a===1){o.push(b)
-s=p}for(;;)switch(s){case 0:n.u(new A.aZQ(n))
-p=4
-s=7
-return A.i(n.d.JS("/me/",A.ac(["first_name",B.c.ai(n.e.a.a),"last_name",B.c.ai(n.f.a.a),"phone",B.c.ai(n.r.a.a),"country",B.c.ai(n.w.a.a),"address",B.c.ai(n.x.a.a)],t.N,t.z)),$async$FU)
-case 7:m=b
-if(n.c==null){s=1
-break}n.u(new A.aZR(n,m))
-p=2
-s=6
-break
-case 4:p=3
-j=o.pop()
-l=A.W(j)
-if(n.c==null){s=1
-break}n.u(new A.aZS(n,l))
-s=6
-break
-case 3:s=2
-break
-case 6:case 1:return A.n(q,r)
-case 2:return A.m(o.at(-1),r)}})
+FU(){var s=0,r=A.q(t.H),q,n=this
+var $async$FU=A.r(function(a,b){if(a===1)return A.m(b,r)
+while(true)switch(s){case 0:n.u(new A.aZQ(n))
+n.u(new A.aZS(n,A.W("Personal details cannot be changed after account creation.")))
+return A.n(q,r)}})
 return A.o($async$FU,r)},
 FT(){var s=0,r=A.q(t.H),q,p=2,o=[],n=this,m,l,k,j,i,h
 var $async$FT=A.r(function(a,b){if(a===1){o.push(b)
@@ -123143,17 +123125,17 @@ q=A.b([q,p,B.a0,A.yk(A.b([new A.hB(o,l),new A.hB("KYC "+A.f(n==null?"":n),l)],s)
 p=m.ch
 if(p.gbV(p)){p=m.ch.h(0,"available_balance")
 B.b.O(q,A.b([B.a0,A.B("Wallet: "+A.d8(p==null?m.ch.h(0,"wallet_balance"):p,"USD"),l,l,l,l,l,l,l,l)],s))}r.push(new A.bR(A.aC(q,B.B,B.f,B.j),l))
-r.push(A.bT(B.F,!1,m.e,A.bM("First name",l),l,l,l,1,!1,l,l,l,l,B.r,l))
+r.push(A.bT(B.F,!0,m.e,A.bM("First name",l),l,l,l,1,!1,l,l,l,l,B.r,l))
 r.push(B.a5)
-r.push(A.bT(B.F,!1,m.f,A.bM("Last name",l),l,l,l,1,!1,l,l,l,l,B.r,l))
+r.push(A.bT(B.F,!0,m.f,A.bM("Last name",l),l,l,l,1,!1,l,l,l,l,B.r,l))
 r.push(B.a5)
-r.push(A.bT(B.F,!1,m.r,A.bM("Phone",l),l,l,l,1,!1,l,l,l,l,B.r,l))
+r.push(A.bT(B.F,!0,m.r,A.bM("Phone",l),l,l,l,1,!1,l,l,l,l,B.r,l))
 r.push(B.a5)
-r.push(A.bT(B.F,!1,m.w,A.bM("Country",l),l,l,l,1,!1,l,l,l,l,B.r,l))
+r.push(A.bT(B.F,!0,m.w,A.bM("Country",l),l,l,l,1,!1,l,l,l,l,B.r,l))
 r.push(B.a5)
-r.push(A.bT(B.F,!1,m.x,A.bM("Address",l),l,l,l,2,!1,l,l,l,l,B.r,l))
-r.push(B.bE)
-r.push(A.fo(l,"Save Profile",m.as,m.gaA4()))
+r.push(A.bT(B.F,!0,m.x,A.bM("Address",l),l,l,l,2,!1,l,l,l,l,B.r,l))
+r.push(B.a5)
+r.push(A.B(A.f("Name, phone, country and address cannot be edited after account creation."),l,l,l,l,B.ce,l,l,l))
 r.push(B.is)
 r.push(B.acx)
 r.push(B.a5)
