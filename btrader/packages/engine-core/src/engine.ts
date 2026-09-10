@@ -53,7 +53,8 @@ import {
   OpenPositionView,
   executionApplies,
   pendingTypeToApplyKind,
-  sleepMs,
+  sleepUntil,
+  marketExecutionDelayMs,
   type ExecutionApplyKind,
   type ExecutionApplyTo,
 } from './calc';
@@ -417,13 +418,16 @@ export class TradingEngine {
 
     // Trading-group pricing first — Instant honour / Market delay need it before
     // we read the live book (delay must expire, then we sample the new price).
+    // Clock starts here so DB pricing latency overlaps the configured wait and
+    // every MARKET fill of the same delay lands on the same absolute deadline.
+    const delayClock = performance.now();
     const pricing = await this.groupPricing(account.groupId, sym, tenantId);
     const applyKind: ExecutionApplyKind =
       execOpts?.applyKind ?? (req.side === 'BUY' ? 'marketBuy' : 'marketSell');
     const applies = executionApplies(pricing.executionApplyTo, applyKind);
-
-    if (applies && pricing.executionMode === 'MARKET' && (pricing.executionDelayMs ?? 0) > 0) {
-      await sleepMs(pricing.executionDelayMs!);
+    const delayMs = marketExecutionDelayMs(pricing, applyKind);
+    if (delayMs > 0) {
+      await sleepUntil(delayClock + delayMs);
     }
 
     const px =
@@ -1351,8 +1355,14 @@ export class TradingEngine {
       protectiveLevel?: number;
       /** Which protective kind fired — drives Instant honour / Market delay. */
       protectiveKind?: 'sl' | 'tp';
+      /**
+       * Skip MARKET delay (e.g. closeAll already waited once for the batch,
+       * or stop-out must not wait).
+       */
+      skipExecutionDelay?: boolean;
     },
   ): Promise<ExecutionResult> {
+    const delayClock = performance.now();
     const pos = await prisma.position.findFirst({
       where: { id: positionId, tenantId, status: 'OPEN' },
       include: { symbol: true, account: true },
@@ -1370,13 +1380,20 @@ export class TradingEngine {
       protectiveKind != null &&
       executionApplies(pricing.executionApplyTo, protectiveKind);
 
-    // Market execution delay for SL/TP when the group selects those kinds.
+    // MARKET delay: SL/TP use protective flags; manual / close-all use exit side
+    // (BUY pos → marketSell, SELL pos → marketBuy) — same ms as group config.
+    // Stop-out and dealer overrides skip. closeAll pre-waits then passes skip.
     if (
-      appliesProtective &&
-      pricing!.executionMode === 'MARKET' &&
-      (pricing!.executionDelayMs ?? 0) > 0
+      pricing != null &&
+      !opts?.skipExecutionDelay &&
+      !opts?.floorBalanceAtZero
     ) {
-      await sleepMs(pricing!.executionDelayMs!);
+      const delayKind: ExecutionApplyKind =
+        protectiveKind ?? (pos.side === 'BUY' ? 'marketSell' : 'marketBuy');
+      const delayMs = marketExecutionDelayMs(pricing, delayKind);
+      if (delayMs > 0) {
+        await sleepUntil(delayClock + delayMs);
+      }
     }
 
     // A dealer (admin) close can override the fill price for slippage /
@@ -1556,14 +1573,35 @@ export class TradingEngine {
   }
 
   async closeAll(tenantId: string, accountId: string): Promise<number> {
+    const delayClock = performance.now();
     const open = await prisma.position.findMany({
       where: { tenantId, accountId, status: 'OPEN' },
-      select: { id: true },
+      include: { symbol: true, account: { select: { groupId: true } } },
     });
+    if (open.length === 0) return 0;
+
+    // One shared MARKET wait for the whole batch so position #1 and #N close
+    // on the same clock — sequential per-position sleeps caused staggered fills.
+    let maxDelay = 0;
+    try {
+      const sample = open[0];
+      const pricing = await this.groupPricing(sample.account.groupId, sample.symbol, tenantId);
+      for (const p of open) {
+        const delayKind: ExecutionApplyKind =
+          p.side === 'BUY' ? 'marketSell' : 'marketBuy';
+        maxDelay = Math.max(maxDelay, marketExecutionDelayMs(pricing, delayKind));
+      }
+    } catch {
+      maxDelay = 0;
+    }
+    if (maxDelay > 0) {
+      await sleepUntil(delayClock + maxDelay);
+    }
+
     let closed = 0;
     for (const p of open) {
       try {
-        await this.closePosition(tenantId, p.id);
+        await this.closePosition(tenantId, p.id, undefined, { skipExecutionDelay: true });
         closed++;
       } catch {
         /* skip positions with no price; retried next call */
@@ -2138,7 +2176,14 @@ export class TradingEngine {
     const ask = this.deps.prices.buyPrice(tenantId, symbol);
     if (bid == null || ask == null) return;
 
+    const delayClock = performance.now();
     const open = this.book.forSymbol(tenantId, sym.id);
+    type Hit = {
+      id: string;
+      kind: 'sl' | 'tp';
+      level?: number;
+    };
+    const hits: Hit[] = [];
     for (const p of open) {
       const hit = protectiveHit({
         side: p.side,
@@ -2149,11 +2194,49 @@ export class TradingEngine {
       });
       if (hit.hit) {
         counters.inc(hit.hit === 'SL' ? 'order.sl_fired' : 'order.tp_fired');
-        await this.closePosition(tenantId, p.id, undefined, {
-          protectiveLevel: hit.level == null ? undefined : Number(hit.level),
-          protectiveKind: hit.hit === 'SL' ? 'sl' : 'tp',
-        }).catch(() => undefined);
+        hits.push({
+          id: p.id,
+          kind: hit.hit === 'SL' ? 'sl' : 'tp',
+          level: hit.level == null ? undefined : Number(hit.level),
+        });
       }
+    }
+    if (hits.length === 0) return;
+
+    // One shared MARKET wait for every SL/TP that fired on this tick — avoids
+    // N×delay when hundreds of positions trip together. Different accounts may
+    // have different groups; take the max so nobody fills early.
+    let maxDelay = 0;
+    const pricingByGroup = new Map<string, GroupPricing>();
+    try {
+      for (const h of hits) {
+        const row = open.find((p) => p.id === h.id);
+        if (!row?.accountId) continue;
+        const acct = await prisma.account.findFirst({
+          where: { id: row.accountId, tenantId },
+          select: { groupId: true },
+        });
+        if (!acct?.groupId) continue;
+        let pricing = pricingByGroup.get(acct.groupId);
+        if (!pricing) {
+          pricing = await this.groupPricing(acct.groupId, sym, tenantId);
+          pricingByGroup.set(acct.groupId, pricing);
+        }
+        maxDelay = Math.max(maxDelay, marketExecutionDelayMs(pricing, h.kind));
+      }
+    } catch {
+      maxDelay = 0;
+    }
+    if (maxDelay > 0) {
+      await sleepUntil(delayClock + maxDelay);
+    }
+
+    for (const h of hits) {
+      await this.closePosition(tenantId, h.id, undefined, {
+        protectiveLevel: h.level,
+        protectiveKind: h.kind,
+        skipExecutionDelay: true,
+      }).catch(() => undefined);
     }
   }
 

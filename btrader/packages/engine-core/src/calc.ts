@@ -129,10 +129,37 @@ export function pendingTypeToApplyKind(type: string, side: string): ExecutionApp
   return null;
 }
 
-export function sleepMs(ms: number): Promise<void> {
-  const n = Math.max(0, Math.floor(ms));
-  if (n <= 0) return Promise.resolve();
-  return new Promise((resolve) => setTimeout(resolve, n));
+/**
+ * Wait until an absolute deadline (`performance.now()` ms).
+ * Coarse `setTimeout` plus short re-checks so MARKET delays stay near the
+ * configured ms without busy-spinning the event loop (critical at high fill rates).
+ */
+export async function sleepUntil(deadlineMs: number): Promise<void> {
+  for (;;) {
+    const left = deadlineMs - performance.now();
+    if (left <= 0) return;
+    // Leave a 1ms cushion so the next wake lands on/after the deadline.
+    const wait = left > 16 ? Math.floor(left - 1) : Math.max(1, Math.ceil(left));
+    await new Promise<void>((resolve) => setTimeout(resolve, wait));
+  }
+}
+
+/** Wait exactly `ms` from now (wall-clock via performance.now). */
+export async function sleepMs(ms: number): Promise<void> {
+  const n = Math.max(0, Number(ms) || 0);
+  if (n <= 0) return;
+  await sleepUntil(performance.now() + n);
+}
+
+/** MARKET-mode delay in ms for a given apply-to kind (0 when Instant / not selected). */
+export function marketExecutionDelayMs(
+  pricing: Pick<GroupPricing, 'executionMode' | 'executionDelayMs' | 'executionApplyTo'> | null | undefined,
+  kind: ExecutionApplyKind,
+): number {
+  if (!pricing) return 0;
+  if ((pricing.executionMode ?? 'MARKET') !== 'MARKET') return 0;
+  if (!executionApplies(pricing.executionApplyTo, kind)) return 0;
+  return Math.max(0, Math.floor(Number(pricing.executionDelayMs) || 0));
 }
 
 export interface GroupPricing {
