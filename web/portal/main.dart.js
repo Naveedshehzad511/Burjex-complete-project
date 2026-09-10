@@ -60542,19 +60542,19 @@ p.toString
 p=a2.$1(p)
 f=b2.$0()
 b8=b2.$0()
-e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLi(d8),d7,new A.aLj(d8),new A.aLk(d8),new A.aLl(d8,h,a,a5,b3,b4),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,new A.aLi(d8),new A.aLj(d8),new A.aLk(d8),new A.aLl(d8,h,a,a5,b3,b4)),b8,d7,0,d7,p-f/2,s))}if(d8.db!=null&&d8.dx!=null){s=d8.r
+e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLi(d8),d7,new A.aLj(d8),new A.aLk(d8),new A.aLl(d8,h,a,a5,b3,b4),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,new A.aLi(d8),new A.aLj(d8),new A.aLk(d8),new A.aLl(d8,h,a,a5,b3,b4)),b8,d7,s-96,d7,p-f/2,96))}if(d8.db!=null&&d8.dx!=null){s=d8.r
 p=d8.dx
 p.toString
 p=a2.$1(p)
 f=b2.$0()
 b8=b2.$0()
-e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLm(d8),d7,new A.aLn(d8),new A.aLo(d8,b3),new A.aLp(d8,h,a,a5,b3),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,new A.aLm(d8),new A.aLn(d8),new A.aLo(d8,b3),new A.aLp(d8,h,a,a5,b3)),b8,d7,0,d7,p-f/2,s))}if(d8.db!=null&&d8.dy!=null){s=d8.r
+e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLm(d8),d7,new A.aLn(d8),new A.aLo(d8,b3),new A.aLp(d8,h,a,a5,b3),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,new A.aLm(d8),new A.aLn(d8),new A.aLo(d8,b3),new A.aLp(d8,h,a,a5,b3)),b8,d7,s-96,d7,p-f/2,96))}if(d8.db!=null&&d8.dy!=null){s=d8.r
 p=d8.dy
 p.toString
 p=a2.$1(p)
 f=b2.$0()
 b8=b2.$0()
-e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLq(d8),d7,new A.aLr(d8),new A.aLt(d8,b4),new A.aLu(d8,h,a,a5,b4),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,new A.aLq(d8),new A.aLr(d8),new A.aLt(d8,b4),new A.aLu(d8,h,a,a5,b4)),b8,d7,0,d7,p-f/2,s))}if(d8.db!=null){s=A.v(d4).ax.k2.cZ(0.96)
+e.push(A.iG(d7,A.ib(B.ax,d7,B.a3,!1,d7,d7,new A.aLq(d8),d7,new A.aLr(d8),new A.aLt(d8,b4),new A.aLu(d8,h,a,a5,b4),d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,d7,new A.aLq(d8),new A.aLr(d8),new A.aLt(d8,b4),new A.aLu(d8,h,a,a5,b4)),b8,d7,s-96,d7,p-f/2,96))}if(d8.db!=null){s=A.v(d4).ax.k2.cZ(0.96)
 p=A.bb(10)
 f=A.v(d4)
 b8=A.b([],d5)
@@ -60822,7 +60822,7 @@ p=s.$1(p)
 q=q.dy
 q.toString
 r=Math.abs(p-s.$1(q))
-return r>=56?56:Math.max(44,r)},
+return r>=56?56:Math.max(32,r)},
 $S:74}
 A.aMd.prototype={
 $1(a){var s=this,r=s.a
