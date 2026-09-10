@@ -163,17 +163,20 @@ services:
   btrader-gateway:
     build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: gateway-api } }
     image: burjex/btrader-gateway:net
-    container_name: bxnet_bt_gateway
+    # No fixed container_name — allows --scale and Caddy DNS round-robin on btrader-gateway
     <<: *restart
     expose: ['4100']
     env_file: .env.github
     environment:
       NODE_ENV: production
       API_PORT: '4100'
-      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public
+      # Larger pool for concurrent fills (15k-oriented). Tune with Pg max_connections.
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=40&pool_timeout=30
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
       CHART_PROVIDER: ${CHART_PROVIDER:-internal}
       BROKER_UTC_OFFSET_SEC: ${BROKER_UTC_OFFSET_SEC:-10800}
+      ORDER_RATE_MAX: ${ORDER_RATE_MAX:-40}
+      ORDER_RATE_WINDOW_MS: ${ORDER_RATE_WINDOW_MS:-1000}
     command: >-
       sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
       cd /app/apps/gateway-api && exec node dist/main.js"
@@ -187,7 +190,7 @@ services:
   btrader-ws:
     build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: ws-gateway } }
     image: burjex/btrader-ws:net
-    container_name: bxnet_bt_ws
+    # No fixed container_name — allows --scale and Caddy DNS round-robin on btrader-ws
     <<: *restart
     expose: ['4101']
     env_file: .env.github
@@ -207,8 +210,13 @@ services:
     env_file: .env.github
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=40&pool_timeout=30
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+      ENGINE_FAST_INTERVAL_MS: ${ENGINE_FAST_INTERVAL_MS:-40}
+      ENGINE_TICK_INTERVAL_MS: ${ENGINE_TICK_INTERVAL_MS:-200}
+      ENGINE_TICK_CONCURRENCY: ${ENGINE_TICK_CONCURRENCY:-8}
+      ORDER_RATE_MAX: ${ORDER_RATE_MAX:-40}
+      ORDER_RATE_WINDOW_MS: ${ORDER_RATE_WINDOW_MS:-1000}
     depends_on:
       btrader-postgres: { condition: service_healthy }
       btrader-redis: { condition: service_healthy }

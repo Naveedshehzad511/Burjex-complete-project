@@ -58,6 +58,7 @@ import {
   type ExecutionApplyKind,
   type ExecutionApplyTo,
 } from './calc';
+import { AccountExclusiveQueue, AccountOrderRateLimiter } from './account-queue';
 
 const d = (v: Prisma.Decimal | number | string | null | undefined): number =>
   v == null ? 0 : typeof v === 'number' ? v : Number(v);
@@ -148,6 +149,11 @@ function toBookRow(r: Record<string, unknown>, accountCurrency: string): BookRow
 export class TradingEngine {
   constructor(private readonly deps: EngineDeps) {}
 
+  /** Per-account FIFO mailbox (in-process actor-style queue). */
+  private readonly accountQueue = new AccountExclusiveQueue();
+  /** Per-account open/close flood guard. */
+  private readonly orderRate = new AccountOrderRateLimiter();
+
   private readonly _groupCache = new TtlCache<Prisma.TradingGroupGetPayload<{
     include: { rules: true; symbolMappings: true };
   }> | null>(_CONFIG_TTL_MS);
@@ -156,6 +162,16 @@ export class TradingEngine {
 
   // ── PLACE ORDER ───────────────────────────────────────────────────────────
   async placeOrder(tenantId: string, req: PlaceOrderRequest): Promise<ExecutionResult> {
+    return this.accountQueue.run(String(req.accountId), () => this.placeOrderExclusive(tenantId, req));
+  }
+
+  private async placeOrderExclusive(tenantId: string, req: PlaceOrderRequest): Promise<ExecutionResult> {
+    if (!this.orderRate.allow(String(req.accountId))) {
+      throw new BtError(
+        BtErrorCode.RATE_LIMITED,
+        `order rate limit — max ${process.env.ORDER_RATE_MAX ?? 40} orders per ${process.env.ORDER_RATE_WINDOW_MS ?? 1000}ms for this account`,
+      );
+    }
     const stopValidate = latency.start('order.validate');
     // Account + symbol are independent reads — fetch them in parallel.
     const [account, sym] = await Promise.all([
@@ -1360,6 +1376,36 @@ export class TradingEngine {
        * or stop-out must not wait).
        */
       skipExecutionDelay?: boolean;
+      /** When set, skip the account lookup used only to queue (batch already holds id). */
+      accountIdForQueue?: string;
+    },
+  ): Promise<ExecutionResult> {
+    // Resolve account for FIFO queue; prefer caller-provided id to avoid double fetch.
+    let accountId = opts?.accountIdForQueue;
+    if (!accountId) {
+      const row = await prisma.position.findFirst({
+        where: { id: positionId, tenantId, status: 'OPEN' },
+        select: { accountId: true },
+      });
+      if (!row) throw new BtError(BtErrorCode.POSITION_NOT_FOUND);
+      accountId = row.accountId;
+    }
+    return this.accountQueue.run(accountId, () =>
+      this.closePositionExclusive(tenantId, positionId, closeVolume, opts),
+    );
+  }
+
+  private async closePositionExclusive(
+    tenantId: string,
+    positionId: string,
+    closeVolume?: number,
+    opts?: {
+      floorBalanceAtZero?: boolean;
+      closePriceOverride?: number;
+      protectiveLevel?: number;
+      protectiveKind?: 'sl' | 'tp';
+      skipExecutionDelay?: boolean;
+      accountIdForQueue?: string;
     },
   ): Promise<ExecutionResult> {
     const delayClock = performance.now();
@@ -1368,6 +1414,18 @@ export class TradingEngine {
       include: { symbol: true, account: true },
     });
     if (!pos) throw new BtError(BtErrorCode.POSITION_NOT_FOUND);
+    // Flood guard for manual closes only (SL/TP/stop-out/closeAll skip).
+    if (
+      !opts?.floorBalanceAtZero &&
+      opts?.protectiveKind == null &&
+      !opts?.skipExecutionDelay &&
+      !this.orderRate.allow(pos.accountId)
+    ) {
+      throw new BtError(
+        BtErrorCode.RATE_LIMITED,
+        `order rate limit — max ${process.env.ORDER_RATE_MAX ?? 40} mutations per ${process.env.ORDER_RATE_WINDOW_MS ?? 1000}ms for this account`,
+      );
+    }
     const sym = pos.symbol;
     const spec = specOf(sym);
 
@@ -1573,6 +1631,10 @@ export class TradingEngine {
   }
 
   async closeAll(tenantId: string, accountId: string): Promise<number> {
+    return this.accountQueue.run(accountId, () => this.closeAllExclusive(tenantId, accountId));
+  }
+
+  private async closeAllExclusive(tenantId: string, accountId: string): Promise<number> {
     const delayClock = performance.now();
     const open = await prisma.position.findMany({
       where: { tenantId, accountId, status: 'OPEN' },
@@ -1601,7 +1663,11 @@ export class TradingEngine {
     let closed = 0;
     for (const p of open) {
       try {
-        await this.closePosition(tenantId, p.id, undefined, { skipExecutionDelay: true });
+        // Already inside account queue — call exclusive path directly.
+        await this.closePositionExclusive(tenantId, p.id, undefined, {
+          skipExecutionDelay: true,
+          accountIdForQueue: accountId,
+        });
         closed++;
       } catch {
         /* skip positions with no price; retried next call */
@@ -1612,6 +1678,22 @@ export class TradingEngine {
 
   // ── MODIFY SL/TP ──────────────────────────────────────────────────────────
   async modifyPosition(
+    tenantId: string,
+    positionId: string,
+    sl?: number | null,
+    tp?: number | null,
+  ): Promise<void> {
+    const peek = await prisma.position.findFirst({
+      where: { id: positionId, tenantId, status: 'OPEN' },
+      select: { accountId: true },
+    });
+    if (!peek) throw new BtError(BtErrorCode.POSITION_NOT_FOUND);
+    return this.accountQueue.run(peek.accountId, () =>
+      this.modifyPositionExclusive(tenantId, positionId, sl, tp),
+    );
+  }
+
+  private async modifyPositionExclusive(
     tenantId: string,
     positionId: string,
     sl?: number | null,
@@ -2180,6 +2262,7 @@ export class TradingEngine {
     const open = this.book.forSymbol(tenantId, sym.id);
     type Hit = {
       id: string;
+      accountId: string;
       kind: 'sl' | 'tp';
       level?: number;
     };
@@ -2196,6 +2279,7 @@ export class TradingEngine {
         counters.inc(hit.hit === 'SL' ? 'order.sl_fired' : 'order.tp_fired');
         hits.push({
           id: p.id,
+          accountId: p.accountId,
           kind: hit.hit === 'SL' ? 'sl' : 'tp',
           level: hit.level == null ? undefined : Number(hit.level),
         });
@@ -2210,10 +2294,8 @@ export class TradingEngine {
     const pricingByGroup = new Map<string, GroupPricing>();
     try {
       for (const h of hits) {
-        const row = open.find((p) => p.id === h.id);
-        if (!row?.accountId) continue;
         const acct = await prisma.account.findFirst({
-          where: { id: row.accountId, tenantId },
+          where: { id: h.accountId, tenantId },
           select: { groupId: true },
         });
         if (!acct?.groupId) continue;
@@ -2236,6 +2318,7 @@ export class TradingEngine {
         protectiveLevel: h.level,
         protectiveKind: h.kind,
         skipExecutionDelay: true,
+        accountIdForQueue: h.accountId,
       }).catch(() => undefined);
     }
   }

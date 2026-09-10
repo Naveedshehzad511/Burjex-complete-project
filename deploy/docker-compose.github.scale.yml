@@ -1,0 +1,15 @@
+# Scale hints for concurrent traders (engine stays 1x — Redis instance lock).
+# Main compose already allows --scale on gateway/ws (no fixed container_name).
+#
+#   docker compose -p burjex_net -f docker-compose.github.yml -f docker-compose.github.scale.yml --env-file .env.github up -d --scale btrader-gateway=4 --scale btrader-ws=6
+#   docker compose -p burjex_net -f docker-compose.github.yml --env-file .env.github up -d --force-recreate --no-deps caddy
+#
+# Prove with: k6 run btrader/loadtest/concurrent_orders.js
+
+services:
+  btrader-postgres:
+    command: postgres -c max_connections=200 -c shared_buffers=512MB
+  btrader-redis:
+    command: >
+      redis-server --requirepass ${BT_REDIS_PASSWORD} --appendonly yes
+      --maxmemory 1024mb --maxmemory-policy noeviction

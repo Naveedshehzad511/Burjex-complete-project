@@ -111,7 +111,7 @@
 
 :6100 {
 	import ip_headers
-	import api_proxy bxnet_bt_gateway:4100
+	import api_proxy btrader-gateway:4100
 	request_body {
 		max_size 10MB
 	}
@@ -120,7 +120,7 @@
 
 :6101 {
 	import ip_headers
-	import ws_proxy bxnet_bt_ws:4101
+	import ws_proxy btrader-ws:4101
 }
 
 :6200 {

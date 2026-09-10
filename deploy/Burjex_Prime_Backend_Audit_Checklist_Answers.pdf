@@ -1,0 +1,410 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 3701 >>
+stream
+BT
+/F1 9 Tf
+14 TL
+1 0 0 1 48 794 Tm
+(Burjex Prime Backend - Audit & Verification Checklist ANSWERS) Tj
+0 -12 Td
+(Read-only audit \(no code changes\). Date: 2026-09-10) Tj
+0 -12 Td
+(Repo: Burjex-complete-project | Live target: burjexprime.net \(burjex_net\)) Tj
+0 -12 Td
+(KEY FINDING: No Rust backend. Live trading = Node.js/TypeScript btrader + Django CRM.) Tj
+0 -12 Td
+(Checklist answered vs ACTUAL stack; Rust items marked NO with ALTERNATES where present.) Tj
+0 -12 Td
+(-----------------------------------------------------------------------------------------------) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(IMPORTANT PREFACE) Tj
+0 -12 Td
+(================================================================================) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Stack reality) Tj
+0 -12 Td
+(STATUS: ABSENT \(as Rust\)) Tj
+0 -12 Td
+(ANSWER: NO Rust backend exists in this repo \(0 Cargo.toml / 0 .rs files\).) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: Live trading stack is Node.js 20+ TypeScript \(btrader/\) + Django CRM.) Tj
+0 -12 Td
+(Checklist items answered against ACTUAL live stack, with Rust expectation marked and) Tj
+0 -12 Td
+(alternates noted.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(1. Concurrency & Thread Safety \(Tokio / Rust Specific\)) Tj
+0 -12 Td
+(================================================================================) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Async Runtime \(Tokio\)) Tj
+0 -12 Td
+(STATUS: NO \(Tokio\)) Tj
+0 -12 Td
+(ANSWER: Backend does NOT run on Tokio.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE: Node.js V8 event loop + async/await \(trading-engine) Tj
+0 -12 Td
+(main.ts, NestJS gateway\). I/O is non-blocking via Prisma/ioredis Promises.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Thread Safety & Shared State \(Arc/Mutex/DashMap\)) Tj
+0 -12 Td
+(STATUS: NO \(Rust primitives\)) Tj
+0 -12 Td
+(ANSWER: No Arc<Mutex>, RwLock, or DashMap.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE / PARTIAL: In-process JS Map books \(position-book.ts,) Tj
+0 -12 Td
+(pending-book.ts, price-source.ts\) + Redis SET NX instance lock \(instance-lock.ts\) so only) Tj
+0 -12 Td
+(one engine process owns ticks. Single-threaded JS avoids classic data races; multi-gateway) Tj
+0 -12 Td
+(in-process books can drift.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Actor Model / Message Passing \(Actix / mpsc\)) Tj
+0 -12 Td
+(STATUS: NO \(Actix/mpsc\)) Tj
+0 -12 Td
+(ANSWER: No Actix actors or Tokio mpsc queues.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE / PARTIAL: Redis Streams \(bt:engine:cmd XREADGROUP\) + Redis) Tj
+0 -12 Td
+(pub/sub for ticks. REST opens go in-process via gateway TradingEngine.placeOrder\(\) - not a) Tj
+0 -12 Td
+(single global actor mailbox for all fills.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(2. Order Matching Engine & Performance) Tj
+0 -12 Td
+(================================================================================) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: In-Memory Matching) Tj
+0 -12 Td
+(STATUS: PARTIAL \(dealer model\)) Tj
+0 -12 Td
+(ANSWER: Not a central limit order book \(LOB\) matcher.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE PRESENT: In-RAM position book, pending book, L1 bid/ask) Tj
+0 -12 Td
+(cache. Fills are MT5-like dealer execution vs LP/broker quote \(A/B-book routing\), not peer) Tj
+0 -12 Td
+(matching.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Sub-Millisecond Processing) Tj
+0 -12 Td
+(STATUS: NO) Tj
+0 -12 Td
+(ANSWER: No sub-ms matching architecture.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE / DESIGN TARGET: Docs target low tens of ms p99) Tj
+0 -12 Td
+(intra-region. Tick drains default 50ms/250ms; MARKET mode may add executionDelayMs. Hot path) Tj
+0 -12 Td
+(is sync REST + Prisma transaction.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: FIFO Queue Implementation) Tj
+0 -12 Td
+(STATUS: PARTIAL) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 3759 >>
+stream
+BT
+/F1 9 Tf
+14 TL
+1 0 0 1 48 794 Tm
+(ANSWER: No strict LOB price-time FIFO match queue.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE: Redis Stream commands are FIFO; CRM outbox ordered by) Tj
+0 -12 Td
+(createdAt; stop-out tie-break uses openedAt. Pending trigger walks Map \(not a dedicated FIFO) Tj
+0 -12 Td
+(fill queue\).) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(3. Database & Data Persistence) Tj
+0 -12 Td
+(================================================================================) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Zero Blocking DB Operations) Tj
+0 -12 Td
+(STATUS: PARTIAL / NO on money path) Tj
+0 -12 Td
+(ANSWER: Order open/close use synchronous Prisma DB transactions on the critical path.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE PRESENT for ancillary work: CRM outbox worker \(~2s\),) Tj
+0 -12 Td
+(floating P/L flush \(PROFIT_PERSIST_MS\), candle history queue, swap accrual; Django Celery) Tj
+0 -12 Td
+(for CRM only \(not order matching\).) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Database Sharding / Partitioning) Tj
+0 -12 Td
+(STATUS: NO \(physical\)) Tj
+0 -12 Td
+(ANSWER: No PostgreSQL PARTITION BY / trade table sharding in live schema.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE / PARTIAL: Logical tenantId isolation; optional ENGINE_SHARD) Tj
+0 -12 Td
+(hash in code; live burjexprime compose runs single bxnet_bt_postgres + 1 engine replica.) Tj
+0 -12 Td
+(Docs mention future dedicated DB / K8s sharding.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: In-Memory Caching \(Redis\)) Tj
+0 -12 Td
+(STATUS: YES \(ticks\) / PARTIAL \(sessions\)) Tj
+0 -12 Td
+(ANSWER: Redis is active for realtime trading data.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: PRESENT: lastticks hash, tick pub/sub, engine command streams, L1) Tj
+0 -12 Td
+(price Map. CRM uses Redis-backed cache/sessions in prod. Trading API auth is JWT) Tj
+0 -12 Td
+(\(stateless\), not Redis sessions.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(4. Network & Latency Management) Tj
+0 -12 Td
+(================================================================================) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Low-Latency Networking \(serde / tungstenite\)) Tj
+0 -12 Td
+(STATUS: NO \(Rust net stack\)) Tj
+0 -12 Td
+(ANSWER: No serde zero-copy or tokio-tungstenite.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE PRESENT: ws package WebSocket gateway + NestJS REST + JSON.) Tj
+0 -12 Td
+(Tick batching \(WS_TICK_BATCH_MS\). Latency helpers in packages/shared. Not) Tj
+0 -12 Td
+(MessagePack/Protobuf.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Co-location / Infrastructure Ready) Tj
+0 -12 Td
+(STATUS: PARTIAL) Tj
+0 -12 Td
+(ANSWER: Clean Docker Compose deploy exists; not colo-tuned HFT infra.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: PRESENT: docker-compose.github.yml, Caddy edge, multi-stage Docker) Tj
+0 -12 Td
+(builds. ABSENT live: Equinix-style colo, CPU pinning, multi-AZ HA. K8s manifests exist as) Tj
+0 -12 Td
+(aspirational, not live burjexprime topology.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(5. Risk Control & Admin Group Settings) Tj
+0 -12 Td
+(================================================================================) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Strict Group Rules Enforcement) Tj
+0 -12 Td
+(STATUS: YES) Tj
+0 -12 Td
+(ANSWER: Admin group/symbol rules enforced in engine-core.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: PRESENT: spreads/markup, leverage/margin, symbol sessions, max) Tj
+0 -12 Td
+(lot/positions, stop-out/margin call, Instant/Market executionApplyTo + delay. Admin Flutter) Tj
+0 -12 Td
+(groups UI.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Slippage & Requote Logic) Tj
+0 -12 Td
+(STATUS: YES \(slippage/Instant-Market\) / PARTIAL \(requote\)) Tj
+0 -12 Td
+(ANSWER: Automated slippage and Instant/Market modes are active.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: PRESENT: slippagePoints, MARKET delay, INSTANT honour. REQUOTE error) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 3494 >>
+stream
+BT
+/F1 9 Tf
+14 TL
+1 0 0 1 48 794 Tm
+(code exists but engine does not currently throw requote on deviation \(legacy/unused path\).) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(6. Stress, Load & Chaos Testing) Tj
+0 -12 Td
+(================================================================================) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Load Testing Script \(K6 / Locust\)) Tj
+0 -12 Td
+(STATUS: NO) Tj
+0 -12 Td
+(ANSWER: No k6/Locust/Artillery load suite found for trading.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE: Jest unit tests only \(calc/trigger/stale\). Roadmap docs) Tj
+0 -12 Td
+(list load tests as future work.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Memory Leak Check \(Valgrind / profiling\)) Tj
+0 -12 Td
+(STATUS: NO \(Valgrind\) / PARTIAL \(metrics\)) Tj
+0 -12 Td
+(ANSWER: No Valgrind or continuous heap-leak suite.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE PARTIAL: in-process latency stats, Prometheus /v1/metrics) Tj
+0 -12 Td
+(text, optional Sentry env hook documented - not a full memory-leak verification program.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(7. Security, Error Handling & High Availability) Tj
+0 -12 Td
+(================================================================================) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Panic-Free Code \(unwrap/expect / Result\)) Tj
+0 -12 Td
+(STATUS: N/A \(not Rust\) - ALTERNATE YES pattern) Tj
+0 -12 Td
+(ANSWER: No Rust unwrap/expect/panic model.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: ALTERNATE: TypeScript BtError + BtErrorCode; Nest filter maps to HTTP.) Tj
+0 -12 Td
+(Tick loops catch/log. Some fire-and-forget .catch on non-critical Redis publishes.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Redundancy & Failover) Tj
+0 -12 Td
+(STATUS: PARTIAL / mostly NO on live) Tj
+0 -12 Td
+(ANSWER: Live burjexprime stack is effectively single-instance per service.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: PARTIAL PRESENT: Redis engine instance lock \(loser exits\). Docs/K8s) Tj
+0 -12 Td
+(describe replicas, Patroni, Redis Sentinel - not deployed on current compose. No instant) Tj
+0 -12 Td
+(secondary failover proven live.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(ITEM: Bank-Level Encryption \(TLS + JWT/OAuth\)) Tj
+0 -12 Td
+(STATUS: YES \(TLS+JWT\) / NO \(OAuth on trading\)) Tj
+0 -12 Td
+(ANSWER: Edge TLS + trading JWT are in place.) Tj
+0 -12 Td
+(ALTERNATE / EVIDENCE: PRESENT: Caddy/nginx TLS termination; access/refresh JWT; WS ?token=;) Tj
+0 -12 Td
+(CRM webhook HMAC. ABSENT on live trading path: OAuth. Social-login CRM code is local) Tj
+0 -12 Td
+(leftover and excluded from live deploy by policy.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(================================================================================) Tj
+0 -12 Td
+(SUMMARY SCORECARD) Tj
+0 -12 Td
+(- Rust/Tokio/Actix/DashMap/tungstenite/Valgrind LOB matching: NOT PRESENT) Tj
+0 -12 Td
+(- Present equivalents: Node async, Redis streams/pubsub, in-memory dealer books,) Tj
+0 -12 Td
+(  group risk rules, Instant/Market+slippage, Redis ticks, JWT+TLS, Docker deploy) Tj
+0 -12 Td
+(- Gaps vs checklist ideal: sub-ms matching, physical DB shards, load tests, live HA failover,) Tj
+0 -12 Td
+(  active requote throws, OAuth on trading API) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(Evidence roots: btrader/apps/trading-engine, btrader/packages/engine-core,) Tj
+0 -12 Td
+(btrader/apps/gateway-api, btrader/apps/ws-gateway, btrader/apps/market-data,) Tj
+0 -12 Td
+(deploy/docker-compose.github.yml, btrader/docs/01-system-architecture.md) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(END OF AUDIT - read-only; no repository code was modified for this document.) Tj
+ET
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000133 00000 n 
+0000000203 00000 n 
+0000000329 00000 n 
+0000004082 00000 n 
+0000004208 00000 n 
+0000008019 00000 n 
+0000008145 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+11691
+%%EOF

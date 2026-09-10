@@ -1,0 +1,39 @@
+Burjex checklist — what we implemented vs skipped (Node stack, not Rust)
+=======================================================================
+Date: 2026-09-10
+Goal context: harden toward 15k concurrent traders. Honest limit: 100% zero-error
+at 15k is NOT guaranteed by code alone — needs fat hardware + load test proof.
+
+IMPLEMENTED (Node equivalents)
+------------------------------
+1c Actor/FIFO: AccountExclusiveQueue per accountId (engine-core/account-queue.ts)
+   wired into place/close/closeAll/modify — in-process mailbox; DB FOR UPDATE still
+   cross-process.
+2a In-memory books: already present (position-book / pending-book / PriceSource)
+2c FIFO: per-account exclusive queue + Redis stream FIFO for engine cmds
+3c Redis ticks/cache: already present; kept
+5a Group rules: already present
+5b Slippage / Instant-Market: already present
+6a Load test: btrader/loadtest/concurrent_orders.js (k6)
+7a Errors: BtError + RATE_LIMITED on flood (ORDER_RATE_MAX default 40/sec/account)
+7c TLS+JWT: already present (edge Caddy + Nest JWT)
+Compose: larger Prisma connection_limit, faster tick drain env, Caddy service DNS
+   for future gateway/ws scale (docker-compose.github.scale.yml)
+
+SKIPPED (Rust-only or unsafe / needs infra not in this box)
+----------------------------------------------------------
+1a Tokio runtime — N/A (Node event loop)
+1b Arc/Mutex/DashMap — N/A (JS single-thread + account queue + FOR UPDATE)
+2b Sub-millisecond matching — not realistic with sync Postgres fills
+3a Zero-blocking money DB writes — unsafe for balances (kept sync transactions)
+3b Physical table partitioning / multi-DB shards — ops migration, not silent patch
+4a serde / tokio-tungstenite — N/A (ws + JSON)
+4b Equinix colo — ops/hardware, not code
+6b Valgrind — N/A; use Node metrics / clinic later
+7b Instant multi-server failover — needs second host + Patroni/Sentinel (not live)
+
+15k REQUIREMENT
+---------------
+Code hardening alone cannot make one Windows Docker Compose node safely run
+15,000 simultaneous traders. Next ops steps: scale gateway/ws, stronger Postgres
+IOPS/CPU, prove with k6 VUS climb, then engine tenant shards if needed.
