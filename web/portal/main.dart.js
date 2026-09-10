@@ -59657,7 +59657,7 @@ $2(a,b){var s=null,r=this.a,q=this.b,p=String(q.id==null?"":q.id),o=q.ro===!0,n=
 j=q.bal
 try{i=j==null||j!==j?"":$.uH().dn(j)+" "+k}catch(d){i=j==null?"":A.f(j)+" "+k}h=p===b
 g=o?B.ml:h?B.M:m
-f=A.b([A.B("#"+p,s,s,s,s,A.aK(s,s,g,s,s,s,s,s,s,s,B.bv,15,s,s,B.a_,s,s,!0,s,s,s,s,s,s,s,s),s,s,s)],t.p)
+f=A.b([A.B("#"+p+(o?"  ·  Investor":""),s,s,s,s,A.aK(s,s,g,s,s,s,s,s,s,s,B.bv,15,s,s,B.a_,s,s,!0,s,s,s,s,s,s,s,s),s,s,s)],t.p)
 if(l.length!==0)f.push(A.B(l,s,s,s,s,A.aK(s,s,n,s,s,s,s,s,s,s,s,12.5,s,s,s,s,s,!0,s,s,s,s,s,s,s,s),s,s,s))
 if(i.length!==0)f.push(A.B(i,s,s,s,s,A.aK(s,s,m,s,s,s,s,s,s,s,B.bv,13.5,s,s,s,s,s,!0,s,s,s,s,s,s,s,s),s,s,s))
 e=A.aC(f,B.l,B.f,B.L)
