@@ -32186,8 +32186,8 @@ break
 case 1:return A.w(q,r)}})
 return A.x($async$a8n,r)},
 b_8(){var s=A.bH("/+$",!0,!1,!1)
-return A.f8("http://5.226.139.8:4100",s,"")},
-baK(){return"ws://5.226.139.8:4101"},
+return A.f8("https://admin.burjexprime.net",s,"")},
+baK(){return"wss://admin.burjexprime.net"},
 bmH(a,b,c,d){var s,r,q,p,o,n=A.D(d,c.i("r<0>"))
 for(s=c.i("J<0>"),r=0;r<1;++r){q=a[r]
 p=b.$1(q)

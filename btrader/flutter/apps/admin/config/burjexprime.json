@@ -1,0 +1,10 @@
+{
+  "_comment": "burjexprime.net admin web — same-origin API/WS via edge Caddy (admin.burjexprime.net /v1 and WS upgrade). Build: flutter build web --release --dart-define-from-file=config/burjexprime.json",
+  "API_BASE": "https://admin.burjexprime.net",
+  "WS_URL": "wss://admin.burjexprime.net",
+  "TENANT": "demo",
+  "BRAND_NAME": "B-Trader",
+  "BRAND_LOGO": "",
+  "BRAND_PRIMARY": "#1652F0",
+  "BRAND_ACCENT": "#0BB07B"
+}
