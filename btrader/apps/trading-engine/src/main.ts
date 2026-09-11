@@ -53,10 +53,11 @@ async function main() {
       // Broadcast engine events for the WS gateway to fan out to clients.
       pub.publish(`bt:${evt.tenantId}:${Channels.ENGINE_EVT}`, JSON.stringify(evt)).catch(() => {});
     },
-    crmOutbox: async (tenantId, eventType, payload) => {
-      await prisma.crmSyncOutbox.create({
+    crmOutbox: (tenantId, eventType, payload) => {
+      void prisma.crmSyncOutbox.create({
         data: { tenantId, eventType, payload: payload as object },
-      });
+      }).catch(() => {});
+      return Promise.resolve();
     },
     activeSource: async (tenantId, symbol) => pub.hget(`bt:bestsrc:${tenantId}`, symbol),
     maxPriceAgeMs: Number(process.env.MAX_PRICE_AGE_MS ?? 8000),

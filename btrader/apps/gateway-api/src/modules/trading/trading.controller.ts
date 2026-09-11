@@ -81,7 +81,7 @@ export class TradingController {
     );
     ttlDelPrefix(`orders:${t.id}:${(dto as any).accountId}`);
     ttlDelPrefix(`pos:${t.id}:${(dto as any).accountId}`);
-    await this.audit.log(t.id, u.id, 'ORDER_PLACE', 'order', res.orderId, { after: res });
+    void this.audit.log(t.id, u.id, 'ORDER_PLACE', 'order', res.orderId, { after: res });
     return res;
   }
 
@@ -129,7 +129,7 @@ export class TradingController {
   ) {
     await this.assertOrderAccess(t.id, u, id);
     await this.eng.engine.modifyOrder(t.id, id, dto);
-    await this.audit.log(t.id, u.id, 'ORDER_MODIFY', 'order', id, { after: dto });
+    void this.audit.log(t.id, u.id, 'ORDER_MODIFY', 'order', id, { after: dto });
     return { ok: true };
   }
 
@@ -139,7 +139,7 @@ export class TradingController {
   async cancel(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string) {
     await this.assertOrderAccess(t.id, u, id);
     await this.eng.engine.cancelOrder(t.id, id);
-    await this.audit.log(t.id, u.id, 'ORDER_CANCEL', 'order', id);
+    void this.audit.log(t.id, u.id, 'ORDER_CANCEL', 'order', id);
     return { ok: true };
   }
 
@@ -164,7 +164,7 @@ export class TradingController {
     const accountId = await this.assertPositionAccess(t.id, u, id);
     await this.eng.engine.modifyPosition(t.id, id, dto.slPrice, dto.tpPrice);
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
-    await this.audit.log(t.id, u.id, 'POSITION_MODIFY', 'position', id, { after: dto });
+    void this.audit.log(t.id, u.id, 'POSITION_MODIFY', 'position', id, { after: dto });
     return { ok: true };
   }
 
@@ -173,7 +173,7 @@ export class TradingController {
   @ApiOperation({ summary: 'Dealer: edit an open position entry price (slippage compensation, admin-only)' })
   async setOpenPrice(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string, @Body() dto: { openPrice: number }) {
     await this.eng.engine.setPositionOpenPrice(t.id, id, Number(dto.openPrice));
-    await this.audit.log(t.id, u.id, 'POSITION_MODIFY', 'position', id, { after: { openPrice: dto.openPrice, dealerEdit: true } });
+    void this.audit.log(t.id, u.id, 'POSITION_MODIFY', 'position', id, { after: { openPrice: dto.openPrice, dealerEdit: true } });
     return { ok: true };
   }
 
@@ -185,7 +185,7 @@ export class TradingController {
     const res = await this.eng.engine.closePosition(t.id, id, dto.volume);
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     ttlDelPrefix(`orders:${t.id}:${accountId}`);
-    await this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'position', id, { after: res });
+    void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'position', id, { after: res });
     return res;
   }
 
@@ -194,7 +194,7 @@ export class TradingController {
   @ApiOperation({ summary: 'Dealer: close a position at a manual price (slippage / compensation, admin-only)' })
   async closeAt(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string, @Body() dto: { price: number; volume?: number }) {
     const res = await this.eng.engine.closePosition(t.id, id, dto.volume, { closePriceOverride: Number(dto.price) });
-    await this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'position', id, { after: { ...res, closePrice: dto.price, dealerClose: true } });
+    void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'position', id, { after: { ...res, closePrice: dto.price, dealerClose: true } });
     return res;
   }
 
@@ -206,7 +206,7 @@ export class TradingController {
     const closed = await this.eng.engine.closeAll(t.id, accountId);
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     ttlDelPrefix(`orders:${t.id}:${accountId}`);
-    await this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'account', accountId, { meta: { closed } });
+    void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'account', accountId, { meta: { closed } });
     return { closed };
   }
 

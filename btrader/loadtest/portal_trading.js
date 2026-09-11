@@ -128,6 +128,8 @@ export default function () {
   const h = hdr(session.token);
   const q = quote(h);
   if (!q || !q.bid || !q.ask) { errRate.add(1); sleep(2); return; }
+  const openRows = js(http.get(BASE + '/v1/positions?accountId=' + session.accountId + '&status=OPEN', { headers: h, tags: { name: 'positions' } }));
+  if (Array.isArray(openRows)) for (let i = 0; i < openRows.length && i < 3; i++) closePos(h, openRows[i].id);
   const lane = __ITER % 4;
   if (lane === 0) market(h, 'BUY', q);
   else if (lane === 1) market(h, 'SELL', q);

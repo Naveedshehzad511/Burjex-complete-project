@@ -141,6 +141,8 @@ class TtlCache<V> {
 // Config that changes only on admin action → short TTL is safe and cuts several
 // DB round-trips off every order.
 const _CONFIG_TTL_MS = 5000;
+/** Fail in 2s if the pool is busy instead of stacking 10s waits on every write. */
+const _TX_OPTS = { maxWait: 2_000, timeout: 12_000 } as const;
 
 function toBookRow(r: Record<string, unknown>, accountCurrency: string): BookRow {
   return { ...r, accountCurrency } as BookRow;
@@ -159,6 +161,10 @@ export class TradingEngine {
   }> | null>(_CONFIG_TTL_MS);
   private readonly _symGroupBookCache = new TtlCache<{ defaultBook: BookType } | null>(_CONFIG_TTL_MS);
   private readonly _routingCache = new TtlCache<RoutingRuleLike[]>(_CONFIG_TTL_MS);
+  private readonly _groupSymAccessCache = new TtlCache<{
+    picks: { symbolId: string }[];
+    access: { symbolGroupId: string }[];
+  }>(_CONFIG_TTL_MS);
 
   // ── PLACE ORDER ───────────────────────────────────────────────────────────
   async placeOrder(tenantId: string, req: PlaceOrderRequest): Promise<ExecutionResult> {
@@ -190,23 +196,33 @@ export class TradingEngine {
     // order on a hidden-yet-enabled symbol must still be refused.
     if (account.groupId) {
       // Precedence: per-symbol picks > symbol-group buckets > all enabled.
-      const picks = await prisma.tradingGroupSymbol.findMany({
-        where: { tradingGroupId: account.groupId },
-        select: { symbolId: true },
-      });
+      const cached = this._groupSymAccessCache.get(account.groupId);
+      let picks: { symbolId: string }[];
+      let access: { symbolGroupId: string }[];
+      if (cached) {
+        picks = cached.v.picks;
+        access = cached.v.access;
+      } else {
+        picks = await prisma.tradingGroupSymbol.findMany({
+          where: { tradingGroupId: account.groupId },
+          select: { symbolId: true },
+        });
+        access =
+          picks.length > 0
+            ? []
+            : await prisma.tradingGroupSymbolAccess.findMany({
+                where: { tradingGroupId: account.groupId },
+                select: { symbolGroupId: true },
+              });
+        this._groupSymAccessCache.set(account.groupId, { picks, access });
+      }
       if (picks.length > 0) {
         if (!picks.some((p) => p.symbolId === sym.id))
           throw new BtError(BtErrorCode.SYMBOL_DISABLED, 'symbol not available for your account group');
-      } else {
-        const access = await prisma.tradingGroupSymbolAccess.findMany({
-          where: { tradingGroupId: account.groupId },
-          select: { symbolGroupId: true },
-        });
-        if (access.length > 0) {
-          const allowed = new Set(access.map((a) => a.symbolGroupId));
-          if (!sym.groupId || !allowed.has(sym.groupId))
-            throw new BtError(BtErrorCode.SYMBOL_DISABLED, 'symbol not available for your account group');
-        }
+      } else if (access.length > 0) {
+        const allowed = new Set(access.map((a) => a.symbolGroupId));
+        if (!sym.groupId || !allowed.has(sym.groupId))
+          throw new BtError(BtErrorCode.SYMBOL_DISABLED, 'symbol not available for your account group');
       }
     }
     if (!isSymbolTradable(sym.tradingSessions as unknown as SessionWindow[] | null, sym.class, new Date()))
@@ -662,7 +678,7 @@ export class TradingEngine {
         },
       });
       return { position, order };
-    });
+    }, _TX_OPTS);
     stopTx();
 
     // Partial A-book: cover only the allocated portion (coveredVolume) to the
@@ -694,29 +710,8 @@ export class TradingEngine {
       stopCover();
     }
 
-    const stopRecompute = latency.start('order.exec.recompute');
-    const snapshot = await this.recomputeAccount(tenantId, accountId);
-    stopRecompute();
-    await this.syncBook(result.position.id);
-    this.deps.emit?.({ kind: 'POSITION_UPDATE', tenantId, positionId: result.position.id, accountId });
-    this.deps.emit?.({ kind: 'ACCOUNT_UPDATE', tenantId, account: snapshot });
-    await this.deps.crmOutbox?.(tenantId, 'account.snapshot', {
-      login: snapshot.login,
-      balance: snapshot.balance,
-      credit: snapshot.credit,
-      equity: snapshot.equity,
-      margin: snapshot.margin,
-      freeMargin: snapshot.freeMargin,
-      marginLevel: snapshot.marginLevel,
-      floatingPL: snapshot.floatingPL,
-      positionId: result.position.id,
-      reason: 'position.opened',
-    });
-    await this.deps.crmOutbox?.(tenantId, 'position.opened', {
-      login: snapshot.login,
-      positionId: result.position.id,
-    });
-
+    const snapshot = this.accountRowSnapshot(account);
+    this.publishAfterFill(tenantId, accountId, result.position.id, 'opened');
     return {
       accepted: true,
       orderId: result.order.id,
@@ -1502,7 +1497,7 @@ export class TradingEngine {
     let coverToClose = 0;
     let realized = 0;
 
-    const snapshot = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       // Lock account + position so concurrent partial closes cannot over-close
       // or double-realize P/L against the same lots.
       await tx.$queryRaw`SELECT id FROM accounts WHERE id = ${pos.accountId} FOR UPDATE`;
@@ -1588,7 +1583,7 @@ export class TradingEngine {
       }
       await tx.account.update({ where: { id: acct.id }, data: { balance: newBalance } });
       return acct.id;
-    });
+    }, _TX_OPTS);
 
     // A-book: unwind the proportional slice of the LP cover (works for partial
     // and full closes of partial-A positions).
@@ -1596,37 +1591,14 @@ export class TradingEngine {
       await this.coverClose(tenantId, pos.id, coverToClose, closePrice).catch(() => undefined);
     }
 
-    await this.syncBook(pos.id);
-    const snap = await this.recomputeAccount(tenantId, pos.accountId);
-    this.deps.emit?.({ kind: 'POSITION_UPDATE', tenantId, positionId: pos.id, accountId: pos.accountId });
-    this.deps.emit?.({ kind: 'ACCOUNT_UPDATE', tenantId, account: snap });
-    await this.deps.crmOutbox?.(tenantId, 'account.snapshot', {
-      login: snap.login,
-      balance: snap.balance,
-      credit: snap.credit,
-      equity: snap.equity,
-      margin: snap.margin,
-      freeMargin: snap.freeMargin,
-      marginLevel: snap.marginLevel,
-      floatingPL: snap.floatingPL,
-      positionId: pos.id,
-      profit: realized,
-      reason: 'position.closed',
-    });
-    await this.deps.crmOutbox?.(tenantId, 'position.closed', {
-      login: snap.login,
-      positionId: pos.id,
-      profit: realized,
-    });
-    void snapshot;
-
+    this.publishAfterFill(tenantId, pos.accountId, pos.id, 'closed', realized);
     return {
       accepted: true,
       positionId: pos.id,
       status: 'FILLED',
       fillPrice: closePrice,
       filledVolume: vol,
-      account: snap,
+      account: this.accountRowSnapshot(pos.account),
     };
   }
 
@@ -2531,6 +2503,74 @@ export class TradingEngine {
     const acct = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
     const views = await this.openViews(tenantId, accountId, acct.currency);
     return computeAggregates(d(acct.balance), d(acct.credit), views);
+  }
+
+  /** Immediate HTTP snapshot from the row we already loaded — WS/CRM get the live one via publishAfterFill. */
+  private accountRowSnapshot(account: {
+    id: string;
+    login: string;
+    currency: string;
+    leverage: number;
+    balance: Prisma.Decimal | number;
+    credit: Prisma.Decimal | number;
+    equity?: Prisma.Decimal | number | null;
+    margin?: Prisma.Decimal | number | null;
+    freeMargin?: Prisma.Decimal | number | null;
+    marginLevel?: Prisma.Decimal | number | null;
+    floatingPL?: Prisma.Decimal | number | null;
+  }): AccountSnapshot {
+    return {
+      accountId: account.id,
+      login: account.login,
+      currency: account.currency,
+      leverage: account.leverage,
+      balance: d(account.balance),
+      credit: d(account.credit),
+      equity: d(account.equity ?? account.balance),
+      margin: d(account.margin ?? 0),
+      freeMargin: d(account.freeMargin ?? account.balance),
+      marginLevel: d(account.marginLevel ?? 0),
+      floatingPL: d(account.floatingPL ?? 0),
+      closedPL: 0,
+      bonus: d(account.credit),
+      dividend: 0,
+      ts: Date.now(),
+    };
+  }
+
+  /** Recompute, book, WS, CRM — after the fill/close already committed. */
+  private publishAfterFill(
+    tenantId: string,
+    accountId: string,
+    positionId: string,
+    kind: 'opened' | 'closed',
+    profit?: number,
+  ): void {
+    void this.recomputeAccount(tenantId, accountId)
+      .then((snap) => {
+        void this.syncBook(positionId);
+        this.deps.emit?.({ kind: 'POSITION_UPDATE', tenantId, positionId, accountId });
+        this.deps.emit?.({ kind: 'ACCOUNT_UPDATE', tenantId, account: snap });
+        void this.deps.crmOutbox?.(tenantId, 'account.snapshot', {
+          login: snap.login,
+          balance: snap.balance,
+          credit: snap.credit,
+          equity: snap.equity,
+          margin: snap.margin,
+          freeMargin: snap.freeMargin,
+          marginLevel: snap.marginLevel,
+          floatingPL: snap.floatingPL,
+          positionId,
+          ...(profit != null ? { profit } : {}),
+          reason: kind === 'opened' ? 'position.opened' : 'position.closed',
+        });
+        void this.deps.crmOutbox?.(tenantId, kind === 'opened' ? 'position.opened' : 'position.closed', {
+          login: snap.login,
+          positionId,
+          ...(profit != null ? { profit } : {}),
+        });
+      })
+      .catch(() => undefined);
   }
 
   /** Recompute and persist live aggregates; return the snapshot for WS/CRM. */

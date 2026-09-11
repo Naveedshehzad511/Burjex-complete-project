@@ -32,8 +32,9 @@ export class EngineProvider implements OnModuleInit {
         this.pub
           .publish(`bt:${evt.tenantId}:${Channels.ENGINE_EVT}`, JSON.stringify(evt))
           .catch(() => {}),
-      crmOutbox: async (tenantId, eventType, payload) => {
-        await prisma.crmSyncOutbox.create({ data: { tenantId, eventType, payload: payload as object } });
+      crmOutbox: (tenantId, eventType, payload) => {
+        void prisma.crmSyncOutbox.create({ data: { tenantId, eventType, payload: payload as object } }).catch(() => {});
+        return Promise.resolve();
       },
       // BEST_PRICE venue routing: the currently-active pricing source per symbol
       // (written by market-data to bt:bestsrc:{tenant}).
