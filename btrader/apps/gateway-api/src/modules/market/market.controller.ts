@@ -40,8 +40,9 @@ export class MarketController {
 
   @Get('quotes')
   @ApiOperation({ summary: 'Last-known quote per symbol — seeds the watchlist so it is never blank.' })
-  getQuotes(@CurrentTenant() t: any) {
-    return this.quotes.snapshot(t.id);
+  @ApiQuery({ name: 'symbol', required: false, example: 'XAUUSD' })
+  getQuotes(@CurrentTenant() t: any, @Query('symbol') symbol?: string) {
+    return this.quotes.snapshot(t.id, symbol);
   }
 
   @Get('candles')

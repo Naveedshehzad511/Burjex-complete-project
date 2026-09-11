@@ -165,6 +165,12 @@ export class TradingEngine {
     picks: { symbolId: string }[];
     access: { symbolGroupId: string }[];
   }>(_CONFIG_TTL_MS);
+  private readonly _riskTenantCache = new TtlCache<
+    Awaited<ReturnType<typeof prisma.riskLimit.findMany>>
+  >(_CONFIG_TTL_MS);
+  private readonly _riskHasAccountScopes = new TtlCache<boolean>(_CONFIG_TTL_MS);
+  /** Single-flight for symbol lookups so 1000 concurrent opens share one query. */
+  private readonly symbolRowInflight = new Map<string, Promise<SymbolRow>>();
 
   // ── PLACE ORDER ───────────────────────────────────────────────────────────
   async placeOrder(tenantId: string, req: PlaceOrderRequest): Promise<ExecutionResult> {
@@ -179,10 +185,10 @@ export class TradingEngine {
       );
     }
     const stopValidate = latency.start('order.validate');
-    // Account + symbol are independent reads — fetch them in parallel.
+    // Account is per-login; symbol is shared (XAUUSD) and must not stampede the pool.
     const [account, sym] = await Promise.all([
       prisma.account.findFirst({ where: { id: req.accountId, tenantId } }),
-      prisma.symbol.findFirst({ where: { tenantId, symbol: req.symbol } }),
+      this.tickSymbol(tenantId, req.symbol),
     ]);
     if (!account) throw new BtError(BtErrorCode.VALIDATION, 'account not found');
     if (account.status === 'TRADING_DISABLED' || account.status === 'READ_ONLY')
@@ -1388,6 +1394,8 @@ export class TradingEngine {
       skipExecutionDelay?: boolean;
       /** When set, skip the account lookup used only to queue (batch already holds id). */
       accountIdForQueue?: string;
+      /** JWT-bound account: reject if the position belongs to someone else. */
+      requireAccountId?: string;
     },
   ): Promise<ExecutionResult> {
     // Resolve account for FIFO queue; prefer caller-provided id to avoid double fetch.
@@ -1416,6 +1424,7 @@ export class TradingEngine {
       protectiveKind?: 'sl' | 'tp';
       skipExecutionDelay?: boolean;
       accountIdForQueue?: string;
+      requireAccountId?: string;
     },
   ): Promise<ExecutionResult> {
     const delayClock = performance.now();
@@ -1424,6 +1433,9 @@ export class TradingEngine {
       include: { symbol: true, account: true },
     });
     if (!pos) throw new BtError(BtErrorCode.POSITION_NOT_FOUND);
+    if (opts?.requireAccountId && pos.accountId !== opts.requireAccountId) {
+      throw new BtError(BtErrorCode.VALIDATION, 'position access denied');
+    }
     // Flood guard for manual closes only (SL/TP/stop-out/closeAll skip).
     if (
       !opts?.floorBalanceAtZero &&
@@ -1836,13 +1848,11 @@ export class TradingEngine {
 
   // Throttle live broadcasts per tenant:symbol so 4 ticks/sec don't storm the DB/WS.
   private readonly liveThrottle = new Map<string, number>();
+  /** Per-account cap for tick-path equity writes (must not stampede Prisma). */
+  private readonly acctLiveAt = new Map<string, number>();
 
-  // Short-TTL cache for the tick-path symbol lookup. Each onTick pass resolved
-  // the same row four times, so a busy feed multiplied DB load until the Prisma
-  // pool timed out and *every* tick-driven check (pending triggers, SL/TP,
-  // stop-out) silently stopped working. Only the tick paths read this — order
-  // placement still reads the row straight from the DB, since it needs exact
-  // current specs. All tick callers use `id` only, which never changes.
+  // Short-TTL cache for symbol lookup (tick path + order placement). Single-flight
+  // in tickSymbol() so a 1000-VU burst shares one query instead of 1000.
   private readonly symbolRowCache = new Map<string, { row: SymbolRow; at: number }>();
 
   private async tickSymbol(tenantId: string, symbol: string): Promise<SymbolRow> {
@@ -1850,9 +1860,14 @@ export class TradingEngine {
     const now = Date.now();
     const hit = this.symbolRowCache.get(key);
     if (hit && now - hit.at < SYMBOL_CACHE_TTL_MS) return hit.row;
-    const row = await prisma.symbol.findFirst({ where: { tenantId, symbol } });
-    this.symbolRowCache.set(key, { row, at: now });
-    return row;
+    const pending = this.symbolRowInflight.get(key);
+    if (pending) return pending;
+    const p = prisma.symbol.findFirst({ where: { tenantId, symbol } }).then((row) => {
+      this.symbolRowCache.set(key, { row, at: Date.now() });
+      return row;
+    }).finally(() => this.symbolRowInflight.delete(key));
+    this.symbolRowInflight.set(key, p);
+    return p;
   }
 
   // ── TICK PROCESSING: pending triggers, SL/TP, stop-out, live P/L ────────────
@@ -2051,9 +2066,20 @@ export class TradingEngine {
       this.profitDirty.set(p.id, profit);
     }
     await this.flushProfits();
+    // Never await a recompute per open account on the tick path: leftover (or
+    // in-flight) gold positions used to serialize hundreds of account UPDATEs
+    // every 500ms, which starved the gateway pool (median ~10s). Cap + defer.
+    const liveMs = Math.max(1000, Number(process.env.ENGINE_ACCOUNT_LIVE_MS ?? 5000));
+    let budget = 2;
     for (const accountId of accounts) {
-      const snap = await this.recomputeAccount(tenantId, accountId);
-      this.deps.emit?.({ kind: 'ACCOUNT_UPDATE', tenantId, account: snap });
+      if (budget <= 0) break;
+      const last = this.acctLiveAt.get(accountId) ?? 0;
+      if (now - last < liveMs) continue;
+      this.acctLiveAt.set(accountId, now);
+      budget--;
+      void this.recomputeAccount(tenantId, accountId)
+        .then((snap) => this.deps.emit?.({ kind: 'ACCOUNT_UPDATE', tenantId, account: snap }))
+        .catch(() => undefined);
     }
   }
 
@@ -2101,23 +2127,11 @@ export class TradingEngine {
     const ask = this.deps.prices.buyPrice(tenantId, symbol);
     if (bid == null || ask == null) return;
 
-    const fromBook = this.pendings.forSymbol(tenantId, sym.id);
-    let working = fromBook;
-    if (working.length === 0) {
-      // Gateway in-process placeOrder cannot write this process's book. Pull once.
-      const rows = await prisma.order.findMany({
-        where: {
-          tenantId,
-          symbolId: sym.id,
-          OR: [
-            { status: 'PENDING' },
-            { status: 'PARTIAL', positionId: null, filledVolume: 0 },
-          ],
-        },
-      });
-      for (const r of rows) this.pendings.upsert(this.toPendingRow(r));
-      working = this.pendings.forSymbol(tenantId, sym.id);
-    }
+    // In-memory book only. An empty book used to fall through to findMany on
+    // every gold tick (~25/s), which starved the gateway Prisma pool. Gateway
+    // pending orders land here via refreshPendings() (default 1s).
+    const working = this.pendings.forSymbol(tenantId, sym.id);
+    if (working.length === 0) return;
 
     const now = new Date();
     const staleCutoff = new Date(Date.now() - STALE_CLAIM_MS);
@@ -2324,12 +2338,27 @@ export class TradingEngine {
     }
   }
 
+  private stopOutCursor = 0;
+  private readonly stopOutCheckedAt = new Map<string, number>();
+
   private async checkStopOut(tenantId: string, symbol: string): Promise<void> {
     // Find accounts holding this symbol and re-evaluate margin level.
     const sym = await this.tickSymbol(tenantId, symbol);
     if (!sym) return;
     const accounts = this.book.accountsForSymbol(tenantId, sym.id);
-    for (const accountId of accounts) {
+    if (!accounts.length) return;
+    const now = Date.now();
+    const start = this.stopOutCursor % accounts.length;
+    this.stopOutCursor = start + 1;
+    let n = 0;
+    const maxPerTick = Math.max(1, Number(process.env.ENGINE_STOPOUT_PER_TICK ?? 4));
+    const minGap = Math.max(250, Number(process.env.ENGINE_STOPOUT_GAP_MS ?? 1000));
+    for (let i = 0; i < accounts.length && n < maxPerTick; i++) {
+      const accountId = accounts[(start + i) % accounts.length]!;
+      const last = this.stopOutCheckedAt.get(accountId) ?? 0;
+      if (now - last < minGap) continue;
+      this.stopOutCheckedAt.set(accountId, now);
+      n++;
       await this.enforceStopOut(tenantId, accountId);
     }
   }
@@ -2685,9 +2714,29 @@ export class TradingEngine {
     symbol: string,
     volume: number,
   ): Promise<void> {
-    const limits = await prisma.riskLimit.findMany({
-      where: { tenantId, enabled: true, scope: { in: ['tenant', `account:${accountId}`] } },
-    });
+    let tenantLimits = this._riskTenantCache.get(tenantId)?.v;
+    if (!this._riskTenantCache.get(tenantId)) {
+      tenantLimits = await prisma.riskLimit.findMany({
+        where: { tenantId, enabled: true, scope: 'tenant' },
+      });
+      this._riskTenantCache.set(tenantId, tenantLimits);
+    }
+    const scopeKey = `acct-scopes:${tenantId}`;
+    let hasAccountScopes = this._riskHasAccountScopes.get(scopeKey)?.v;
+    if (this._riskHasAccountScopes.get(scopeKey) == null) {
+      const probe = await prisma.riskLimit.findFirst({
+        where: { tenantId, enabled: true, scope: { startsWith: 'account:' } },
+        select: { id: true },
+      });
+      hasAccountScopes = !!probe;
+      this._riskHasAccountScopes.set(scopeKey, hasAccountScopes);
+    }
+    const acctLimits = hasAccountScopes
+      ? await prisma.riskLimit.findMany({
+          where: { tenantId, enabled: true, scope: `account:${accountId}` },
+        })
+      : [];
+    const limits = [...(tenantLimits ?? []), ...acctLimits];
     for (const l of limits) {
       if (l.maxLotPerOrder != null && volume > d(l.maxLotPerOrder))
         throw new BtError(BtErrorCode.RISK_LIMIT_BREACH, 'max lot per order exceeded');

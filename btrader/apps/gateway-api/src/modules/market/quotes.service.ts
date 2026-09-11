@@ -14,8 +14,11 @@ import { PORTAL_READ_CACHE_MS, ttlWrap } from '../../common/ttl-cache';
 export class QuotesService {
   private readonly redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6380');
 
-  async snapshot(tenantId: string): Promise<Tick[]> {
-    return ttlWrap(`quotes:${tenantId}`, PORTAL_READ_CACHE_MS, () => this.loadSnapshot(tenantId));
+  async snapshot(tenantId: string, symbol?: string): Promise<Tick[]> {
+    const all = await ttlWrap(`quotes:${tenantId}`, PORTAL_READ_CACHE_MS, () => this.loadSnapshot(tenantId));
+    if (!symbol) return all;
+    const u = symbol.toUpperCase();
+    return all.filter((t) => String(t.symbol).toUpperCase() === u);
   }
 
   private async loadSnapshot(tenantId: string): Promise<Tick[]> {

@@ -54,7 +54,7 @@ function loginVu() {
 }
 
 function quote(h) {
-  const rows = js(http.get(BASE + '/v1/market/quotes', { headers: h, tags: { name: 'quotes' } }));
+  const rows = js(http.get(BASE + '/v1/market/quotes?symbol=' + SYMBOL, { headers: h, tags: { name: 'quotes' } }));
   if (!Array.isArray(rows)) return null;
   for (let i = 0; i < rows.length; i++) if (rows[i] && String(rows[i].symbol).toUpperCase() === SYMBOL) return rows[i];
   return null;
@@ -122,7 +122,7 @@ export default function () {
   if (!session) {
     session = loginVu();
     if (!session) return;
-    sleep((__VU % 40) * 0.25);
+    sleep(4 + (__VU % 200) * 0.4);
     return;
   }
   const h = hdr(session.token);
@@ -136,5 +136,5 @@ export default function () {
 }
 
 export function teardown() {
-  console.log('portal_trading 1000vu demo logins 610001+ XAUUSD');
+  console.log('portal_trading 1000vu demo 610001+ spread first trade ~80s');
 }

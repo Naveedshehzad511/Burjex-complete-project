@@ -95,6 +95,8 @@ export class TradingController {
   /** Strip the account's group client-symbol-suffix from an incoming symbol. */
   private async stripGroupSuffix(tenantId: string, accountId: string | undefined, symbol: string): Promise<string> {
     if (!accountId || !symbol) return symbol;
+    // Canonical names (XAUUSD) have no group suffix — skip a per-account DB hit.
+    if (!symbol.includes('.')) return symbol;
     const sfx = await ttlWrap(`sfx:${tenantId}:${accountId}`, 30_000, async () => {
       const a = await prisma.account.findFirst({
         where: { tenantId, id: accountId },
@@ -181,8 +183,16 @@ export class TradingController {
   @ForbidReadOnly()
   @ApiOperation({ summary: 'Close a position (full or partial via volume)' })
   async close(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string, @Body() dto: ClosePositionDto) {
-    const accountId = await this.assertPositionAccess(t.id, u, id);
-    const res = await this.eng.engine.closePosition(t.id, id, dto.volume);
+    let accountId: string;
+    if (u.acct) {
+      accountId = u.acct;
+    } else {
+      accountId = await this.assertPositionAccess(t.id, u, id);
+    }
+    const res = await this.eng.engine.closePosition(t.id, id, dto.volume, {
+      accountIdForQueue: accountId,
+      requireAccountId: u.acct || undefined,
+    });
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     ttlDelPrefix(`orders:${t.id}:${accountId}`);
     void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'position', id, { after: res });

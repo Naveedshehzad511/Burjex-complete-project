@@ -169,12 +169,13 @@ async function main() {
     }
   }
 
+  const pendingRefreshMs = Math.max(250, Number(process.env.ENGINE_PENDING_REFRESH_MS ?? 1000));
   setInterval(() => void drainSet(dirtyFast, fastState, (t, s) => engine.onTickFast(t, s)), fastMs);
   setInterval(() => void drainSet(dirtySlow, slowState, (t, s) => engine.onTickSlow(t, s)), drainMs);
-  setInterval(() => void engine.refreshPendings().catch(() => undefined), fastMs);
+  setInterval(() => void engine.refreshPendings().catch(() => undefined), pendingRefreshMs);
   // eslint-disable-next-line no-console
   console.log(
-    `[trading-engine] tick worker: fast ${fastMs}ms (pending+SL/TP), slow ${drainMs}ms (stop-out+P&L), concurrency ${drainConcurrency}, shard ${engineShard()}/${engineShardCount()}`,
+    `[trading-engine] tick worker: fast ${fastMs}ms (pending+SL/TP), slow ${drainMs}ms (stop-out+P&L), pending refresh ${pendingRefreshMs}ms, concurrency ${drainConcurrency}, shard ${engineShard()}/${engineShardCount()}`,
   );
 
   // Consume execution commands from the gateway via a Redis Stream consumer group.
