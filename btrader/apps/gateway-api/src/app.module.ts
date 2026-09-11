@@ -1,10 +1,12 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { TenantMiddleware } from './common/tenant.middleware';
 import { PrismaService } from './common/prisma.service';
 import { HealthController } from './common/health.controller';
+import { BtThrottlerGuard } from './common/bt-throttler.guard';
+import { THROTTLE_LIMIT, THROTTLE_TTL_MS } from './common/throttle.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
@@ -26,8 +28,10 @@ import { HqModule } from './modules/hq/hq.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    // Global API rate limiting (per-IP). Override per-route as needed.
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
+    // Global API rate limiting (per client IP). Code default 300/min; raise via
+    // THROTTLE_LIMIT on the load-test/github stack only. Login uses a stricter
+    // @Throttle override (THROTTLE_AUTH_LIMIT).
+    ThrottlerModule.forRoot([{ name: 'default', ttl: THROTTLE_TTL_MS, limit: THROTTLE_LIMIT }]),
     AuthModule,
     TenantsModule,
     AccountsModule,
@@ -49,7 +53,7 @@ import { HqModule } from './modules/hq/hq.module';
   controllers: [HealthController],
   providers: [
     PrismaService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: BtThrottlerGuard },
   ],
   exports: [PrismaService],
 })

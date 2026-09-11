@@ -10,7 +10,7 @@ export interface TenantRequest extends Request {
  * Resolves the active tenant for each request, in priority order:
  *   1. X-BT-Tenant header (platform/service callers)
  *   2. Host match against tenant.domain / adminDomain / appDomain
- *      (app./admin./api. subdomains stripped, mirroring the CRM's resolver)
+ *      (app./admin./api./client./portal./www. subdomains stripped, mirroring the CRM's resolver)
  *   3. ?tenant=slug query (dev)
  * Result is attached to req.tenant and consumed by guards + services.
  */
@@ -30,7 +30,7 @@ export class TenantMiddleware implements NestMiddleware {
       );
     }
     if (!tenant && host) {
-      const registrable = host.replace(/^(app|admin|api|client)\./, '');
+      const registrable = host.replace(/^(app|admin|api|client|portal|www)\./, '');
       tenant = await this.byKey('host:' + host, () =>
         prisma.tenant.findFirst({
           where: {

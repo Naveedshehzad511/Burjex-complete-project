@@ -180,6 +180,15 @@ services:
       BROKER_UTC_OFFSET_SEC: ${BROKER_UTC_OFFSET_SEC:-10800}
       ORDER_RATE_MAX: ${ORDER_RATE_MAX:-40}
       ORDER_RATE_WINDOW_MS: ${ORDER_RATE_WINDOW_MS:-1000}
+      # Per-IP HTTP throttle (Nest). Code defaults stay 300/min GET, 60/min login.
+      # This stack is the 500-VU Grafana Cloud target (few NAT IPs, many readers).
+      THROTTLE_TTL_MS: ${THROTTLE_TTL_MS:-60000}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-12000}
+      THROTTLE_AUTH_LIMIT: ${THROTTLE_AUTH_LIMIT:-600}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-2}
+      # Optional: k6 sends X-BT-Load-Test with the same value to skip throttle.
+      # Leave empty so the header is ignored unless you set LOAD_TEST_KEY.
+      LOAD_TEST_KEY: ${LOAD_TEST_KEY:-}
     command: >-
       sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
       cd /app/apps/gateway-api && exec node dist/main.js"

@@ -9,6 +9,9 @@ import { BtErrorFilter } from './common/bt-error.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { cors: true });
+  // Live path is client → TLS Caddy → bxnet_caddy → this process. Without this,
+  // req.ip is the proxy and the 300/min throttle is shared by every user.
+  app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 2));
   app.use(helmet());
   // Default express limit is 100kb; tenant logo upload sends base64 JSON.
   app.useBodyParser('json', { limit: '6mb' });

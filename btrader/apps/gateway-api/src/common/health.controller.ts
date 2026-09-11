@@ -1,9 +1,11 @@
 import { Controller, Get, Header } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { prisma } from '@btrader/db';
 import { latency, counters, prometheusText } from '@btrader/shared';
 
 @ApiTags('health')
+@SkipThrottle()
 @Controller()
 export class HealthController {
   @Get('health')
