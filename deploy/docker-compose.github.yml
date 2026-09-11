@@ -163,7 +163,10 @@ services:
   btrader-gateway:
     build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: gateway-api } }
     image: burjex/btrader-gateway:net
-    # No fixed container_name — allows --scale and Caddy DNS round-robin on btrader-gateway
+    # Unique name required: bxnet_caddy is on burjex_edge, so `btrader-gateway`
+    # DNS hits live duafx and Quotes/Chart return 401. Do not use the short
+    # Compose service name as the Caddy upstream.
+    container_name: bxnet_bt_gateway
     <<: *restart
     expose: ['4100']
     env_file: .env.github
@@ -190,7 +193,8 @@ services:
   btrader-ws:
     build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: ws-gateway } }
     image: burjex/btrader-ws:net
-    # No fixed container_name — allows --scale and Caddy DNS round-robin on btrader-ws
+    # Unique name — same burjex_edge collision as gateway (`btrader-ws` is duafx).
+    container_name: bxnet_bt_ws
     <<: *restart
     expose: ['4101']
     env_file: .env.github
