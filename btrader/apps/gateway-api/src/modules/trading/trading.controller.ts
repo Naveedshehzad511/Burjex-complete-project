@@ -18,6 +18,7 @@ import { CurrentTenant, CurrentUser, Roles, ForbidReadOnly } from '../../common/
 import { EngineProvider } from './engine.provider';
 import { AuditService } from '../audit/audit.service';
 import { PlaceOrderDto, ModifyPositionDto, ModifyOrderDto, ClosePositionDto } from './dto';
+import { PORTAL_READ_CACHE_MS, ttlDelPrefix, ttlWrap } from '../../common/ttl-cache';
 
 const STAFF_ROLES = new Set(['SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_STAFF', 'SERVICE']);
 
@@ -74,6 +75,8 @@ export class TradingController {
     const res = await latency.time('order.place.total', () =>
       this.eng.engine.placeOrder(t.id, { ...dto, symbol, source: 'mobile' } as any),
     );
+    ttlDelPrefix(`orders:${t.id}:${(dto as any).accountId}`);
+    ttlDelPrefix(`pos:${t.id}:${(dto as any).accountId}`);
     await this.audit.log(t.id, u.id, 'ORDER_PLACE', 'order', res.orderId, { after: res });
     return res;
   }
@@ -99,12 +102,14 @@ export class TradingController {
   @Get('orders')
   @ApiOperation({ summary: 'List orders for an account (optionally by status)' })
   orders(@CurrentTenant() t: any, @Query('accountId') accountId: string, @Query('status') status?: string) {
-    return prisma.order.findMany({
-      where: { tenantId: t.id, accountId, ...(status ? { status: status as any } : {}) },
-      include: { symbol: { select: { symbol: true, digits: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
+    return ttlWrap(`orders:${t.id}:${accountId}:${status || ''}`, PORTAL_READ_CACHE_MS, () =>
+      prisma.order.findMany({
+        where: { tenantId: t.id, accountId, ...(status ? { status: status as any } : {}) },
+        include: { symbol: { select: { symbol: true, digits: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      }),
+    );
   }
 
   @Patch('orders/:id')
@@ -136,20 +141,23 @@ export class TradingController {
   @Get('positions')
   @ApiOperation({ summary: 'List open positions for an account' })
   positions(@CurrentTenant() t: any, @Query('accountId') accountId: string, @Query('status') status = 'OPEN') {
-    return prisma.position.findMany({
-      where: { tenantId: t.id, accountId, status: status as any },
-      include: { symbol: { select: { symbol: true, digits: true } } },
-      orderBy: { openedAt: 'desc' },
-      take: 500,
-    });
+    return ttlWrap(`pos:${t.id}:${accountId}:${status}`, PORTAL_READ_CACHE_MS, () =>
+      prisma.position.findMany({
+        where: { tenantId: t.id, accountId, status: status as any },
+        include: { symbol: { select: { symbol: true, digits: true } } },
+        orderBy: { openedAt: 'desc' },
+        take: 500,
+      }),
+    );
   }
 
   @Patch('positions/:id')
   @ForbidReadOnly()
   @ApiOperation({ summary: 'Modify SL/TP on an open position' })
   async modify(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string, @Body() dto: ModifyPositionDto) {
-    await this.assertPositionAccess(t.id, u, id);
+    const accountId = await this.assertPositionAccess(t.id, u, id);
     await this.eng.engine.modifyPosition(t.id, id, dto.slPrice, dto.tpPrice);
+    ttlDelPrefix(`pos:${t.id}:${accountId}`);
     await this.audit.log(t.id, u.id, 'POSITION_MODIFY', 'position', id, { after: dto });
     return { ok: true };
   }
@@ -167,8 +175,10 @@ export class TradingController {
   @ForbidReadOnly()
   @ApiOperation({ summary: 'Close a position (full or partial via volume)' })
   async close(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string, @Body() dto: ClosePositionDto) {
-    await this.assertPositionAccess(t.id, u, id);
+    const accountId = await this.assertPositionAccess(t.id, u, id);
     const res = await this.eng.engine.closePosition(t.id, id, dto.volume);
+    ttlDelPrefix(`pos:${t.id}:${accountId}`);
+    ttlDelPrefix(`orders:${t.id}:${accountId}`);
     await this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'position', id, { after: res });
     return res;
   }
@@ -188,6 +198,8 @@ export class TradingController {
   async closeAll(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('accountId') accountId: string) {
     await this.assertAccountAccess(t.id, u, accountId);
     const closed = await this.eng.engine.closeAll(t.id, accountId);
+    ttlDelPrefix(`pos:${t.id}:${accountId}`);
+    ttlDelPrefix(`orders:${t.id}:${accountId}`);
     await this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'account', accountId, { meta: { closed } });
     return { closed };
   }

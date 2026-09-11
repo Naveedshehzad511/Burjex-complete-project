@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { prisma } from '@btrader/db';
+import { PORTAL_READ_CACHE_MS, ttlWrap } from '../../common/ttl-cache';
 
 /** A readable random trading password (no ambiguous chars like O/0, I/l). */
 function genPassword(): string {
@@ -205,14 +206,19 @@ export class AccountsService {
    *  only that account is returned — the client sees just the account they
    *  signed into, and switches by logging in with another number + password. */
   async myAccounts(tenantId: string, userId: string, acctScope?: string | null) {
-    const rows = await prisma.account.findMany({
-      where: { tenantId, userId, ...(acctScope ? { id: acctScope } : {}) },
-      include: {
-        group: { select: { clientSymbolSuffix: true, name: true } },
-        user: { select: { firstName: true, lastName: true, email: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    const rows = await ttlWrap(
+      `acctme:${tenantId}:${userId}:${acctScope ?? ''}`,
+      PORTAL_READ_CACHE_MS,
+      () =>
+        prisma.account.findMany({
+          where: { tenantId, userId, ...(acctScope ? { id: acctScope } : {}) },
+          include: {
+            group: { select: { clientSymbolSuffix: true, name: true } },
+            user: { select: { firstName: true, lastName: true, email: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        }),
+    );
     return rows.map(({ group, user, ...a }) => ({
       ...a,
       symbolSuffix: group?.clientSymbolSuffix ?? null,

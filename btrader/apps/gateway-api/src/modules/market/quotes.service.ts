@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
 import { prisma } from '@btrader/db';
 import { Tick } from '@btrader/shared';
+import { PORTAL_READ_CACHE_MS, ttlWrap } from '../../common/ttl-cache';
 
 /**
  * Last-known-quote snapshot. market-data writes the last real tick per symbol to
@@ -14,6 +15,10 @@ export class QuotesService {
   private readonly redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6380');
 
   async snapshot(tenantId: string): Promise<Tick[]> {
+    return ttlWrap(`quotes:${tenantId}`, PORTAL_READ_CACHE_MS, () => this.loadSnapshot(tenantId));
+  }
+
+  private async loadSnapshot(tenantId: string): Promise<Tick[]> {
     const [raw, symbols] = await Promise.all([
       this.redis.hgetall(`bt:${tenantId}:lastticks`),
       prisma.symbol.findMany({ where: { tenantId, enabled: true }, select: { symbol: true } }),

@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { prisma } from '@btrader/db';
+import { ttlWrap } from '../../common/ttl-cache';
 
 function genDemoPassword(): string {
   return crypto.randomBytes(9).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) + '9x';
@@ -11,6 +12,19 @@ function genDemoPassword(): string {
 @Injectable()
 export class AuthService {
   constructor(private readonly jwt: JwtService) {}
+
+  /** One UPDATE per user per minute — 500 concurrent logins must not serialize on one row. */
+  private lastLoginTouch = new Map<string, number>();
+
+  private touchLastLogin(userId: string) {
+    const now = Date.now();
+    const prev = this.lastLoginTouch.get(userId) ?? 0;
+    if (now - prev < 60_000) return;
+    this.lastLoginTouch.set(userId, now);
+    void prisma.user
+      .update({ where: { id: userId }, data: { lastLoginAt: new Date() } })
+      .catch(() => undefined);
+  }
 
   /**
    * Self-serve demo signup (lead generation). Captures the prospect's full
@@ -75,7 +89,11 @@ export class AuthService {
     // WS gateway uses `accts` to authorize which accounts may be watched.
     const accts = acctScope
       ? [acctScope]
-      : (await prisma.account.findMany({ where: { userId: user.id }, select: { id: true } })).map((a) => a.id);
+      : (
+          await ttlWrap(`accts:${user.id}`, 5_000, () =>
+            prisma.account.findMany({ where: { userId: user.id }, select: { id: true } }),
+          )
+        ).map((a) => a.id);
     return this.jwt.sign(
       {
         sub: user.id,
@@ -192,7 +210,7 @@ export class AuthService {
     await prisma.session.create({
       data: { userId: user.id, tenantId: user.tenantId, refreshHash, ip, userAgent: ua, expiresAt },
     });
-    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    this.touchLastLogin(user.id);
     // `readonly` lets the client hide trade controls for an investor session;
     // the server enforces it regardless (JwtAuthGuard + @ForbidReadOnly).
     return { accessToken: access, refreshToken: refresh, role: user.role, readonly };

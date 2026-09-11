@@ -131,6 +131,7 @@ services:
     image: postgres:16-alpine
     container_name: bxnet_bt_postgres
     <<: *restart
+    command: postgres -c max_connections=250
     environment:
       POSTGRES_USER: ${BT_POSTGRES_USER}
       POSTGRES_PASSWORD: ${BT_POSTGRES_PASSWORD}
@@ -173,8 +174,10 @@ services:
     environment:
       NODE_ENV: production
       API_PORT: '4100'
-      # Larger pool for concurrent fills (15k-oriented). Tune with Pg max_connections.
-      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=40&pool_timeout=30
+      # HTTP readers: 80 vs previous 40. Postgres max_connections is 250 so
+      # gateway 80 + engine 40 + market-data still fit. pool_timeout 15s so a
+      # saturated pool fails before k6's 60s hang.
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=80&pool_timeout=15
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
       CHART_PROVIDER: ${CHART_PROVIDER:-internal}
       BROKER_UTC_OFFSET_SEC: ${BROKER_UTC_OFFSET_SEC:-10800}
@@ -189,6 +192,7 @@ services:
       # Optional: k6 sends X-BT-Load-Test with the same value to skip throttle.
       # Leave empty so the header is ignored unless you set LOAD_TEST_KEY.
       LOAD_TEST_KEY: ${LOAD_TEST_KEY:-}
+      PORTAL_READ_CACHE_MS: ${PORTAL_READ_CACHE_MS:-2000}
     command: >-
       sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
       cd /app/apps/gateway-api && exec node dist/main.js"
