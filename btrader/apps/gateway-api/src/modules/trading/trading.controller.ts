@@ -36,12 +36,16 @@ export class TradingController {
   private async assertAccountAccess(tenantId: string, u: any, accountId: string): Promise<void> {
     if (!accountId) throw new ForbiddenException('account required');
     if (STAFF_ROLES.has(u?.role)) return;
+    // Account-number login already bound the JWT to this account — skip a DB round-trip.
+    if (u.acct) {
+      if (u.acct !== accountId) throw new ForbiddenException('account access denied');
+      return;
+    }
     const acct = await prisma.account.findFirst({
       where: { id: accountId, tenantId },
       select: { userId: true },
     });
     if (!acct || acct.userId !== u.id) throw new ForbiddenException('account access denied');
-    if (u.acct && u.acct !== accountId) throw new ForbiddenException('account access denied');
   }
 
   private async assertPositionAccess(tenantId: string, u: any, positionId: string): Promise<string> {
@@ -91,11 +95,13 @@ export class TradingController {
   /** Strip the account's group client-symbol-suffix from an incoming symbol. */
   private async stripGroupSuffix(tenantId: string, accountId: string | undefined, symbol: string): Promise<string> {
     if (!accountId || !symbol) return symbol;
-    const a = await prisma.account.findFirst({
-      where: { tenantId, id: accountId },
-      select: { group: { select: { clientSymbolSuffix: true } } },
+    const sfx = await ttlWrap(`sfx:${tenantId}:${accountId}`, 30_000, async () => {
+      const a = await prisma.account.findFirst({
+        where: { tenantId, id: accountId },
+        select: { group: { select: { clientSymbolSuffix: true } } },
+      });
+      return a?.group?.clientSymbolSuffix ?? '';
     });
-    const sfx = a?.group?.clientSymbolSuffix;
     return sfx && symbol.endsWith(sfx) ? symbol.slice(0, symbol.length - sfx.length) : symbol;
   }
 

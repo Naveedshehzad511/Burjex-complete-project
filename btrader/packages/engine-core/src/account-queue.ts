@@ -1,3 +1,5 @@
+import { BtError, BtErrorCode } from '@btrader/shared';
+
 /**
  * Per-account FIFO serialization for trading mutations.
  *
@@ -6,21 +8,53 @@
  * process, so concurrent HTTP floods cannot interleave margin checks before the
  * DB FOR UPDATE lock is taken.
  *
+ * Waiters that sit longer than ACCOUNT_QUEUE_WAIT_MS (default 8s) are rejected
+ * with 429 so one flooded account cannot pin thousands of HTTP connections.
+ * Timed-out waiters still occupy their mailbox slot (no-op) so exclusivity holds.
+ *
  * Cross-process safety still relies on PostgreSQL `SELECT … FOR UPDATE`.
  */
 export class AccountExclusiveQueue {
   private readonly tails = new Map<string, Promise<unknown>>();
+  private readonly waitMs = Math.max(0, Number(process.env.ACCOUNT_QUEUE_WAIT_MS ?? 8_000));
 
   /** Run `fn` exclusively for `accountId` (FIFO with prior callers). */
   run<T>(accountId: string, fn: () => Promise<T>): Promise<T> {
     const key = String(accountId || '');
     if (!key) return fn();
     const prev = this.tails.get(key) ?? Promise.resolve();
-    const run = prev.then(
-      () => fn(),
-      () => fn(),
-    );
-    const sentinel = run.then(
+
+    let timedOut = false;
+    let settle!: (err: unknown, value?: T) => void;
+    const work = new Promise<T>((resolve, reject) => {
+      settle = (err, value) => (err ? reject(err) : resolve(value as T));
+    });
+
+    const timer =
+      this.waitMs > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            settle(new BtError(BtErrorCode.RATE_LIMITED, 'account busy — too many queued mutations'));
+          }, this.waitMs)
+        : undefined;
+
+    const slot = prev
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+      .then(() => {
+        if (timer) clearTimeout(timer);
+        if (timedOut) return;
+        return Promise.resolve()
+          .then(fn)
+          .then(
+            (v) => settle(null, v),
+            (e) => settle(e),
+          );
+      });
+
+    const sentinel = slot.then(
       () => undefined,
       () => undefined,
     );
@@ -28,7 +62,7 @@ export class AccountExclusiveQueue {
     void sentinel.then(() => {
       if (this.tails.get(key) === sentinel) this.tails.delete(key);
     });
-    return run;
+    return work;
   }
 
   /** Approx number of accounts with an in-flight exclusive chain (metrics). */

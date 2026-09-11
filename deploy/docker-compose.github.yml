@@ -131,7 +131,7 @@ services:
     image: postgres:16-alpine
     container_name: bxnet_bt_postgres
     <<: *restart
-    command: postgres -c max_connections=250
+    command: postgres -c max_connections=400
     environment:
       POSTGRES_USER: ${BT_POSTGRES_USER}
       POSTGRES_PASSWORD: ${BT_POSTGRES_PASSWORD}
@@ -174,10 +174,11 @@ services:
     environment:
       NODE_ENV: production
       API_PORT: '4100'
-      # HTTP readers: 80 vs previous 40. Postgres max_connections is 250 so
-      # gateway 80 + engine 40 + market-data still fit. pool_timeout 15s so a
-      # saturated pool fails before k6's 60s hang.
-      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=80&pool_timeout=15
+      # HTTP + in-process engine: 200 vs previous 80. Postgres max_connections
+      # is 400 so gateway 200 + engine 40 + market-data still fit. pool_timeout
+      # 10s so a saturated pool fails before k6's 60s hang.
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=200&pool_timeout=10
+      ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-8000}
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
       CHART_PROVIDER: ${CHART_PROVIDER:-internal}
       BROKER_UTC_OFFSET_SEC: ${BROKER_UTC_OFFSET_SEC:-10800}
@@ -234,6 +235,7 @@ services:
       ENGINE_TICK_CONCURRENCY: ${ENGINE_TICK_CONCURRENCY:-8}
       ORDER_RATE_MAX: ${ORDER_RATE_MAX:-40}
       ORDER_RATE_WINDOW_MS: ${ORDER_RATE_WINDOW_MS:-1000}
+      ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-8000}
     depends_on:
       btrader-postgres: { condition: service_healthy }
       btrader-redis: { condition: service_healthy }

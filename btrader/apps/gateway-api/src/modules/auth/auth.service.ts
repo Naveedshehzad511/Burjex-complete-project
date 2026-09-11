@@ -9,6 +9,15 @@ function genDemoPassword(): string {
   return crypto.randomBytes(9).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) + '9x';
 }
 
+/** bcrypt only for bcrypt hashes — never burn CPU comparing a sha256 hex as $2a$. */
+async function passwordMatches(hash: string | null | undefined, password: string): Promise<boolean> {
+  if (!hash) return false;
+  if (hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$')) {
+    return bcrypt.compare(password, hash).catch(() => false);
+  }
+  return crypto.createHash('sha256').update(password).digest('hex') === hash;
+}
+
 @Injectable()
 export class AuthService {
   constructor(private readonly jwt: JwtService) {}
@@ -147,10 +156,7 @@ export class AuthService {
     }
     if (!user || !user.passwordHash) throw new UnauthorizedException('invalid credentials');
 
-    const ok =
-      // accept bcrypt or the seed's sha256 (dev) for convenience
-      (await bcrypt.compare(password, user.passwordHash).catch(() => false)) ||
-      crypto.createHash('sha256').update(password).digest('hex') === user.passwordHash;
+    const ok = await passwordMatches(user.passwordHash, password);
     if (!ok) throw new UnauthorizedException('invalid credentials');
     if (!user.isActive) throw new UnauthorizedException('account disabled');
 
@@ -175,13 +181,7 @@ export class AuthService {
     // password first (so an account where investor == main stays full-access,
     // the legacy default), then the investor password. Only a distinct investor
     // password that matches yields a read-only session.
-    const matches = async (h: string | null | undefined): Promise<boolean> => {
-      if (!h) return false;
-      return (
-        (await bcrypt.compare(password, h).catch(() => false)) ||
-        crypto.createHash('sha256').update(password).digest('hex') === h
-      );
-    };
+    const matches = (h: string | null | undefined) => passwordMatches(h, password);
     let readonly = false;
     if (await matches(mainHash)) {
       readonly = false;
