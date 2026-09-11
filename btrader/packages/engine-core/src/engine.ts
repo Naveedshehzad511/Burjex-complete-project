@@ -598,10 +598,8 @@ export class TradingEngine {
     const coveredVolume =
       book === 'A' ? roundLots((volume * routing.coverageRatio) / 100, d(sym.lotStep)) : 0;
 
-    // Fast-fail free-margin check (authoritative re-check is inside the TX with
-    // a row lock so concurrent opens / withdrawals cannot double-spend margin).
-    const agg = await this.aggregatesFor(tenantId, accountId);
-    if (agg.freeMargin < margin) throw new BtError(BtErrorCode.INSUFFICIENT_MARGIN);
+    // Authoritative free-margin check is inside the TX (row lock). Skip the
+    // extra pre-read — it doubled pool use under 1000 concurrent opens.
     stopReads();
 
     const stopTx = latency.start('order.exec.tx');
@@ -677,7 +675,19 @@ export class TradingEngine {
           comment: req.comment,
         },
       });
-      return { position, order };
+      const viewsAfter = await this.openViewsTx(tx, tenantId, accountId, locked.currency);
+      const after = computeAggregates(d(locked.balance), d(locked.credit), viewsAfter);
+      await tx.account.update({
+        where: { id: locked.id },
+        data: {
+          equity: after.equity,
+          margin: after.margin,
+          freeMargin: after.freeMargin,
+          marginLevel: after.marginLevel,
+          floatingPL: after.floatingPL,
+        },
+      });
+      return { position, order, snap: this.aggSnapshot(locked, after) };
     }, _TX_OPTS);
     stopTx();
 
@@ -710,8 +720,13 @@ export class TradingEngine {
       stopCover();
     }
 
-    const snapshot = this.accountRowSnapshot(account);
-    this.publishAfterFill(tenantId, accountId, result.position.id, 'opened');
+    const snapshot = result.snap;
+    try {
+      this.book.upsert(toBookRow(result.position as unknown as Record<string, unknown>, account.currency));
+    } catch {
+      /* reconcile will heal */
+    }
+    this.publishAfterFill(tenantId, accountId, result.position.id, 'opened', snapshot);
     return {
       accepted: true,
       orderId: result.order.id,
@@ -1497,7 +1512,7 @@ export class TradingEngine {
     let coverToClose = 0;
     let realized = 0;
 
-    await prisma.$transaction(async (tx) => {
+    const closedSnap = await prisma.$transaction(async (tx) => {
       // Lock account + position so concurrent partial closes cannot over-close
       // or double-realize P/L against the same lots.
       await tx.$queryRaw`SELECT id FROM accounts WHERE id = ${pos.accountId} FOR UPDATE`;
@@ -1581,8 +1596,20 @@ export class TradingEngine {
           },
         });
       }
-      await tx.account.update({ where: { id: acct.id }, data: { balance: newBalance } });
-      return acct.id;
+      const views = await this.openViewsTx(tx, tenantId, pos.accountId, acct.currency);
+      const after = computeAggregates(newBalance, d(acct.credit), views);
+      await tx.account.update({
+        where: { id: acct.id },
+        data: {
+          balance: newBalance,
+          equity: after.equity,
+          margin: after.margin,
+          freeMargin: after.freeMargin,
+          marginLevel: after.marginLevel,
+          floatingPL: after.floatingPL,
+        },
+      });
+      return this.aggSnapshot({ ...acct, balance: newBalance }, after);
     }, _TX_OPTS);
 
     // A-book: unwind the proportional slice of the LP cover (works for partial
@@ -1591,14 +1618,16 @@ export class TradingEngine {
       await this.coverClose(tenantId, pos.id, coverToClose, closePrice).catch(() => undefined);
     }
 
-    this.publishAfterFill(tenantId, pos.accountId, pos.id, 'closed', realized);
+    if (partial) void this.syncBook(pos.id);
+    else this.book.remove(pos.id);
+    this.publishAfterFill(tenantId, pos.accountId, pos.id, 'closed', closedSnap, realized);
     return {
       accepted: true,
       positionId: pos.id,
       status: 'FILLED',
       fillPrice: closePrice,
       filledVolume: vol,
-      account: this.accountRowSnapshot(pos.account),
+      account: closedSnap,
     };
   }
 
@@ -2505,20 +2534,10 @@ export class TradingEngine {
     return computeAggregates(d(acct.balance), d(acct.credit), views);
   }
 
-  /** Immediate HTTP snapshot from the row we already loaded — WS/CRM get the live one via publishAfterFill. */
-  private accountRowSnapshot(account: {
-    id: string;
-    login: string;
-    currency: string;
-    leverage: number;
-    balance: Prisma.Decimal | number;
-    credit: Prisma.Decimal | number;
-    equity?: Prisma.Decimal | number | null;
-    margin?: Prisma.Decimal | number | null;
-    freeMargin?: Prisma.Decimal | number | null;
-    marginLevel?: Prisma.Decimal | number | null;
-    floatingPL?: Prisma.Decimal | number | null;
-  }): AccountSnapshot {
+  private aggSnapshot(
+    account: { id: string; login: string; currency: string; leverage: number; balance: Prisma.Decimal | number; credit: Prisma.Decimal | number },
+    agg: { equity: number; margin: number; freeMargin: number; marginLevel: number; floatingPL: number },
+  ): AccountSnapshot {
     return {
       accountId: account.id,
       login: account.login,
@@ -2526,11 +2545,11 @@ export class TradingEngine {
       leverage: account.leverage,
       balance: d(account.balance),
       credit: d(account.credit),
-      equity: d(account.equity ?? account.balance),
-      margin: d(account.margin ?? 0),
-      freeMargin: d(account.freeMargin ?? account.balance),
-      marginLevel: d(account.marginLevel ?? 0),
-      floatingPL: d(account.floatingPL ?? 0),
+      equity: agg.equity,
+      margin: agg.margin,
+      freeMargin: agg.freeMargin,
+      marginLevel: agg.marginLevel,
+      floatingPL: agg.floatingPL,
       closedPL: 0,
       bonus: d(account.credit),
       dividend: 0,
@@ -2538,39 +2557,35 @@ export class TradingEngine {
     };
   }
 
-  /** Recompute, book, WS, CRM — after the fill/close already committed. */
+  /** WS + CRM after the fill/close already committed — no extra DB on the HTTP path. */
   private publishAfterFill(
     tenantId: string,
     accountId: string,
     positionId: string,
     kind: 'opened' | 'closed',
+    snap: AccountSnapshot,
     profit?: number,
   ): void {
-    void this.recomputeAccount(tenantId, accountId)
-      .then((snap) => {
-        void this.syncBook(positionId);
-        this.deps.emit?.({ kind: 'POSITION_UPDATE', tenantId, positionId, accountId });
-        this.deps.emit?.({ kind: 'ACCOUNT_UPDATE', tenantId, account: snap });
-        void this.deps.crmOutbox?.(tenantId, 'account.snapshot', {
-          login: snap.login,
-          balance: snap.balance,
-          credit: snap.credit,
-          equity: snap.equity,
-          margin: snap.margin,
-          freeMargin: snap.freeMargin,
-          marginLevel: snap.marginLevel,
-          floatingPL: snap.floatingPL,
-          positionId,
-          ...(profit != null ? { profit } : {}),
-          reason: kind === 'opened' ? 'position.opened' : 'position.closed',
-        });
-        void this.deps.crmOutbox?.(tenantId, kind === 'opened' ? 'position.opened' : 'position.closed', {
-          login: snap.login,
-          positionId,
-          ...(profit != null ? { profit } : {}),
-        });
-      })
-      .catch(() => undefined);
+    this.deps.emit?.({ kind: 'POSITION_UPDATE', tenantId, positionId, accountId });
+    this.deps.emit?.({ kind: 'ACCOUNT_UPDATE', tenantId, account: snap });
+    void this.deps.crmOutbox?.(tenantId, 'account.snapshot', {
+      login: snap.login,
+      balance: snap.balance,
+      credit: snap.credit,
+      equity: snap.equity,
+      margin: snap.margin,
+      freeMargin: snap.freeMargin,
+      marginLevel: snap.marginLevel,
+      floatingPL: snap.floatingPL,
+      positionId,
+      ...(profit != null ? { profit } : {}),
+      reason: kind === 'opened' ? 'position.opened' : 'position.closed',
+    });
+    void this.deps.crmOutbox?.(tenantId, kind === 'opened' ? 'position.opened' : 'position.closed', {
+      login: snap.login,
+      positionId,
+      ...(profit != null ? { profit } : {}),
+    });
   }
 
   /** Recompute and persist live aggregates; return the snapshot for WS/CRM. */
