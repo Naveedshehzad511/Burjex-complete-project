@@ -31,6 +31,9 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# --- leftover standalone trader SPA (live app is web/portal) ---
+web/trader/
+
 # --- runtime junk ---
 _archive/
 .docker-winrm/

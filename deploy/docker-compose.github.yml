@@ -4,7 +4,7 @@
 #
 #   docker compose -p burjex_net -f deploy/docker-compose.github.yml --env-file deploy/.env.github up -d --build
 #
-# Host ports: 6800 CRM | 6100 REST | 6101 WS | 6200 admin | 6300 ingest | 6400 trader | 6500 portal
+# Host ports: 6800 CRM | 6100 REST | 6101 WS | 6200 admin | 6300 ingest | 6500 portal
 
 name: burjex_net
 
@@ -22,7 +22,6 @@ services:
       - '6101:6101'
       - '6200:6200'
       - '6300:6300'
-      - '6400:6400'
       - '6500:6500'
     env_file: .env.github
     volumes:
@@ -32,7 +31,6 @@ services:
       - bxnet_crm_static:/srv/crm/static:ro
       - bxnet_crm_media:/srv/crm/media:ro
       - ${BURJEX_WEB_ADMIN}:/srv/btrader-admin:ro
-      - ${BURJEX_WEB_TRADER}:/srv/btrader-trader:ro
       - ${BURJEX_WEB_PORTAL}:/srv/burjex-portal:ro
     depends_on: [crm-web, btrader-gateway, btrader-ws, btrader-market-data]
     networks: [edge, live_edge]

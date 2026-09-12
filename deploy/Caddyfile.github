@@ -141,10 +141,6 @@
 	import api_proxy bxnet_bt_market_data:4200
 }
 
-:6400 {
-	import spa_site /srv/btrader-trader
-}
-
 :6500 {
 	import portal_spa
 }
