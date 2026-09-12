@@ -163,6 +163,11 @@ urlpatterns = [
         name="admin-crm-group-symbols-json",
     ),
     path(
+        "crm/group-management/btrader-symbols.json",
+        symbol_admin_views.btrader_engine_symbols_json,
+        name="admin-btrader-engine-symbols-json",
+    ),
+    path(
         "crm/group-management/match-trader-groups/",
         views.match_trader_broker_groups_admin,
         name="admin-match-trader-broker-groups",

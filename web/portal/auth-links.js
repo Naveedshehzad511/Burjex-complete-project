@@ -8,7 +8,12 @@
   var hashParams = new URLSearchParams(hashQuery);
   var token = params.get("oauth_token") || hashParams.get("oauth_token") || "";
   var socialError = params.get("social_error") || hashParams.get("social_error") || "";
+  var ibRef = params.get("ref") || params.get("ib") || hashParams.get("ref") || hashParams.get("ib") || "";
   var path = (location.pathname || "/").replace(/\/+$/, "") || "/";
+
+  if (ibRef) {
+    try { localStorage.setItem("bx_signup_ref", ibRef); } catch (e) {}
+  }
 
   function setPref(k, v) {
     try {

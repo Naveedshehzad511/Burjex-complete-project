@@ -362,12 +362,24 @@ class IBLevelUpgradeRequest(models.Model):
 class IBCommissionMatrixRule(models.Model):
     """
     CRM-side IB payout rules by IB level, optional account type, symbol group, or single-symbol override.
+    MT5 rules stay on the MT5 rebate sync. BTrader rules pay $ per 1.00 lot on engine closes.
     """
+
+    class Platform(models.TextChoices):
+        MT5 = "MT5", "MT5"
+        BTRADER = "BTRADER", "BTrader"
 
     class CommissionMode(models.TextChoices):
         PERCENT = "PERCENT", "Percentage"
         FIXED_PER_LOT = "FIXED_PER_LOT", "Fixed per lot"
 
+    platform = models.CharField(
+        max_length=16,
+        choices=Platform.choices,
+        default=Platform.MT5,
+        db_index=True,
+        help_text="MT5 = existing MetaTrader rebate path. BTrader = engine close rebate ($ / 1.00 lot).",
+    )
     ib_level = models.ForeignKey(IBLevel, on_delete=models.CASCADE, related_name="matrix_rules")
     account_type = models.ForeignKey(
         "admin_panel.TradingAccountType",
@@ -420,6 +432,9 @@ class IBCommissionMatrixRule(models.Model):
         ordering = ["-priority", "id"]
 
     def __str__(self) -> str:
+        plat = (self.platform or self.Platform.MT5).upper()
+        if plat == self.Platform.BTRADER:
+            return f"{self.ib_level} / BTrader:{self.matrix_symbol_name or '*'}"
         if self.mt5_crm_group_id:
             sym = (self.matrix_symbol_name or "").strip() or "*"
             return f"{self.ib_level} / CRM:{self.mt5_crm_group_id}:{sym}"
@@ -480,4 +495,24 @@ class ProcessedMT5Deal(models.Model):
 
     def __str__(self) -> str:
         return f"Deal {self.deal_id} for IB {self.ib_user.email}: ${self.rebate_amount}"
+
+
+class ProcessedBTraderDeal(models.Model):
+    """Idempotent BTrader close rebate ledger, keyed by engine deal / trade id."""
+
+    deal_id = models.CharField(max_length=64, unique=True, db_index=True)
+    position_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    login_id = models.CharField(max_length=64, db_index=True)
+    symbol = models.CharField(max_length=64)
+    volume_lots = models.DecimalField(max_digits=12, decimal_places=4)
+    rebate_per_lot = models.DecimalField(max_digits=12, decimal_places=4)
+    rebate_amount = models.DecimalField(max_digits=20, decimal_places=4)
+    ib_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="processed_btrader_deals")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"BTrader {self.deal_id} IB {self.ib_user_id}: ${self.rebate_amount}"
 

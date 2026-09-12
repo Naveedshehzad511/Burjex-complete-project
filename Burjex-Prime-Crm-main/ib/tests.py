@@ -136,3 +136,98 @@ class IBModuleTests(TestCase):
         # Calculate expected balance: 150.00 - 30.00 (pending hold) - 20.00 (internal transfer) = 100.00
         balance = _ib_wallet_balance_for_user(self.ib_user)
         self.assertEqual(balance, Decimal("100.00"))
+
+
+class BTraderIbRebateTests(TestCase):
+    def setUp(self):
+        from accounts.models import MT5Account
+        from ib.models import IBCommissionMatrixRule, IBLevel, IBProfile, IBRequest
+
+        self.level = IBLevel.objects.create(name="BT Gold", sequence=1, is_active=True)
+        self.ib_user = User.objects.create_user(
+            username="bt_ib",
+            email="btib@example.com",
+            role=User.Roles.IB,
+            password="testpassword123",
+        )
+        IBProfile.objects.create(user=self.ib_user, ib_code="IBTEST001", ib_level=self.level)
+        self.client_user = User.objects.create_user(
+            username="bt_client",
+            email="btclient@example.com",
+            role=User.Roles.CLIENT,
+            password="testpassword123",
+        )
+        IBRequest.objects.create(
+            ib_user=self.ib_user,
+            client_user=self.client_user,
+            status=IBRequest.Status.APPROVED,
+            notes="Referral signup",
+            processed_at=timezone.now(),
+        )
+        self.live = MT5Account.objects.create(
+            user=self.client_user,
+            account_type=MT5Account.AccountType.LIVE,
+            login_id="88001",
+            server="BTrader",
+        )
+        self.demo = MT5Account.objects.create(
+            user=self.client_user,
+            account_type=MT5Account.AccountType.DEMO,
+            login_id="88002",
+            server="BTrader",
+        )
+        IBCommissionMatrixRule.objects.create(
+            ib_level=self.level,
+            platform=IBCommissionMatrixRule.Platform.BTRADER,
+            matrix_symbol_name="XAUUSD.s",
+            commission_mode=IBCommissionMatrixRule.CommissionMode.FIXED_PER_LOT,
+            value=Decimal("5.00"),
+            priority=10,
+        )
+
+    def test_scales_with_lots_and_is_idempotent(self):
+        from ib.btrader_rebates import credit_btrader_close
+        from ib.models import ProcessedBTraderDeal
+
+        first = credit_btrader_close(
+            login="88001",
+            deal_id="deal-aaa",
+            symbol="XAUUSD.s",
+            lots="0.10",
+            position_id="pos-1",
+        )
+        self.assertTrue(first["credited"])
+        self.assertEqual(first["amount"], "0.50")
+        self.assertEqual(ProcessedBTraderDeal.objects.filter(deal_id="deal-aaa").count(), 1)
+
+        again = credit_btrader_close(
+            login="88001",
+            deal_id="deal-aaa",
+            symbol="XAUUSD.s",
+            lots="0.10",
+            position_id="pos-1",
+        )
+        self.assertFalse(again["credited"])
+        self.assertEqual(again["reason"], "duplicate")
+        self.assertEqual(ProcessedBTraderDeal.objects.filter(deal_id="deal-aaa").count(), 1)
+
+        two_lots = credit_btrader_close(
+            login="88001",
+            deal_id="deal-bbb",
+            symbol="XAUUSD.s",
+            lots="2",
+        )
+        self.assertTrue(two_lots["credited"])
+        self.assertEqual(two_lots["amount"], "10.00")
+
+    def test_demo_and_unknown_symbol_are_skipped(self):
+        from ib.btrader_rebates import credit_btrader_close
+
+        demo = credit_btrader_close(login="88002", deal_id="deal-demo", symbol="XAUUSD.s", lots="1")
+        self.assertFalse(demo["credited"])
+        self.assertEqual(demo["reason"], "demo")
+
+        miss = credit_btrader_close(login="88001", deal_id="deal-eur", symbol="EURUSD", lots="1")
+        self.assertFalse(miss["credited"])
+        self.assertEqual(miss["reason"], "no_rule")
+

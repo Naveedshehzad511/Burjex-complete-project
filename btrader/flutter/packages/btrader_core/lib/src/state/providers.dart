@@ -31,6 +31,7 @@ class AuthController extends StateNotifier<AuthState> {
   static const _kAccess = 'bt_access';
   static const _kRefresh = 'bt_refresh';
   static const _kRole = 'bt_role';
+  static const _kCrmToken = 'crm_token';
 
   AuthStore get _store => _ref.read(authStoreProvider);
   ApiClient get _api => _ref.read(apiClientProvider);
@@ -51,6 +52,7 @@ class AuthController extends StateNotifier<AuthState> {
     await p.remove(_kAccess);
     await p.remove(_kRefresh);
     await p.remove(_kRole);
+    await p.remove(_kCrmToken);
     if (mounted) state = const AuthState(loading: false, authenticated: false);
   }
 
@@ -72,6 +74,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> login(String email, String password) async {
     final data = await _api.post('/auth/login', {'email': email, 'password': password});
     await _store4(data);
+    await _tryCrmLogin(email, password);
   }
 
   /// CRM client forgot-password (email reset link). Independent of B-Trader login.
@@ -194,7 +197,28 @@ class AuthController extends StateNotifier<AuthState> {
     await p.remove(_kAccess);
     await p.remove(_kRefresh);
     await p.remove(_kRole);
+    await p.remove(_kCrmToken);
     state = const AuthState(loading: false, authenticated: false);
+  }
+
+  Future<void> _tryCrmLogin(String email, String password) async {
+    try {
+      final dio = Dio(BaseOptions(
+        baseUrl: 'https://crm.burjexprime.net/api/v1',
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 20),
+      ));
+      final res = await dio.post('/auth/login/', data: {'username': email.trim(), 'password': password});
+      final body = res.data;
+      if (body is! Map || body['success'] != true) return;
+      final data = body['data'];
+      if (data is! Map) return;
+      if (data['totp_required'] == true) return;
+      final token = (data['token'] ?? data['access'] ?? '').toString();
+      if (token.isEmpty) return;
+      final p = await SharedPreferences.getInstance();
+      await p.setString(_kCrmToken, token);
+    } catch (_) {}
   }
 }
 
@@ -241,4 +265,41 @@ final symbolsProvider = FutureProvider<List<TradeSymbol>>((ref) async {
   }
   final data = await api.get('/symbols', query: query) as List;
   return data.map((e) => TradeSymbol.fromJson(e as Map<String, dynamic>)).toList();
+});
+
+class IbReferralInfo {
+  const IbReferralInfo({required this.ibCode, required this.referralLink});
+  final String ibCode;
+  final String referralLink;
+}
+
+/// IB ID + share link from CRM (only after CRM login with the same email).
+final ibReferralProvider = FutureProvider<IbReferralInfo?>((ref) async {
+  ref.watch(authControllerProvider);
+  final p = await SharedPreferences.getInstance();
+  final token = p.getString('crm_token') ?? '';
+  if (token.isEmpty) return null;
+  try {
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://crm.burjexprime.net/api/v1',
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 20),
+      headers: {'Authorization': 'Token $token'},
+    ));
+    final res = await dio.get('/ib/dashboard/');
+    final body = res.data;
+    if (body is! Map || body['success'] != true) return null;
+    final data = body['data'];
+    if (data is! Map) return null;
+    final profile = data['ib_profile'];
+    if (profile is! Map) return null;
+    final code = (profile['ib_code'] ?? '').toString().trim();
+    if (code.isEmpty) return null;
+    return IbReferralInfo(
+      ibCode: code,
+      referralLink: (profile['referral_link'] ?? '').toString(),
+    );
+  } catch (_) {
+    return null;
+  }
 });

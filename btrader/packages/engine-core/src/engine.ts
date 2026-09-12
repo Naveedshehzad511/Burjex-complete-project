@@ -1630,6 +1630,7 @@ export class TradingEngine {
     let partial = false;
     let coverToClose = 0;
     let realized = 0;
+    let closeDealId = "";
 
     const closedSnap = await prisma.$transaction(async (tx) => {
       // Lock account + position so concurrent partial closes cannot over-close
@@ -1673,7 +1674,7 @@ export class TradingEngine {
       }
       const newBalance = d(acct.balance) + realized;
 
-      await tx.deal.create({
+      const closeDeal = await tx.deal.create({
         data: {
           tenantId,
           accountId: pos.accountId,
@@ -1695,6 +1696,7 @@ export class TradingEngine {
           }),
         },
       });
+      closeDealId = closeDeal.id;
 
       if (partial) {
         const remaining = openVol - vol;
@@ -1757,6 +1759,7 @@ export class TradingEngine {
       side: pos.side as OrderSide,
       closePrice,
       volume: vol,
+      dealId: closeDealId,
       slPrice: pos.slPrice != null ? d(pos.slPrice) : undefined,
       tpPrice: pos.tpPrice != null ? d(pos.tpPrice) : undefined,
       openedAt: pos.openedAt.toISOString(),
@@ -2974,6 +2977,7 @@ export class TradingEngine {
       side?: OrderSide;
       closePrice?: number;
       volume?: number;
+      dealId?: string;
       slPrice?: number;
       tpPrice?: number;
       openedAt?: string;
@@ -3021,6 +3025,9 @@ export class TradingEngine {
       login: snap.login,
       positionId,
       ...(profit != null ? { profit } : {}),
+      ...(positionSnap?.symbol ? { symbol: positionSnap.symbol } : {}),
+      ...(positionSnap?.volume != null ? { volume: positionSnap.volume } : {}),
+      ...(positionSnap?.dealId ? { dealId: positionSnap.dealId } : {}),
     });
   }
 

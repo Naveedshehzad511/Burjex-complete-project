@@ -20,17 +20,27 @@
       {% endif %}
     </div>
 
-    {% if referral_link %}
+    {% if referral_link or ib_profile %}
     <div class="mt-4 rounded-xl p-4" style="background:var(--portal-muted-bg);border:1px solid var(--portal-border);">
-      <label class="portal-form-label mb-2" for="referralLink">Copy Referral Link</label>
+      {% if ib_profile and ib_profile.ib_code %}
+      <label class="portal-form-label mb-2" for="ibAppId">App IB ID</label>
+      <div class="flex flex-col sm:flex-row gap-2 mb-4">
+        <input type="text" id="ibAppId" readonly class="portal-input flex-1 font-mono text-sm" value="{{ ib_profile.ib_code }}" />
+        <button type="button" onclick="copyIbField('ibAppId')" class="portal-btn-primary shrink-0">Copy ID</button>
+      </div>
+      <p class="text-xs mb-4" style="color:var(--portal-text-muted);">Clients type this ID on the app Register screen.</p>
+      {% endif %}
+      {% if referral_link %}
+      <label class="portal-form-label mb-2" for="referralLink">Referral link</label>
       <div class="flex flex-col sm:flex-row gap-2">
         <input type="text" id="referralLink" readonly class="portal-input flex-1 font-mono text-sm" value="{{ referral_link }}" />
-        <button type="button" onclick="copyReferralLink()" class="portal-btn-primary shrink-0">Copy</button>
+        <button type="button" onclick="copyIbField('referralLink')" class="portal-btn-primary shrink-0">Copy</button>
       </div>
+      {% endif %}
     </div>
     <script>
-      function copyReferralLink() {
-        var el = document.getElementById("referralLink");
+      function copyIbField(id) {
+        var el = document.getElementById(id);
         if (!el) return;
         var val = el.value || "";
         if (navigator.clipboard && navigator.clipboard.writeText) {

@@ -24,13 +24,13 @@ def generate_unique_ib_code() -> str:
     return tail
 
 
-def build_register_referral_url(request, ib_code: str) -> str:
-    """Absolute URL: https://host/register?ref={ib_code}"""
-    from django.urls import reverse
+PORTAL_REGISTER_URL = "https://portal.burjexprime.net/register"
 
-    path = reverse("client-register")
+
+def build_register_referral_url(request, ib_code: str) -> str:
+    """App/portal signup URL with the IB ID: https://portal.burjexprime.net/register?ref={ib_code}."""
     safe_code = quote(str(ib_code).strip(), safe="")
-    return request.build_absolute_uri(f"{path}?ref={safe_code}")
+    return f"{PORTAL_REGISTER_URL}?ref={safe_code}"
 
 
 def ensure_profile_referral_url(request, profile) -> str:

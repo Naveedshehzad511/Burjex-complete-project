@@ -4226,7 +4226,11 @@ def referral_link(request):
     referral_url = (
         build_register_referral_url(request, prof.ib_code) if (prof.ib_code or "").strip() else (prof.referral_link or "")
     )
-    return render(request, "user_portal/referral_link.html", {"referral_url": referral_url, "title": "Referral Link"})
+    return render(
+        request,
+        "user_portal/referral_link.html",
+        {"referral_url": referral_url, "ib_code": prof.ib_code or "", "title": "Referral Link"},
+    )
 
 
 @login_required

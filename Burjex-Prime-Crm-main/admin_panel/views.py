@@ -1074,7 +1074,11 @@ def ib_requests_page(request):
                 "ib_request_approved",
                 to_email=client.email,
                 user=client,
-                extra_context={"name": client.display_name(), "reason": profile.referral_link or "—"},
+                extra_context={
+                "name": client.display_name(),
+                "reason": profile.referral_link or "—",
+                "ib_code": profile.ib_code or "",
+            },
             )
         elif action == "reject":
             req.status = IBRequest.Status.REJECTED

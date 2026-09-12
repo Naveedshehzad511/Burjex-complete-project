@@ -8,7 +8,8 @@ import 'signup_countries.dart';
 const _navy = Color(0xFF002D58);
 
 class RegisterScreen extends ConsumerStatefulWidget {
-  const RegisterScreen({super.key});
+  const RegisterScreen({super.key, this.initialIbId = ''});
+  final String initialIbId;
   @override
   ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
@@ -27,6 +28,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _busy = false;
   String? _error;
   String? _ok;
+
+  @override
+  void initState() {
+    super.initState();
+    final q = Uri.base.queryParameters;
+    final fromUrl = (q['ref'] ?? q['ib'] ?? '').trim();
+    final seed = widget.initialIbId.trim().isNotEmpty ? widget.initialIbId.trim() : fromUrl;
+    if (seed.isNotEmpty) _refCode.text = seed;
+  }
 
   @override
   void dispose() {
@@ -179,7 +189,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 const SizedBox(height: 10),
                 TextField(controller: _confirm, obscureText: true, decoration: _dec('Confirm password *')),
                 const SizedBox(height: 10),
-                TextField(controller: _refCode, decoration: _dec('Referral code (optional)')),
+                TextField(controller: _refCode, decoration: _dec('IB ID (optional)')),
                 const SizedBox(height: 8),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,

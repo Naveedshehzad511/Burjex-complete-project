@@ -155,7 +155,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 height: 52,
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () => context.push('/register'),
+                  onPressed: () {
+                    final refId = (Uri.base.queryParameters['ref'] ?? Uri.base.queryParameters['ib'] ?? '').trim();
+                    context.push(refId.isEmpty ? '/register' : '/register?ref=$refId');
+                  },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: _navy,
                     side: const BorderSide(color: Color(0xFFC9CED8)),

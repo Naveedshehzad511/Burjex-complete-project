@@ -138,6 +138,14 @@ class BTraderClient:
     def balance_op(self, login: str, payload: dict) -> dict:
         return self.request("POST", f"/crm/accounts/{login}/balance", payload)
 
+    def list_symbols(self) -> list[dict]:
+        data = self.request("GET", "/crm/symbols")
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict) and isinstance(data.get("symbols"), list):
+            return data["symbols"]
+        return []
+
     def ping(self) -> tuple[bool, str]:
         """Health/auth check via GET /crm/groups (crm.read)."""
         try:

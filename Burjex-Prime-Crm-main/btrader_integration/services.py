@@ -104,6 +104,34 @@ def test_btrader_connection(
     return client.ping()
 
 
+def list_btrader_engine_symbols() -> tuple[list[str], str]:
+    """Enabled BTrader engine symbols the broker created (XAUUSD.s), not raw feed names."""
+    if not is_btrader_configured():
+        return [], "BTrader integration is not configured."
+    try:
+        client = _client_from_settings()
+        rows = client.list_symbols()
+        names: list[str] = []
+        seen: set[str] = set()
+        for row in rows:
+            name = ""
+            if isinstance(row, str):
+                name = row.strip()
+            elif isinstance(row, dict):
+                name = str(row.get("symbol") or row.get("name") or "").strip()
+            if not name:
+                continue
+            key = name.upper()
+            if key in seen:
+                continue
+            seen.add(key)
+            names.append(name)
+        return names, ""
+    except Exception as exc:
+        logger.warning("BTrader engine symbol list failed: %s", exc)
+        return [], str(exc)[:250]
+
+
 def fetch_btrader_groups() -> tuple[bool, list[str]]:
     """Return (connected, group_names) for Group Management tree."""
     if not is_btrader_configured():

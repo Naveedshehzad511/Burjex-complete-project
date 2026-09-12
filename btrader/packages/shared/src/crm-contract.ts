@@ -181,6 +181,7 @@ export interface CrmWebhookEvent<T = unknown> {
  */
 export const CRM_ROUTE_MAP = {
   listGroups: 'GET /v1/crm/groups',
+  listSymbols: 'GET /v1/crm/symbols',
   createAccount: 'POST /v1/crm/accounts',
   getAccount: 'GET /v1/crm/accounts/:login',
   batchAccounts: 'POST /v1/crm/accounts/batch',

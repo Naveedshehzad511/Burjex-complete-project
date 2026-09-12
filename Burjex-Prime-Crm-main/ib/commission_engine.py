@@ -79,7 +79,11 @@ def infer_symbol_group_from_account_suffix(mt5_symbol: str, account_type: Tradin
 def _matrix_rules_queryset(ib_level: IBLevel | None, account_type_id: int | None):
     if not ib_level:
         return IBCommissionMatrixRule.objects.none()
-    qs = IBCommissionMatrixRule.objects.filter(ib_level=ib_level, is_active=True).select_related(
+    qs = IBCommissionMatrixRule.objects.filter(
+        ib_level=ib_level,
+        is_active=True,
+        platform=IBCommissionMatrixRule.Platform.MT5,
+    ).select_related(
         "trading_symbol", "symbol_group", "account_type", "mt5_crm_group"
     )
     if account_type_id:

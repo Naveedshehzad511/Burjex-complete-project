@@ -240,6 +240,35 @@ class SettingsScreen extends ConsumerWidget {
           subtitle: const Text('Virtual funds, real prices — practice risk-free'),
           onTap: openDemo,
         ),
+        ...ref.watch(ibReferralProvider).when(
+              data: (info) {
+                if (info == null) return const <Widget>[];
+                return [
+                  const _SectionLabel('IB'),
+                  ListTile(
+                    leading: const Icon(Icons.badge_outlined),
+                    title: const Text('IB ID'),
+                    subtitle: Text(info.ibCode),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.copy, size: 18),
+                      onPressed: () => Clipboard.setData(ClipboardData(text: info.ibCode)),
+                    ),
+                  ),
+                  if (info.referralLink.isNotEmpty)
+                    ListTile(
+                      leading: const Icon(Icons.link),
+                      title: const Text('Referral link'),
+                      subtitle: Text(info.referralLink, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.copy, size: 18),
+                        onPressed: () => Clipboard.setData(ClipboardData(text: info.referralLink)),
+                      ),
+                    ),
+                ];
+              },
+              loading: () => const <Widget>[],
+              error: (_, __) => const <Widget>[],
+            ),
         const _SectionLabel('Appearance'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),

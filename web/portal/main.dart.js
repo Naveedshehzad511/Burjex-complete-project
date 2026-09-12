@@ -119203,6 +119203,7 @@ J.c_(l,"password",a1.a.a)
 J.c_(l,"confirm_password",a2.a.a)
 if(n.ch){a1=n.ay?"on":""
 J.c_(l,"captcha",a1)}a1=B.c.ai(n.Q.a.a)
+if(a1.length===0)try{var u=new URL(self.location.href);a1=B.c.ai(u.searchParams.get("ref")||u.searchParams.get("ib")||localStorage.getItem("bx_signup_ref")||"")}catch(a1z){}
 if(a1.length!==0)J.c_(l,"signup_ref",a1)
 s=7
 return A.i(a3.e3("/auth/signup/",l),$async$vC)
@@ -119287,7 +119288,7 @@ q=A.cb(B.a7,A.B(l,j,j,j,j,B.a8C,j,j,j),B.o,j,j,new A.bY(B.Lk,j,n,q,j,j,B.Q),j,56
 n=A.b([new A.HF(A.bw("[\\d\\s\\-]",!0,!1,!1),!0,"")],t.VS)
 B.b.O(r,A.b([A.aS(A.b([q,B.b2,A.bq(A.bT(B.F,!1,k.w,A.bM(k.hI(g)?"Phone *":"Phone","Local number"),n,B.cR,j,1,!1,j,j,j,j,B.r,j),1)],s),B.B,B.f,B.j,0),B.a5],s))}if(k.mT("address"))B.b.O(r,A.b([A.bT(B.F,!1,k.x,A.bM(k.hI("address")?"Address *":"Address",j),j,j,j,1,!1,j,j,j,j,B.r,j),B.a5],s))
 if(k.mT(f))B.b.O(r,A.b([A.bT(B.F,!1,k.y,A.bM(k.hI(f)?"Password *":"Password",j),j,j,j,1,!0,j,j,j,j,B.r,j),B.a5,A.bT(B.F,!1,k.z,A.bM("Confirm password *",j),j,j,j,1,!0,j,j,j,j,B.r,j),B.a5],s))
-r.push(A.bT(B.F,!1,k.Q,A.bM("Referral code (optional)",j),j,j,j,1,!1,j,j,j,j,B.r,j))
+r.push(A.bT(B.F,!1,k.Q,A.bM("IB ID (optional)",j),j,j,j,1,!1,j,j,j,j,B.r,j))
 if(k.ch)B.b.O(r,A.b([B.a0,new A.Go(k.ay,new A.b1Z(k),B.M,B.abc,B.J,j)],s))
 r.push(B.at)
 r.push(A.fo(j,"Create Account",k.ax,k.gaCy()))

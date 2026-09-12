@@ -112,6 +112,17 @@ def crm_group_symbols_json(request):
 
 @login_required
 @role_required([User.Roles.ADMIN, User.Roles.BANKER])
+@require_GET
+def btrader_engine_symbols_json(_request):
+    """BTrader engine symbols the broker created (XAUUSD.s), not LP feed names."""
+    from btrader_integration.services import list_btrader_engine_symbols
+
+    symbols, err = list_btrader_engine_symbols()
+    return JsonResponse({"symbols": symbols, "error": err or ""})
+
+
+@login_required
+@role_required([User.Roles.ADMIN, User.Roles.BANKER])
 @require_http_methods(["GET", "POST"])
 def symbol_groups_admin(request):
     if request.method == "POST":
@@ -182,13 +193,33 @@ def ib_commission_matrix_admin(request):
                     return int(v) if v.isdigit() else None
 
                 rule_kind = (request.POST.get("rule_kind") or "crm").strip().lower()
-                if rule_kind == "crm":
+                if rule_kind == "btrader":
+                    sym_name = (request.POST.get("matrix_symbol_name") or "").strip()[:64]
+                    if not sym_name:
+                        messages.error(request, "Please select a BTrader symbol.")
+                    else:
+                        try:
+                            rebate = Decimal(str(request.POST.get("value") or 0))
+                        except Exception:
+                            rebate = Decimal("0")
+                        IBCommissionMatrixRule.objects.create(
+                            ib_level_id=int(lid),
+                            platform=IBCommissionMatrixRule.Platform.BTRADER,
+                            mt5_crm_group_id=None,
+                            matrix_symbol_name=sym_name,
+                            commission_mode=IBCommissionMatrixRule.CommissionMode.FIXED_PER_LOT,
+                            value=rebate,
+                            priority=int(request.POST.get("priority") or 0),
+                        )
+                        messages.success(request, f"BTrader rebate saved: ${rebate} per 1.00 lot on {sym_name}.")
+                elif rule_kind == "crm":
                     sym_name = (request.POST.get("matrix_symbol_name") or "").strip()[:64]
                     if not sym_name:
                         messages.error(request, "Please select a specific Symbol for the rule.")
                     else:
                         IBCommissionMatrixRule.objects.create(
                             ib_level_id=int(lid),
+                            platform=IBCommissionMatrixRule.Platform.MT5,
                             account_type_id=_nid("account_type_id"),
                             mt5_crm_group_id=None,
                             matrix_symbol_name=sym_name,
@@ -197,10 +228,11 @@ def ib_commission_matrix_admin(request):
                             value=Decimal(str(request.POST.get("value") or 0)),
                             priority=int(request.POST.get("priority") or 0),
                         )
-                        messages.success(request, "CRM group rule added.")
+                        messages.success(request, "MT5 rule added.")
                 else:
                     IBCommissionMatrixRule.objects.create(
                         ib_level_id=int(lid),
+                        platform=IBCommissionMatrixRule.Platform.MT5,
                         account_type_id=_nid("account_type_id"),
                         symbol_group_id=_nid("symbol_group_id"),
                         trading_symbol_id=_nid("trading_symbol_id"),
@@ -244,6 +276,7 @@ def ib_commission_matrix_admin(request):
             "sym_q": sym_q,
             "crm_groups": MT5Group.objects.filter(is_active=True).order_by("crm_group_name", "name"),
             "crm_symbols_json_url": reverse("admin-crm-group-symbols-json"),
+            "btrader_symbols_json_url": reverse("admin-btrader-engine-symbols-json"),
         },
     )
 

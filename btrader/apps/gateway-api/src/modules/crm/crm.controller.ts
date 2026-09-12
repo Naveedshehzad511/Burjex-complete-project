@@ -22,6 +22,13 @@ export class CrmController {
     return this.crm.listGroups(t.id);
   }
 
+  @Get('symbols')
+  @CrmAuth('crm.read')
+  @ApiOperation({ summary: 'Enabled B-Trader engine symbols (broker-created names)' })
+  symbols(@CurrentTenant() t: any) {
+    return this.crm.listSymbols(t.id);
+  }
+
   @Post('accounts')
   @CrmAuth('crm.write')
   @ApiOperation({ summary: 'Create a trading account (CRM provisioning)' })

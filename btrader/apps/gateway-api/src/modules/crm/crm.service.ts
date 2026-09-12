@@ -35,6 +35,21 @@ export class CrmService {
     }));
   }
 
+  /** Broker-created engine symbols (XAUUSD.s), not raw LP feed names. */
+  async listSymbols(tenantId: string): Promise<Array<{ symbol: string; description: string | null; class: string; enabled: boolean }>> {
+    const rows = await prisma.symbol.findMany({
+      where: { tenantId, enabled: true },
+      select: { symbol: true, description: true, class: true, enabled: true },
+      orderBy: { symbol: 'asc' },
+    });
+    return rows.map((r) => ({
+      symbol: r.symbol,
+      description: r.description,
+      class: r.class,
+      enabled: r.enabled,
+    }));
+  }
+
   async createAccount(tenantId: string, body: any): Promise<{ accountId: string; login: string }> {
     // Find-or-create the trader user mapped to the CRM user id.
     const user = await prisma.user.upsert({

@@ -68,7 +68,7 @@ class IBDashboardAPIView(APIView):
             or 0
         )
         ib_profile = IBProfile.objects.filter(user=user).first()
-        if ib_profile and user.role == User.Roles.IB and not (ib_profile.ib_code or "").strip():
+        if ib_profile and user.role == User.Roles.IB:
             ensure_profile_referral_url(request, ib_profile)
             ib_profile.save(update_fields=["ib_code", "referral_link"])
 
