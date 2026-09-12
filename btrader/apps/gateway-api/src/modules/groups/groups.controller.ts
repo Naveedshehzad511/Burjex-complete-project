@@ -5,6 +5,7 @@ import { prisma } from '@btrader/db';
 import { JwtAuthGuard } from '../../common/jwt.guard';
 import { Roles, CurrentTenant, CurrentUser } from '../../common/decorators';
 import { AuditService } from '../audit/audit.service';
+import { Channels } from '@btrader/shared';
 
 const PRICING_METHODS = new Set(['SPREAD_ONLY', 'COMMISSION_ONLY', 'SPREAD_AND_COMMISSION']);
 const COMMISSION_TYPES = new Set(['NONE', 'PER_LOT', 'PER_SIDE', 'ROUND_TURN', 'PERCENT']);
@@ -17,6 +18,8 @@ const EXECUTION_APPLY_KEYS = [
   'sellStop',
   'sl',
   'tp',
+  'manualClose',
+  'closeAll',
 ] as const;
 
 /** Normalize admin body → Prisma JSON for TradingGroup.executionApplyTo. */
@@ -170,6 +173,7 @@ export class GroupsController {
       if ((mapResult as any).error) return mapResult;
     }
     await this.audit.log(t.id, u.id, 'CREATE', 'tradingGroup', g.id, { after: { name: g.name } });
+    void this.redis.publish(`bt:${Channels.ENGINE_CFG}`, JSON.stringify({ type: 'group', id: g.id, tenantId: t.id }));
     return prisma.tradingGroup.findUnique({
       where: { id: g.id },
       include: {
@@ -208,6 +212,7 @@ export class GroupsController {
       if ((mapResult as any).error) return mapResult;
     }
     await this.audit.log(t.id, u.id, 'TENANT_CHANGE', 'tradingGroup', id, { after: data });
+    void this.redis.publish(`bt:${Channels.ENGINE_CFG}`, JSON.stringify({ type: 'group', id, tenantId: t.id }));
     return { updated: g.count };
   }
 

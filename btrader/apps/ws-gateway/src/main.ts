@@ -287,7 +287,16 @@ sub.on('pmessage', (_pattern, channel, message) => {
     // arrived. Route on whichever carries the account.
     const posBody =
       evt.kind === 'POSITION_UPDATE'
-        ? evt.position ?? (evt.accountId ? { id: evt.positionId, accountId: evt.accountId, stale: true } : null)
+        ? evt.position ??
+          (evt.accountId
+            ? {
+                id: evt.positionId,
+                accountId: evt.accountId,
+                status: evt.book === 'closed' ? 'CLOSED' : undefined,
+                book: evt.book,
+                stale: evt.book !== 'closed' && !evt.position,
+              }
+            : null)
         : null;
     const posAccount = posBody?.accountId;
 

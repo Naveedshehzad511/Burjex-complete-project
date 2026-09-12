@@ -11,12 +11,16 @@ import 'live.dart';
 /// Open positions for the active account — used to overlay entry/SL/TP lines on
 /// the chart (MT5-style). Refreshed on demand.
 final openPositionsProvider = FutureProvider.autoDispose<List<Position>>((ref) async {
-  ref.watch(_chartTicker); // background reconcile (instant draw is optimistic, client-side)
+  ref.watch(_chartTicker);
+  final closed = ref.watch(closedPositionIdsProvider);
   final id = ref.watch(activeAccountIdProvider);
   if (id == null) return const <Position>[];
   final api = ref.watch(apiClientProvider);
   final data = await api.get('/positions', query: {'accountId': id, 'status': 'OPEN'}) as List;
-  return data.map((e) => Position.fromJson(e)).toList();
+  return data
+      .map((e) => Position.fromJson(e as Map<String, dynamic>))
+      .where((p) => !closed.contains(p.id))
+      .toList();
 });
 
 /// The user's selected chart timeframe. Persisted to disk (SharedPreferences)

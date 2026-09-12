@@ -85,7 +85,6 @@ async function main() {
   const drainMs = Math.max(50, Number(process.env.ENGINE_TICK_INTERVAL_MS ?? 250));
   const fastMs = Math.max(20, Number(process.env.ENGINE_FAST_INTERVAL_MS ?? 50));
   const drainConcurrency = Math.max(1, Number(process.env.ENGINE_TICK_CONCURRENCY ?? 4));
-  const fastState = { busy: false };
   const slowState = { busy: false };
 
   // The position book must be full before the first tick pass. An unhydrated
@@ -122,10 +121,35 @@ async function main() {
       });
   }, reconcileMs);
 
-  await sub.psubscribe(`bt:*:${Channels.TICKS}`);
+  await sub.psubscribe(`bt:*:${Channels.TICKS}`, `bt:*:${Channels.ENGINE_EVT}`);
+  await sub.subscribe(`bt:${Channels.ENGINE_CFG}`);
+  sub.on('message', (channel, message) => {
+    if (channel !== `bt:${Channels.ENGINE_CFG}`) return;
+    try {
+      const j = JSON.parse(message) as { type?: string; id?: string };
+      engine.invalidateGroupCache(j.type === 'group' ? j.id : undefined);
+    } catch {
+      engine.invalidateGroupCache();
+    }
+  });
   sub.on('pmessage', (_pattern, channel, message) => {
-    // channel = bt:{tenantId}:ticks
     const tenantId = channel.split(':')[1];
+    if (channel.endsWith(`:${Channels.ENGINE_EVT}`)) {
+      let evt: { kind?: string; positionId?: string; book?: 'opened' | 'closed' | 'upsert' | 'remove' | 'claimed'; order?: { id: string; status?: string } };
+      try {
+        evt = JSON.parse(message);
+      } catch {
+        return;
+      }
+      if (!tenantId || (tenantId && !tenantOwnedByThisShard(tenantId))) return;
+      if (evt.kind === 'POSITION_UPDATE' && evt.positionId && evt.book) {
+        void engine.ingestRemotePosition(evt.positionId, evt.book).catch(() => undefined);
+      }
+      if (evt.kind === 'ORDER_UPDATE' && evt.order?.id) {
+        void engine.ingestRemoteOrder(evt.order).catch(() => undefined);
+      }
+      return;
+    }
     let tick: Tick;
     try {
       tick = JSON.parse(message) as Tick;
@@ -169,8 +193,17 @@ async function main() {
     }
   }
 
-  const pendingRefreshMs = Math.max(250, Number(process.env.ENGINE_PENDING_REFRESH_MS ?? 1000));
-  setInterval(() => void drainSet(dirtyFast, fastState, (t, s) => engine.onTickFast(t, s)), fastMs);
+  const pendingRefreshMs = Math.max(50, Number(process.env.ENGINE_PENDING_REFRESH_MS ?? 200));
+  setInterval(() => {
+    if (dirtyFast.size === 0) return;
+    const batch = [...dirtyFast.values()];
+    dirtyFast.clear();
+    for (const w of batch) {
+      void engine.onTickFast(w.tenantId, w.symbol).catch((e) => {
+        console.error(`onTickFast error [${w.symbol}]`, (e as Error).message);
+      });
+    }
+  }, fastMs);
   setInterval(() => void drainSet(dirtySlow, slowState, (t, s) => engine.onTickSlow(t, s)), drainMs);
   setInterval(() => void engine.refreshPendings().catch(() => undefined), pendingRefreshMs);
   // eslint-disable-next-line no-console

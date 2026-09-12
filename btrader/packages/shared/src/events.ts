@@ -17,6 +17,8 @@ export const Channels = {
   ACCOUNTS: 'accounts',
   ENGINE_CMD: 'engine.cmd',
   ENGINE_EVT: 'engine.evt',
+  /** Admin group/config invalidation (not tenant-scoped). */
+  ENGINE_CFG: 'engine.cfg',
 } as const;
 
 /**

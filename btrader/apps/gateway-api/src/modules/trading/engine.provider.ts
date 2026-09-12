@@ -46,15 +46,45 @@ export class EngineProvider implements OnModuleInit {
   }
 
   async onModuleInit() {
+    await this.engine.hydrateBook().catch((e) =>
+      this.logger.warn(`position book hydrate failed: ${(e as Error).message}`),
+    );
     await this.sub.psubscribe(`bt:*:${Channels.TICKS}`);
+    await this.sub.subscribe(`bt:${Channels.ENGINE_CFG}`);
+    this.sub.on('message', (channel, message) => {
+      if (channel !== `bt:${Channels.ENGINE_CFG}`) return;
+      try {
+        const j = JSON.parse(message) as { type?: string; id?: string };
+        if (j.type === 'group') this.engine.invalidateGroupCache(j.id);
+        else this.engine.invalidateGroupCache();
+      } catch {
+        this.engine.invalidateGroupCache();
+      }
+    });
+    const dirtyFast = new Map<string, { tenantId: string; symbol: string }>();
+    const fastMs = Math.max(20, Number(process.env.ENGINE_FAST_INTERVAL_MS ?? 50));
     this.sub.on('pmessage', (_p, channel, message) => {
       const tenantId = channel.split(':')[1];
-      this.prices.set(tenantId, JSON.parse(message) as Tick);
+      let tick: Tick;
+      try {
+        tick = JSON.parse(message) as Tick;
+      } catch {
+        return;
+      }
+      this.prices.set(tenantId, tick);
+      dirtyFast.set(`${tenantId}\u0000${tick.symbol}`, { tenantId, symbol: tick.symbol });
     });
+    setInterval(() => {
+      if (dirtyFast.size === 0) return;
+      const batch = [...dirtyFast.values()];
+      dirtyFast.clear();
+      for (const w of batch) {
+        void this.engine.onTickFast(w.tenantId, w.symbol).catch(() => undefined);
+      }
+    }, fastMs);
     await this.reloadLpConfigs();
-    // Periodically re-sync bridges (admin may change config / credentials).
     setInterval(() => this.reloadLpConfigs().catch(() => undefined), 60_000);
-    this.logger.log('engine ready (in-process execution + tick cache + A-book router)');
+    this.logger.log(`engine ready (in-process fill + SL/TP/pending drain every ${fastMs}ms)`);
   }
 
   /** Currently-active pricing source code for a (tenant, symbol), or null. */

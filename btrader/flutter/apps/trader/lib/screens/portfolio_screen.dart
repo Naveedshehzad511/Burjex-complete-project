@@ -394,12 +394,16 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
             width: double.infinity,
             child: FilledButton(
               onPressed: () async {
-                await ref.read(apiClientProvider).patch('/positions/${p.id}', {
-                  'slPrice': double.tryParse(sl.text),
-                  'tpPrice': double.tryParse(tp.text),
-                });
-                SoundService.instance.tradeOpen();
-                if (ctx.mounted) Navigator.pop(ctx);
+                try {
+                  await ref.read(apiClientProvider).patch('/positions/${p.id}', {
+                    'slPrice': double.tryParse(sl.text),
+                    'tpPrice': double.tryParse(tp.text),
+                  });
+                  SoundService.instance.tradeOpen();
+                  if (ctx.mounted) Navigator.pop(ctx);
+                } catch (_) {
+                  // Server is authoritative — reconcile even when PATCH is rejected.
+                }
                 await refresh();
               },
               child: const Text('Save SL/TP'),

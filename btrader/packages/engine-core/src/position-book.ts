@@ -72,6 +72,11 @@ export type BookRow = {
   openedAt: Date;
   /** Denormalised from the owning account; emitLiveUpdates needs it per row. */
   accountCurrency: string;
+  /** Trading group for client-quote markup on the SL/TP tick path. */
+  groupId?: string | null;
+  /** Set when SL/TP/manual close has been latched; skip re-detect. */
+  execClaimKind?: string | null;
+  execClaimedAt?: Date | null;
 };
 
 const key = (tenantId: string, symbolId: string) => `${tenantId}\u0000${symbolId}`;
@@ -210,6 +215,7 @@ function sameRow(a: BookRow, b: BookRow): boolean {
     String(a.commission) === String(b.commission) &&
     String(a.marginUsed) === String(b.marginUsed) &&
     a.side === b.side &&
-    a.accountId === b.accountId
+    a.accountId === b.accountId &&
+    (a.groupId ?? '') === (b.groupId ?? '')
   );
 }

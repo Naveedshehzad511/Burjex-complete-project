@@ -30,50 +30,41 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
   );
   sock.connect();
 
-  // Debounce for refetches triggered by state-change position frames.
-  Timer? _staleTimer;
-
   final sub = sock.frames.listen((f) {
     switch (f) {
       case TickFrame(:final tick):
         ref.read(quotesProvider.notifier).set(tick);
         ref.read(dayStatsProvider.notifier).update(tick);
       case CandleFrame(:final candle, :final symbol, :final tf):
-        // Server-authoritative chart bar. The client no longer aggregates chart
-        // OHLC, so what is shown while forming IS the bar that finalizes.
         ref.read(serverCandlesProvider.notifier).upsert(symbol, tf, candle);
       case AccountFrame(:final data):
         ref.read(liveAccountProvider.notifier).set(data);
       case PositionFrame(:final data):
-        // A `stale` frame carries ids only, not a snapshot: the position was
-        // opened, closed or modified. Nothing in it can be applied to the live
-        // P/L map, so the authoritative list has to be refetched - previously
-        // these events never reached the client at all, which is why a closed
-        // position kept sitting on screen with its last floating figure.
-        //
-        // Coalesced onto one timer: closing several positions at once, or a
-        // stop-out sweeping an account, would otherwise fire a refetch per
-        // position against the same endpoint.
-        if (data['stale'] == true) {
-          _staleTimer?.cancel();
-          _staleTimer = Timer(const Duration(milliseconds: 120), () {
+        final id = '${data['id'] ?? data['positionId'] ?? ''}';
+        final status = '${data['status'] ?? ''}'.toUpperCase();
+        final book = '${data['book'] ?? ''}';
+        final closed = status == 'CLOSED' || book == 'closed';
+        if (closed && id.isNotEmpty) {
+          ref.read(livePositionNotifierProvider.notifier).forget(id);
+          ref.read(closedPositionIdsProvider.notifier).add(id);
+          Future.microtask(() {
             ref.invalidate(openPositionsProvider);
             ref.invalidate(accountsProvider);
           });
           break;
         }
-        // Pass the quote we hold right now as a fallback anchor. The server
-        // sends `currentPrice`, but if it is ever absent or unparseable the
-        // anchoring silently degrades to the raw push rate — the figure then
-        // steps twice a second while the price moves fifty times. Our own last
-        // tick is the same price to within one tick, so it keeps the anchor
-        // populated no matter what the payload contains.
+        if (data['stale'] == true) {
+          Future.microtask(() {
+            ref.invalidate(openPositionsProvider);
+            ref.invalidate(accountsProvider);
+          });
+          break;
+        }
         final sym = '${data['symbol'] ?? ''}';
         final q = sym.isEmpty ? null : ref.read(quotesProvider)[sym];
         ref.read(livePositionNotifierProvider.notifier).set(data, fallbackQuote: q);
       case OrderFrame():
-        _staleTimer?.cancel();
-        _staleTimer = Timer(const Duration(milliseconds: 120), () {
+        Future.microtask(() {
           ref.invalidate(openPositionsProvider);
           ref.invalidate(accountsProvider);
         });
@@ -82,12 +73,26 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
   });
 
   ref.onDispose(() {
-    _staleTimer?.cancel();
     sub.cancel();
     sock.dispose();
   });
   return sock;
 });
+
+/// Position ids the server has already closed. Overlay so the chart/portfolio
+/// drop the row on the close event without waiting for a list refetch.
+class ClosedPositionIds extends StateNotifier<Set<String>> {
+  ClosedPositionIds() : super(const {});
+  void add(String id) {
+    if (id.isEmpty || state.contains(id)) return;
+    state = {...state, id};
+  }
+
+  void clear() => state = const {};
+}
+
+final closedPositionIdsProvider =
+    StateNotifierProvider<ClosedPositionIds, Set<String>>((_) => ClosedPositionIds());
 
 /// Subscribes the WebSocket to every available symbol so ticks actually flow.
 /// The WS gateway only forwards ticks for subscribed symbols — watch this

@@ -12,6 +12,10 @@ import { BtError, BtErrorCode } from '@btrader/shared';
  * with 429 so one flooded account cannot pin thousands of HTTP connections.
  * Timed-out waiters still occupy their mailbox slot (no-op) so exclusivity holds.
  *
+ * Delay clocks live on ExecutionPlan (trigger + group.executionDelayMs), not
+ * here. A late start after FIFO wait must call waitForDeadline(original) so
+ * remaining time is 0 — this queue must never restart a delay.
+ *
  * Cross-process safety still relies on PostgreSQL `SELECT … FOR UPDATE`.
  */
 export class AccountExclusiveQueue {

@@ -95,7 +95,9 @@ export type ExecutionApplyKind =
   | 'buyStop'
   | 'sellStop'
   | 'sl'
-  | 'tp';
+  | 'tp'
+  | 'manualClose'
+  | 'closeAll';
 
 export type ExecutionApplyTo = Partial<Record<ExecutionApplyKind, boolean>>;
 
@@ -108,6 +110,8 @@ export const DEFAULT_EXECUTION_APPLY: Record<ExecutionApplyKind, boolean> = {
   sellStop: true,
   sl: true,
   tp: true,
+  manualClose: true,
+  closeAll: true,
 };
 
 /** True when Instant honour / Market delay should apply to this kind. */

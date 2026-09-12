@@ -53,12 +53,22 @@ import {
   OpenPositionView,
   executionApplies,
   pendingTypeToApplyKind,
-  sleepUntil,
-  marketExecutionDelayMs,
   type ExecutionApplyKind,
   type ExecutionApplyTo,
 } from './calc';
 import { AccountExclusiveQueue, AccountOrderRateLimiter } from './account-queue';
+import {
+  createExecutionPlan,
+  waitForDeadline,
+  captureTrigger,
+  metricLabel,
+  closeApplyKind,
+  auditComment,
+  ENGINE_INSTANCE_ID,
+  type ExecutionPlan,
+} from './execution-policy';
+import { MemoryClaimStore } from './execution-claim';
+import { ExecutionWorker, type ExecJob } from './execution-worker';
 
 const d = (v: Prisma.Decimal | number | string | null | undefined): number =>
   v == null ? 0 : typeof v === 'number' ? v : Number(v);
@@ -76,13 +86,6 @@ const SYMBOL_CACHE_TTL_MS = 30_000;
 
 /** How often the floating-P/L cache on `Position.profit` is flushed to the DB. */
 const PROFIT_PERSIST_MS = Number(process.env.PROFIT_PERSIST_MS ?? 2000);
-
-/**
- * A pending order is claimed as PARTIAL while its market fill is in flight. If the
- * process dies (or the restore write itself fails) the claim is never released, so
- * an untouched claim older than this is treated as PENDING again.
- */
-const STALE_CLAIM_MS = 30_000;
 
 function specOf(sym: NonNullable<SymbolRow>): SymbolCalcSpec {
   return {
@@ -136,16 +139,26 @@ class TtlCache<V> {
   set(key: string, v: V): void {
     this.m.set(key, { v, at: Date.now() });
   }
+  del(key: string): void {
+    this.m.delete(key);
+  }
+  clear(): void {
+    this.m.clear();
+  }
 }
 
 // Config that changes only on admin action → short TTL is safe and cuts several
 // DB round-trips off every order.
-const _CONFIG_TTL_MS = 5000;
+const _CONFIG_TTL_MS = Math.max(250, Number(process.env.ENGINE_GROUP_CACHE_MS ?? 2000));
 /** Fail in 2s if the pool is busy instead of stacking 10s waits on every write. */
 const _TX_OPTS = { maxWait: 2_000, timeout: 12_000 } as const;
 
-function toBookRow(r: Record<string, unknown>, accountCurrency: string): BookRow {
-  return { ...r, accountCurrency } as BookRow;
+function toBookRow(
+  r: Record<string, unknown>,
+  accountCurrency: string,
+  groupId?: string | null,
+): BookRow {
+  return { ...r, accountCurrency, groupId: groupId ?? null } as BookRow;
 }
 
 export class TradingEngine {
@@ -171,13 +184,31 @@ export class TradingEngine {
   private readonly _riskHasAccountScopes = new TtlCache<boolean>(_CONFIG_TTL_MS);
   /** Single-flight for symbol lookups so 1000 concurrent opens share one query. */
   private readonly symbolRowInflight = new Map<string, Promise<SymbolRow>>();
+  private readonly _acctGroupCache = new TtlCache<string | null>(_CONFIG_TTL_MS);
+  /** In-process latch so a reverse tick cannot re-arm after this process detected a hit. */
+  private readonly memClaims = new MemoryClaimStore();
+  private readonly execWorker = new ExecutionWorker((job) => this.runExecJob(job));
+
+  /** Admin edited a group — drop cached executionDelayMs / apply-to immediately. */
+  invalidateGroupCache(groupId?: string): void {
+    if (groupId) this._groupCache.del(groupId);
+    else this._groupCache.clear();
+    this._acctGroupCache.clear();
+  }
 
   // ── PLACE ORDER ───────────────────────────────────────────────────────────
   async placeOrder(tenantId: string, req: PlaceOrderRequest): Promise<ExecutionResult> {
-    return this.accountQueue.run(String(req.accountId), () => this.placeOrderExclusive(tenantId, req));
+    const trigger = captureTrigger();
+    return this.accountQueue.run(String(req.accountId), () =>
+      this.placeOrderExclusive(tenantId, req, trigger),
+    );
   }
 
-  private async placeOrderExclusive(tenantId: string, req: PlaceOrderRequest): Promise<ExecutionResult> {
+  private async placeOrderExclusive(
+    tenantId: string,
+    req: PlaceOrderRequest,
+    trigger = captureTrigger(),
+  ): Promise<ExecutionResult> {
     if (!this.orderRate.allow(String(req.accountId))) {
       throw new BtError(
         BtErrorCode.RATE_LIMITED,
@@ -265,7 +296,10 @@ export class TradingEngine {
     if (isMarket) {
       const tif = (req.timeInForce ?? 'GTC').toUpperCase();
       try {
-        return await this.executeMarket(tenantId, account, sym, spec, req, volume);
+        return await this.executeMarket(tenantId, account, sym, spec, req, volume, undefined, {
+          triggerMono: trigger.triggerMono,
+          triggerWall: trigger.triggerWall,
+        });
       } catch (err) {
         if (
           (tif === 'IOC' || tif === 'FOK') &&
@@ -431,6 +465,49 @@ export class TradingEngine {
     };
   }
 
+  /**
+   * Bid/ask the client chart sees (LP + group/mapping/news markup). SL/TP and
+   * pending triggers must use this — raw LP is behind the marked-up quote, so
+   * the chart can already show a cross while the engine is still waiting.
+   */
+  private quotedBidAsk(
+    tenantId: string,
+    symbol: string,
+    sym: NonNullable<SymbolRow>,
+    pricing: GroupPricing,
+  ): { bid: number; ask: number } | null {
+    const bid = this.deps.prices.sellPrice(tenantId, symbol);
+    const ask = this.deps.prices.buyPrice(tenantId, symbol);
+    if (bid == null || ask == null) return null;
+    const newsMarkup = sym.newsMode ? Number(sym.newsSpreadPoints || 0) : 0;
+    const mappingOwnsSpread =
+      pricing.pricingMethod === 'SPREAD_ONLY' ||
+      pricing.pricingMethod === 'SPREAD_AND_COMMISSION' ||
+      pricing.pricingMethod === 'COMMISSION_ONLY';
+    const symbolBookMarkup = mappingOwnsSpread ? 0 : Number(sym.spreadMarkup || 0);
+    const totalMarkup = symbolBookMarkup + (pricing.markupPoints || 0) + newsMarkup;
+    return {
+      bid: applyMarkup('SELL', bid, totalMarkup, Number(sym.digits)),
+      ask: applyMarkup('BUY', ask, totalMarkup, Number(sym.digits)),
+    };
+  }
+
+  private async quotedBidAskForGroup(
+    tenantId: string,
+    symbol: string,
+    sym: NonNullable<SymbolRow>,
+    groupId: string | null | undefined,
+    cache: Map<string, { bid: number; ask: number }>,
+  ): Promise<{ bid: number; ask: number } | null> {
+    const key = groupId ?? '';
+    const hit = cache.get(key);
+    if (hit) return hit;
+    const pricing = await this.groupPricing(groupId ?? null, sym, tenantId);
+    const q = this.quotedBidAsk(tenantId, symbol, sym, pricing);
+    if (q) cache.set(key, q);
+    return q;
+  }
+
   // ── MARKET EXECUTION ────────────────────────────────────────────────────
   private async executeMarket(
     tenantId: string,
@@ -450,22 +527,29 @@ export class TradingEngine {
       applyKind?: ExecutionApplyKind;
       /** Pending Instant honour price (trigger / limit) when req.price is unset. */
       honourPrice?: number;
+      triggerMono?: number;
+      triggerWall?: number;
+      plan?: ExecutionPlan;
+      skipExecutionDelay?: boolean;
     },
   ): Promise<ExecutionResult> {
     const accountId = account.id;
 
-    // Trading-group pricing first — Instant honour / Market delay need it before
-    // we read the live book (delay must expire, then we sample the new price).
-    // Clock starts here so DB pricing latency overlaps the configured wait and
-    // every MARKET fill of the same delay lands on the same absolute deadline.
-    const delayClock = performance.now();
     const pricing = await this.groupPricing(account.groupId, sym, tenantId);
     const applyKind: ExecutionApplyKind =
       execOpts?.applyKind ?? (req.side === 'BUY' ? 'marketBuy' : 'marketSell');
     const applies = executionApplies(pricing.executionApplyTo, applyKind);
-    const delayMs = marketExecutionDelayMs(pricing, applyKind);
-    if (delayMs > 0) {
-      await sleepUntil(delayClock + delayMs);
+    const plan =
+      execOpts?.plan ??
+      createExecutionPlan({
+        pricing,
+        kind: applyKind,
+        triggerMono: execOpts?.triggerMono,
+        triggerWall: execOpts?.triggerWall,
+        groupId: account.groupId,
+      });
+    if (!execOpts?.skipExecutionDelay) {
+      await waitForDeadline(plan);
     }
 
     const px =
@@ -678,7 +762,10 @@ export class TradingEngine {
           volume,
           price: fillPrice,
           balanceAfter: locked.balance,
-          comment: req.comment,
+          comment: auditComment(plan, {
+            fillPrice,
+            result: 'filled',
+          }),
         },
       });
       const viewsAfter = await this.openViewsTx(tx, tenantId, accountId, locked.currency);
@@ -696,6 +783,8 @@ export class TradingEngine {
       return { position, order, snap: this.aggSnapshot(locked, after) };
     }, _TX_OPTS);
     stopTx();
+    latency.record(metricLabel(applyKind, 'trigger_to_commit'), Math.max(0, performance.now() - plan.triggerMono));
+    latency.record(metricLabel(applyKind, 'request_to_exec'), Math.max(0, performance.now() - plan.triggerMono));
 
     // Partial A-book: cover only the allocated portion (coveredVolume) to the
     // LP. Non-blocking for the client — the fill already stands; the cover keeps
@@ -728,7 +817,9 @@ export class TradingEngine {
 
     const snapshot = result.snap;
     try {
-      this.book.upsert(toBookRow(result.position as unknown as Record<string, unknown>, account.currency));
+      this.book.upsert(
+        toBookRow(result.position as unknown as Record<string, unknown>, account.currency, account.groupId),
+      );
     } catch {
       /* reconcile will heal */
     }
@@ -1388,17 +1479,20 @@ export class TradingEngine {
       /** Which protective kind fired — drives Instant honour / Market delay. */
       protectiveKind?: 'sl' | 'tp';
       /**
-       * Skip MARKET delay (e.g. closeAll already waited once for the batch,
-       * or stop-out must not wait).
+       * Skip waiting (deadline already consumed by the execution worker, or
+       * closeAll already waited once for the batch, or stop-out / dealer).
        */
       skipExecutionDelay?: boolean;
-      /** When set, skip the account lookup used only to queue (batch already holds id). */
       accountIdForQueue?: string;
-      /** JWT-bound account: reject if the position belongs to someone else. */
       requireAccountId?: string;
+      closeAll?: boolean;
+      executionPlan?: ExecutionPlan;
+      triggerMono?: number;
+      triggerWall?: number;
+      triggerBid?: number;
+      triggerAsk?: number;
     },
   ): Promise<ExecutionResult> {
-    // Resolve account for FIFO queue; prefer caller-provided id to avoid double fetch.
     let accountId = opts?.accountIdForQueue;
     if (!accountId) {
       const row = await prisma.position.findFirst({
@@ -1408,8 +1502,11 @@ export class TradingEngine {
       if (!row) throw new BtError(BtErrorCode.POSITION_NOT_FOUND);
       accountId = row.accountId;
     }
+    const trigger = opts?.executionPlan
+      ? { triggerMono: opts.executionPlan.triggerMono, triggerWall: opts.executionPlan.triggerWall }
+      : captureTrigger(opts?.triggerMono, opts?.triggerWall);
     return this.accountQueue.run(accountId, () =>
-      this.closePositionExclusive(tenantId, positionId, closeVolume, opts),
+      this.closePositionExclusive(tenantId, positionId, closeVolume, { ...opts, ...trigger, accountIdForQueue: accountId }),
     );
   }
 
@@ -1425,9 +1522,14 @@ export class TradingEngine {
       skipExecutionDelay?: boolean;
       accountIdForQueue?: string;
       requireAccountId?: string;
+      closeAll?: boolean;
+      executionPlan?: ExecutionPlan;
+      triggerMono?: number;
+      triggerWall?: number;
+      triggerBid?: number;
+      triggerAsk?: number;
     },
   ): Promise<ExecutionResult> {
-    const delayClock = performance.now();
     const pos = await prisma.position.findFirst({
       where: { id: positionId, tenantId, status: 'OPEN' },
       include: { symbol: true, account: true },
@@ -1436,11 +1538,11 @@ export class TradingEngine {
     if (opts?.requireAccountId && pos.accountId !== opts.requireAccountId) {
       throw new BtError(BtErrorCode.VALIDATION, 'position access denied');
     }
-    // Flood guard for manual closes only (SL/TP/stop-out/closeAll skip).
     if (
       !opts?.floorBalanceAtZero &&
       opts?.protectiveKind == null &&
       !opts?.skipExecutionDelay &&
+      !opts?.closeAll &&
       !this.orderRate.allow(pos.accountId)
     ) {
       throw new BtError(
@@ -1460,20 +1562,25 @@ export class TradingEngine {
       protectiveKind != null &&
       executionApplies(pricing.executionApplyTo, protectiveKind);
 
-    // MARKET delay: SL/TP use protective flags; manual / close-all use exit side
-    // (BUY pos → marketSell, SELL pos → marketBuy) — same ms as group config.
-    // Stop-out and dealer overrides skip. closeAll pre-waits then passes skip.
-    if (
-      pricing != null &&
-      !opts?.skipExecutionDelay &&
-      !opts?.floorBalanceAtZero
-    ) {
-      const delayKind: ExecutionApplyKind =
-        protectiveKind ?? (pos.side === 'BUY' ? 'marketSell' : 'marketBuy');
-      const delayMs = marketExecutionDelayMs(pricing, delayKind);
-      if (delayMs > 0) {
-        await sleepUntil(delayClock + delayMs);
-      }
+    const applyKind = closeApplyKind({
+      protectiveKind,
+      closeAll: opts?.closeAll,
+      stopOut: !!opts?.floorBalanceAtZero,
+      dealer: override != null,
+    });
+    const plan =
+      opts?.executionPlan ??
+      (pricing && applyKind
+        ? createExecutionPlan({
+            pricing,
+            kind: applyKind,
+            triggerMono: opts?.triggerMono,
+            triggerWall: opts?.triggerWall,
+            groupId: pos.account.groupId,
+          })
+        : undefined);
+    if (pricing != null && !opts?.skipExecutionDelay && !opts?.floorBalanceAtZero && override == null) {
+      await waitForDeadline(plan);
     }
 
     // A dealer (admin) close can override the fill price for slippage /
@@ -1578,6 +1685,14 @@ export class TradingEngine {
           price: closePrice,
           profit: realized,
           balanceAfter: newBalance,
+          comment: auditComment(plan, {
+            fillPrice: closePrice,
+            bid: opts?.triggerBid,
+            ask: opts?.triggerAsk,
+            level: opts?.protectiveLevel,
+            result: 'closed',
+            partial,
+          }),
         },
       });
 
@@ -1624,6 +1739,11 @@ export class TradingEngine {
       return this.aggSnapshot({ ...acct, balance: newBalance }, after);
     }, _TX_OPTS);
 
+    if (plan && applyKind) {
+      latency.record(metricLabel(applyKind, 'trigger_to_commit'), Math.max(0, performance.now() - plan.triggerMono));
+    }
+    this.memClaims.markClosed(pos.id);
+
     // A-book: unwind the proportional slice of the LP cover (works for partial
     // and full closes of partial-A positions).
     if (coverToClose > 0) {
@@ -1632,7 +1752,15 @@ export class TradingEngine {
 
     if (partial) void this.syncBook(pos.id);
     else this.book.remove(pos.id);
-    this.publishAfterFill(tenantId, pos.accountId, pos.id, 'closed', closedSnap, realized);
+    this.publishAfterFill(tenantId, pos.accountId, pos.id, 'closed', closedSnap, realized, {
+      symbol: sym.symbol,
+      side: pos.side as OrderSide,
+      closePrice,
+      volume: vol,
+      slPrice: pos.slPrice != null ? d(pos.slPrice) : undefined,
+      tpPrice: pos.tpPrice != null ? d(pos.tpPrice) : undefined,
+      openedAt: pos.openedAt.toISOString(),
+    });
     return {
       accepted: true,
       positionId: pos.id,
@@ -1644,47 +1772,53 @@ export class TradingEngine {
   }
 
   async closeAll(tenantId: string, accountId: string): Promise<number> {
-    return this.accountQueue.run(accountId, () => this.closeAllExclusive(tenantId, accountId));
+    const trigger = captureTrigger();
+    return this.accountQueue.run(accountId, () => this.closeAllExclusive(tenantId, accountId, trigger));
   }
 
-  private async closeAllExclusive(tenantId: string, accountId: string): Promise<number> {
-    const delayClock = performance.now();
+  private async closeAllExclusive(
+    tenantId: string,
+    accountId: string,
+    trigger = captureTrigger(),
+  ): Promise<number> {
     const open = await prisma.position.findMany({
       where: { tenantId, accountId, status: 'OPEN' },
       include: { symbol: true, account: { select: { groupId: true } } },
     });
     if (open.length === 0) return 0;
 
-    // One shared MARKET wait for the whole batch so position #1 and #N close
-    // on the same clock — sequential per-position sleeps caused staggered fills.
-    let maxDelay = 0;
+    let plan: ExecutionPlan | undefined;
     try {
       const sample = open[0];
       const pricing = await this.groupPricing(sample.account.groupId, sample.symbol, tenantId);
-      for (const p of open) {
-        const delayKind: ExecutionApplyKind =
-          p.side === 'BUY' ? 'marketSell' : 'marketBuy';
-        maxDelay = Math.max(maxDelay, marketExecutionDelayMs(pricing, delayKind));
-      }
+      plan = createExecutionPlan({
+        pricing,
+        kind: 'closeAll',
+        triggerMono: trigger.triggerMono,
+        triggerWall: trigger.triggerWall,
+        groupId: sample.account.groupId,
+      });
     } catch {
-      maxDelay = 0;
+      plan = undefined;
     }
-    if (maxDelay > 0) {
-      await sleepUntil(delayClock + maxDelay);
-    }
+    await waitForDeadline(plan);
 
     let closed = 0;
     for (const p of open) {
       try {
-        // Already inside account queue — call exclusive path directly.
         await this.closePositionExclusive(tenantId, p.id, undefined, {
           skipExecutionDelay: true,
           accountIdForQueue: accountId,
+          closeAll: true,
+          executionPlan: plan,
         });
         closed++;
       } catch {
         /* skip positions with no price; retried next call */
       }
+    }
+    if (plan) {
+      latency.record(metricLabel('closeAll', 'trigger_to_commit'), Math.max(0, performance.now() - plan.triggerMono));
     }
     return closed;
   }
@@ -1695,7 +1829,7 @@ export class TradingEngine {
     positionId: string,
     sl?: number | null,
     tp?: number | null,
-  ): Promise<void> {
+  ): Promise<{ slPrice: number | null; tpPrice: number | null }> {
     const peek = await prisma.position.findFirst({
       where: { id: positionId, tenantId, status: 'OPEN' },
       select: { accountId: true },
@@ -1711,10 +1845,10 @@ export class TradingEngine {
     positionId: string,
     sl?: number | null,
     tp?: number | null,
-  ): Promise<void> {
+  ): Promise<{ slPrice: number | null; tpPrice: number | null }> {
     const pos = await prisma.position.findFirst({
       where: { id: positionId, tenantId, status: 'OPEN' },
-      include: { symbol: true },
+      include: { symbol: true, account: { select: { groupId: true } } },
     });
     if (!pos) throw new BtError(BtErrorCode.POSITION_NOT_FOUND);
 
@@ -1731,9 +1865,11 @@ export class TradingEngine {
     // the ask for a short - the same side the trigger itself uses, so a level
     // that passes this check cannot fire immediately.
     const isBuy = pos.side === 'BUY';
+    const pricing = await this.groupPricing(pos.account.groupId, pos.symbol, tenantId);
+    const quoted = this.quotedBidAsk(tenantId, pos.symbol.symbol, pos.symbol, pricing);
     const close = isBuy
-      ? this.deps.prices.sellPrice(tenantId, pos.symbol.symbol)
-      : this.deps.prices.buyPrice(tenantId, pos.symbol.symbol);
+      ? (quoted?.bid ?? this.deps.prices.sellPrice(tenantId, pos.symbol.symbol))
+      : (quoted?.ask ?? this.deps.prices.buyPrice(tenantId, pos.symbol.symbol));
     if (close != null) {
       const px = (n: number) => n.toFixed(pos.symbol.digits);
       if (sl != null && (isBuy ? sl >= close : sl <= close)) {
@@ -1750,12 +1886,35 @@ export class TradingEngine {
       }
     }
 
+    const nextSl = sl === undefined ? pos.slPrice : sl;
+    const nextTp = tp === undefined ? pos.tpPrice : tp;
     await prisma.position.update({
       where: { id: pos.id },
-      data: { slPrice: sl === undefined ? pos.slPrice : sl, tpPrice: tp === undefined ? pos.tpPrice : tp },
+      data: { slPrice: nextSl, tpPrice: nextTp },
     });
     await this.syncBook(pos.id);
-    this.deps.emit?.({ kind: 'POSITION_UPDATE', tenantId, positionId: pos.id, accountId: pos.accountId });
+    this.deps.emit?.({
+      kind: 'POSITION_UPDATE',
+      tenantId,
+      positionId: pos.id,
+      accountId: pos.accountId,
+      book: 'upsert',
+      position: {
+        id: pos.id,
+        accountId: pos.accountId,
+        symbol: pos.symbol.symbol,
+        side: pos.side,
+        status: 'OPEN',
+        volume: d(pos.volume),
+        openPrice: d(pos.openPrice),
+        slPrice: nextSl != null ? d(nextSl) : undefined,
+        tpPrice: nextTp != null ? d(nextTp) : undefined,
+      },
+    });
+    return {
+      slPrice: nextSl != null ? d(nextSl) : null,
+      tpPrice: nextTp != null ? d(nextTp) : null,
+    };
   }
 
   // ── DEALER: EDIT OPEN PRICE (slippage / compensation, admin-only) ──────────
@@ -1885,6 +2044,48 @@ export class TradingEngine {
     const rows = await this.readOpenRows();
     this.book.load(rows);
     this.pendings.load(await this.readPendingRows());
+    try {
+      const claimed = await prisma.$queryRaw<
+        Array<{
+          id: string;
+          tenantId: string;
+          accountId: string;
+          execClaimKind: string | null;
+          execClaimedAt: Date | null;
+        }>
+      >`
+        SELECT id, "tenantId", "accountId", "execClaimKind", "execClaimedAt"
+        FROM positions
+        WHERE status = 'OPEN' AND "execClaimedAt" IS NOT NULL
+      `;
+      for (const r of claimed) {
+        if (r.execClaimKind === 'sl' || r.execClaimKind === 'tp') {
+          this.book.patch(r.id, { execClaimKind: r.execClaimKind, execClaimedAt: r.execClaimedAt });
+          this.memClaims.claim(r.id, {
+            kind: r.execClaimKind,
+            claimedBy: 'hydrate',
+            triggerWall: r.execClaimedAt?.getTime() ?? Date.now(),
+            triggerMono: 0,
+            deadlineWall: Date.now(),
+            delayMs: 0,
+          });
+          this.execWorker.enqueue({
+            type: 'protective',
+            key: `p:${r.id}`,
+            tenantId: r.tenantId,
+            positionId: r.id,
+            accountId: r.accountId,
+            kind: r.execClaimKind,
+            triggerMono: 0,
+            triggerWall: r.execClaimedAt?.getTime() ?? Date.now(),
+            bid: 0,
+            ask: 0,
+          });
+        }
+      }
+    } catch {
+      /* columns not migrated yet */
+    }
     return rows.length;
   }
 
@@ -1956,9 +2157,9 @@ export class TradingEngine {
   private async readOpenRows(): Promise<BookRow[]> {
     const rows = await prisma.position.findMany({
       where: { status: 'OPEN' },
-      include: { account: { select: { currency: true } } },
+      include: { account: { select: { currency: true, groupId: true } } },
     });
-    return rows.map((r) => toBookRow(r, r.account.currency));
+    return rows.map((r) => toBookRow(r, r.account.currency, r.account.groupId));
   }
 
   /** Refresh one position in the book from the database, after a commit. */
@@ -1966,17 +2167,47 @@ export class TradingEngine {
     try {
       const row = await prisma.position.findUnique({
         where: { id: positionId },
-        include: { account: { select: { currency: true } } },
+        include: { account: { select: { currency: true, groupId: true } } },
       });
       if (row === null || row.status !== 'OPEN') {
         this.book.remove(positionId);
         return;
       }
-      this.book.upsert(toBookRow(row, row.account.currency));
+      this.book.upsert(toBookRow(row, row.account.currency, row.account.groupId));
     } catch {
       // Never let book maintenance fail the trade that already committed. The
       // periodic reconcile is what makes this safe to swallow.
     }
+  }
+
+  /**
+   * Remainder wait lives in waitForDeadline(plan) using the original trigger.
+   * This helper is gone on purpose so no path can sleep(N) from "now".
+   */
+
+  /** Gateway placed/closed a position in another process — keep this book's SL/TP live. */
+  async ingestRemotePosition(positionId: string, book: 'opened' | 'closed' | 'upsert' | 'remove' | 'claimed'): Promise<void> {
+    if (book === 'closed' || book === 'remove') {
+      this.book.remove(positionId);
+      this.memClaims.markClosed(positionId);
+      return;
+    }
+    await this.syncBook(positionId);
+  }
+
+  /** Gateway parked/cancelled a pending — keep the trigger book current. */
+  async ingestRemoteOrder(order: { id: string; status?: string }): Promise<void> {
+    const st = String(order.status || '').toUpperCase();
+    if (st && st !== 'PENDING' && st !== 'PARTIAL') {
+      this.pendings.remove(order.id);
+      return;
+    }
+    const row = await prisma.order.findFirst({ where: { id: order.id } });
+    if (!row || (row.status !== 'PENDING' && row.status !== 'PARTIAL')) {
+      this.pendings.remove(order.id);
+      return;
+    }
+    this.pendings.upsert(this.toPendingRow(row));
   }
 
   async onTick(tenantId: string, symbol: string): Promise<void> {
@@ -2133,12 +2364,24 @@ export class TradingEngine {
     const working = this.pendings.forSymbol(tenantId, sym.id);
     if (working.length === 0) return;
 
+    const missingGroups = [...new Set(working.map((o) => o.accountId))].filter(
+      (id) => !this._acctGroupCache.get(id),
+    );
+    if (missingGroups.length) {
+      const accts = await prisma.account.findMany({
+        where: { id: { in: missingGroups }, tenantId },
+        select: { id: true, groupId: true },
+      });
+      for (const a of accts) this._acctGroupCache.set(a.id, a.groupId);
+      for (const id of missingGroups) {
+        if (!this._acctGroupCache.get(id)) this._acctGroupCache.set(id, null);
+      }
+    }
+
+    const quoteCache = new Map<string, { bid: number; ask: number }>();
     const now = new Date();
-    const staleCutoff = new Date(Date.now() - STALE_CLAIM_MS);
 
     for (const o of working) {
-      if (o.status === 'PARTIAL' && o.updatedAt > staleCutoff) continue;
-
       if (o.expiresAt && o.expiresAt < now) {
         const expired = await prisma.order.update({ where: { id: o.id }, data: { status: 'EXPIRED' } });
         this.pendings.remove(o.id);
@@ -2146,13 +2389,29 @@ export class TradingEngine {
         continue;
       }
 
+      if (o.status === 'PARTIAL') {
+        this.execWorker.enqueue({
+          type: 'pending',
+          key: `o:${o.id}`,
+          tenantId,
+          orderId: o.id,
+          accountId: o.accountId,
+          triggerMono: performance.now(),
+          triggerWall: o.updatedAt?.getTime() ?? Date.now(),
+        });
+        continue;
+      }
+
       const trigger = o.stopPrice ?? o.price;
       if (trigger == null) continue;
+      const gid = this._acctGroupCache.get(o.accountId)?.v ?? null;
+      const q =
+        (await this.quotedBidAskForGroup(tenantId, symbol, sym, gid, quoteCache)) ?? { bid, ask };
       const action = pendingFires({
         type: o.type,
         side: o.side,
-        bid,
-        ask,
+        bid: q.bid,
+        ask: q.ask,
         trigger,
         stopPrice: o.stopPrice,
         limitPrice: o.price,
@@ -2171,170 +2430,286 @@ export class TradingEngine {
         continue;
       }
 
-      if (action !== 'fill') {
-        if (o.status === 'PARTIAL') {
-          const released = await prisma.order.updateMany({
-            where: { id: o.id, status: 'PARTIAL' },
-            data: { status: 'PENDING' },
-          });
-          if (released.count > 0) this.pendings.patch(o.id, { status: 'PENDING' });
-        }
-        continue;
-      }
+      if (action !== 'fill') continue;
 
       const claimed = await prisma.order.updateMany({
         where: { id: o.id, status: { in: ['PENDING', 'PARTIAL'] } },
         data: { status: 'PARTIAL', triggeredAt: now },
       });
       if (claimed.count === 0) continue;
-      this.pendings.patch(o.id, { status: 'PARTIAL' });
-
-      const pendingAcct = await prisma.account.findFirst({ where: { id: o.accountId, tenantId } });
-      if (!pendingAcct) {
-        const rejected = await prisma.order.update({ where: { id: o.id }, data: { status: 'REJECTED' } });
-        this.pendings.remove(o.id);
-        this.deps.emit?.({ kind: 'ORDER_UPDATE', tenantId, order: this.orderDto(rejected, symbol) });
-        continue;
-      }
-
-      const clampPrice = isLimitFillType(o.type) && o.price != null ? o.price : undefined;
-      const applyKind = pendingTypeToApplyKind(String(o.type), String(o.side)) ?? undefined;
-      const honourPrice =
-        applyKind === 'buyStop' || applyKind === 'sellStop'
-          ? (o.stopPrice ?? o.price ?? undefined)
-          : (o.price ?? o.stopPrice ?? undefined);
-      try {
-        const fill = await this.executeMarket(
-          tenantId,
-          pendingAcct,
-          sym,
-          specOf(sym),
-          {
-            accountId: o.accountId,
-            symbol,
-            side: o.side as OrderSide,
-            type: 'MARKET',
-            volume: o.volume,
-            price: honourPrice ?? undefined,
-            slPrice: o.slPrice ?? undefined,
-            tpPrice: o.tpPrice ?? undefined,
-            source: 'api',
-          },
-          o.volume,
-          clampPrice,
-          { applyKind, honourPrice: honourPrice ?? undefined },
-        );
-        const filled = await prisma.order.update({
-          where: { id: o.id },
-          data: {
-            status: 'FILLED',
-            filledAt: now,
-            triggeredAt: now,
-            filledVolume: o.volume,
-            avgFillPrice: fill.fillPrice ?? null,
-            positionId: fill.positionId ?? null,
-          },
-        });
-        this.pendings.remove(o.id);
-        counters.inc('order.pending_filled');
-        this.deps.emit?.({ kind: 'ORDER_UPDATE', tenantId, order: this.orderDto(filled, symbol) });
-      } catch (err) {
-        const reject =
-          err instanceof BtError &&
-          (err.code === BtErrorCode.INSUFFICIENT_MARGIN ||
-            err.code === BtErrorCode.TRADING_DISABLED ||
-            err.code === BtErrorCode.INVALID_VOLUME);
-        try {
-          const restored = await prisma.order.update({
-            where: { id: o.id },
-            data: { status: reject ? 'REJECTED' : 'PENDING' },
-          });
-          if (reject) this.pendings.remove(o.id);
-          else this.pendings.patch(o.id, { status: 'PENDING' });
-          this.deps.emit?.({
-            kind: 'ORDER_UPDATE',
-            tenantId,
-            order: this.orderDto(restored, symbol),
-          });
-        } catch (restoreErr) {
-          console.error(
-            `[engine] could not release claim on order ${o.id}:`,
-            (restoreErr as Error).message,
-          );
-        }
-      }
+      this.pendings.patch(o.id, { status: 'PARTIAL', updatedAt: now });
+      const trig = captureTrigger();
+      this.execWorker.enqueue({
+        type: 'pending',
+        key: `o:${o.id}`,
+        tenantId,
+        orderId: o.id,
+        accountId: o.accountId,
+        triggerMono: trig.triggerMono,
+        triggerWall: trig.triggerWall,
+      });
     }
   }
 
   private async checkProtectiveStops(tenantId: string, symbol: string): Promise<void> {
     const sym = await this.tickSymbol(tenantId, symbol);
     if (!sym) return;
-    const bid = this.deps.prices.sellPrice(tenantId, symbol);
-    const ask = this.deps.prices.buyPrice(tenantId, symbol);
-    if (bid == null || ask == null) return;
+    const rawBid = this.deps.prices.sellPrice(tenantId, symbol);
+    const rawAsk = this.deps.prices.buyPrice(tenantId, symbol);
+    if (rawBid == null || rawAsk == null) return;
 
-    const delayClock = performance.now();
     const open = this.book.forSymbol(tenantId, sym.id);
-    type Hit = {
-      id: string;
-      accountId: string;
-      kind: 'sl' | 'tp';
-      level?: number;
-    };
-    const hits: Hit[] = [];
+    const quoteCache = new Map<string, { bid: number; ask: number }>();
+    const trig = captureTrigger();
     for (const p of open) {
+      if (p.execClaimKind || this.memClaims.has(p.id)) {
+        if (p.execClaimKind === 'sl' || p.execClaimKind === 'tp' || this.memClaims.has(p.id)) {
+          const rec = this.memClaims.get(p.id);
+          this.execWorker.enqueue({
+            type: 'protective',
+            key: `p:${p.id}`,
+            tenantId,
+            positionId: p.id,
+            accountId: p.accountId,
+            kind: (p.execClaimKind === 'tp' || rec?.kind === 'tp' ? 'tp' : 'sl'),
+            level: rec?.level ?? undefined,
+            bid: rec?.bid ?? rawBid,
+            ask: rec?.ask ?? rawAsk,
+            triggerMono: rec?.triggerMono ?? 0,
+            triggerWall: rec?.triggerWall ?? trig.triggerWall,
+          });
+        }
+        continue;
+      }
+      const q =
+        (await this.quotedBidAskForGroup(tenantId, symbol, sym, p.groupId, quoteCache)) ?? {
+          bid: rawBid,
+          ask: rawAsk,
+        };
       const hit = protectiveHit({
         side: p.side,
-        bid,
-        ask,
+        bid: q.bid,
+        ask: q.ask,
         sl: p.slPrice ? d(p.slPrice) : null,
         tp: p.tpPrice ? d(p.tpPrice) : null,
       });
-      if (hit.hit) {
-        counters.inc(hit.hit === 'SL' ? 'order.sl_fired' : 'order.tp_fired');
-        hits.push({
-          id: p.id,
-          accountId: p.accountId,
-          kind: hit.hit === 'SL' ? 'sl' : 'tp',
-          level: hit.level == null ? undefined : Number(hit.level),
-        });
-      }
+      if (!hit.hit) continue;
+      const kind: 'sl' | 'tp' = hit.hit === 'SL' ? 'sl' : 'tp';
+      const level = hit.level == null ? undefined : Number(hit.level);
+      const mem = this.memClaims.claim(p.id, {
+        kind,
+        claimedBy: ENGINE_INSTANCE_ID,
+        triggerWall: trig.triggerWall,
+        triggerMono: trig.triggerMono,
+        deadlineWall: trig.triggerWall,
+        delayMs: 0,
+        bid: q.bid,
+        ask: q.ask,
+        level,
+      });
+      if (mem === 'already_claimed') continue;
+      counters.inc(kind === 'sl' ? 'order.sl_fired' : 'order.tp_fired');
+      this.book.patch(p.id, { execClaimKind: kind, execClaimedAt: new Date(trig.triggerWall) });
+      const dbClaimed = await this.claimPositionDb(p.id, kind, trig.triggerWall, q.bid, q.ask, level);
+      if (dbClaimed !== 'claimed') continue;
+      this.deps.emit?.({
+        kind: 'POSITION_UPDATE',
+        tenantId,
+        positionId: p.id,
+        accountId: p.accountId,
+        book: 'claimed',
+      });
+      this.execWorker.enqueue({
+        type: 'protective',
+        key: `p:${p.id}`,
+        tenantId,
+        positionId: p.id,
+        accountId: p.accountId,
+        kind,
+        level,
+        bid: q.bid,
+        ask: q.ask,
+        triggerMono: trig.triggerMono,
+        triggerWall: trig.triggerWall,
+      });
     }
-    if (hits.length === 0) return;
+  }
 
-    // One shared MARKET wait for every SL/TP that fired on this tick — avoids
-    // N×delay when hundreds of positions trip together. Different accounts may
-    // have different groups; take the max so nobody fills early.
-    let maxDelay = 0;
-    const pricingByGroup = new Map<string, GroupPricing>();
+  private async claimPositionDb(
+    positionId: string,
+    kind: 'sl' | 'tp' | 'manualClose' | 'closeAll',
+    triggerWall: number,
+    bid?: number,
+    ask?: number,
+    level?: number,
+  ): Promise<'claimed' | 'already_claimed'> {
+    const now = new Date(triggerWall);
     try {
-      for (const h of hits) {
-        const acct = await prisma.account.findFirst({
-          where: { id: h.accountId, tenantId },
-          select: { groupId: true },
-        });
-        if (!acct?.groupId) continue;
-        let pricing = pricingByGroup.get(acct.groupId);
-        if (!pricing) {
-          pricing = await this.groupPricing(acct.groupId, sym, tenantId);
-          pricingByGroup.set(acct.groupId, pricing);
-        }
-        maxDelay = Math.max(maxDelay, marketExecutionDelayMs(pricing, h.kind));
-      }
+      const n = await prisma.$executeRaw`
+        UPDATE positions
+        SET "execClaimKind" = ${kind},
+            "execClaimedAt" = ${now},
+            "execClaimedBy" = ${ENGINE_INSTANCE_ID},
+            "execTriggerAt" = ${now},
+            "execTriggerBid" = ${bid ?? null},
+            "execTriggerAsk" = ${ask ?? null}
+        WHERE id = ${positionId}
+          AND status = 'OPEN'
+          AND "execClaimedAt" IS NULL
+      `;
+      return Number(n) > 0 ? 'claimed' : 'already_claimed';
     } catch {
-      maxDelay = 0;
+      return 'claimed';
     }
-    if (maxDelay > 0) {
-      await sleepUntil(delayClock + maxDelay);
-    }
+  }
 
-    for (const h of hits) {
-      await this.closePosition(tenantId, h.id, undefined, {
-        protectiveLevel: h.level,
-        protectiveKind: h.kind,
+  private async runExecJob(job: ExecJob): Promise<void> {
+    if (job.type === 'protective') {
+      await this.executeProtectiveJob(job);
+      return;
+    }
+    await this.executePendingJob(job);
+  }
+
+  private async executeProtectiveJob(job: Extract<ExecJob, { type: 'protective' }>): Promise<void> {
+    const pos = await prisma.position.findFirst({
+      where: { id: job.positionId, tenantId: job.tenantId },
+      include: { symbol: true, account: { select: { groupId: true } } },
+    });
+    if (!pos || pos.status !== 'OPEN') {
+      this.book.remove(job.positionId);
+      this.memClaims.markClosed(job.positionId);
+      return;
+    }
+    const pricing = await this.groupPricing(pos.account.groupId, pos.symbol, job.tenantId);
+    const plan = createExecutionPlan({
+      pricing,
+      kind: job.kind,
+      triggerMono: job.triggerMono,
+      triggerWall: job.triggerWall,
+      groupId: pos.account.groupId,
+    });
+    latency.record(metricLabel(job.kind, 'trigger_to_exec'), Math.max(0, performance.now() - plan.triggerMono));
+    await waitForDeadline(plan);
+    try {
+      await this.closePosition(job.tenantId, job.positionId, undefined, {
+        protectiveLevel: job.level,
+        protectiveKind: job.kind,
         skipExecutionDelay: true,
-        accountIdForQueue: h.accountId,
-      }).catch(() => undefined);
+        accountIdForQueue: job.accountId,
+        executionPlan: plan,
+        triggerBid: job.bid,
+        triggerAsk: job.ask,
+      });
+    } catch (err) {
+      if (err instanceof BtError && err.code === BtErrorCode.POSITION_NOT_FOUND) {
+        this.book.remove(job.positionId);
+        this.memClaims.markClosed(job.positionId);
+        return;
+      }
+      console.error(`[engine] SL/TP close failed ${job.positionId}:`, (err as Error)?.message ?? err);
+      void this.syncBook(job.positionId);
+    }
+  }
+
+  private async executePendingJob(job: Extract<ExecJob, { type: 'pending' }>): Promise<void> {
+    const o = await prisma.order.findFirst({
+      where: { id: job.orderId, tenantId: job.tenantId },
+      include: { symbol: true },
+    });
+    if (!o || (o.status !== 'PARTIAL' && o.status !== 'PENDING')) {
+      this.pendings.remove(job.orderId);
+      return;
+    }
+    const pendingAcct = await prisma.account.findFirst({ where: { id: o.accountId, tenantId: job.tenantId } });
+    if (!pendingAcct) {
+      const rejected = await prisma.order.update({ where: { id: o.id }, data: { status: 'REJECTED' } });
+      this.pendings.remove(o.id);
+      this.deps.emit?.({ kind: 'ORDER_UPDATE', tenantId: job.tenantId, order: this.orderDto(rejected, o.symbol.symbol) });
+      return;
+    }
+    const applyKind = pendingTypeToApplyKind(String(o.type), String(o.side)) ?? 'buyLimit';
+    const pricing = await this.groupPricing(pendingAcct.groupId, o.symbol, job.tenantId);
+    const plan = createExecutionPlan({
+      pricing,
+      kind: applyKind,
+      triggerMono: job.triggerMono,
+      triggerWall: job.triggerWall,
+      groupId: pendingAcct.groupId,
+    });
+    await waitForDeadline(plan);
+    const honourPrice =
+      applyKind === 'buyStop' || applyKind === 'sellStop'
+        ? (o.stopPrice != null ? d(o.stopPrice) : o.price != null ? d(o.price) : undefined)
+        : (o.price != null ? d(o.price) : o.stopPrice != null ? d(o.stopPrice) : undefined);
+    const clampPrice = isLimitFillType(o.type) && o.price != null ? d(o.price) : undefined;
+    const now = new Date();
+    try {
+      const fill = await this.accountQueue.run(o.accountId, () =>
+        this.executeMarket(
+          job.tenantId,
+          pendingAcct,
+          o.symbol,
+          specOf(o.symbol),
+          {
+            accountId: o.accountId,
+            symbol: o.symbol.symbol,
+            side: o.side as OrderSide,
+            type: 'MARKET',
+            volume: d(o.volume),
+            price: honourPrice,
+            slPrice: o.slPrice != null ? d(o.slPrice) : undefined,
+            tpPrice: o.tpPrice != null ? d(o.tpPrice) : undefined,
+            source: 'api',
+          },
+          d(o.volume),
+          clampPrice,
+          {
+            applyKind,
+            honourPrice,
+            plan,
+            skipExecutionDelay: true,
+          },
+        ),
+      );
+      const filled = await prisma.order.update({
+        where: { id: o.id },
+        data: {
+          status: 'FILLED',
+          filledAt: now,
+          triggeredAt: now,
+          filledVolume: o.volume,
+          avgFillPrice: fill.fillPrice ?? null,
+          positionId: fill.positionId ?? null,
+        },
+      });
+      this.pendings.remove(o.id);
+      counters.inc('order.pending_filled');
+      latency.record(metricLabel(applyKind, 'trigger_to_commit'), Math.max(0, performance.now() - plan.triggerMono));
+      this.deps.emit?.({ kind: 'ORDER_UPDATE', tenantId: job.tenantId, order: this.orderDto(filled, o.symbol.symbol) });
+    } catch (err) {
+      const reject =
+        err instanceof BtError &&
+        (err.code === BtErrorCode.INSUFFICIENT_MARGIN ||
+          err.code === BtErrorCode.TRADING_DISABLED ||
+          err.code === BtErrorCode.INVALID_VOLUME);
+      try {
+        if (reject) {
+          const restored = await prisma.order.update({
+            where: { id: o.id },
+            data: { status: 'REJECTED' },
+          });
+          this.pendings.remove(o.id);
+          this.deps.emit?.({
+            kind: 'ORDER_UPDATE',
+            tenantId: job.tenantId,
+            order: this.orderDto(restored, o.symbol.symbol),
+          });
+        }
+        // Non-reject: keep PARTIAL so a reverse tick cannot un-trigger. Worker will retry via next detect.
+      } catch (restoreErr) {
+        console.error(`[engine] could not reject claimed order ${o.id}:`, (restoreErr as Error).message);
+      }
     }
   }
 
@@ -2594,8 +2969,40 @@ export class TradingEngine {
     kind: 'opened' | 'closed',
     snap: AccountSnapshot,
     profit?: number,
+    positionSnap?: {
+      symbol?: string;
+      side?: OrderSide;
+      closePrice?: number;
+      volume?: number;
+      slPrice?: number;
+      tpPrice?: number;
+      openedAt?: string;
+    },
   ): void {
-    this.deps.emit?.({ kind: 'POSITION_UPDATE', tenantId, positionId, accountId });
+    const stopEmit = latency.start(metricLabel(kind === 'closed' ? 'manualClose' : 'marketBuy', 'commit_to_emit'));
+    this.deps.emit?.({
+      kind: 'POSITION_UPDATE',
+      tenantId,
+      positionId,
+      accountId,
+      book: kind,
+      position: {
+        id: positionId,
+        accountId,
+        status: kind === 'closed' ? 'CLOSED' : 'OPEN',
+        symbol: positionSnap?.symbol,
+        side: positionSnap?.side,
+        volume: positionSnap?.volume ?? (kind === 'closed' ? 0 : undefined),
+        closePrice: positionSnap?.closePrice,
+        slPrice: positionSnap?.slPrice,
+        tpPrice: positionSnap?.tpPrice,
+        openedAt: positionSnap?.openedAt,
+        closedAt: kind === 'closed' ? new Date().toISOString() : undefined,
+        profit,
+        stale: kind === 'closed',
+      },
+    });
+    stopEmit();
     this.deps.emit?.({ kind: 'ACCOUNT_UPDATE', tenantId, account: snap });
     void this.deps.crmOutbox?.(tenantId, 'account.snapshot', {
       login: snap.login,

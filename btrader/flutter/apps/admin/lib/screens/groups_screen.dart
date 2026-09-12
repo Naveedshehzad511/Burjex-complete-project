@@ -191,6 +191,8 @@ class GroupsScreen extends ConsumerWidget {
       'sellStop': applyFlag('sellStop'),
       'sl': applyFlag('sl'),
       'tp': applyFlag('tp'),
+      'manualClose': applyFlag('manualClose'),
+      'closeAll': applyFlag('closeAll'),
     };
 
     final mappings = <_MappingRow>[
@@ -316,7 +318,7 @@ class GroupsScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Only checked types use Instant honour or Market delay. Unchecked types fill immediately at market.',
+                        'Only checked types use Instant honour or Market delay. Unchecked types fill immediately at market. Delay ms is the live group value (not hard-coded).',
                         style: TextStyle(fontSize: 12, color: Theme.of(ctx).hintColor),
                       ),
                       const SizedBox(height: 4),
@@ -333,6 +335,8 @@ class GroupsScreen extends ConsumerWidget {
                             ('sellStop', 'Sell Stop'),
                             ('sl', 'SL'),
                             ('tp', 'TP'),
+                            ('manualClose', 'Manual Close'),
+                            ('closeAll', 'Close All'),
                           ])
                             FilterChip(
                               label: Text(e.$2, style: const TextStyle(fontSize: 12)),

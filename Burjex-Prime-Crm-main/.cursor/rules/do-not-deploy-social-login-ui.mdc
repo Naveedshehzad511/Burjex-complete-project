@@ -1,0 +1,29 @@
+---
+description: Never deploy the reverted Google/Apple sign-in UI; wait for an explicit deploy request
+alwaysApply: true
+---
+
+# Do not deploy reverted social login UI
+
+User (8 Sep 2026): sign-in page was restored to **this morning** (Flutter login only: Welcome, email, password, LOGIN, Create Account). **Do not put the removed Google/Apple login UI back on live.**
+
+## Never deploy / never re-add unless the user explicitly asks
+
+- Portal overlay `#bx-auth`, `social-config.js`, `oauth-callback.html`
+- Google / Apple buttons on `web/portal` login (`Sign up with Google` / `Sign up with Apple`)
+- Patches to `web/portal/main.dart.js` / `flutter_bootstrap.js` / `index.html` for social buttons
+- Django HTML login/signup social buttons (`_social_auth_buttons.html`, social styles in `auth.css`)
+
+Portal login must stay: `web/portal/index.html` loads **only** `flutter_bootstrap.js`.
+
+## Local leftover (do not ship with a later deploy)
+
+These exist only in the local working tree. Skip them on deploy unless the user later says to ship social login:
+
+- `api/services/social_auth.py`, `api/views/social_auth.py`
+- Admin Integrations → Social login page / `SocialLoginSettings`
+- User `google_sub` / `apple_sub` + related migrations
+
+## Deploy trigger
+
+Do **not** deploy until the user explicitly says to deploy. When they do, ship to **burjexprime.net** (`C:\Burjex-complete-project` / `burjex_net`) only, and exclude everything above. Never ship this to live duafx `C:\burjex`.

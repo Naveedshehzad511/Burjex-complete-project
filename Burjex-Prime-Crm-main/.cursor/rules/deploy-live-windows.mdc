@@ -1,45 +1,33 @@
 ---
-description: Deploy runtime changes immediately to Windows production (5.226.139.8)
+description: Deploy GitHub stack to burjexprime.net; never touch live duafx unless named
 alwaysApply: true
 ---
 
-# Deploy Live (Windows Server)
+# Deploy — burjexprime.net (GitHub)
 
-Standing instruction (Urdu): **"ab jo bhe change krna direct deployed krty jana"** — after any runtime-affecting change, deploy immediately. Never leave server-side fixes local-only.
+Code lives in **https://github.com/Naveedshehzad511/Burjex-complete-project**. Live site for this work is **burjexprime.net**.
 
-## Target
+Do **not** deploy until the user explicitly asks. When they do:
 
-| | |
-|---|---|
-| **Server** | `5.226.139.8` (Windows) |
-| **Path** | `C:\burjex` |
-| **Retired** | `187.127.215.195` — **never deploy** unless user explicitly asks |
-
-Config: `deploy/windows-server/DEPLOY_TARGET.env`
-
-## Deploy workflow
-
-1. **Push code:** WinRM / hotpatch only the affected trees to `C:\burjex` (CRM, gateway, market-data, bridge as relevant).
-2. **Restart stack:** Use `deploy/windows-server/` helpers — they always pass `--env-file deploy/.env.prod.ip`:
-   - `.\up.ps1` — build + start
-   - `.\recreate.ps1 <service>` — force recreate one service
-   - `.\restart.ps1 <service>` — restart
-   - **Never** run raw `docker compose up/restart/recreate` without `--env-file` (causes market-data crash-loop).
-3. **Bridge:** After `mt5_bridge` changes, restart NSSM service `BurjexMt5Bridge` on the server.
-
-## What to redeploy
+1. Push only intended files to GitHub `main` (skip reverted social-login UI).
+2. Update server **`C:\Burjex-complete-project`** (git pull / hotpatch).
+3. Restart **only** `burjex_net`:
+   - `docker compose -p burjex_net -f deploy/docker-compose.github.yml --env-file deploy/.env.github`
+   - recreate/restart matching `bxnet_*` services
+4. **Never** run compose without `--env-file`.
 
 | Changed | Redeploy |
 |---|---|
-| Django CRM | `.\recreate.ps1 crm-web` or `.\up.ps1 --build` |
-| BTrader gateway / ws / engine | matching `btrader-*` service via `.\recreate.ps1` |
-| market-data / feed | `.\recreate.ps1 btrader-market-data` |
-| MT5 bridge | hotpatch + restart bridge service |
+| Django CRM | `bxnet_crm_web` |
+| BTrader gateway / ws / engine | matching `bxnet_bt_*` |
+| market-data | `bxnet_bt_market_data` |
+| portal / admin static | `bxnet_caddy` or copy into compose volumes |
 
-## Flutter / mobile
+## Off-limits
 
-When Flutter or mobile app code changes: rebuild release APK and copy to user Desktop as `BurjexPrime-LIVE.apk`.
+- `C:\burjex` (live duafx.com) — do not hotpatch, recreate, or restart
+- Retired VPS `187.127.215.195`
 
 ## Agent permissions
 
-Use `required_permissions: ["all"]` for deploy, WinRM, and shell commands — do not ask the user repeatedly to Allow.
+Use `required_permissions: ["all"]` for deploy, WinRM, and shell — do not keep asking Allow.

@@ -476,7 +476,8 @@ model TradingGroup {
   executionDelayMs      Int           @default(0)
   /// Which order kinds use Instant honour / Market delay. JSON object with
   /// boolean keys: marketBuy, marketSell, buyLimit, sellLimit, buyStop,
-  /// sellStop, sl, tp. Empty / missing keys default to true (apply to all).
+  /// sellStop, sl, tp, manualClose, closeAll. Empty / missing keys default to
+  /// true (apply to all). Delay is always `executionDelayMs` (never hard-coded).
   executionApplyTo      Json          @default("{}")
 
   createdAt       DateTime @default(now())
@@ -859,6 +860,17 @@ model Position {
   closedAt      DateTime?
   updatedAt     DateTime       @updatedAt
 
+  // Protective/manual close claim. Set at trigger; a later price reversal does
+  // not clear this. The other engine process losing the UPDATE is a no-op.
+  execClaimKind    String?
+  execClaimedAt    DateTime?
+  execClaimedBy    String?
+  execTriggerAt    DateTime?
+  execDeadlineAt   DateTime?
+  execDelayMs      Int?
+  execTriggerBid   Decimal?       @db.Decimal(20, 8)
+  execTriggerAsk   Decimal?       @db.Decimal(20, 8)
+
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   account Account @relation(fields: [accountId], references: [id])
   symbol  Symbol  @relation(fields: [symbolId], references: [id])
@@ -877,6 +889,7 @@ model Position {
   // indexes and filters tenantId on the heap - measured at 3.4M rows that meant
   // walking 767k index entries to return 35k, vs a direct index scan here.
   @@index([tenantId, symbolId, status])
+  @@index([status, execClaimedAt])
   @@map("positions")
 }
 

@@ -164,10 +164,10 @@ export class TradingController {
   @ApiOperation({ summary: 'Modify SL/TP on an open position' })
   async modify(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string, @Body() dto: ModifyPositionDto) {
     const accountId = await this.assertPositionAccess(t.id, u, id);
-    await this.eng.engine.modifyPosition(t.id, id, dto.slPrice, dto.tpPrice);
+    const saved = await this.eng.engine.modifyPosition(t.id, id, dto.slPrice, dto.tpPrice);
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     void this.audit.log(t.id, u.id, 'POSITION_MODIFY', 'position', id, { after: dto });
-    return { ok: true };
+    return { ok: true, ...saved };
   }
 
   @Patch('positions/:id/open-price')

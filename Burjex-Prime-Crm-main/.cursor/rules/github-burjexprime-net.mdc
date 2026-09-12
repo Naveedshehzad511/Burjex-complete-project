@@ -1,0 +1,35 @@
+---
+description: GitHub Burjex-complete-project is source of truth; live target is burjexprime.net only
+alwaysApply: true
+---
+
+# GitHub + live burjexprime.net
+
+User (8 Sep 2026): connect to **Naveedshehzad511 / Burjex-complete-project** and make live changes on **burjexprime.net**, not duafx.
+
+## Source of truth
+
+- Repo: `https://github.com/Naveedshehzad511/Burjex-complete-project`
+- Local `origin` already points here. Branch: `main`.
+- `gh` account: `Naveedshehzad511`.
+
+## Live target (GitHub stack only)
+
+| | |
+|---|---|
+| Domain | `burjexprime.net` (crm / portal / admin) |
+| Server | `5.226.139.8` |
+| Path | `C:\Burjex-complete-project` |
+| Compose | `-p burjex_net -f deploy/docker-compose.github.yml --env-file deploy/.env.github` |
+
+CRM `:6800` · Portal `:6500` · Admin `:6200`
+
+## Never touch unless the user names duafx explicitly
+
+- Live duafx path `C:\burjex`
+- Compose project `burjex` / `crm_web` / ports `80`/`443`/`4xxx`
+- Retired VPS `187.127.215.195`
+
+## Deploy
+
+Wait until the user says deploy. Then push GitHub `main` and update **only** `C:\Burjex-complete-project` / `burjex_net`. Do not ship reverted Google/Apple sign-in UI.

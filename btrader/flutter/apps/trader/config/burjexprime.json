@@ -1,0 +1,9 @@
+{
+  "API_BASE": "https://portal.burjexprime.net",
+  "WS_URL": "wss://portal.burjexprime.net",
+  "TENANT": "demo",
+  "BRAND_NAME": "Burjex Prime",
+  "BRAND_LOGO": "",
+  "BRAND_PRIMARY": "#1652F0",
+  "BRAND_ACCENT": "#0BB07B"
+}
