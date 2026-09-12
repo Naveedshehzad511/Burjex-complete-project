@@ -74,10 +74,42 @@ class AuthController extends StateNotifier<AuthState> {
     await _store4(data);
   }
 
+  /// CRM client forgot-password (email reset link). Independent of B-Trader login.
+  Future<String> forgotPassword(String email) async {
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://crm.burjexprime.net/api/v1',
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 20),
+    ));
+    final res = await dio.post('/auth/forgot-password/', data: {'email': email.trim()});
+    final data = res.data;
+    if (data is Map && data['success'] == true) {
+      return (data['message'] as String?) ?? 'Password reset email sent.';
+    }
+    final msg = data is Map ? data['message'] : null;
+    throw Exception(msg is String && msg.isNotEmpty ? msg : 'Request failed');
+  }
+
   /// MT5-style login by trading account number + password (trader app).
   Future<void> loginByAccount(String accountNumber, String password) async {
     final data = await _api.post('/auth/account-login', {'login': accountNumber, 'password': password});
     await _store4(data, activeAccountId: data['accountId'] as String?);
+  }
+
+  /// CRM client signup — same fields as portal Create Account.
+  Future<String> signupCrm(Map<String, dynamic> body) async {
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://crm.burjexprime.net/api/v1',
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 30),
+    ));
+    final res = await dio.post('/auth/signup/', data: body);
+    final data = res.data;
+    if (data is Map && data['success'] == true) {
+      return (data['message'] as String?) ?? 'Account created successfully.';
+    }
+    final msg = data is Map ? data['message'] : null;
+    throw Exception(msg is String && msg.isNotEmpty ? msg : 'Registration failed');
   }
 
   /// Self-serve demo signup (lead-gen): creates a lead user + demo account and

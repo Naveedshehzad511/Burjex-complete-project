@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:btrader_core/btrader_core.dart';
 
 import 'shell.dart';
+import 'screens/onboarding_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/register_screen.dart';
+import 'screens/forgot_password_screen.dart';
 import 'screens/markets_screen.dart';
 import 'screens/charts_screen.dart';
 import 'screens/trade_screen.dart';
@@ -14,21 +17,26 @@ import 'screens/account_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/funding_screen.dart';
 
+const _authRoutes = {'/', '/login', '/register', '/forgot-password'};
+
 /// go_router with an auth redirect driven by AuthController state.
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    initialLocation: '/markets',
+    initialLocation: '/',
     refreshListenable: _AuthListenable(ref),
     redirect: (context, state) {
       final auth = ref.read(authControllerProvider);
       if (auth.loading) return null;
-      final loggingIn = state.matchedLocation == '/login';
-      if (!auth.authenticated) return loggingIn ? null : '/login';
-      if (loggingIn) return '/markets';
+      final onAuth = _authRoutes.contains(state.matchedLocation);
+      if (!auth.authenticated) return onAuth ? null : '/';
+      if (onAuth) return '/markets';
       return null;
     },
     routes: [
+      GoRoute(path: '/', builder: (_, __) => const OnboardingScreen()),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
+      GoRoute(path: '/forgot-password', builder: (_, __) => const ForgotPasswordScreen()),
       ShellRoute(
         builder: (context, state, child) => TraderShell(state: state, child: child),
         routes: [

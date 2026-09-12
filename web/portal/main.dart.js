@@ -20806,6 +20806,10 @@ bT(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o){var s,r=i?B.Fg:B.Fh,q=i?B.Fi:B.Fj
 if(f==null)s=h===1?B.bG:B.iv
 else s=f
 return new A.M1(c,d,s,o,m,n,b,i,r,q,h,g,j,k,l,e,!0,a,null)},
+bTLock(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o){var s,r=i?B.Fg:B.Fh,q=i?B.Fi:B.Fj
+if(f==null)s=h===1?B.bG:B.iv
+else s=f
+return new A.M1(c,d,s,o,m,n,!0,i,r,q,h,g,j,k,l,e,!1,a,null)},
 bzf(a,b){var s,r=!1
 if(!b.a.x){s=b.c
 s.toString
@@ -34512,6 +34516,8 @@ adG:function adG(){},
 xP:function xP(a){this.a=a},
 abj:function abj(a,b){var _=this
 _.y=_.x=_.w=$
+_.z=0
+_.Q=null
 _.e_$=a
 _.bs$=b
 _.d=$
@@ -122574,7 +122580,7 @@ s.K$=r
 s.R$=0
 this.ak()},
 F(a){var s=null,r=A.ce(a,!0,t.W0).d
-return A.hz(s,B.i,A.f_(!0,A.B7(new A.aWm(this,A.ce(a,!0,t.Gb).b.a,r)),!0,!1,B.J,!0,!0),s,s,s,s)}}
+return A.hz(A.iY(s,s,!0,B.i,s,s,0,B.aR,s,s,s,s,s),B.i,A.f_(!0,A.B7(new A.aWm(this,A.ce(a,!0,t.Gb).b.a,r)),!0,!1,B.J,!0,!0),s,s,s,s)}}
 A.aWn.prototype={
 $1(a){var s=this.a.c
 s.toString
@@ -122586,13 +122592,13 @@ s.toString
 return new A.y9(s,null)},
 $S:862}
 A.aWm.prototype={
-$2(a,b){var s=null,r=B.d.bc(b.d-48,0,1/0),q=A.B("Welcome to "+this.b,s,s,s,s,B.aa8,B.ap,s,s),p=this.a,o=A.bT(B.XU,!1,p.d,A.ps(s,new A.fQ(4,A.bb(12),B.iP),s,s,s,s,s,s,!0,new A.fQ(4,A.bb(12),B.iP),s,s,s,s,s,B.cI,!0,s,s,s,s,new A.fQ(4,A.bb(12),B.ql),s,s,s,s,s,s,s,s,B.eT,"Email or username",s,s,s,s,s,s,s,s,s,!0,!0,!1,s,s,s,s,s,s,s,s,s,s,s,s,s,s),s,B.iw,s,1,!1,s,s,s,B.FN,B.r,B.FL),n=p.f,m=this.c,l=A.cB(n?B.u1:B.S4,B.aS,s,s),k=n?"Show password":"Hide password"
+$2(a,b){var s=null,r=B.d.bc(b.d-48,0,1/0),p=this.a,o=A.bT(B.XU,!1,p.d,A.ps(s,new A.fQ(4,A.bb(12),B.iP),s,s,s,s,s,s,!0,new A.fQ(4,A.bb(12),B.iP),s,s,s,s,s,B.cI,!0,s,s,s,s,new A.fQ(4,A.bb(12),B.ql),s,s,s,s,s,s,s,s,B.eT,"Email address",s,s,s,s,s,s,s,s,s,!0,!0,!1,s,s,s,s,s,s,s,s,s,s,s,s,s,s),s,B.iw,s,1,!1,s,s,s,B.FN,B.r,B.FL),n=p.f,m=this.c,l=A.cB(n?B.u1:B.S4,B.aS,s,s),k=n?"Show password":"Hide password"
 k=A.eK(s,s,s,l,s,s,new A.aWi(p),s,s,s,k,s)
 n=A.bT(B.XH,!1,p.e,A.ps(s,new A.fQ(4,A.bb(12),B.iP),s,s,s,s,s,s,!0,new A.fQ(4,A.bb(12),B.iP),s,s,s,s,s,B.cI,!0,s,s,s,s,new A.fQ(4,A.bb(12),B.ql),s,s,s,s,s,s,s,s,B.eT,"Password",s,s,s,s,s,s,s,s,s,!0,!0,!1,s,s,s,s,s,s,s,s,k,s,s,s,s,s),s,s,s,1,n,s,s,new A.aWj(p,m),B.FN,B.r,B.pt)
 k=A.e8(B.acm,new A.aWk(a),s)
 p=m?s:p.gawB()
 l=A.AA(s,s,B.M,s,s,s,0,s,s,B.i,s,s,s,s,new A.cM(A.bb(12),B.v),s,s,s,s,s)
-return new A.uY(A.Le(new A.dR(new A.an(0,1/0,r,1/0),A.aC(A.b([B.In,B.is,q,B.a0,B.abw,B.Fc,o,B.aT,n,new A.ez(B.lL,s,s,k,s),B.a0,new A.b7(1/0,52,A.Az(m?B.pl:B.acS,p,l),s),B.at,A.e8(B.acg,new A.aWl(a),s)],t.p),B.l,B.eB,B.j),s),s,B.a3,B.em,s,B.C),s)},
+return new A.uY(A.Le(new A.dR(new A.an(0,1/0,r,1/0),A.aC(A.b([A.B("Sign in to your account",s,s,s,s,A.aK(s,s,B.M,s,s,s,s,s,s,s,s,24,s,s,B.a_,s,s,!0,s,s,s,s,s,s,s,s),s,s,s),B.aT,o,B.aT,n,new A.ez(B.lL,s,s,k,s),B.a0,new A.b7(1/0,52,A.Az(m?B.pl:B.acS,p,l),s)],t.p),B.l,B.eB,B.j),s),s,B.a3,B.em,s,B.C),s)},
 $S:863}
 A.aWj.prototype={
 $1(a){return this.b?null:this.a.vh()},
@@ -123131,15 +123137,15 @@ q=A.b([q,p,B.a0,A.yk(A.b([new A.hB(o,l),new A.hB("KYC "+A.f(n==null?"":n),l)],s)
 p=m.ch
 if(p.gbV(p)){p=m.ch.h(0,"available_balance")
 B.b.O(q,A.b([B.a0,A.B("Wallet: "+A.d8(p==null?m.ch.h(0,"wallet_balance"):p,"USD"),l,l,l,l,l,l,l,l)],s))}r.push(new A.bR(A.aC(q,B.B,B.f,B.j),l))
-r.push(A.bT(B.F,!0,m.e,A.bM("First name",l),l,l,l,1,!1,l,l,l,l,B.r,l))
+r.push(A.bTLock(B.F,!0,m.e,A.bM("First name",l),l,l,l,1,!1,l,l,l,l,B.r,l))
 r.push(B.a5)
-r.push(A.bT(B.F,!0,m.f,A.bM("Last name",l),l,l,l,1,!1,l,l,l,l,B.r,l))
+r.push(A.bTLock(B.F,!0,m.f,A.bM("Last name",l),l,l,l,1,!1,l,l,l,l,B.r,l))
 r.push(B.a5)
-r.push(A.bT(B.F,!0,m.r,A.bM("Phone",l),l,l,l,1,!1,l,l,l,l,B.r,l))
+r.push(A.bTLock(B.F,!0,m.r,A.bM("Phone",l),l,l,l,1,!1,l,l,l,l,B.r,l))
 r.push(B.a5)
-r.push(A.bT(B.F,!0,m.w,A.bM("Country",l),l,l,l,1,!1,l,l,l,l,B.r,l))
+r.push(A.bTLock(B.F,!0,m.w,A.bM("Country",l),l,l,l,1,!1,l,l,l,l,B.r,l))
 r.push(B.a5)
-r.push(A.bT(B.F,!0,m.x,A.bM("Address",l),l,l,l,2,!1,l,l,l,l,B.r,l))
+r.push(A.bTLock(B.F,!0,m.x,A.bM("Address",l),l,l,l,2,!1,l,l,l,l,B.r,l))
 r.push(B.a5)
 r.push(A.B(A.f("Name, phone, country and address cannot be edited after account creation."),l,l,l,l,B.ce,l,l,l))
 r.push(B.is)
@@ -123871,8 +123877,14 @@ q=A.bZ(B.jv,s,o)
 p.y!==$&&A.be()
 p.y=new A.aL(q,new A.aQ(0.94,1,r),r.i("aL<aM.T>"))
 s.bR(0)
+p.z=0
+if(p.Q!=null)self.clearInterval(p.Q)
+p.Q=self.setInterval(function(){if(p.c==null){self.clearInterval(p.Q);p.Q=null;return}p.u(new A.bxInc(p))},3e3)
+if(!p.bxT){p.bxT=!0
+A.bxBind(p)}
 $.a8.ry$.push(new A.b2l(p))},
 l(){var s=this.w
+if(this.Q!=null){self.clearInterval(this.Q);this.Q=null}
 s===$&&A.a()
 s.l()
 this.akx()},
@@ -123899,9 +123911,7 @@ case 4:s=6
 return A.i(A.AL(new A.aV(15e4-j),null,t.z),$async$uT)
 case 6:case 5:j=p.c
 if(j==null){s=1
-break}if(!o.f){l=t.X
-A.Z7(j,"/login",l,l)
-s=1
+break}if(!o.f){s=1
 break}s=7
 return A.i(A.uC(j,null,p.gba()),$async$uT)
 case 7:k=b
@@ -123911,11 +123921,80 @@ break}l=t.X
 A.Z7(j,k,l,l)
 case 1:return A.n(q,r)}})
 return A.o($async$uT,r)},
-F(a){var s,r=null,q=A.ce(a,!0,t.Gb).b.a,p=this.x
-p===$&&A.a()
-s=this.y
-s===$&&A.a()
-return A.hz(r,B.M,A.f_(!0,A.e6(new A.dj(p,!1,A.aBa(A.aC(A.b([B.Io,B.Fb,A.B(q.length===0?"Burjex Prime":q,r,r,r,r,B.aan,B.ap,r,r),B.Fc,B.Fa],t.p),B.l,B.eB,B.j),s),r),r,r),!0,!1,B.J,!0,!0),r,r,r,r)}}
+F(a){var s=null,r=this,q=(r.z|0)%4,p,o,n,m,l,k,j,i,h,g,f,e,d
+p=new A.I7(new A.FQ("branding/"+(q+1)+".png",s,s),s,1/0,1/0,B.HM,s)
+o=A.bb(22)
+n=A.b([new A.ca(0,B.a9,B.M.cZ(0.28),new A.j(0,10),6)],t.G)
+m=A.cb(s,p,B.bN,s,s,new A.bY(new A.H(1,0.9882352941176471,0.9803921568627451,0.9647058823529412,B.h),s,s,o,n,s,B.Q),s,s,s,s,s,s,s)
+l=m
+k=A.b([],t.p)
+for(j=0;j<4;++j){i=j===q
+k.push(A.cb(s,s,B.o,s,s,new A.bY(i?B.M:B.bW,s,s,A.bb(4),s,s,B.Q),s,i?8:7,new A.aa(3,0,3,0),s,s,s,i?8:7))}
+h=A.aS(k,B.l,B.eB,B.j,0)
+g=A.fo(s,"Login",!1,new A.bxGoRoute(a,"/login"))
+f=A.bxOutline("Register",new A.bxGoRoute(a,"/signup"),s)
+e=A.aS(A.b([A.bq(A.cb(s,s,B.o,s,s,new A.bY(B.bW,s,s,s,s,s,B.Q),s,1,s,s,s,s,s),1),new A.ao(new A.aa(10,0,10,0),A.B("or",s,s,s,s,B.iy,s,s,s),s),A.bq(A.cb(s,s,B.o,s,s,new A.bY(B.bW,s,s,s,s,s,B.Q),s,1,s,s,s,s,s),1)],t.p),B.l,B.eB,B.j,0)
+d=A.bxOutline("Google",new A.bxSocial("google"),new A.I7(new A.FQ("branding/google.png",s,s),s,24,24,B.HN,s))
+i=A.bxOutline("Apple",new A.bxSocial("apple"),new A.I7(new A.FQ("branding/apple.png",s,s),s,24,24,B.HN,s))
+return A.hz(s,new A.H(1,0.9882352941176471,0.9803921568627451,0.9647058823529412,B.h),A.f_(!0,new A.ao(new A.aa(20,8,20,16),A.aC(A.b([A.bq(l,1),B.at,h,B.aT,g,B.a0,f,B.at,e,B.at,d,B.a0,i],t.p),B.B,B.eB,B.j),s),!0,!1,B.J,!0,!0),s,s,s,s)}}
+
+A.bxPos=function(a){var s
+if(a==null)return 0
+s=a.c
+if(s!=null&&typeof s.a=="number")return s.a
+s=a.e
+if(s!=null&&typeof s.a=="number")return s.a
+s=a.b
+if(s!=null&&typeof s.a=="number")return s.a
+s=a.d
+if(s!=null&&typeof s.a=="number")return s.a
+if(typeof a.a=="number")return a.a
+return 0}
+A.bxArm=function(a){if(a.Q!=null)self.clearInterval(a.Q)
+a.Q=self.setInterval(function(){if(a.c==null){self.clearInterval(a.Q);a.Q=null;return}a.u(new A.bxInc(a))},3e3)}
+A.bxBind=function(a){var s=document.querySelector("flutter-view")||document.body,r=null,q=null
+function n(y){var p=s.getBoundingClientRect()
+return y<p.top+p.height*0.54}
+function o(x,y){if(!n(y)){r=null;return}r=x;q=y}
+function p(x,y){var k,j
+if(r==null)return
+k=x-r
+j=y-q
+r=null
+if(Math.abs(k)<48||Math.abs(k)<Math.abs(j)*1.15)return
+a.u(new A.bxGo(a,k>0?-1:1))
+A.bxArm(a)}
+s.addEventListener("pointerdown",function(e){if(e.button!=null&&e.button!==0)return;o(e.clientX,e.clientY)},{passive:!0})
+s.addEventListener("pointerup",function(e){p(e.clientX,e.clientY)},{passive:!0})}
+A.bxDown=function(a){this.a=a}
+A.bxDown.prototype={$1(a){this.a.bxX=A.bxPos(a)},$S:18}
+A.bxUp=function(a){this.a=a}
+A.bxUp.prototype={$1(a){var s=this.a,r=s.bxX,q
+if(r==null)return
+q=A.bxPos(a)-r
+s.bxX=null
+if(q>48)s.u(new A.bxGo(s,-1))
+else if(q<-48)s.u(new A.bxGo(s,1))
+A.bxArm(s)},$S:18}
+A.bxInc=function(a){this.a=a}
+A.bxInc.prototype={$0(){this.a.z=(this.a.z+1)%4},$S:0}
+A.bxStep=function(a,b){this.a=a
+this.b=b}
+A.bxStep.prototype={$0(){var s=this.a,r=this.b
+s.u(new A.bxGo(s,r))},$S:0}
+A.bxGo=function(a,b){this.a=a
+this.b=b}
+A.bxGo.prototype={$0(){this.a.z=(this.a.z+this.b+4)%4},$S:0}
+A.bxGoRoute=function(a,b){this.a=a
+this.b=b}
+A.bxGoRoute.prototype={$0(){return A.b0(this.a,!1).j6(this.b,null,t.X)},$S:0}
+A.bxSocial=function(a){this.a=a}
+A.bxSocial.prototype={$0(){var s=encodeURIComponent(self.window.location.origin+"/")
+self.window.location.href="https://crm.burjexprime.net/api/v1/auth/"+this.a+"/start/?mode=token&next="+s},$S:0}
+A.bxOutline=function(a,b,c){var s=null,r=A.bb(12),q=A.h5(B.bW,1),p=A.b([],t.p)
+if(c!=null){p.push(c)
+p.push(B.iq)}p.push(A.B(a,s,s,s,s,B.a8x,s,s,s))
+return A.dd(!1,s,!0,A.cb(s,A.aS(p,B.l,B.eB,B.j,0),B.o,s,s,new A.bY(B.i,s,q,r,s,s,B.Q),s,52,s,s,s,s,1/0),s,!0,s,s,s,s,s,s,s,s,b,s,s,s,s,s,s,s)}
 A.b2l.prototype={
 $1(a){return this.a.uT()},
 $S:4}
@@ -138244,7 +138323,7 @@ B.acf=new A.ad("Demo: add balance",null,null,null,null,null,null,null,null,null,
 B.acg=new A.ad("Create account",null,B.G4,null,null,null,null,null,null,null,null)
 B.aci=new A.ad("No trading account yet",null,B.FY,B.ap,null,null,null,null,null,null,null)
 B.acj=new A.ad("Recent transfers",null,B.co,null,null,null,null,null,null,null,null)
-B.acl=new A.ad("Create Account",null,null,null,null,null,null,null,null,null,null)
+B.acl=new A.ad("Register",null,null,null,null,null,null,null,null,null,null)
 B.a7y=new A.y(!0,B.M,null,null,null,null,null,B.aA,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
 B.acm=new A.ad("Forgot password?",null,B.a7y,null,null,null,null,null,null,null,null)
 B.acn=new A.ad("IB Programme",null,B.aD,null,null,null,null,null,null,null,null)
