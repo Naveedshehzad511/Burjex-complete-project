@@ -4,6 +4,7 @@ from .models import (
     DashboardSettings,
     MatchTraderSettings,
     SidebarUISettings,
+    SocialLoginSettings,
     SupportIntegration,
     SupportSettings,
     TradingPlatformIntegration,
@@ -236,3 +237,12 @@ def support_public_context(request):
         "crm_support_settings": settings,
         "crm_support_floating_icon": floating_icon,
     }
+
+
+def social_login_context(request):
+    """Google / Apple buttons on client login and signup pages."""
+    try:
+        obj = SocialLoginSettings.get_solo()
+    except Exception:
+        return {"social_login": None}
+    return {"social_login": obj}

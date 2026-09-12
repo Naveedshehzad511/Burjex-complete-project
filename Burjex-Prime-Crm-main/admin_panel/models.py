@@ -2781,6 +2781,42 @@ class ReCaptchaIntegrationSettings(models.Model):
         return obj
 
 
+class SocialLoginSettings(models.Model):
+    """System Management → Integrations → Social login (Google / Apple)."""
+
+    google_enabled = models.BooleanField(default=True)
+    google_client_id = models.CharField(max_length=255, blank=True, default="")
+    google_client_secret = models.TextField(blank=True, default="")
+    apple_enabled = models.BooleanField(default=True)
+    apple_client_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Apple Services ID (web) / Bundle ID (native).",
+    )
+    apple_team_id = models.CharField(max_length=32, blank=True, default="")
+    apple_key_id = models.CharField(max_length=32, blank=True, default="")
+    apple_private_key = models.TextField(
+        blank=True,
+        default="",
+        help_text="Apple Sign In .p8 private key (PEM).",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def google_ready(self) -> bool:
+        return self.google_enabled and bool(self.google_client_id.strip()) and bool(self.google_client_secret.strip())
+
+    def apple_ready(self) -> bool:
+        return self.apple_enabled and bool(self.apple_client_id.strip()) and bool(
+            self.apple_team_id.strip()
+        ) and bool(self.apple_key_id.strip()) and bool(self.apple_private_key.strip())
+
+
 class Google2FAIntegrationSettings(models.Model):
     enabled = models.BooleanField(default=False)
     method_google_auth = models.BooleanField(default=True)

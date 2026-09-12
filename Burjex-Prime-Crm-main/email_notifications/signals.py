@@ -72,6 +72,10 @@ def on_user_created(sender, instance, created, **kwargs):
     """Send welcome email when a new client account is created."""
     if not created or not instance.email:
         return
+    if getattr(instance, "_skip_auth_emails", False):
+        return
+    if (getattr(instance, "google_sub", "") or "").strip() or (getattr(instance, "apple_sub", "") or "").strip():
+        return
 
     _fire_email_task(
         user_id=instance.pk,

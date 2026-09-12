@@ -316,11 +316,14 @@ def _send_verification_email(user, request):
     token = (getattr(user, "email_token", None) or "").strip()
     if not token:
         raise ValueError("email_token is required to send verification email")
-    base = (getattr(dj_settings, "SITE_BASE_URL", "") or "").rstrip("/")
-    if base:
-        verify_url = f"{base}/verify-email/{token}/"
-    else:
-        verify_url = request.build_absolute_uri(f"/verify-email/{token}/")
+    from accounts.password_reset import email_verify_url
+
+    verify_url = email_verify_url(token)
+    if not verify_url:
+        base = (getattr(dj_settings, "SITE_BASE_URL", "") or "").rstrip("/")
+        verify_url = f"{base}/verify-email/{token}/" if base else request.build_absolute_uri(
+            f"/verify-email/{token}/"
+        )
     ok, reason = send_event_email(
         "email_verification",
         to_email=user.email,
@@ -619,7 +622,7 @@ def forgot_password_view(request):
             email = form.cleaned_data["email"].strip().lower()
             user = User.objects.filter(email__iexact=email).first()
             if user:
-                reset_link = password_reset_url(user, portal=False)
+                reset_link = password_reset_url(user, portal=True)
                 ok, reason = send_event_email(
                     "forgot_password",
                     to_email=user.email,
@@ -660,6 +663,10 @@ def forgot_password_view(request):
 
 @require_http_methods(["GET", "POST"])
 def reset_password_view(request, uidb64, token):
+    from accounts.password_reset import portal_reset_url_from_parts
+
+    if request.method == "GET":
+        return redirect(portal_reset_url_from_parts(uidb64, token))
     brand = UserAuthBrandingSettings.get_solo()
     user = user_from_uid_token(uidb64, token)
     form = SetNewPasswordForm(request.POST or None)
@@ -693,27 +700,9 @@ def reset_password_view(request, uidb64, token):
 
 
 def verify_email_view(request, token):
-    ev = EmailVerificationSettings.get_solo()
-    user = User.objects.filter(email_token=token).first()
-    if not user:
-        messages.error(request, "Invalid verification token.")
-        return redirect("/login/")
-    if user.email_verified:
-        messages.info(request, "Email already verified.")
-        return redirect("/login/")
-    created_at = user.email_token_created_at or timezone.now()
-    expiry_hours = ev.token_expiry_hours if ev.token_expiry_hours and ev.token_expiry_hours > 0 else 24
-    if timezone.now() > created_at + timedelta(hours=expiry_hours):
-        messages.error(request, "Verification token expired. Please request a new one.")
-        return redirect("/login/")
-    user.email_verified = True
-    user.email_verified_at = timezone.now()
-    user.is_active = True
-    user.email_token = ""
-    user.save(update_fields=["email_verified", "email_verified_at", "is_active", "email_token"])
-    send_event_email("email_verified", to_email=user.email, user=user)
-    messages.success(request, "Email verified successfully. Please login.")
-    return redirect("/login/")
+    from accounts.password_reset import email_verify_url
+
+    return redirect(email_verify_url(token))
 
 
 def resend_verification_view(request):

@@ -323,6 +323,7 @@ urlpatterns = [
         name="admin-integrations-trading",
     ),
     path("system-management/integrations/recaptcha/", integrations_views.integrations_recaptcha, name="admin-integrations-recaptcha"),
+    path("system-management/integrations/social-login/", integrations_views.integrations_social_login, name="admin-integrations-social-login"),
     path("system-management/integrations/google-2fa/", integrations_views.integrations_google_2fa, name="admin-integrations-google-2fa"),
     path("system-management/integrations/match2pay/", integrations_views.integrations_match2pay, name="admin-integrations-match2pay"),
     path(

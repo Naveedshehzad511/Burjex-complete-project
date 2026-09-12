@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -50,9 +51,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _social(String provider) async {
-    final next = Uri.encodeComponent('https://portal.burjexprime.net/');
+    final origin = kIsWeb ? Uri.base.origin : 'https://portal.burjexprime.net';
+    final next = Uri.encodeComponent('$origin/');
     final uri = Uri.parse('$_crmSocial/$provider/start/?mode=token&next=$next');
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (kIsWeb) {
+      await launchUrl(uri, webOnlyWindowName: '_self');
+    } else {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Widget _socialBtn(String label, VoidCallback onTap, {Widget? leading}) {
@@ -173,12 +179,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 () => _social('google'),
                 leading: const GoogleMark(),
               ),
-              const SizedBox(height: 10),
-              _socialBtn(
-                'Apple',
-                () => _social('apple'),
-                leading: const AppleMark(),
-              ),
+              if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+                const SizedBox(height: 10),
+                _socialBtn(
+                  'Apple',
+                  () => _social('apple'),
+                  leading: const AppleMark(),
+                ),
+              ],
             ],
           ),
         ),

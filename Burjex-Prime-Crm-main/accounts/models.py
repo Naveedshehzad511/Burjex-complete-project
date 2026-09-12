@@ -159,6 +159,8 @@ class User(AbstractUser):
     # Google Authenticator (TOTP) — enabled only after client completes setup in portal
     totp_secret = models.CharField(max_length=64, blank=True, default="")
     totp_enabled = models.BooleanField(default=False)
+    google_sub = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    apple_sub = models.CharField(max_length=64, blank=True, default="", db_index=True)
 
     def save(self, *args, **kwargs):
         # Auto-assign a referral code for new users.

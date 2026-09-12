@@ -8,6 +8,8 @@ import 'screens/onboarding_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/forgot_password_screen.dart';
+import 'screens/reset_password_screen.dart';
+import 'screens/verify_email_screen.dart';
 import 'screens/markets_screen.dart';
 import 'screens/charts_screen.dart';
 import 'screens/trade_screen.dart';
@@ -17,7 +19,7 @@ import 'screens/account_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/funding_screen.dart';
 
-const _authRoutes = {'/', '/login', '/register', '/forgot-password'};
+const _authRoutes = {'/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email'};
 
 /// go_router with an auth redirect driven by AuthController state.
 final routerProvider = Provider<GoRouter>((ref) {
@@ -29,6 +31,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (auth.loading) return null;
       final onAuth = _authRoutes.contains(state.matchedLocation);
       if (!auth.authenticated) return onAuth ? null : '/';
+      if (state.matchedLocation == '/reset-password' || state.matchedLocation == '/verify-email') {
+        return null;
+      }
       if (onAuth) return '/markets';
       return null;
     },
@@ -37,6 +42,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
       GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
       GoRoute(path: '/forgot-password', builder: (_, __) => const ForgotPasswordScreen()),
+      GoRoute(
+        path: '/reset-password',
+        builder: (_, state) => ResetPasswordScreen(
+          uid: state.uri.queryParameters['uid'] ?? '',
+          token: state.uri.queryParameters['token'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/verify-email',
+        builder: (_, state) => VerifyEmailScreen(token: state.uri.queryParameters['token'] ?? ''),
+      ),
       ShellRoute(
         builder: (context, state, child) => TraderShell(state: state, child: child),
         routes: [

@@ -34,6 +34,7 @@ from .models import (
     ReCaptchaIntegrationSettings,
     SMSProvider,
     SMTPSettings,
+    SocialLoginSettings,
     SupportIntegration,
 )
 
@@ -590,6 +591,38 @@ def integrations_recaptcha(request):
         messages.success(request, "reCAPTCHA settings saved.")
         return redirect("admin-integrations-recaptcha")
     return render(request, "admin_panel/integrations/recaptcha.html", {"obj": obj})
+
+
+@login_required
+@role_required([User.Roles.ADMIN, User.Roles.BANKER])
+@require_http_methods(["GET", "POST"])
+def integrations_social_login(request):
+    obj = SocialLoginSettings.get_solo()
+    if request.method == "POST":
+        obj.google_enabled = request.POST.get("google_enabled") == "on"
+        obj.apple_enabled = request.POST.get("apple_enabled") == "on"
+        obj.google_client_id = (request.POST.get("google_client_id") or "").strip()[:255]
+        secret = (request.POST.get("google_client_secret") or "").strip()
+        if secret:
+            obj.google_client_secret = secret
+        obj.apple_client_id = (request.POST.get("apple_client_id") or "").strip()[:255]
+        obj.apple_team_id = (request.POST.get("apple_team_id") or "").strip()[:32]
+        obj.apple_key_id = (request.POST.get("apple_key_id") or "").strip()[:32]
+        apple_key = (request.POST.get("apple_private_key") or "").strip()
+        if apple_key:
+            obj.apple_private_key = apple_key
+        obj.save()
+        messages.success(request, "Social login settings saved.")
+        return redirect("admin-integrations-social-login")
+    from api.services.social_auth import callback_url as social_callback_url
+
+    google_cb = social_callback_url(request, "google")
+    apple_cb = social_callback_url(request, "apple")
+    return render(
+        request,
+        "admin_panel/integrations/social_login.html",
+        {"obj": obj, "google_callback_url": google_cb, "apple_callback_url": apple_cb},
+    )
 
 
 @login_required

@@ -22,6 +22,15 @@ from api.views.auth import (
     StaffTotpVerifyAPIView,
     VerifyEmailAPIView,
 )
+from api.views.social_auth import (
+    AppleTokenAPIView,
+    GoogleTokenAPIView,
+    SocialOptionsAPIView,
+    apple_callback,
+    apple_start,
+    google_callback,
+    google_start,
+)
 from api.views.dashboard import ClientDashboardAPIView
 from api.views.ib import (
     IBApplyAPIView,
@@ -76,6 +85,13 @@ app_name = "api"
 urlpatterns = [
     # Auth
     path("auth/login/", ClientLoginAPIView.as_view(), name="client-login"),
+    path("auth/social/options/", SocialOptionsAPIView.as_view(), name="social-options"),
+    path("auth/google/", GoogleTokenAPIView.as_view(), name="auth-google"),
+    path("auth/google/start/", google_start, name="auth-google-start"),
+    path("auth/google/callback/", google_callback, name="auth-google-callback"),
+    path("auth/apple/", AppleTokenAPIView.as_view(), name="auth-apple"),
+    path("auth/apple/start/", apple_start, name="auth-apple-start"),
+    path("auth/apple/callback/", apple_callback, name="auth-apple-callback"),
     path("auth/admin/login/", StaffLoginAPIView.as_view(), name="staff-login"),
     path("auth/totp/verify/", ClientTotpVerifyAPIView.as_view(), name="client-totp-verify"),
     path("auth/admin/totp/verify/", StaffTotpVerifyAPIView.as_view(), name="staff-totp-verify"),

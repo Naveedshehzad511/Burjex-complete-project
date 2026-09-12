@@ -237,12 +237,19 @@ class VerifyEmailAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    def post(self, request, token: str = ""):
-        tok = token or (request.data.get("token") or "")
-        ok, message = auth_service.verify_email_token(tok)
+    def _run(self, token: str):
+        ok, message = auth_service.verify_email_token(token)
         if not ok:
             return error_response(message, status=400)
         return success_response({}, message=message)
+
+    def get(self, request, token: str = ""):
+        tok = token or (request.query_params.get("token") or "")
+        return self._run(tok)
+
+    def post(self, request, token: str = ""):
+        tok = token or (request.data.get("token") or "")
+        return self._run(tok)
 
 
 class ResendVerificationAPIView(APIView):

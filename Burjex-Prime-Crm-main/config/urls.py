@@ -27,6 +27,7 @@ from accounts.views import (
 )
 from admin_panel.security_views import maintenance_page
 from admin_panel.integrations_views import match2pay_webhook_stub
+from api.views.social_auth import apple_callback, apple_start, google_callback, google_start
 from btrader_integration.webhook import btrader_webhook
 
 urlpatterns = [
@@ -49,6 +50,10 @@ urlpatterns = [
     path("user/", include("user_portal.urls")),
     path("login/", UserLoginView.as_view(), name="client-login"),
     path("login", UserLoginView.as_view(), name="client-login-ns"),
+    path("auth/google/start/", google_start, name="html-google-start"),
+    path("auth/google/callback/", google_callback, name="html-google-callback"),
+    path("auth/apple/start/", apple_start, name="html-apple-start"),
+    path("auth/apple/callback/", apple_callback, name="html-apple-callback"),
     path("signup/", client_signup_view, name="client-signup"),
     path("signup", client_signup_view, name="client-signup-ns"),
     path("register/", client_signup_view, name="client-register"),

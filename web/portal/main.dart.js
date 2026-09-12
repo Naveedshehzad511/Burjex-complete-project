@@ -123935,8 +123935,10 @@ g=A.fo(s,"Login",!1,new A.bxGoRoute(a,"/login"))
 f=A.bxOutline("Register",new A.bxGoRoute(a,"/signup"),s)
 e=A.aS(A.b([A.bq(A.cb(s,s,B.o,s,s,new A.bY(B.bW,s,s,s,s,s,B.Q),s,1,s,s,s,s,s),1),new A.ao(new A.aa(10,0,10,0),A.B("or",s,s,s,s,B.iy,s,s,s),s),A.bq(A.cb(s,s,B.o,s,s,new A.bY(B.bW,s,s,s,s,s,B.Q),s,1,s,s,s,s,s),1)],t.p),B.l,B.eB,B.j,0)
 d=A.bxOutline("Google",new A.bxSocial("google"),new A.I7(new A.FQ("branding/google.png",s,s),s,24,24,B.HN,s))
-i=A.bxOutline("Apple",new A.bxSocial("apple"),new A.I7(new A.FQ("branding/apple.png",s,s),s,24,24,B.HN,s))
-return A.hz(s,new A.H(1,0.9882352941176471,0.9803921568627451,0.9647058823529412,B.h),A.f_(!0,new A.ao(new A.aa(20,8,20,16),A.aC(A.b([A.bq(l,1),B.at,h,B.aT,g,B.a0,f,B.at,e,B.at,d,B.a0,i],t.p),B.B,B.eB,B.j),s),!0,!1,B.J,!0,!0),s,s,s,s)}}
+i=/iPhone|iPad|iPod/i.test(self.window.navigator.userAgent)?A.bxOutline("Apple",new A.bxSocial("apple"),new A.I7(new A.FQ("branding/apple.png",s,s),s,24,24,B.HN,s)):null
+k=A.b([A.bq(l,1),B.at,h,B.aT,g,B.a0,f,B.at,e,B.at,d],t.p)
+if(i!=null){k.push(B.a0);k.push(i)}
+return A.hz(s,new A.H(1,0.9882352941176471,0.9803921568627451,0.9647058823529412,B.h),A.f_(!0,new A.ao(new A.aa(20,8,20,16),A.aC(k,B.B,B.eB,B.j),s),!0,!1,B.J,!0,!0),s,s,s,s)}}
 
 A.bxPos=function(a){var s
 if(a==null)return 0

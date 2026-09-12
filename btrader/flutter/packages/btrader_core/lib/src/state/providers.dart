@@ -90,6 +90,58 @@ class AuthController extends StateNotifier<AuthState> {
     throw Exception(msg is String && msg.isNotEmpty ? msg : 'Request failed');
   }
 
+  Future<String> resetPassword({
+    required String uid,
+    required String token,
+    required String password,
+    required String confirm,
+  }) async {
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://crm.burjexprime.net/api/v1',
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 20),
+    ));
+    try {
+      final res = await dio.post('/auth/reset-password/', data: {
+        'uid': uid,
+        'token': token,
+        'new_password': password,
+        'confirm_password': confirm,
+      });
+      final data = res.data;
+      if (data is Map && data['success'] == true) {
+        return (data['message'] as String?) ?? 'Password updated. You can sign in now.';
+      }
+      final msg = data is Map ? data['message'] : null;
+      throw Exception(msg is String && msg.isNotEmpty ? msg : 'Request failed');
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final msg = data is Map ? data['message'] : null;
+      throw Exception(msg is String && msg.isNotEmpty ? msg : 'Reset failed');
+    }
+  }
+
+  Future<String> verifyEmailToken(String token) async {
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://crm.burjexprime.net/api/v1',
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 20),
+    ));
+    try {
+      final res = await dio.post('/auth/verify-email/', data: {'token': token});
+      final data = res.data;
+      if (data is Map && data['success'] == true) {
+        return (data['message'] as String?) ?? 'Email verified. You can sign in now.';
+      }
+      final msg = data is Map ? data['message'] : null;
+      throw Exception(msg is String && msg.isNotEmpty ? msg : 'Verification failed');
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final msg = data is Map ? data['message'] : null;
+      throw Exception(msg is String && msg.isNotEmpty ? msg : 'Verification failed');
+    }
+  }
+
   /// MT5-style login by trading account number + password (trader app).
   Future<void> loginByAccount(String accountNumber, String password) async {
     final data = await _api.post('/auth/account-login', {'login': accountNumber, 'password': password});

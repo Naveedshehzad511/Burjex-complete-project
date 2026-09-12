@@ -65,6 +65,9 @@ CSRF_TRUSTED_ORIGINS = [
     "http://crm.burjexprime.com",
     "https://187.77.150.39",
     "https://crm.burjexprime.com",
+    "https://crm.burjexprime.net",
+    "https://portal.burjexprime.net",
+    "https://admin.burjexprime.net",
 ]
 # Production: add the real origins (scheme required) via env CSV.
 for _origin in _env_csv("DJANGO_CSRF_TRUSTED_ORIGINS"):
@@ -278,6 +281,7 @@ TEMPLATES = [
                 'admin_panel.context_processors.trading_platform_public_context',
                 'live_chat.context_processors.live_chat_widget_context',
                 'admin_panel.context_processors.support_public_context',
+                'admin_panel.context_processors.social_login_context',
             ],
         },
     },

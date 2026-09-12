@@ -1,0 +1,58 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Social login{% endblock %}
+{% block admin_content %}
+<div class="max-w-2xl mx-auto space-y-6 pb-10 px-2">
+  <a href="{% url 'admin-integrations-hub' %}" class="text-sm text-indigo-600 hover:underline">← Integrations</a>
+  <h1 class="text-xl font-semibold text-slate-900">Social login</h1>
+  <p class="text-sm text-slate-600">Android shows Google only. iPhone and iPad show Google and Apple. New social accounts are created already verified — no verification email is sent. Clients complete KYC from the dashboard.</p>
+  <form method="post" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-6">
+    {% csrf_token %}
+
+    <div class="space-y-3">
+      <h2 class="text-xs font-bold uppercase tracking-wide text-slate-500">Google</h2>
+      <label class="inline-flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" name="google_enabled" {% if obj.google_enabled %}checked{% endif %} class="rounded border-slate-300" />
+        <span class="text-sm font-medium">Show Google / Gmail button</span>
+      </label>
+      <div>
+        <label class="block text-sm text-slate-600 mb-1">Client ID</label>
+        <input type="text" name="google_client_id" value="{{ obj.google_client_id }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+      </div>
+      <div>
+        <label class="block text-sm text-slate-600 mb-1">Client secret</label>
+        <input type="password" name="google_client_secret" value="" placeholder="{% if obj.google_client_secret %}•••• (leave blank to keep){% endif %}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+      </div>
+      <p class="text-xs text-slate-500 break-all">Authorized redirect URI: <code>{{ google_callback_url }}</code></p>
+    </div>
+
+    <div class="space-y-3">
+      <h2 class="text-xs font-bold uppercase tracking-wide text-slate-500">Sign in with Apple</h2>
+      <label class="inline-flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" name="apple_enabled" {% if obj.apple_enabled %}checked{% endif %} class="rounded border-slate-300" />
+        <span class="text-sm font-medium">Show Apple ID button (iOS / web)</span>
+      </label>
+      <div>
+        <label class="block text-sm text-slate-600 mb-1">Services ID / Bundle ID</label>
+        <input type="text" name="apple_client_id" value="{{ obj.apple_client_id }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Team ID</label>
+          <input type="text" name="apple_team_id" value="{{ obj.apple_team_id }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Key ID</label>
+          <input type="text" name="apple_key_id" value="{{ obj.apple_key_id }}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" autocomplete="off" />
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-600 mb-1">.p8 private key</label>
+        <textarea name="apple_private_key" rows="5" placeholder="{% if obj.apple_private_key %}•••• (leave blank to keep){% endif %}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono" autocomplete="off"></textarea>
+      </div>
+      <p class="text-xs text-slate-500 break-all">Return URL: <code>{{ apple_callback_url }}</code></p>
+    </div>
+
+    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium">Save configuration</button>
+  </form>
+</div>
+{% endblock %}
