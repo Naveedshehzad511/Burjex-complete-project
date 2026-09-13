@@ -58,13 +58,13 @@ class _GoogleGPainter extends CustomPainter {
       return p;
     }
 
-    canvas.drawPath(sector(38, 107), const Paint()..color = Color(0xFF34A853));
-    canvas.drawPath(sector(145, 70), const Paint()..color = Color(0xFFFBBC05));
-    canvas.drawPath(sector(215, 108), const Paint()..color = Color(0xFFEA4335));
-    canvas.drawPath(sector(-38, 76), const Paint()..color = Color(0xFF4285F4));
+    canvas.drawPath(sector(38, 107), Paint()..color = const Color(0xFF34A853));
+    canvas.drawPath(sector(145, 70), Paint()..color = const Color(0xFFFBBC05));
+    canvas.drawPath(sector(215, 108), Paint()..color = const Color(0xFFEA4335));
+    canvas.drawPath(sector(-38, 76), Paint()..color = const Color(0xFF4285F4));
     canvas.drawRRect(
       RRect.fromLTRBR(23.5, 20, 44, 28, const Radius.circular(1.2)),
-      const Paint()..color = Color(0xFF4285F4),
+      Paint()..color = const Color(0xFF4285F4),
     );
     canvas.restore();
   }
