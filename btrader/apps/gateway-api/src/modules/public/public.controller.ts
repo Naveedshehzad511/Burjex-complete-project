@@ -14,12 +14,12 @@ export class PublicController {
   @Get('branding')
   @ApiOperation({ summary: 'Tenant branding for white-label app launch' })
   async branding(@CurrentTenant() t: any) {
-    if (!t) return { appName: 'B-Trader', primaryColor: '#1652F0', accentColor: '#0BB07B' };
+    if (!t) return { appName: 'Burjex Prime', primaryColor: '#002D58', accentColor: '#0BB07B' };
     const b = await prisma.tenantBranding.findUnique({ where: { tenantId: t.id } });
     return {
-      appName: b?.appName ?? 'B-Trader',
+      appName: b?.appName || t.name || 'Burjex Prime',
       logoUrl: b?.logoUrl ?? null,
-      primaryColor: b?.primaryColor ?? '#1652F0',
+      primaryColor: b?.primaryColor ?? '#002D58',
       accentColor: b?.accentColor ?? '#0BB07B',
       baseCurrency: t.baseCurrency,
     };

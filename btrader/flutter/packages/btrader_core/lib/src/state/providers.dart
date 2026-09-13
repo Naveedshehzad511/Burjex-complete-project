@@ -312,12 +312,26 @@ final authControllerProvider =
 
 /// Tenant branding for theming — fetched unauthenticated at launch.
 final brandingProvider = FutureProvider<Branding>((ref) async {
+  final seed = Branding.fallback;
   try {
     final dio = Dio(BaseOptions(baseUrl: '${BtConfig.apiBase}/v1'));
     final res = await dio.get('/public/branding', options: Options(headers: {'X-BT-Tenant': BtConfig.tenant}));
-    return Branding.fromJson(res.data);
+    final data = res.data;
+    if (data is! Map) return seed;
+    final api = Branding.fromJson(Map<String, dynamic>.from(data));
+    final name = api.appName.trim().toLowerCase();
+    if (name.isEmpty || name == 'b-trader' || name == 'btrader' || name == 'demo trader') {
+      return Branding(
+        appName: seed.appName,
+        logoUrl: api.logoUrl ?? seed.logoUrl,
+        primary: seed.primary,
+        accent: seed.accent,
+        baseCurrency: api.baseCurrency,
+      );
+    }
+    return api;
   } catch (_) {
-    return Branding.fallback;
+    return seed;
   }
 });
 
