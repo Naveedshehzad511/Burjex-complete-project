@@ -59360,7 +59360,7 @@ a=A.iY(A.b([A.eK(b6,b6,b6,A.cb(b6,A.cB(B.jX,B.M,b6,22),B.o,b6,b6,new A.bY(B.i,b6
 a2=A.b([],b0)
 if(!f)a2.push(new A.ao(B.dP,A.aC(A.b([b5.zC("Balance",a9.dn(a0)),b5.zC("Equity",a9.dn(a5)),b5.zC("Credit",a9.dn(a1)),b5.zC("Margin",a9.dn(a4)),b5.zC("Free margin",a9.dn(a5-a4))],b0),B.l,B.f,B.j),b6))
 a2.push(B.a0)
-if(m.gC(r)>1){f=A.b([],b0)
+if(m.gC(r)>1&&m.gC(r)<=16){f=A.b([],b0)
 for(m=m.ga6(r);m.q();){a9=m.gJ(m)
 f.push(new A.ao(B.du,A.V5(A.B("#"+a9.b,b6,b6,b6,b6,A.bxInv()?A.aK(b6,b6,A.v(b8).cy,b6,b6,b6,b6,b6,b6,b6,b6,b6,b6,b6,b6,b6,b6,!0,b6,b6,b6,b6,b6,b6,b6,b6):b6,b6,b6,b6),b6,new A.aZe(b5,a9),a9.a===p,b6),b6))}a2.push(new A.b7(b6,40,A.cR(f,B.hD,b6,B.aP,!1),b6))}a2.push(B.c0)
 m=A.v(b8).ax

@@ -17,7 +17,9 @@ class LoginDto {
   @IsString() @MinLength(6) password!: string;
 }
 class AccountLoginDto {
-  @IsString() login!: string; // trading account number
+  @Transform(({ value }) => String(value ?? '').trim())
+  @IsString()
+  login!: string; // trading account number
   @IsString() @MinLength(4) password!: string;
 }
 class RefreshDto {
