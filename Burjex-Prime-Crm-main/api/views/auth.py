@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
@@ -18,6 +20,8 @@ from api.serializers.auth import (
 )
 from api.serializers.common import UserSerializer
 from api.services import auth_service
+
+logger = logging.getLogger(__name__)
 
 
 def _user_payload(request, user):
@@ -249,6 +253,11 @@ class ResetPasswordOtpAPIView(APIView):
             ser.validated_data["new_password"],
         )
         if not result.get("ok"):
+            logger.info(
+                "reset-password-otp failed email=%s errors=%s",
+                ser.validated_data.get("email"),
+                result.get("errors"),
+            )
             return validation_error_response(result.get("errors") or {})
         return success_response({}, message=result["message"])
 

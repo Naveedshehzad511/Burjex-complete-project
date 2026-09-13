@@ -143,7 +143,10 @@ export class AuthService {
   async login(tenantId: string | null, email: string, password: string, ip?: string, ua?: string) {
     const normalizedEmail = String(email ?? '').trim().toLowerCase();
     let user = await prisma.user.findFirst({
-      where: { email: normalizedEmail, tenantId: tenantId ?? null },
+      where: {
+        tenantId: tenantId ?? null,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
     // Global super-admins aren't bound to a tenant. The admin app pins a tenant
     // header (X-BT-Tenant), so a tenant-scoped lookup never finds them — fall

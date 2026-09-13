@@ -173,8 +173,14 @@ class User(AbstractUser):
                     self.referral_code = code
                     break
         # Do not regenerate a verification token after email is verified (one-time link flow).
-        if not self.email_token and not self.email_verified:
-            self.email_token = uuid.uuid4().hex
+        # Also skip when the caller is storing/clearing an in-app OTP hash.
+        token = (self.email_token or "").strip()
+        update_fields = kwargs.get("update_fields")
+        hashed_otp = token.startswith("eotp$") or token.startswith("potp$")
+        clearing_otp = bool(update_fields) and "email_token" in update_fields and not token
+        if not token and not self.email_verified and not hashed_otp and not clearing_otp:
+            if update_fields is None:
+                self.email_token = uuid.uuid4().hex
 
         if not self.is_superuser:
             if self.account_status in (self.AccountStatus.SUSPENDED, self.AccountStatus.BLOCKED):

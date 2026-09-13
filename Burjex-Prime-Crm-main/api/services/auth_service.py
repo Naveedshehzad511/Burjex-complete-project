@@ -435,36 +435,41 @@ def forgot_password(email: str, *, portal: bool = True) -> dict:
         return {"ok": False, "errors": _form_errors(form)}
     email = form.cleaned_data["email"].strip().lower()
     user = User.objects.filter(email__iexact=email).first()
-    if user:
-        from accounts.client_otp import issue_otp
+    if not user:
+        return {"ok": False, "errors": {"email": ["This email is not registered."]}}
+    from accounts.client_otp import issue_otp
 
-        ok, reason = issue_otp(user, purpose="password")
-        if not ok:
-            logger.info(
-                "api forgot_password otp skipped user_id=%s reason=%s",
-                user.pk,
-                reason,
-            )
+    ok, reason = issue_otp(user, purpose="password")
+    if not ok:
+        return {"ok": False, "errors": {"email": [reason]}}
     return {
         "ok": True,
-        "message": "If this email exists, a 6-digit code has been sent.",
+        "message": "A 6-digit code has been sent to your email.",
     }
 
 
 def confirm_password_reset_otp(email: str, otp: str, new_password: str) -> dict:
-    from accounts.client_otp import sync_btrader_login, verify_otp
+    from accounts.client_otp import consume_otp, sync_btrader_login, verify_otp
 
     email = (email or "").strip().lower()
     user = User.objects.filter(email__iexact=email).first()
     if not user:
-        return {"ok": False, "errors": {"otp": ["Invalid code."]}}
-    ok, reason = verify_otp(user, otp, purpose="password")
+        return {"ok": False, "errors": {"email": ["This email is not registered."]}}
+    ok, reason = verify_otp(user, otp, purpose="password", consume=False)
     if not ok:
         return {"ok": False, "errors": {"otp": [reason]}}
-    try:
-        validate_password(new_password, user=user)
-    except DjangoValidationError as exc:
-        return {"ok": False, "errors": {"new_password": list(exc.messages)}}
+    if len(new_password or "") < 8:
+        return {"ok": False, "errors": {"new_password": ["Use at least 8 characters."]}}
+    synced = sync_btrader_login(user, password=new_password, is_active=True)
+    if not synced:
+        return {
+            "ok": False,
+            "errors": {
+                "non_field_errors": [
+                    "Could not update the trading login. Wait a moment and try again."
+                ]
+            },
+        }
     user.set_password(new_password)
     fields = ["password"]
     if hasattr(user, "force_password_change"):
@@ -472,7 +477,7 @@ def confirm_password_reset_otp(email: str, otp: str, new_password: str) -> dict:
         fields.append("force_password_change")
     user.save(update_fields=fields)
     Token.objects.filter(user=user).delete()
-    sync_btrader_login(user, password=new_password, is_active=True)
+    consume_otp(user, purpose="password")
     return {"ok": True, "message": "Password updated. You can sign in now."}
 
 

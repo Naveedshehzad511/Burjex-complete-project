@@ -98,25 +98,37 @@ export class CrmService {
       ? await prisma.tradingGroup.findUnique({ where: { tenantId_name: { tenantId, name: groupName } } })
       : null;
 
-    const user = await prisma.user.upsert({
-      where: { tenantId_email: { tenantId, email: body.email } },
-      update: {
-        crmUserId: body.crmUserId,
-        ...(portalHash ? { passwordHash: portalHash } : {}),
-        ...(body.isActive === false ? { isActive: false } : {}),
-      },
-      create: {
-        tenantId,
-        email: body.email,
-        crmUserId: body.crmUserId,
-        role: 'TRADER',
-        firstName: body.name?.split(' ')?.[0],
-        lastName: body.name?.split(' ')?.slice(1).join(' '),
-        phone: body.phone,
-        passwordHash: portalHash,
-        isActive: body.isActive !== false,
-      },
+    const email = String(body.email ?? '').trim().toLowerCase();
+    const existing = await prisma.user.findFirst({
+      where: { tenantId, email: { equals: email, mode: 'insensitive' } },
     });
+    // Never disable or overwrite login for an already-active trader when CRM
+    // attaches a new demo account (signup OTP uses isActive:false).
+    let user;
+    if (existing) {
+      const data: { crmUserId?: string; passwordHash?: string; isActive?: boolean } = {
+        crmUserId: body.crmUserId,
+      };
+      if (!existing.isActive) {
+        if (body.isActive === false) data.isActive = false;
+        if (portalHash) data.passwordHash = portalHash;
+      }
+      user = await prisma.user.update({ where: { id: existing.id }, data });
+    } else {
+      user = await prisma.user.create({
+        data: {
+          tenantId,
+          email,
+          crmUserId: body.crmUserId,
+          role: 'TRADER',
+          firstName: body.name?.split(' ')?.[0],
+          lastName: body.name?.split(' ')?.slice(1).join(' '),
+          phone: body.phone,
+          passwordHash: portalHash,
+          isActive: body.isActive !== false,
+        },
+      });
+    }
 
     const login = await this.nextLogin(tenantId);
     const account = await prisma.account.create({
@@ -319,7 +331,9 @@ export class CrmService {
   async setUserCredentials(tenantId: string, body: any) {
     const email = String(body.email ?? '').trim().toLowerCase();
     if (!email) throw new BtError(BtErrorCode.VALIDATION, 'email is required');
-    const user = await prisma.user.findFirst({ where: { tenantId, email } });
+    const user = await prisma.user.findFirst({
+      where: { tenantId, email: { equals: email, mode: 'insensitive' } },
+    });
     if (!user) throw new BtError(BtErrorCode.VALIDATION, 'user not found');
     const data: { passwordHash?: string; isActive?: boolean } = {};
     if (body.newPassword) data.passwordHash = await bcrypt.hash(String(body.newPassword), 10);

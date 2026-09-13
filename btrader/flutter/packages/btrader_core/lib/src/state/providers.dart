@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
@@ -72,9 +74,13 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> login(String email, String password) async {
-    final data = await _api.post('/auth/login', {'email': email, 'password': password});
-    await _store4(data);
-    await _tryCrmLogin(email, password);
+    try {
+      final data = await _api.post('/auth/login', {'email': email, 'password': password});
+      await _store4(data);
+    } on DioException catch (e) {
+      throw Exception(_crmMessage(e.response?.data, 'Login failed. Check your email and password.'));
+    }
+    unawaited(_tryCrmLogin(email, password));
   }
 
   Dio _crmDio() => Dio(BaseOptions(
@@ -87,6 +93,7 @@ class AuthController extends StateNotifier<AuthState> {
     if (data is Map) {
       final msg = data['message'];
       if (msg is String && msg.isNotEmpty) return msg;
+      if (msg is List && msg.isNotEmpty) return msg.first.toString();
       final errors = data['errors'];
       if (errors is Map && errors.isNotEmpty) {
         final first = errors.values.first;
@@ -103,7 +110,7 @@ class AuthController extends StateNotifier<AuthState> {
       final res = await _crmDio().post('/auth/forgot-password/', data: {'email': email.trim()});
       final data = res.data;
       if (data is Map && data['success'] == true) {
-        return (data['message'] as String?) ?? 'If this email exists, a 6-digit code has been sent.';
+        return (data['message'] as String?) ?? 'A 6-digit code has been sent to your email.';
       }
       throw Exception(_crmMessage(data, 'Request failed'));
     } on DioException catch (e) {
@@ -283,8 +290,8 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       final dio = Dio(BaseOptions(
         baseUrl: 'https://crm.burjexprime.net/api/v1',
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 20),
+        connectTimeout: const Duration(seconds: 4),
+        receiveTimeout: const Duration(seconds: 6),
       ));
       final res = await dio.post('/auth/login/', data: {'username': email.trim(), 'password': password});
       final body = res.data;

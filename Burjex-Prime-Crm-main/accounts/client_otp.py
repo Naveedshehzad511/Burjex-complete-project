@@ -87,7 +87,7 @@ def issue_otp(user, *, purpose: str = "email") -> tuple[bool, str]:
     return True, "Verification code sent to your email."
 
 
-def verify_otp(user, code: str, *, purpose: str = "email") -> tuple[bool, str]:
+def verify_otp(user, code: str, *, purpose: str = "email", consume: bool = True) -> tuple[bool, str]:
     code = (code or "").strip()
     if not code.isdigit() or len(code) != 6:
         return False, "Enter the 6-digit code from your email."
@@ -108,30 +108,37 @@ def verify_otp(user, code: str, *, purpose: str = "email") -> tuple[bool, str]:
         if left <= 0:
             return False, "Too many attempts. Request a new code."
         return False, f"Invalid code. {left} attempts left."
+    if consume:
+        consume_otp(user, purpose=purpose)
+    return True, "ok"
+
+
+def consume_otp(user, *, purpose: str = "email") -> None:
     user.email_token = ""
     user.save(update_fields=["email_token"])
     cache.delete(_attempts_key(purpose, user.pk))
     cache.delete(_sent_key(purpose, user.pk))
-    return True, "ok"
 
 
-def sync_btrader_login(user, *, password: str | None = None, is_active: bool | None = None) -> None:
-    """Best-effort: portal email login uses the BTrader user row, not CRM."""
+def sync_btrader_login(user, *, password: str | None = None, is_active: bool | None = None) -> bool:
+    """Portal email login uses the BTrader user row, not CRM. Returns False on failure."""
     try:
         from btrader_integration.services import _client_from_settings, is_btrader_configured
 
         if not is_btrader_configured() or not (user.email or "").strip():
-            return
+            return False
         body: dict = {"email": user.email.strip().lower()}
         if password:
             body["newPassword"] = password
         if is_active is not None:
             body["isActive"] = bool(is_active)
         if "newPassword" not in body and "isActive" not in body:
-            return
+            return True
         _client_from_settings().set_user_credentials(body)
+        return True
     except Exception:
         logger.exception("btrader credential sync failed user_id=%s", getattr(user, "pk", None))
+        return False
 
 
 def activate_verified_client(user, *, password: str | None = None) -> None:

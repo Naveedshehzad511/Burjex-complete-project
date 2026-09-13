@@ -615,18 +615,17 @@ def forgot_password_view(request):
         if form.is_valid():
             email = form.cleaned_data["email"].strip().lower()
             user = User.objects.filter(email__iexact=email).first()
-            if user:
+            if not user:
+                messages.error(request, "This email is not registered.")
+            else:
                 from accounts.client_otp import issue_otp
 
                 ok, reason = issue_otp(user, purpose="password")
                 if not ok:
-                    logger.info(
-                        "forgot_password otp skipped user_id=%s reason=%s",
-                        user.pk,
-                        reason,
-                    )
-            messages.success(request, "If this email exists, a 6-digit code has been sent.")
-            return redirect("/login")
+                    messages.error(request, reason)
+                else:
+                    messages.success(request, "A 6-digit code has been sent to your email.")
+                    return redirect("/login")
     else:
         form = ForgotPasswordForm()
     ctx = resolve_branding_context(request)
