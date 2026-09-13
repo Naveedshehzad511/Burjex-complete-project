@@ -867,7 +867,7 @@ model Order {
   positionId    String?
   source        String?     // "mobile" | "admin" | "crm" | "api"
   createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  updatedAt     DateTime    @default(now()) @updatedAt
   filledAt      DateTime?
 
   tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -910,7 +910,7 @@ model Position {
   comment       String?
   openedAt      DateTime       @default(now())
   closedAt      DateTime?
-  updatedAt     DateTime       @updatedAt
+  updatedAt     DateTime       @default(now()) @updatedAt
 
   // Protective/manual close claim. Set at trigger; a later price reversal does
   // not clear this. The other engine process losing the UPDATE is a no-op.
@@ -980,7 +980,7 @@ model HedgeOrder {
 
   openedAt      DateTime    @default(now())
   closedAt      DateTime?
-  updatedAt     DateTime    @updatedAt
+  updatedAt     DateTime    @default(now()) @updatedAt
 
   tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   position   Position?          @relation(fields: [positionId], references: [id])
