@@ -465,9 +465,9 @@ impl Engine {
         sqlx::query(
             r#"INSERT INTO positions (
                  id, "tenantId", "accountId", "symbolId", side, status, book, volume, "coveredVolume",
-                 "openPrice", "slPrice", "tpPrice", "marginUsed", commission, comment
+                 "openPrice", "slPrice", "tpPrice", "marginUsed", commission, comment, "updatedAt"
                ) VALUES (
-                 $1,$2,$3,$4,$5::"OrderSide",'OPEN'::"PositionStatus",$6::"BookType",$7,$8,$9,$10,$11,$12,$13,$14
+                 $1,$2,$3,$4,$5::"OrderSide",'OPEN'::"PositionStatus",$6::"BookType",$7,$8,$9,$10,$11,$12,$13,$14,NOW()
                )"#,
         )
         .bind(&position_id)
@@ -491,10 +491,10 @@ impl Engine {
             r#"INSERT INTO orders (
                  id, "tenantId", "accountId", "symbolId", side, type, status, book, volume, "filledVolume",
                  "requestedPrice", "avgFillPrice", "slPrice", "tpPrice", "slippagePoints", "positionId",
-                 source, "filledAt", "clientOrderId"
+                 source, "filledAt", "clientOrderId", "updatedAt"
                ) VALUES (
                  $1,$2,$3,$4,$5::"OrderSide",'MARKET'::"OrderType",'FILLED'::"OrderStatus",$6::"BookType",
-                 $7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),$16
+                 $7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),$16,NOW()
                )"#,
         )
         .bind(&order_id)

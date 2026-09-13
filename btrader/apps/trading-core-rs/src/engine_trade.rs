@@ -66,10 +66,10 @@ impl Engine {
             r#"INSERT INTO orders (
                  id, "tenantId", "accountId", "symbolId", side, type, status, "timeInForce", volume,
                  price, "stopPrice", "requestedPrice", "slPrice", "tpPrice", "expiresAt", "slippagePoints",
-                 comment, source, "clientOrderId", "stopTriggered"
+                 comment, source, "clientOrderId", "stopTriggered", "updatedAt"
                ) VALUES (
                  $1,$2,$3,$4,$5::"OrderSide",$6::"OrderType",'PENDING'::"OrderStatus",$7::"TimeInForce",
-                 $8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,false
+                 $8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,false,NOW()
                )"#,
         )
         .bind(&order_id)

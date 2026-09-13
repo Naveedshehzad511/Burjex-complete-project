@@ -552,10 +552,10 @@ impl Engine {
         let _ = sqlx::query(
             r#"INSERT INTO hedge_orders (
                  id, "tenantId", "positionId", "accountId", "symbolId", "symbolName", side, volume, status, kind, driver,
-                 "lpProviderId", "requestPrice", "fillPrice", "rejectReason"
+                 "lpProviderId", "requestPrice", "fillPrice", "rejectReason", "updatedAt"
                ) VALUES (
                  $1,$2,$3,$4,$5,$6,$7::"OrderSide",$8,$9::"HedgeStatus",'CLIENT_COVER'::"HedgeKind",$10::"LpExecDriver",
-                 $11,$12,$13,$14
+                 $11,$12,$13,$14,NOW()
                )"#,
         )
         .bind(&hedge_id)
