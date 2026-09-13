@@ -70,7 +70,7 @@ def _pick_demo_account_type(demo_cfg):
     return None
 
 
-def provision_signup_demo_account(user) -> dict[str, Any] | None:
+def provision_signup_demo_account(user, *, portal_password: str = "") -> dict[str, Any] | None:
     """
     Create one BTrader DEMO account for ``user`` if they have none yet.
 
@@ -165,6 +165,8 @@ def provision_signup_demo_account(user) -> dict[str, Any] | None:
                 currency=currency,
                 leverage=leverage_val,
                 is_demo=True,
+                portal_password=portal_password or "",
+                is_active=False,
             )
         except BTraderAPIError as exc:
             logger.error("signup_demo BTrader create failed user_id=%s: %s", user.pk, exc)
@@ -270,7 +272,9 @@ def provision_signup_demo_account(user) -> dict[str, Any] | None:
         return None
 
 
-def ensure_signup_demo_for_new_client(user, *, force: bool = False) -> dict[str, Any] | None:
+def ensure_signup_demo_for_new_client(
+    user, *, force: bool = False, portal_password: str = ""
+) -> dict[str, Any] | None:
     """
     Provision demo on signup (force=True) or within the first-login window
     when the client still has zero trading accounts.
@@ -278,7 +282,7 @@ def ensure_signup_demo_for_new_client(user, *, force: bool = False) -> dict[str,
     if user is None:
         return None
     if force:
-        return provision_signup_demo_account(user)
+        return provision_signup_demo_account(user, portal_password=portal_password)
     if _user_has_trading_account(user):
         return None
     joined = getattr(user, "date_joined", None)
@@ -286,4 +290,4 @@ def ensure_signup_demo_for_new_client(user, *, force: bool = False) -> dict[str,
         return None
     if timezone.now() - joined > _FIRST_LOGIN_DEMO_WINDOW:
         return None
-    return provision_signup_demo_account(user)
+    return provision_signup_demo_account(user, portal_password=portal_password)

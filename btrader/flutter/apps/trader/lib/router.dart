@@ -10,6 +10,7 @@ import 'screens/register_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/reset_password_screen.dart';
 import 'screens/verify_email_screen.dart';
+import 'screens/verify_otp_screen.dart';
 import 'screens/markets_screen.dart';
 import 'screens/charts_screen.dart';
 import 'screens/trade_screen.dart';
@@ -19,7 +20,15 @@ import 'screens/account_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/funding_screen.dart';
 
-const _authRoutes = {'/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email'};
+const _authRoutes = {
+  '/',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-email',
+  '/verify-otp',
+};
 
 /// go_router with an auth redirect driven by AuthController state.
 final routerProvider = Provider<GoRouter>((ref) {
@@ -47,6 +56,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(path: '/forgot-password', builder: (_, __) => const ForgotPasswordScreen()),
+      GoRoute(
+        path: '/verify-otp',
+        builder: (_, state) => VerifyOtpScreen(email: state.uri.queryParameters['email'] ?? ''),
+      ),
       GoRoute(
         path: '/reset-password',
         builder: (_, state) => ResetPasswordScreen(

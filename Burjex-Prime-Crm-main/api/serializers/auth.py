@@ -53,6 +53,24 @@ class ResetPasswordSerializer(serializers.Serializer):
         return attrs
 
 
+class EmailOtpSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=8)
+    password = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
+
+class ResetPasswordOtpSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=8)
+    new_password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        return attrs
+
+
 class ResendVerificationSerializer(serializers.Serializer):
     email = serializers.EmailField()
 

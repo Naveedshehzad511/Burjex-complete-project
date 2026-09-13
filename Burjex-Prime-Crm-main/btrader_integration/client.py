@@ -121,6 +121,9 @@ class BTraderClient:
     def create_account(self, payload: dict) -> dict:
         return self.request("POST", "/crm/accounts", payload)
 
+    def set_user_credentials(self, payload: dict) -> dict:
+        return self.request("POST", "/crm/users/credentials", payload)
+
     def get_account(self, login: str) -> dict:
         return self.request("GET", f"/crm/accounts/{login}")
 

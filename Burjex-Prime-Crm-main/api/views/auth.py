@@ -11,6 +11,8 @@ from api.serializers.auth import (
     ClientSignupSerializer,
     ForgotPasswordSerializer,
     ResetPasswordSerializer,
+    ResetPasswordOtpSerializer,
+    EmailOtpSerializer,
     ResendVerificationSerializer,
     TotpVerifySerializer,
 )
@@ -233,6 +235,24 @@ class ResetPasswordAPIView(APIView):
         return success_response({}, message=result["message"])
 
 
+class ResetPasswordOtpAPIView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        ser = ResetPasswordOtpSerializer(data=request.data)
+        if not ser.is_valid():
+            return validation_error_response(ser.errors)
+        result = auth_service.confirm_password_reset_otp(
+            ser.validated_data["email"],
+            ser.validated_data["otp"],
+            ser.validated_data["new_password"],
+        )
+        if not result.get("ok"):
+            return validation_error_response(result.get("errors") or {})
+        return success_response({}, message=result["message"])
+
+
 class VerifyEmailAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -250,6 +270,27 @@ class VerifyEmailAPIView(APIView):
     def post(self, request, token: str = ""):
         tok = token or (request.data.get("token") or "")
         return self._run(tok)
+
+
+class VerifyEmailOtpAPIView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        ser = EmailOtpSerializer(data=request.data)
+        if not ser.is_valid():
+            return validation_error_response(ser.errors)
+        ok, result = auth_service.verify_email_otp(
+            ser.validated_data["email"],
+            ser.validated_data["otp"],
+            ser.validated_data.get("password") or "",
+        )
+        if not ok:
+            return error_response(result.get("message", "Invalid code."), status=400)
+        data = {k: v for k, v in result.items() if k != "user"}
+        if result.get("user"):
+            data["user"] = _user_payload(request, result["user"])
+        return success_response(data, message=result.get("message", "Email verified."))
 
 
 class ResendVerificationAPIView(APIView):

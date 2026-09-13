@@ -98,4 +98,11 @@ export class CrmController {
   password(@CurrentTenant() t: any, @Param('login') login: string, @Body() body: any) {
     return this.crm.changePassword(t.id, login, body.newPassword, body.type ?? 'MAIN');
   }
+
+  @Post('users/credentials')
+  @CrmAuth('crm.write')
+  @ApiOperation({ summary: 'Set trader email-login password and/or active flag' })
+  userCredentials(@CurrentTenant() t: any, @Body() body: any) {
+    return this.crm.setUserCredentials(t.id, body);
+  }
 }

@@ -57,7 +57,10 @@ class AccountScreen extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.logout, color: Color(0xFFE5484D)),
             title: const Text('Sign out', style: TextStyle(color: Color(0xFFE5484D))),
-            onTap: () => ref.read(authControllerProvider.notifier).logout(),
+            onTap: () {
+              ref.read(authControllerProvider.notifier).logout();
+              context.go('/');
+            },
           ),
           const SizedBox(height: 16),
           Center(child: Text(brand.appName, style: TextStyle(color: Theme.of(context).hintColor))),

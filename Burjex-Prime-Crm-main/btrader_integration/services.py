@@ -166,6 +166,8 @@ def create_btrader_account(
     is_demo: bool,
     account_type: str = "STANDARD",
     investor_password: str = "",
+    portal_password: str = "",
+    is_active: bool | None = None,
 ) -> dict[str, str]:
     """
     POST /v1/crm/accounts — returns {accountId, login}.
@@ -190,6 +192,10 @@ def create_btrader_account(
         "leverage": int(leverage or 100),
         "isDemo": bool(is_demo),
     }
+    if (portal_password or "").strip():
+        payload["portalPassword"] = portal_password
+    if is_active is not None:
+        payload["isActive"] = bool(is_active)
     group_name = (group or "").strip()
     if group_name:
         payload["group"] = group_name

@@ -63,8 +63,8 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
               if (_error != null) Text(_error!, style: const TextStyle(color: Color(0xFFE5484D))),
               const SizedBox(height: 16),
               TextButton(
-                onPressed: () => context.go('/login'),
-                child: const Text('Back to login'),
+                onPressed: () => context.go('/'),
+                child: const Text('Back'),
               ),
             ],
           ),

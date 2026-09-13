@@ -306,36 +306,17 @@ class UserLoginView(LoginView):
 
 
 def _send_verification_email(user, request):
-    """Send signup verification via active Email Template only.
+    """Send a 6-digit OTP (no verification link)."""
+    from accounts.client_otp import issue_otp
 
-    Missing/inactive ``email_verification`` → no send. CRM test email is unchanged
-    (uses ``send_dynamic_email`` directly).
-    """
-    from django.conf import settings as dj_settings
-
-    token = (getattr(user, "email_token", None) or "").strip()
-    if not token:
-        raise ValueError("email_token is required to send verification email")
-    from accounts.password_reset import email_verify_url
-
-    verify_url = email_verify_url(token)
-    if not verify_url:
-        base = (getattr(dj_settings, "SITE_BASE_URL", "") or "").rstrip("/")
-        verify_url = f"{base}/verify-email/{token}/" if base else request.build_absolute_uri(
-            f"/verify-email/{token}/"
-        )
-    ok, reason = send_event_email(
-        "email_verification",
-        to_email=user.email,
-        user=user,
-        extra_context={"verify_url": verify_url, "name": user.display_name()},
-    )
+    ok, reason = issue_otp(user, purpose="email")
     if not ok:
         logger.info(
-            "verification email skipped user_id=%s reason=%s",
+            "verification otp skipped user_id=%s reason=%s",
             getattr(user, "pk", None),
             reason,
         )
+        raise ValueError(reason)
 
 
 @require_http_methods(["GET", "POST"])
@@ -405,8 +386,31 @@ def admin_totp_verify_view(request):
 
 
 def email_verification_sent_view(request):
-    """Shown after signup when a verification email was sent."""
+    """After signup: enter the email OTP (no link)."""
+    from accounts.client_otp import activate_verified_client, issue_otp, verify_otp
+
     brand = UserAuthBrandingSettings.get_solo()
+    email = (request.session.get("registration_pending_email") or request.POST.get("email") or "").strip().lower()
+    if request.method == "POST":
+        user = User.objects.filter(email__iexact=email).first() if email else None
+        action = (request.POST.get("action") or "verify").strip()
+        if action == "resend" and user:
+            ok, reason = issue_otp(user, purpose="email")
+            if ok:
+                messages.success(request, reason)
+            else:
+                messages.error(request, reason)
+            return redirect(reverse("email-verification-sent"))
+        code = (request.POST.get("otp") or "").strip()
+        if not user:
+            messages.error(request, "Email not found. Create the account again.")
+        else:
+            ok, reason = verify_otp(user, code, purpose="email")
+            if ok:
+                activate_verified_client(user)
+                login(request, user)
+                return redirect("/user/dashboard/")
+            messages.error(request, reason)
     ctx = resolve_branding_context(request)
     ctx.update(
         {
@@ -414,7 +418,7 @@ def email_verification_sent_view(request):
             "branding": brand,
             "brand_logo_url": totp_user_logo_url(request),
             "branding_v": int(brand.updated_at.timestamp()) if getattr(brand, "updated_at", None) else 1,
-            "registration_email": (request.session.get("registration_pending_email") or "").strip(),
+            "registration_email": email,
         }
     )
     return render(request, "accounts/email_verification_sent.html", ctx)
@@ -508,7 +512,7 @@ def client_signup_view(request):
             try:
                 from api.services.signup_demo import ensure_signup_demo_for_new_client
 
-                ensure_signup_demo_for_new_client(user, force=True)
+                ensure_signup_demo_for_new_client(user, force=True, portal_password=password)
             except Exception:
                 logger.exception("client_signup demo account auto-create failed user_id=%s", user.pk)
 
@@ -539,21 +543,11 @@ def client_signup_view(request):
                 user.refresh_from_db()
                 user.is_active = False
                 user.email_verified = False
-                user.email_token = uuid.uuid4().hex
-                user.email_token_created_at = timezone.now()
-                user.save(
-                    update_fields=[
-                        "is_active",
-                        "email_verified",
-                        "email_token",
-                        "email_token_created_at",
-                    ]
-                )
+                user.save(update_fields=["is_active", "email_verified"])
                 logger.info(
-                    "client_signup verification pending user_id=%s is_active=%s token_set=%s",
+                    "client_signup verification pending user_id=%s is_active=%s",
                     user.pk,
                     user.is_active,
-                    bool(user.email_token),
                 )
                 try:
                     send_event_email("account_created", to_email=user.email, user=user)
@@ -567,7 +561,7 @@ def client_signup_view(request):
                 request.session["pending_verify_email"] = user.email
                 messages.success(
                     request,
-                    "Verification email sent. Please check your email.",
+                    "We sent a 6-digit code to your email. Enter it to verify.",
                 )
                 return redirect(reverse("email-verification-sent"))
 
@@ -622,25 +616,16 @@ def forgot_password_view(request):
             email = form.cleaned_data["email"].strip().lower()
             user = User.objects.filter(email__iexact=email).first()
             if user:
-                reset_link = password_reset_url(user, portal=True)
-                ok, reason = send_event_email(
-                    "forgot_password",
-                    to_email=user.email,
-                    user=user,
-                    extra_context={
-                        "reset_link": reset_link,
-                        "verify_url": reset_link,
-                        "reset_url": reset_link,
-                        "name": user.display_name(),
-                    },
-                )
+                from accounts.client_otp import issue_otp
+
+                ok, reason = issue_otp(user, purpose="password")
                 if not ok:
                     logger.info(
-                        "forgot_password email skipped user_id=%s reason=%s",
+                        "forgot_password otp skipped user_id=%s reason=%s",
                         user.pk,
                         reason,
                     )
-            messages.success(request, "If this email exists, password reset instructions have been sent.")
+            messages.success(request, "If this email exists, a 6-digit code has been sent.")
             return redirect("/login")
     else:
         form = ForgotPasswordForm()
@@ -718,13 +703,11 @@ def resend_verification_view(request):
     if user.email_verified:
         messages.info(request, "Email is already verified.")
         return redirect("/login/")
-    user.email_token = uuid.uuid4().hex
-    user.email_token_created_at = timezone.now()
-    user.save(update_fields=["email_token", "email_token_created_at"])
     _send_verification_email(user, request)
     request.session["pending_verify_email"] = user.email
-    messages.success(request, "Verification email resent.")
-    return redirect("/login/")
+    request.session["registration_pending_email"] = user.email
+    messages.success(request, "A new 6-digit code was sent to your email.")
+    return redirect(reverse("email-verification-sent"))
 
 
 def client_logout(request):

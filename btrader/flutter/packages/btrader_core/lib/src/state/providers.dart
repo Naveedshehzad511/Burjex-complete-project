@@ -77,20 +77,61 @@ class AuthController extends StateNotifier<AuthState> {
     await _tryCrmLogin(email, password);
   }
 
-  /// CRM client forgot-password (email reset link). Independent of B-Trader login.
-  Future<String> forgotPassword(String email) async {
-    final dio = Dio(BaseOptions(
-      baseUrl: 'https://crm.burjexprime.net/api/v1',
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 20),
-    ));
-    final res = await dio.post('/auth/forgot-password/', data: {'email': email.trim()});
-    final data = res.data;
-    if (data is Map && data['success'] == true) {
-      return (data['message'] as String?) ?? 'Password reset email sent.';
+  Dio _crmDio() => Dio(BaseOptions(
+        baseUrl: 'https://crm.burjexprime.net/api/v1',
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 30),
+      ));
+
+  String _crmMessage(dynamic data, String fallback) {
+    if (data is Map) {
+      final msg = data['message'];
+      if (msg is String && msg.isNotEmpty) return msg;
+      final errors = data['errors'];
+      if (errors is Map && errors.isNotEmpty) {
+        final first = errors.values.first;
+        if (first is List && first.isNotEmpty) return first.first.toString();
+        if (first is String) return first;
+      }
     }
-    final msg = data is Map ? data['message'] : null;
-    throw Exception(msg is String && msg.isNotEmpty ? msg : 'Request failed');
+    return fallback;
+  }
+
+  /// CRM client forgot-password (email OTP). Independent of B-Trader login.
+  Future<String> forgotPassword(String email) async {
+    try {
+      final res = await _crmDio().post('/auth/forgot-password/', data: {'email': email.trim()});
+      final data = res.data;
+      if (data is Map && data['success'] == true) {
+        return (data['message'] as String?) ?? 'If this email exists, a 6-digit code has been sent.';
+      }
+      throw Exception(_crmMessage(data, 'Request failed'));
+    } on DioException catch (e) {
+      throw Exception(_crmMessage(e.response?.data, 'Request failed'));
+    }
+  }
+
+  Future<String> resetPasswordOtp({
+    required String email,
+    required String otp,
+    required String password,
+    required String confirm,
+  }) async {
+    try {
+      final res = await _crmDio().post('/auth/reset-password-otp/', data: {
+        'email': email.trim(),
+        'otp': otp.trim(),
+        'new_password': password,
+        'confirm_password': confirm,
+      });
+      final data = res.data;
+      if (data is Map && data['success'] == true) {
+        return (data['message'] as String?) ?? 'Password updated.';
+      }
+      throw Exception(_crmMessage(data, 'Reset failed'));
+    } on DioException catch (e) {
+      throw Exception(_crmMessage(e.response?.data, 'Reset failed'));
+    }
   }
 
   Future<String> resetPassword({
@@ -124,6 +165,45 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  Future<String> verifyEmailOtp({
+    required String email,
+    required String otp,
+    String password = '',
+  }) async {
+    try {
+      final res = await _crmDio().post('/auth/verify-email-otp/', data: {
+        'email': email.trim(),
+        'otp': otp.trim(),
+        if (password.isNotEmpty) 'password': password,
+      });
+      final data = res.data;
+      if (data is Map && data['success'] == true) {
+        final token = ((data['data'] is Map) ? data['data']['token'] : null)?.toString() ?? '';
+        if (token.isNotEmpty) {
+          final p = await SharedPreferences.getInstance();
+          await p.setString(_kCrmToken, token);
+        }
+        return (data['message'] as String?) ?? 'Email verified.';
+      }
+      throw Exception(_crmMessage(data, 'Verification failed'));
+    } on DioException catch (e) {
+      throw Exception(_crmMessage(e.response?.data, 'Verification failed'));
+    }
+  }
+
+  Future<String> resendEmailOtp(String email) async {
+    try {
+      final res = await _crmDio().post('/auth/resend-verification/', data: {'email': email.trim()});
+      final data = res.data;
+      if (data is Map && data['success'] == true) {
+        return (data['message'] as String?) ?? 'A new code was sent.';
+      }
+      throw Exception(_crmMessage(data, 'Could not resend code'));
+    } on DioException catch (e) {
+      throw Exception(_crmMessage(e.response?.data, 'Could not resend code'));
+    }
+  }
+
   Future<String> verifyEmailToken(String token) async {
     final dio = Dio(BaseOptions(
       baseUrl: 'https://crm.burjexprime.net/api/v1',
@@ -153,18 +233,16 @@ class AuthController extends StateNotifier<AuthState> {
 
   /// CRM client signup — same fields as portal Create Account.
   Future<String> signupCrm(Map<String, dynamic> body) async {
-    final dio = Dio(BaseOptions(
-      baseUrl: 'https://crm.burjexprime.net/api/v1',
-      connectTimeout: const Duration(seconds: 20),
-      receiveTimeout: const Duration(seconds: 30),
-    ));
-    final res = await dio.post('/auth/signup/', data: body);
-    final data = res.data;
-    if (data is Map && data['success'] == true) {
-      return (data['message'] as String?) ?? 'Account created successfully.';
+    try {
+      final res = await _crmDio().post('/auth/signup/', data: body);
+      final data = res.data;
+      if (data is Map && data['success'] == true) {
+        return (data['message'] as String?) ?? 'Account created. Enter the code from your email.';
+      }
+      throw Exception(_crmMessage(data, 'Registration failed'));
+    } on DioException catch (e) {
+      throw Exception(_crmMessage(e.response?.data, 'Registration failed'));
     }
-    final msg = data is Map ? data['message'] : null;
-    throw Exception(msg is String && msg.isNotEmpty ? msg : 'Registration failed');
   }
 
   /// Self-serve demo signup (lead-gen): creates a lead user + demo account and

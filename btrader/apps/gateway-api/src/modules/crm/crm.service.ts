@@ -85,9 +85,26 @@ export class CrmService {
 
   async createAccount(tenantId: string, body: any): Promise<{ accountId: string; login: string }> {
     // Find-or-create the trader user mapped to the CRM user id.
+    const passwordHash = body.password ? await bcrypt.hash(String(body.password), 10) : null;
+    const portalHash = body.portalPassword
+      ? await bcrypt.hash(String(body.portalPassword), 10)
+      : passwordHash;
+    const investorPasswordHash = body.investorPassword
+      ? await bcrypt.hash(String(body.investorPassword), 10)
+      : null;
+
+    const groupName = (body.group ?? '').toString().trim();
+    const group = groupName
+      ? await prisma.tradingGroup.findUnique({ where: { tenantId_name: { tenantId, name: groupName } } })
+      : null;
+
     const user = await prisma.user.upsert({
       where: { tenantId_email: { tenantId, email: body.email } },
-      update: { crmUserId: body.crmUserId },
+      update: {
+        crmUserId: body.crmUserId,
+        ...(portalHash ? { passwordHash: portalHash } : {}),
+        ...(body.isActive === false ? { isActive: false } : {}),
+      },
       create: {
         tenantId,
         email: body.email,
@@ -96,28 +113,12 @@ export class CrmService {
         firstName: body.name?.split(' ')?.[0],
         lastName: body.name?.split(' ')?.slice(1).join(' '),
         phone: body.phone,
+        passwordHash: portalHash,
+        isActive: body.isActive !== false,
       },
     });
 
     const login = await this.nextLogin(tenantId);
-    // CRM sends the account (MAIN) password; B-Trader hashes + stores it. The
-    // client logs into the app with this login number + password.
-    const passwordHash = body.password ? await bcrypt.hash(String(body.password), 10) : null;
-    // #3B: CRM also sends a distinct INVESTOR (read-only) password. Logging in
-    // with this yields a read-only session. null when the CRM omits it.
-    const investorPasswordHash = body.investorPassword
-      ? await bcrypt.hash(String(body.investorPassword), 10)
-      : null;
-
-    // Resolve the trading group by name (matches the CRM's account-type group).
-    // The group sets the client's spread markup, commission, default leverage
-    // and book. If the CRM sends a group the broker hasn't created in B-Trader,
-    // the account is still created (no group) — pricing falls back to symbol.
-    const groupName = (body.group ?? '').toString().trim();
-    const group = groupName
-      ? await prisma.tradingGroup.findUnique({ where: { tenantId_name: { tenantId, name: groupName } } })
-      : null;
-
     const account = await prisma.account.create({
       data: {
         tenantId,
@@ -308,9 +309,23 @@ export class CrmService {
     // INVESTOR (read-only, spec #3B) grants a view-only session when used.
     if (type === 'MAIN') {
       await prisma.account.update({ where: { id: acct.id }, data: { passwordHash: hash } });
+      await prisma.user.update({ where: { id: acct.userId }, data: { passwordHash: hash } });
     } else if (type === 'INVESTOR') {
       await prisma.account.update({ where: { id: acct.id }, data: { investorPasswordHash: hash } });
     }
+    return { ok: true };
+  }
+
+  async setUserCredentials(tenantId: string, body: any) {
+    const email = String(body.email ?? '').trim().toLowerCase();
+    if (!email) throw new BtError(BtErrorCode.VALIDATION, 'email is required');
+    const user = await prisma.user.findFirst({ where: { tenantId, email } });
+    if (!user) throw new BtError(BtErrorCode.VALIDATION, 'user not found');
+    const data: { passwordHash?: string; isActive?: boolean } = {};
+    if (body.newPassword) data.passwordHash = await bcrypt.hash(String(body.newPassword), 10);
+    if (typeof body.isActive === 'boolean') data.isActive = body.isActive;
+    if (!Object.keys(data).length) return { ok: true };
+    await prisma.user.update({ where: { id: user.id }, data });
     return { ok: true };
   }
 

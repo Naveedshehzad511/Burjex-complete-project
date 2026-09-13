@@ -117,15 +117,32 @@
       </svg>
     </div>
     
-    <h1 class="verify-auth-title">Check your email</h1>
+    <h1 class="verify-auth-title">Enter your code</h1>
     
     <p class="verify-auth-text">
-      We've sent a verification link to<br/>
+      We sent a 6-digit code to<br/>
       {% if registration_email %}<strong>{{ registration_email }}</strong>{% else %}your email address{% endif %}.<br/>
-      Please check your inbox.
+      Enter it below. Do not use an email link.
     </p>
+    {% if messages %}
+      {% for message in messages %}
+        <p class="verify-auth-text" style="margin-top:0;color:{% if 'error' in message.tags %}#E5484D{% else %}#0B7A4B{% endif %}">{{ message }}</p>
+      {% endfor %}
+    {% endif %}
 
-    <a href="{% url 'client-login' %}" class="verify-submit-btn">Return to Sign In</a>
+    <form method="post" style="text-align:left">
+      {% csrf_token %}
+      <input type="hidden" name="email" value="{{ registration_email }}" />
+      <label for="otp" style="display:block;font-size:13px;margin:0 0 6px">OTP code</label>
+      <input id="otp" name="otp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required
+        style="width:100%;box-sizing:border-box;border:1px solid #C9CED8;border-radius:12px;padding:12px 14px;margin:0 0 14px;font-size:18px;letter-spacing:0.3em;text-align:center" />
+      <button type="submit" name="action" value="verify" class="verify-submit-btn" style="border:0;cursor:pointer;width:100%">Verify and continue</button>
+    </form>
+    <form method="post" style="margin-top:12px">
+      {% csrf_token %}
+      <input type="hidden" name="email" value="{{ registration_email }}" />
+      <button type="submit" name="action" value="resend" class="verify-submit-btn" style="border:0;cursor:pointer;width:100%;background:transparent !important;color:var(--auth-brand) !important">Resend code</button>
+    </form>
   </main>
 </div>
 {% endblock %}

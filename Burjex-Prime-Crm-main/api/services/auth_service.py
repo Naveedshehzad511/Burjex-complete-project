@@ -362,7 +362,7 @@ def client_signup(request, data: dict) -> tuple[bool, dict]:
         try:
             from api.services.signup_demo import ensure_signup_demo_for_new_client
 
-            signup_demo = ensure_signup_demo_for_new_client(user, force=True)
+            signup_demo = ensure_signup_demo_for_new_client(user, force=True, portal_password=password)
         except Exception:
             logger.exception("api client_signup demo account auto-create failed user_id=%s", user.pk)
 
@@ -380,74 +380,31 @@ def client_signup(request, data: dict) -> tuple[bool, dict]:
         except Exception:
             logger.exception("api client_signup staff notification failed user_id=%s", user.pk)
 
-        if ev.enabled:
-            user.refresh_from_db()
-            user.is_active = False
-            user.email_verified = False
-            user.email_token = uuid.uuid4().hex
-            user.email_token_created_at = timezone.now()
-            user.save(
-                update_fields=[
-                    "is_active",
-                    "email_verified",
-                    "email_token",
-                    "email_token_created_at",
-                ]
-            )
-            try:
-                send_event_email("account_created", to_email=user.email, user=user)
-            except Exception:
-                logger.exception("api client_signup account_created email failed")
-            try:
-                _send_verification_email(user, request)
-            except Exception:
-                logger.exception("api client_signup verification email failed")
-            request.session["registration_pending_email"] = user.email
-            request.session["pending_verify_email"] = user.email
-            payload = {
-                "email_verification_required": True,
-                "email": user.email,
-                "user_id": user.pk,
-                "message": "Verification email sent. Please check your email.",
-            }
-            if signup_demo:
-                payload["demo_account"] = {
-                    k: signup_demo[k]
-                    for k in (
-                        "login_id",
-                        "platform",
-                        "account_kind",
-                        "account_type_name",
-                        "leverage",
-                        "balance",
-                        "currency",
-                        "auto_provisioned",
-                    )
-                    if k in signup_demo
-                }
-            return True, payload
-
-        user.email_verified = True
-        user.email_verified_at = timezone.now()
-        user.save(update_fields=["email_verified", "email_verified_at"])
+        user.refresh_from_db()
+        user.is_active = False
+        user.email_verified = False
+        user.save(update_fields=["is_active", "email_verified"])
         try:
             send_event_email("account_created", to_email=user.email, user=user)
         except Exception:
             logger.exception("api client_signup account_created email failed")
-        login(request, user)
+        try:
+            _send_verification_email(user, request)
+        except Exception:
+            logger.exception("api client_signup verification email failed")
+        request.session["registration_pending_email"] = user.email
+        request.session["pending_verify_email"] = user.email
         payload = {
-            "email_verification_required": False,
-            "token": _issue_token(user),
-            "user": user,
-            "message": "Account created successfully.",
+            "email_verification_required": True,
+            "email": user.email,
+            "user_id": user.pk,
+            "message": "We sent a 6-digit code to your email. Enter it in the app to continue.",
         }
         if signup_demo:
-            # Include password only when we also issue a session token (immediate login).
             payload["demo_account"] = {
                 k: signup_demo[k]
                 for k in (
                     "login_id",
-                    "password",
                     "platform",
                     "account_kind",
                     "account_type_name",
@@ -479,28 +436,44 @@ def forgot_password(email: str, *, portal: bool = True) -> dict:
     email = form.cleaned_data["email"].strip().lower()
     user = User.objects.filter(email__iexact=email).first()
     if user:
-        reset_link = password_reset_url(user, portal=portal)
-        ok, reason = send_event_email(
-            "forgot_password",
-            to_email=user.email,
-            user=user,
-            extra_context={
-                "reset_link": reset_link,
-                "verify_url": reset_link,
-                "reset_url": reset_link,
-                "name": user.display_name(),
-            },
-        )
+        from accounts.client_otp import issue_otp
+
+        ok, reason = issue_otp(user, purpose="password")
         if not ok:
             logger.info(
-                "api forgot_password email skipped user_id=%s reason=%s",
+                "api forgot_password otp skipped user_id=%s reason=%s",
                 user.pk,
                 reason,
             )
     return {
         "ok": True,
-        "message": "If this email exists, password reset instructions have been sent.",
+        "message": "If this email exists, a 6-digit code has been sent.",
     }
+
+
+def confirm_password_reset_otp(email: str, otp: str, new_password: str) -> dict:
+    from accounts.client_otp import sync_btrader_login, verify_otp
+
+    email = (email or "").strip().lower()
+    user = User.objects.filter(email__iexact=email).first()
+    if not user:
+        return {"ok": False, "errors": {"otp": ["Invalid code."]}}
+    ok, reason = verify_otp(user, otp, purpose="password")
+    if not ok:
+        return {"ok": False, "errors": {"otp": [reason]}}
+    try:
+        validate_password(new_password, user=user)
+    except DjangoValidationError as exc:
+        return {"ok": False, "errors": {"new_password": list(exc.messages)}}
+    user.set_password(new_password)
+    fields = ["password"]
+    if hasattr(user, "force_password_change"):
+        user.force_password_change = False
+        fields.append("force_password_change")
+    user.save(update_fields=fields)
+    Token.objects.filter(user=user).delete()
+    sync_btrader_login(user, password=new_password, is_active=True)
+    return {"ok": True, "message": "Password updated. You can sign in now."}
 
 
 def confirm_password_reset(uidb64: str, token: str, new_password: str) -> dict:
@@ -525,6 +498,8 @@ def confirm_password_reset(uidb64: str, token: str, new_password: str) -> dict:
 
 
 def verify_email_token(token: str) -> tuple[bool, str]:
+    from accounts.client_otp import activate_verified_client
+
     ev = EmailVerificationSettings.get_solo()
     user = User.objects.filter(email_token=token).first()
     if not user:
@@ -535,18 +510,45 @@ def verify_email_token(token: str) -> tuple[bool, str]:
     expiry_hours = ev.token_expiry_hours if ev.token_expiry_hours and ev.token_expiry_hours > 0 else 24
     if timezone.now() > created_at + timedelta(hours=expiry_hours):
         return False, "Verification token expired. Please request a new one."
-    user.email_verified = True
-    user.email_verified_at = timezone.now()
-    user.is_active = True
-    user.email_token = ""
-    user.save(update_fields=["email_verified", "email_verified_at", "is_active", "email_token"])
-    send_event_email("email_verified", to_email=user.email, user=user)
+    activate_verified_client(user)
     return True, "Email verified successfully. Please login."
+
+
+def verify_email_otp(email: str, otp: str, password: str = "") -> tuple[bool, dict]:
+    from accounts.client_otp import activate_verified_client, verify_otp
+
+    email = (email or "").strip().lower()
+    user = User.objects.filter(email__iexact=email).first()
+    if not user:
+        return False, {"message": "Invalid code."}
+    if user.email_verified and user.is_active:
+        from accounts.client_otp import sync_btrader_login
+
+        portal_pw = password if password and user.check_password(password) else None
+        sync_btrader_login(user, password=portal_pw, is_active=True)
+        return True, {
+            "message": "Email already verified.",
+            "email": user.email,
+            "already": True,
+            "token": _issue_token(user),
+        }
+    ok, reason = verify_otp(user, otp, purpose="email")
+    if not ok:
+        return False, {"message": reason}
+    portal_pw = password if password and user.check_password(password) else None
+    activate_verified_client(user, password=portal_pw)
+    token = _issue_token(user)
+    return True, {
+        "message": "Email verified.",
+        "email": user.email,
+        "token": token,
+        "user": user,
+    }
 
 
 def resend_verification(request, email: str) -> tuple[bool, str]:
     ev = EmailVerificationSettings.get_solo()
-    if not (ev.enabled and ev.allow_resend):
+    if ev.enabled and not ev.allow_resend:
         return False, "Resend verification is disabled."
     email = (email or "").strip().lower()
     user = User.objects.filter(email__iexact=email).first()
@@ -554,12 +556,12 @@ def resend_verification(request, email: str) -> tuple[bool, str]:
         return False, "Email not found."
     if user.email_verified:
         return True, "Email is already verified."
-    user.email_token = uuid.uuid4().hex
-    user.email_token_created_at = timezone.now()
-    user.save(update_fields=["email_token", "email_token_created_at"])
-    _send_verification_email(user, request)
+    try:
+        _send_verification_email(user, request)
+    except Exception as exc:
+        return False, str(exc) or "Could not send the code."
     request.session["pending_verify_email"] = user.email
-    return True, "Verification email resent."
+    return True, "A new 6-digit code was sent to your email."
 
 
 def change_password(user: User, current_password: str, new_password: str) -> tuple[bool, dict]:

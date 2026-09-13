@@ -99,8 +99,8 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               ],
               const SizedBox(height: 16),
               TextButton(
-                onPressed: () => context.go('/login'),
-                child: const Text('Back to login'),
+                onPressed: () => context.go('/'),
+                child: const Text('Back'),
               ),
             ],
           ),

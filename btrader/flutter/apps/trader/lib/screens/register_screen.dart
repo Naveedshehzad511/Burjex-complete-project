@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import '../pending_signup.dart';
 import 'signup_countries.dart';
 
 const _navy = Color(0xFF002D58);
@@ -117,8 +118,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       });
       if (!mounted) return;
       setState(() => _ok = msg);
-      await Future<void>.delayed(const Duration(milliseconds: 600));
-      if (mounted) context.go('/login');
+      final email = _email.text.trim();
+      ref.read(pendingSignupProvider.notifier).state = PendingSignup(email: email, password: _pass.text);
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (mounted) context.go('/verify-otp?email=${Uri.encodeComponent(email)}');
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -210,8 +213,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   ),
                 ),
                 TextButton(
-                  onPressed: () => context.go('/login'),
-                  child: const Text('Back to Login'),
+                  onPressed: () => context.go('/'),
+                  child: const Text('Back'),
                 ),
               ],
             ),

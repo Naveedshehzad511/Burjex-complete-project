@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:btrader_core/btrader_core.dart';
 
 /// App settings — the active account header, an accounts switcher, theme mode,
@@ -293,7 +294,10 @@ class SettingsScreen extends ConsumerWidget {
         ListTile(
           leading: const Icon(Icons.logout, color: Color(0xFFE5484D)),
           title: const Text('Sign out', style: TextStyle(color: Color(0xFFE5484D))),
-          onTap: () => ref.read(authControllerProvider.notifier).logout(),
+          onTap: () {
+            ref.read(authControllerProvider.notifier).logout();
+            context.go('/');
+          },
         ),
         const SizedBox(height: 16),
         Center(child: Text(brand.appName, style: TextStyle(color: Theme.of(context).hintColor))),
