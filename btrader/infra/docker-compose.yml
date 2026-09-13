@@ -31,7 +31,26 @@ services:
     environment:
       DATABASE_URL: postgresql://btrader:btrader@postgres:5432/btrader?schema=public
       REDIS_URL: redis://redis:6379
+      RUST_ENGINE_URL: http://matching:4300
     ports: ['0.0.0.0:4100:4100']
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+      matching: { condition: service_started }
+
+  matching:
+    build: { context: ../apps/trading-core-rs, dockerfile: Dockerfile }
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgresql://btrader:btrader@postgres:5432/btrader
+      REDIS_URL: redis://redis:6379
+      ENGINE_HTTP_PORT: '4300'
+      ENGINE_FAST_INTERVAL_MS: ${ENGINE_FAST_INTERVAL_MS:-40}
+      ENGINE_TICK_INTERVAL_MS: ${ENGINE_TICK_INTERVAL_MS:-250}
+      MAX_PRICE_AGE_MS: ${MAX_PRICE_AGE_MS:-8000}
+      MAX_FEED_STILL_MS: ${MAX_FEED_STILL_MS:-120000}
+      RUST_ENGINE_TOKEN: ${RUST_ENGINE_TOKEN:-}
+      RUST_LOG: info
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_started }

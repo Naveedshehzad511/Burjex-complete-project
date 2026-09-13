@@ -178,7 +178,8 @@ services:
       DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=200&pool_timeout=10
       ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-8000}
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
-      ENGINE_FAST_INTERVAL_MS: ${ENGINE_FAST_INTERVAL_MS:-40}
+      RUST_ENGINE_URL: http://btrader-matching:4300
+      RUST_ENGINE_TOKEN: ${RUST_ENGINE_TOKEN:-}
       CHART_PROVIDER: ${CHART_PROVIDER:-internal}
       BROKER_UTC_OFFSET_SEC: ${BROKER_UTC_OFFSET_SEC:-10800}
       ORDER_RATE_MAX: ${ORDER_RATE_MAX:-40}
@@ -201,9 +202,32 @@ services:
     depends_on:
       btrader-postgres: { condition: service_healthy }
       btrader-redis: { condition: service_healthy }
+      btrader-matching: { condition: service_started }
     volumes:
       - bxnet_bt_uploads:/app/uploads
     networks: [btrader_internal, edge]
+
+  btrader-matching:
+    build: { context: ../btrader/apps/trading-core-rs, dockerfile: Dockerfile }
+    image: burjex/btrader-matching:net
+    container_name: bxnet_bt_matching
+    <<: *restart
+    env_file: .env.github
+    environment:
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+      ENGINE_HTTP_PORT: '4300'
+      ENGINE_FAST_INTERVAL_MS: ${ENGINE_FAST_INTERVAL_MS:-40}
+      ENGINE_TICK_INTERVAL_MS: ${ENGINE_TICK_INTERVAL_MS:-250}
+      MAX_PRICE_AGE_MS: ${MAX_PRICE_AGE_MS:-8000}
+      MAX_FEED_STILL_MS: ${MAX_FEED_STILL_MS:-120000}
+      RUST_ENGINE_TOKEN: ${RUST_ENGINE_TOKEN:-}
+      RUST_LOG: info
+    expose: ['4300']
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+    networks: [btrader_internal]
 
   btrader-ws:
     build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: ws-gateway } }
@@ -235,7 +259,6 @@ services:
       ENGINE_FAST_INTERVAL_MS: ${ENGINE_FAST_INTERVAL_MS:-40}
       ENGINE_TICK_INTERVAL_MS: ${ENGINE_TICK_INTERVAL_MS:-250}
       ENGINE_TICK_CONCURRENCY: ${ENGINE_TICK_CONCURRENCY:-4}
-      ENGINE_PENDING_REFRESH_MS: ${ENGINE_PENDING_REFRESH_MS:-200}
       ORDER_RATE_MAX: ${ORDER_RATE_MAX:-40}
       ORDER_RATE_WINDOW_MS: ${ORDER_RATE_WINDOW_MS:-1000}
       ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-8000}

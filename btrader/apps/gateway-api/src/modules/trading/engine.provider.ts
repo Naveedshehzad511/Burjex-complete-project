@@ -1,68 +1,102 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { prisma } from '@btrader/db';
-import { Channels, Tick } from '@btrader/shared';
-import { TradingEngine, PriceSource, LpExecutionRouter, venueKeyFor } from '@btrader/engine-core';
+import { BtError, BtErrorCode, Channels, Tick } from '@btrader/shared';
+import { PriceSource, LpExecutionRouter, venueKeyFor } from '@btrader/engine-core';
 
 /**
- * In-process engine for the low-latency execution path: the gateway holds a
- * PriceSource fed directly from Redis ticks and runs TradingEngine synchronously
- * so REST order calls return a real fill immediately. The standalone
- * trading-engine service runs the same code for tick-driven SL/TP/stop-out and
- * horizontal scale; both share the DB as the source of truth.
- *
- * It also owns the A-book LpExecutionRouter: on boot (and on demand) it loads
- * each tenant's LpExecutionConfig and configures the matching bridge, so A-book
- * fills are covered to the LP.
+ * Gateway trading facade: live quotes stay in-process (CRM/book P/L), but
+ * market/pending/SL/TP execution is the Rust matching engine over HTTP.
+ * Do not run onTickFast here — that would double-fire stops with Rust.
  */
+class RustMatchingClient {
+  constructor(
+    private readonly url: string,
+    private readonly token: string,
+  ) {}
+
+  private async rpc(method: string, path: string, body: unknown): Promise<any> {
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    if (this.token) headers['x-engine-token'] = this.token;
+    const res = await fetch(`${this.url}${path}`, {
+      method,
+      headers,
+      body: body == null ? undefined : JSON.stringify(body),
+    });
+    const text = await res.text();
+    let json: any = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = { message: text };
+    }
+    if (!res.ok) {
+      const code = (json.code as BtErrorCode) || BtErrorCode.INTERNAL;
+      throw new BtError(code, json.message || `matching engine HTTP ${res.status}`);
+    }
+    return json;
+  }
+
+  placeOrder(tenantId: string, req: any) {
+    return this.rpc('POST', '/v1/place', { tenantId, ...req, type: req.type });
+  }
+
+  modifyOrder(tenantId: string, id: string, dto: any) {
+    return this.rpc('PATCH', `/v1/orders/${id}`, { tenantId, ...dto });
+  }
+
+  cancelOrder(tenantId: string, id: string) {
+    return this.rpc('DELETE', `/v1/orders/${id}`, { tenantId });
+  }
+
+  modifyPosition(tenantId: string, id: string, slPrice?: number | null, tpPrice?: number | null) {
+    return this.rpc('PATCH', `/v1/positions/${id}`, { tenantId, slPrice, tpPrice });
+  }
+
+  setPositionOpenPrice(tenantId: string, id: string, openPrice: number) {
+    return this.rpc('PATCH', `/v1/positions/${id}/open-price`, { tenantId, openPrice });
+  }
+
+  closePosition(tenantId: string, id: string, volume?: number, opts?: any) {
+    return this.rpc('POST', `/v1/positions/${id}/close`, {
+      tenantId,
+      volume,
+      closePriceOverride: opts?.closePriceOverride,
+      requireAccountId: opts?.requireAccountId,
+      accountIdForQueue: opts?.accountIdForQueue,
+    });
+  }
+
+  async closeAll(tenantId: string, accountId: string): Promise<number> {
+    const r = await this.rpc('POST', '/v1/close-all', { tenantId, accountId });
+    return Number(r.closed ?? 0);
+  }
+
+  coverMore(tenantId: string, id: string, lots: number) {
+    return this.rpc('POST', `/v1/positions/${id}/cover-more`, { tenantId, lots });
+  }
+
+  invalidateGroupCache(id?: string) {
+    return this.rpc('POST', '/v1/cfg/invalidate', { id }).catch(() => undefined);
+  }
+}
+
 @Injectable()
 export class EngineProvider implements OnModuleInit {
   private readonly logger = new Logger('EngineProvider');
   readonly prices = new PriceSource();
   readonly lp = new LpExecutionRouter();
-  readonly engine: TradingEngine;
+  readonly engine: RustMatchingClient;
   private readonly pub = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6380');
   private readonly sub = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6380');
 
   constructor() {
-    this.engine = new TradingEngine({
-      prices: this.prices,
-      lp: this.lp,
-      emit: (evt) =>
-        this.pub
-          .publish(`bt:${evt.tenantId}:${Channels.ENGINE_EVT}`, JSON.stringify(evt))
-          .catch(() => {}),
-      crmOutbox: (tenantId, eventType, payload) => {
-        void prisma.crmSyncOutbox.create({ data: { tenantId, eventType, payload: payload as object } }).catch(() => {});
-        return Promise.resolve();
-      },
-      // BEST_PRICE venue routing: the currently-active pricing source per symbol
-      // (written by market-data to bt:bestsrc:{tenant}).
-      activeSource: async (tenantId, symbol) => this.pub.hget(`bt:bestsrc:${tenantId}`, symbol),
-      // Refuse to fill opens on a stale/late feed (default 8s; 0 disables).
-      maxPriceAgeMs: Number(process.env.MAX_PRICE_AGE_MS ?? 8000),
-      maxFeedStillMs: Number(process.env.MAX_FEED_STILL_MS ?? 120000),
-    });
+    const url = (process.env.RUST_ENGINE_URL ?? 'http://127.0.0.1:4300').replace(/\/$/, '');
+    this.engine = new RustMatchingClient(url, process.env.RUST_ENGINE_TOKEN ?? '');
   }
 
   async onModuleInit() {
-    await this.engine.hydrateBook().catch((e) =>
-      this.logger.warn(`position book hydrate failed: ${(e as Error).message}`),
-    );
     await this.sub.psubscribe(`bt:*:${Channels.TICKS}`);
-    await this.sub.subscribe(`bt:${Channels.ENGINE_CFG}`);
-    this.sub.on('message', (channel, message) => {
-      if (channel !== `bt:${Channels.ENGINE_CFG}`) return;
-      try {
-        const j = JSON.parse(message) as { type?: string; id?: string };
-        if (j.type === 'group') this.engine.invalidateGroupCache(j.id);
-        else this.engine.invalidateGroupCache();
-      } catch {
-        this.engine.invalidateGroupCache();
-      }
-    });
-    const dirtyFast = new Map<string, { tenantId: string; symbol: string }>();
-    const fastMs = Math.max(20, Number(process.env.ENGINE_FAST_INTERVAL_MS ?? 50));
     this.sub.on('pmessage', (_p, channel, message) => {
       const tenantId = channel.split(':')[1];
       let tick: Tick;
@@ -72,27 +106,16 @@ export class EngineProvider implements OnModuleInit {
         return;
       }
       this.prices.set(tenantId, tick);
-      dirtyFast.set(`${tenantId}\u0000${tick.symbol}`, { tenantId, symbol: tick.symbol });
     });
-    setInterval(() => {
-      if (dirtyFast.size === 0) return;
-      const batch = [...dirtyFast.values()];
-      dirtyFast.clear();
-      for (const w of batch) {
-        void this.engine.onTickFast(w.tenantId, w.symbol).catch(() => undefined);
-      }
-    }, fastMs);
     await this.reloadLpConfigs();
     setInterval(() => this.reloadLpConfigs().catch(() => undefined), 60_000);
-    this.logger.log(`engine ready (in-process fill + SL/TP/pending drain every ${fastMs}ms)`);
+    this.logger.log(`quotes cache on Redis ticks; execution via ${process.env.RUST_ENGINE_URL ?? 'http://127.0.0.1:4300'}`);
   }
 
-  /** Currently-active pricing source code for a (tenant, symbol), or null. */
   async activeSourceCode(tenantId: string, symbol: string): Promise<string | null> {
     return this.pub.hget(`bt:bestsrc:${tenantId}`, symbol);
   }
 
-  /** (Re)load every tenant venue from its LpExecutionConfig rows (multi-venue). */
   async reloadLpConfigs(): Promise<void> {
     const configs = await prisma.lpExecutionConfig.findMany();
     for (const c of configs) {
@@ -106,7 +129,6 @@ export class EngineProvider implements OnModuleInit {
           endpoint: c.endpoint,
           senderCompId: c.senderCompId,
           targetCompId: c.targetCompId,
-          // Secret is resolved from the secret store by the bridge, not stored here.
           secret: c.credentialRef ? process.env[`LP_SECRET_${c.credentialRef}`] ?? null : null,
         },
       });
@@ -114,7 +136,6 @@ export class EngineProvider implements OnModuleInit {
     if (configs.length) this.logger.log(`A-book venues configured: ${configs.length} row(s)`);
   }
 
-  /** Reconfigure all of a single tenant's venues (called after an admin edit). */
   async reloadLpConfig(tenantId: string): Promise<void> {
     await this.lp.clearTenant(tenantId);
     const rows = await prisma.lpExecutionConfig.findMany({ where: { tenantId } });

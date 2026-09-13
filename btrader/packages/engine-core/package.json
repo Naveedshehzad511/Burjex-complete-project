@@ -9,7 +9,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@btrader/db": "workspace:*",
     "@btrader/shared": "workspace:*"
   },
   "devDependencies": {

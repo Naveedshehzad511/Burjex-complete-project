@@ -12,3 +12,5 @@ packages/db/node_modules/
 **/generated/
 *.tsbuildinfo
 bridges/mt5-manager-python/config.json
+apps/trading-core-rs/target/
+
