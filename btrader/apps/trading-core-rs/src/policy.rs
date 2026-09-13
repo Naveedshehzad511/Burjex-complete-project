@@ -29,16 +29,51 @@ pub fn create_plan(pricing: &GroupPricing, kind: &str, trigger_mono: Instant, tr
     }
 }
 
+/// Sleep until `plan.deadline` — never longer than remaining time.
+/// Coarse sleep then short yields so MARKET delay stays at the configured ms
+/// (no full restart, no extra 1ms+ cushion on top of the group value).
 pub async fn wait_for_deadline(plan: Option<&ExecutionPlan>) {
     let Some(plan) = plan else { return };
     if plan.delay_ms <= 0 {
         return;
     }
-    let now = Instant::now();
-    if now >= plan.deadline {
+    loop {
+        let now = Instant::now();
+        if now >= plan.deadline {
+            return;
+        }
+        let left = plan.deadline.saturating_duration_since(now);
+        if left.is_zero() {
+            return;
+        }
+        if left > Duration::from_millis(4) {
+            // Wake slightly early so the final spin lands on the deadline.
+            let early = left
+                .checked_sub(Duration::from_millis(1))
+                .unwrap_or(Duration::from_millis(1));
+            sleep(early).await;
+        } else {
+            tokio::task::yield_now().await;
+        }
+    }
+}
+
+/// Wait until an absolute Instant (used for SL/TP claim deadlines on retries).
+pub async fn wait_until_instant(deadline: Instant, delay_ms: i32) {
+    if delay_ms <= 0 {
         return;
     }
-    sleep(plan.deadline.saturating_duration_since(now)).await;
+    wait_for_deadline(Some(&ExecutionPlan {
+        kind: String::new(),
+        mode: String::new(),
+        delay_ms,
+        trigger_mono: deadline
+            .checked_sub(Duration::from_millis(delay_ms.max(0) as u64))
+            .unwrap_or(deadline),
+        trigger_wall: 0,
+        deadline,
+    }))
+    .await;
 }
 
 pub fn close_apply_kind(protective_kind: Option<&str>, close_all: bool, stop_out: bool, dealer: bool) -> Option<&'static str> {

@@ -65,17 +65,21 @@ pub struct GroupPricing {
     pub execution_apply_to: serde_json::Value,
 }
 
+/// Whether Instant honour / Market delay applies to `kind`.
+/// Empty `{}` ⇒ all kinds (legacy). Otherwise only explicit `true` keys apply;
+/// missing or `false` ⇒ immediate market fill (no delay / no Instant honour).
+/// Admin always saves the full checkbox map; selective checks must not leak delay
+/// onto unchecked SL/TP/pending kinds.
 pub fn execution_applies(flags: &serde_json::Value, kind: &str) -> bool {
-    if !flags.is_object() {
+    let Some(obj) = flags.as_object() else {
         return true;
-    }
-    let obj = flags.as_object().unwrap();
+    };
     if obj.is_empty() {
         return true;
     }
     match obj.get(kind) {
-        Some(v) => v.as_bool() != Some(false),
-        None => true,
+        Some(v) => v.as_bool() == Some(true),
+        None => false,
     }
 }
 
@@ -367,5 +371,55 @@ mod tests {
     fn profit_sell() {
         let p = position_profit("SELL", 1.0, 1.1, 1.105, &eurusd(), 1.0);
         assert!((p + 500.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn delay_instant_is_zero() {
+        let p = GroupPricing {
+            execution_mode: "INSTANT".into(),
+            execution_delay_ms: 200,
+            execution_apply_to: serde_json::json!({"marketBuy": true, "sl": true}),
+            ..Default::default()
+        };
+        assert_eq!(market_execution_delay_ms(&p, "marketBuy"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "sl"), 0);
+    }
+
+    #[test]
+    fn delay_only_checked_apply_to() {
+        let p = GroupPricing {
+            execution_mode: "MARKET".into(),
+            execution_delay_ms: 150,
+            execution_apply_to: serde_json::json!({
+                "marketBuy": true,
+                "marketSell": false,
+                "sl": false,
+                "tp": false,
+                "buyLimit": false,
+                "sellLimit": false,
+                "buyStop": false,
+                "sellStop": false,
+                "manualClose": false,
+                "closeAll": false
+            }),
+            ..Default::default()
+        };
+        assert_eq!(market_execution_delay_ms(&p, "marketBuy"), 150);
+        assert_eq!(market_execution_delay_ms(&p, "marketSell"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "sl"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "tp"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "buyStop"), 0);
+    }
+
+    #[test]
+    fn delay_empty_apply_to_means_all() {
+        let p = GroupPricing {
+            execution_mode: "MARKET".into(),
+            execution_delay_ms: 80,
+            execution_apply_to: serde_json::json!({}),
+            ..Default::default()
+        };
+        assert_eq!(market_execution_delay_ms(&p, "sl"), 80);
+        assert_eq!(market_execution_delay_ms(&p, "marketBuy"), 80);
     }
 }

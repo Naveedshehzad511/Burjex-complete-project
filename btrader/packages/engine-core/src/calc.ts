@@ -114,11 +114,11 @@ export const DEFAULT_EXECUTION_APPLY: Record<ExecutionApplyKind, boolean> = {
   closeAll: true,
 };
 
-/** True when Instant honour / Market delay should apply to this kind. */
+/** True when Instant honour / Market delay should apply to this kind.
+ * Empty / null => all kinds. Otherwise only explicit `true` counts; missing or false = off. */
 export function executionApplies(flags: ExecutionApplyTo | null | undefined, kind: ExecutionApplyKind): boolean {
   if (!flags || Object.keys(flags).length === 0) return true;
-  const v = flags[kind];
-  return v !== false;
+  return flags[kind] === true;
 }
 
 export function pendingTypeToApplyKind(type: string, side: string): ExecutionApplyKind | null {

@@ -477,8 +477,9 @@ model TradingGroup {
   executionDelayMs      Int           @default(0)
   /// Which order kinds use Instant honour / Market delay. JSON object with
   /// boolean keys: marketBuy, marketSell, buyLimit, sellLimit, buyStop,
-  /// sellStop, sl, tp, manualClose, closeAll. Empty / missing keys default to
-  /// true (apply to all). Delay is always `executionDelayMs` (never hard-coded).
+  /// sellStop, sl, tp, manualClose, closeAll. Empty `{}` = apply to all.
+  /// Otherwise only keys set to true get Instant/Market delay; false/missing = immediate market fill.
+  /// Delay is always `executionDelayMs` (never hard-coded, never restarted on SL/TP retry).
   executionApplyTo      Json          @default("{}")
 
   createdAt       DateTime @default(now())

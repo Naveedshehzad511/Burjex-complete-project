@@ -149,7 +149,8 @@ class GroupsScreen extends ConsumerWidget {
     final applyRaw = (g?['executionApplyTo'] is Map)
         ? Map<String, dynamic>.from(g!['executionApplyTo'] as Map)
         : <String, dynamic>{};
-    bool applyFlag(String k) => applyRaw[k] != false; // missing ⇒ true
+    // Empty map => all kinds (legacy). Otherwise only explicit true is selected.
+    bool applyFlag(String k) => applyRaw.isEmpty ? true : applyRaw[k] == true;
     final applyTo = <String, bool>{
       'marketBuy': applyFlag('marketBuy'),
       'marketSell': applyFlag('marketSell'),

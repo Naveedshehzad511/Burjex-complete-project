@@ -220,7 +220,10 @@ pub struct Claim {
     pub bid: f64,
     pub ask: f64,
     pub trigger_wall: i64,
-    pub trigger_mono: f64,
+    /// Absolute mono deadline for MARKET delay (trigger + executionDelayMs).
+    /// Retries must wait only until this — never restart the delay.
+    pub deadline: std::time::Instant,
+    pub delay_ms: i32,
 }
 
 impl MemoryClaims {

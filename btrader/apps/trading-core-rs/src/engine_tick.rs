@@ -19,15 +19,45 @@ impl Engine {
                       p."slPrice"::float8 AS "slPrice", p."tpPrice"::float8 AS "tpPrice",
                       p."marginUsed"::float8 AS "marginUsed", p.swap::float8 AS swap,
                       p.commission::float8 AS commission, p."coveredVolume"::float8 AS "coveredVolume",
-                      p."openedAt", p."execClaimKind", a.currency, a."groupId"
+                      p."openedAt", p."execClaimKind", p."execDelayMs", p."execDeadlineAt",
+                      p."execTriggerBid"::float8 AS "execTriggerBid",
+                      p."execTriggerAsk"::float8 AS "execTriggerAsk",
+                      a.currency, a."groupId"
                FROM positions p JOIN accounts a ON a.id=p."accountId" WHERE p.status='OPEN'"#,
         )
         .fetch_all(&self.pool)
         .await?;
+        let mut restore_claims: Vec<(String, Claim)> = Vec::new();
         let rows: Vec<BookRow> = pos
             .into_iter()
-            .map(|r| BookRow {
-                id: r.try_get("id").unwrap_or_default(),
+            .map(|r| {
+                let id: String = r.try_get("id").unwrap_or_default();
+                let kind: Option<String> = r.try_get("execClaimKind").ok();
+                if let Some(ref k) = kind {
+                    if k == "sl" || k == "tp" {
+                        let delay_ms: i32 = r.try_get("execDelayMs").unwrap_or(0);
+                        let deadline = if let Ok(Some(at)) = r.try_get::<Option<chrono::DateTime<Utc>>, _>("execDeadlineAt") {
+                            let left_ms = (at - Utc::now()).num_milliseconds().max(0) as u64;
+                            Instant::now() + std::time::Duration::from_millis(left_ms)
+                        } else {
+                            Instant::now()
+                        };
+                        restore_claims.push((
+                            id.clone(),
+                            Claim {
+                                kind: k.clone(),
+                                level: None,
+                                bid: r.try_get("execTriggerBid").unwrap_or(0.0),
+                                ask: r.try_get("execTriggerAsk").unwrap_or(0.0),
+                                trigger_wall: now_ms(),
+                                deadline,
+                                delay_ms,
+                            },
+                        ));
+                    }
+                }
+                BookRow {
+                id,
                 tenant_id: r.try_get("tenantId").unwrap_or_default(),
                 account_id: r.try_get("accountId").unwrap_or_default(),
                 symbol_id: r.try_get("symbolId").unwrap_or_default(),
@@ -43,11 +73,15 @@ impl Engine {
                 opened_at: r.try_get("openedAt").unwrap_or_else(|_| Utc::now()),
                 account_currency: r.try_get("currency").unwrap_or_else(|_| "USD".into()),
                 group_id: r.try_get("groupId").ok(),
-                exec_claim_kind: r.try_get("execClaimKind").ok(),
+                exec_claim_kind: kind,
+            }
             })
             .collect();
         let n = rows.len();
         self.book.load(rows);
+        for (id, claim) in restore_claims {
+            let _ = self.claims.claim(&id, claim);
+        }
 
         let pend = sqlx::query(
             r#"SELECT id, "tenantId", "accountId", "symbolId", side::text AS side, type::text AS type,
@@ -301,6 +335,8 @@ impl Engine {
         };
         let open = self.book.for_symbol(tenant_id, &sym.id);
         for p in open {
+            // Already claimed: wait only until the ORIGINAL deadline, then close
+            // with skip_delay so MARKET ms is never applied twice.
             if p.exec_claim_kind.is_some() || self.claims.has(&p.id) {
                 if p.exec_claim_kind.as_deref() == Some("sl")
                     || p.exec_claim_kind.as_deref() == Some("tp")
@@ -312,6 +348,9 @@ impl Engine {
                         .map(|c| c.kind.as_str())
                         .or(p.exec_claim_kind.as_deref())
                         .unwrap_or("sl");
+                    if let Some(c) = rec.as_ref() {
+                        crate::policy::wait_until_instant(c.deadline, c.delay_ms).await;
+                    }
                     let _ = self
                         .close_position(
                             tenant_id,
@@ -320,7 +359,7 @@ impl Engine {
                             None,
                             rec.as_ref().and_then(|c| c.level),
                             Some(kind),
-                            false,
+                            true, // skip_delay — already waited to claim deadline
                             None,
                             false,
                             false,
@@ -335,6 +374,9 @@ impl Engine {
             let (hit, level) = protective_hit(&p.side, bid, ask, p.sl_price, p.tp_price);
             let Some(hit) = hit else { continue };
             let kind = if hit == "SL" { "sl" } else { "tp" };
+            let trigger_mono = Instant::now();
+            let trigger_wall = now_ms();
+            let plan = create_plan(&pricing, kind, trigger_mono, trigger_wall);
             let claimed = self.claims.claim(
                 &p.id,
                 Claim {
@@ -342,21 +384,26 @@ impl Engine {
                     level,
                     bid,
                     ask,
-                    trigger_wall: now_ms(),
-                    trigger_mono: 0.0,
+                    trigger_wall,
+                    deadline: plan.deadline,
+                    delay_ms: plan.delay_ms,
                 },
             );
             if !claimed {
                 continue;
             }
             self.book.patch_claim(&p.id, kind);
+            let deadline_wall = chrono::Utc::now() + chrono::Duration::milliseconds(i64::from(plan.delay_ms.max(0)));
             let n = sqlx::query(
                 r#"UPDATE positions SET "execClaimKind"=$1, "execClaimedAt"=NOW(), "execClaimedBy"=$2,
-                   "execTriggerAt"=NOW(), "execTriggerBid"=$3, "execTriggerAsk"=$4
-                   WHERE id=$5 AND status='OPEN' AND "execClaimedAt" IS NULL"#,
+                   "execTriggerAt"=NOW(), "execDeadlineAt"=$3, "execDelayMs"=$4,
+                   "execTriggerBid"=$5, "execTriggerAsk"=$6
+                   WHERE id=$7 AND status='OPEN' AND "execClaimedAt" IS NULL"#,
             )
             .bind(kind)
             .bind(crate::engine_id())
+            .bind(deadline_wall)
+            .bind(plan.delay_ms)
             .bind(bid)
             .bind(ask)
             .bind(&p.id)
@@ -364,8 +411,11 @@ impl Engine {
             .await?
             .rows_affected();
             if n == 0 {
+                self.claims.mark_closed(&p.id);
                 continue;
             }
+            // Wait exactly group executionDelayMs (0 when Instant / apply-to unchecked).
+            crate::policy::wait_for_deadline(Some(&plan)).await;
             let _ = self
                 .close_position(
                     tenant_id,
@@ -374,7 +424,7 @@ impl Engine {
                     None,
                     level,
                     Some(kind),
-                    false,
+                    true, // delay already consumed against claim deadline
                     None,
                     false,
                     false,
