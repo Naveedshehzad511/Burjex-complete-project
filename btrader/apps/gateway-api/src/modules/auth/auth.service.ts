@@ -2,8 +2,20 @@ import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+import Redis from 'ioredis';
 import { prisma } from '@btrader/db';
 import { ttlWrap } from '../../common/ttl-cache';
+
+const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6380');
+const OWNED_ACCTS_TTL_SEC = 86400;
+
+async function publishOwnedAccounts(userId: string, ids: string[]) {
+  try {
+    await redis.set(`jwtaccts:${userId}`, JSON.stringify(ids), 'EX', OWNED_ACCTS_TTL_SEC);
+  } catch {
+    // WS can still authorize from a leftover Redis key or a scoped `acct` claim.
+  }
+}
 
 function genDemoPassword(): string {
   return crypto.randomBytes(9).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) + '9x';
@@ -92,10 +104,10 @@ export class AuthService {
     acctScope?: string | null,
     readonly = false,
   ) {
-    // MT5-style session scoping: a client who logs in by ACCOUNT NUMBER only
-    // sees/operates that one account (`acct` claim, and `accts` restricted to
-    // it). Email logins (admins) stay unscoped and see all their accounts. The
-    // WS gateway uses `accts` to authorize which accounts may be watched.
+    // Do not embed the full account-id list in the JWT. Hundreds of accounts
+    // made Authorization ~50KB and Node returned HTTP 431 on Quotes.
+    // Scoped account-number/investor logins still carry `acct`. WS authorizes
+    // unscoped traders from Redis `jwtaccts:{userId}` (and old `accts` claims).
     const accts = acctScope
       ? [acctScope]
       : (
@@ -103,14 +115,13 @@ export class AuthService {
             prisma.account.findMany({ where: { userId: user.id }, select: { id: true } }),
           )
         ).map((a) => a.id);
+    await publishOwnedAccounts(user.id, accts);
     return this.jwt.sign(
       {
         sub: user.id,
         role: user.role,
         tenantId: user.tenantId,
-        accts,
         ...(acctScope ? { acct: acctScope } : {}),
-        // #3B: read-only investor session. Absent for normal sessions.
         ...(readonly ? { ro: true } : {}),
       },
       { secret: process.env.JWT_SECRET, expiresIn: process.env.JWT_EXPIRES_IN ?? '15m' },

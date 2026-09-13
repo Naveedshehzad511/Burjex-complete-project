@@ -31,7 +31,8 @@ interface ClientState {
   tenantId: string;
   userId: string;
   isAdmin: boolean;
-  ownedAccounts: Set<string>; // account IDs from the JWT (non-admins gated to these)
+  ownedAccounts: Set<string>; // JWT acct/accts, else Redis jwtaccts:{userId}
+  pendingWatch: Set<string>;
   symbols: Set<string>;
   accountIds: Set<string>;
   alive: boolean;
@@ -124,6 +125,7 @@ function dropClient(c: ClientState) {
   clients.delete(c);
 }
 const sub = new Redis(REDIS_URL);
+const redis = new Redis(REDIS_URL);
 
 /// Buffer one engine event for a client, coalescing where it is safe to.
 ///
@@ -322,10 +324,29 @@ sub.on('pmessage', (_pattern, channel, message) => {
 
 const wss = new WebSocketServer({ port: PORT });
 
+async function ownedAccountIds(claims: {
+  sub: string;
+  acct?: string;
+  accts?: string[];
+}): Promise<Set<string>> {
+  if (claims.acct) return new Set([claims.acct]);
+  if (Array.isArray(claims.accts) && claims.accts.length) return new Set(claims.accts);
+  try {
+    const raw = await redis.get(`jwtaccts:${claims.sub}`);
+    if (raw) {
+      const ids = JSON.parse(raw);
+      if (Array.isArray(ids)) return new Set(ids.filter((id) => typeof id === 'string'));
+    }
+  } catch {
+    /* Quotes/HTTP still work; watch_account stays closed until Redis is populated. */
+  }
+  return new Set();
+}
+
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url ?? '', 'http://localhost');
   const token = url.searchParams.get('token') ?? '';
-  let claims: { sub: string; tenantId: string; role?: string; accts?: string[] };
+  let claims: { sub: string; tenantId: string; role?: string; accts?: string[]; acct?: string };
   try {
     claims = jwt.verify(token, JWT_SECRET) as any;
   } catch {
@@ -333,12 +354,38 @@ wss.on('connection', (ws, req) => {
     return;
   }
 
+  const seeded = claims.acct ? new Set([claims.acct]) : new Set(claims.accts ?? []);
+  const state = attachClient(ws, claims, seeded);
+  if (!claims.acct && !(claims.accts && claims.accts.length)) {
+    void ownedAccountIds(claims).then((owned) => {
+      for (const id of owned) state.ownedAccounts.add(id);
+      for (const id of [...state.pendingWatch]) {
+        if (state.ownedAccounts.has(id)) {
+          state.pendingWatch.delete(id);
+          watchAccount(state, id);
+        }
+      }
+    });
+  }
+});
+
+function watchAccount(state: ClientState, accountId: string) {
+  state.accountIds.add(accountId);
+  indexAdd(byAccount, tkey(state.tenantId, accountId), state);
+}
+
+function attachClient(
+  ws: WebSocket,
+  claims: { sub: string; tenantId: string; role?: string; accts?: string[]; acct?: string },
+  ownedAccounts: Set<string>,
+): ClientState {
   const state: ClientState = {
     ws,
     tenantId: claims.tenantId,
     userId: claims.sub,
     isAdmin: ADMIN_ROLES.has(claims.role ?? ''),
-    ownedAccounts: new Set(claims.accts ?? []),
+    ownedAccounts,
+    pendingWatch: new Set(),
     symbols: new Set(),
     accountIds: new Set(),
     alive: true,
@@ -385,11 +432,10 @@ wss.on('connection', (ws, req) => {
         });
         break;
       case 'watch_account':
-        // Authorize: admins may watch any account in their tenant; everyone else
-        // only their own accounts (from the JWT). Silently ignore otherwise.
         if (msg.accountId && (state.isAdmin || state.ownedAccounts.has(msg.accountId))) {
-          state.accountIds.add(msg.accountId);
-          indexAdd(byAccount, tkey(state.tenantId, msg.accountId), state);
+          watchAccount(state, msg.accountId);
+        } else if (msg.accountId && !state.isAdmin) {
+          state.pendingWatch.add(msg.accountId);
         }
         break;
       case 'unwatch_account':
@@ -406,7 +452,8 @@ wss.on('connection', (ws, req) => {
 
   ws.on('pong', () => (state.alive = true));
   ws.on('close', () => dropClient(state));
-});
+  return state;
+}
 
 // Heartbeat: drop dead connections.
 setInterval(() => {
