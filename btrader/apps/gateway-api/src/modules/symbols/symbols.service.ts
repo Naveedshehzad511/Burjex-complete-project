@@ -51,11 +51,12 @@ export class SymbolsService {
           include: { rules: true, symbolMappings: true },
         })) as TgWithRules | null;
 
-        // Precedence: Symbol Mappings > per-symbol picks > symbol-group buckets.
+        // Precedence: assigned Symbols Group / mappings > per-symbol picks > buckets.
+        // A pack on the trading group is the client's entire book (even if empty).
+        const packAssigned = !!(tradingGroup as { clientSymbolGroupId?: string | null } | null)?.clientSymbolGroupId;
         const enabledMaps = (tradingGroup?.symbolMappings ?? []).filter((m) => m.enabled);
-        if (enabledMaps.length > 0) {
+        if (packAssigned || enabledMaps.length > 0) {
           const ids = enabledMaps.map((m) => m.symbolId).filter((id): id is string => !!id);
-          // Also resolve by lpSymbol when symbolId was null at save time.
           const unresolved = enabledMaps.filter((m) => !m.symbolId).map((m) => m.lpSymbol);
           if (unresolved.length) {
             const found = await prisma.symbol.findMany({

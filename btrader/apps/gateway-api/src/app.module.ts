@@ -21,6 +21,7 @@ import { PublicModule } from './modules/public/public.module';
 import { MarketModule } from './modules/market/market.module';
 import { BookModule } from './modules/book/book.module';
 import { GroupsModule } from './modules/groups/groups.module';
+import { SymbolGroupsModule } from './modules/symbol-groups/symbol-groups.module';
 import { BridgeModule } from './modules/bridge/bridge.module';
 import { LiquidityModule } from './modules/liquidity/liquidity.module';
 import { HqModule } from './modules/hq/hq.module';
@@ -46,6 +47,7 @@ import { HqModule } from './modules/hq/hq.module';
     MarketModule,
     BookModule,
     GroupsModule,
+    SymbolGroupsModule,
     BridgeModule,
     LiquidityModule,
     HqModule,

@@ -59,6 +59,24 @@ final adminSymbolsProvider = FutureProvider.autoDispose<List<TradeSymbol>>((ref)
   return data.map((e) => TradeSymbol.fromJson(e)).toList();
 });
 
+/// Feed / Market Watch symbols for Symbols Group alias autocomplete.
+final lpSymbolsProvider = FutureProvider.autoDispose((ref) async {
+  final api = ref.watch(apiClientProvider);
+  try {
+    return (await api.get('/admin/groups/lp-symbols') as List).cast<Map<String, dynamic>>();
+  } catch (_) {
+    final syms = await ref.watch(adminSymbolsProvider.future);
+    return syms
+        .map((s) => <String, dynamic>{
+              'id': s.id,
+              'symbol': s.symbol,
+              'class': s.klass,
+              'live': false,
+            })
+        .toList();
+  }
+});
+
 final riskLimitsProvider = FutureProvider.autoDispose<List<RiskLimit>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final data = await api.get('/risk/limits') as List;

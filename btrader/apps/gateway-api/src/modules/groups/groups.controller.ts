@@ -6,9 +6,8 @@ import { JwtAuthGuard } from '../../common/jwt.guard';
 import { Roles, CurrentTenant, CurrentUser } from '../../common/decorators';
 import { AuditService } from '../audit/audit.service';
 import { Channels } from '@btrader/shared';
+import { MappingInput, replaceMappings, syncTradingGroupFromPack } from './mapping.util';
 
-const PRICING_METHODS = new Set(['SPREAD_ONLY', 'COMMISSION_ONLY', 'SPREAD_AND_COMMISSION']);
-const COMMISSION_TYPES = new Set(['NONE', 'PER_LOT', 'PER_SIDE', 'ROUND_TURN', 'PERCENT']);
 const EXECUTION_APPLY_KEYS = [
   'marketBuy',
   'marketSell',
@@ -33,51 +32,10 @@ function normalizeExecutionApplyTo(raw: unknown): Record<string, boolean> {
   return out;
 }
 
-type MappingInput = {
-  lpSymbol?: string;
-  clientSymbol?: string;
-  pricingMethod?: string;
-  minSpreadPoints?: number;
-  maxSpreadPoints?: number;
-  commissionType?: string;
-  commissionValue?: number;
-  enabled?: boolean;
-  sortOrder?: number;
-};
-
-function normalizeMapping(raw: MappingInput, index: number) {
-  const lpSymbol = String(raw.lpSymbol ?? '').trim().toUpperCase();
-  const clientSymbol = String(raw.clientSymbol ?? '').trim();
-  if (!lpSymbol || !clientSymbol) return null;
-  const pricingMethod = PRICING_METHODS.has(String(raw.pricingMethod))
-    ? String(raw.pricingMethod)
-    : 'SPREAD_ONLY';
-  let commissionType = COMMISSION_TYPES.has(String(raw.commissionType))
-    ? String(raw.commissionType)
-    : 'NONE';
-  if (pricingMethod === 'SPREAD_ONLY') commissionType = 'NONE';
-  if (pricingMethod === 'COMMISSION_ONLY' && commissionType === 'NONE') commissionType = 'PER_LOT';
-  const minSpreadPoints = Math.max(0, Math.round(Number(raw.minSpreadPoints) || 0));
-  let maxSpreadPoints = Math.max(0, Math.round(Number(raw.maxSpreadPoints) || 0));
-  if (maxSpreadPoints > 0 && maxSpreadPoints < minSpreadPoints) maxSpreadPoints = minSpreadPoints;
-  return {
-    lpSymbol,
-    clientSymbol,
-    pricingMethod: pricingMethod as any,
-    minSpreadPoints,
-    maxSpreadPoints,
-    commissionType: commissionType as any,
-    commissionValue: Number(raw.commissionValue) || 0,
-    enabled: raw.enabled !== false,
-    sortOrder: Number.isFinite(Number(raw.sortOrder)) ? Number(raw.sortOrder) : index,
-  };
-}
-
 /**
- * Client trading groups (Standard / Raw / ECN / STP …). A broker admin creates
- * a group with Symbol Mappings (LP → Client + per-symbol pricing) and default
- * leverage/book, then CRM account types map to the group by name so provisioned
- * accounts inherit that symbol universe automatically.
+ * Client trading groups (Standard / Raw / ECN / STP …). Assign one Symbols
+ * Group (alias pack) — do not add feed symbols here. CRM account types still map
+ * to the trading group by name.
  */
 @ApiTags('groups')
 @ApiBearerAuth()
@@ -96,6 +54,7 @@ export class GroupsController {
       where: { tenantId: t.id },
       include: {
         rules: { include: { symbol: { select: { symbol: true } } } },
+        clientSymbolGroup: { select: { id: true, name: true, enabled: true } },
         symbolMappings: {
           include: { symbol: { select: { id: true, symbol: true, class: true } } },
           orderBy: [{ sortOrder: 'asc' }, { lpSymbol: 'asc' }],
@@ -143,8 +102,10 @@ export class GroupsController {
 
   @Post()
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
-  @ApiOperation({ summary: 'Create a trading group (optional symbolMappings in body)' })
+  @ApiOperation({ summary: 'Create a trading group (assign clientSymbolGroupId — no inline mappings)' })
   async create(@CurrentTenant() t: any, @CurrentUser() u: any, @Body() body: any) {
+    const packId = await this.resolvePackId(t.id, body.clientSymbolGroupId);
+    if (packId && typeof packId === 'object' && (packId as any).error) return packId;
     const g = await prisma.tradingGroup.create({
       data: {
         tenantId: t.id,
@@ -166,10 +127,11 @@ export class GroupsController {
           body.executionDelayMs != null ? Math.max(0, Number(body.executionDelayMs) | 0) : 0,
         executionApplyTo: normalizeExecutionApplyTo(body.executionApplyTo),
         clientSymbolSuffix: body.clientSymbolSuffix?.trim() ? body.clientSymbolSuffix.trim() : null,
+        clientSymbolGroupId: (packId as string | null) ?? null,
       },
     });
-    if (Array.isArray(body.symbolMappings)) {
-      const mapResult = await this.replaceMappings(t.id, g.id, body.symbolMappings);
+    if (g.clientSymbolGroupId) {
+      const mapResult = await syncTradingGroupFromPack(t.id, g.id, g.clientSymbolGroupId);
       if ((mapResult as any).error) return mapResult;
     }
     await this.audit.log(t.id, u.id, 'CREATE', 'tradingGroup', g.id, { after: { name: g.name } });
@@ -177,6 +139,7 @@ export class GroupsController {
     return prisma.tradingGroup.findUnique({
       where: { id: g.id },
       include: {
+        clientSymbolGroup: { select: { id: true, name: true, enabled: true } },
         symbolMappings: { orderBy: [{ sortOrder: 'asc' }, { lpSymbol: 'asc' }] },
         _count: { select: { accounts: true, symbolMappings: true } },
       },
@@ -206,9 +169,14 @@ export class GroupsController {
     if (body.executionApplyTo !== undefined) {
       data.executionApplyTo = normalizeExecutionApplyTo(body.executionApplyTo);
     }
+    if (body.clientSymbolGroupId !== undefined) {
+      const packId = await this.resolvePackId(t.id, body.clientSymbolGroupId);
+      if (packId && typeof packId === 'object' && (packId as any).error) return packId;
+      data.clientSymbolGroupId = (packId as string | null) ?? null;
+    }
     const g = await prisma.tradingGroup.updateMany({ where: { id, tenantId: t.id }, data });
-    if (g.count && Array.isArray(body.symbolMappings)) {
-      const mapResult = await this.replaceMappings(t.id, id, body.symbolMappings);
+    if (g.count && body.clientSymbolGroupId !== undefined) {
+      const mapResult = await syncTradingGroupFromPack(t.id, id, data.clientSymbolGroupId ?? null);
       if ((mapResult as any).error) return mapResult;
     }
     await this.audit.log(t.id, u.id, 'TENANT_CHANGE', 'tradingGroup', id, { after: data });
@@ -249,104 +217,32 @@ export class GroupsController {
     @Param('id') id: string,
     @Body() body: { mappings: MappingInput[] },
   ) {
-    const group = await prisma.tradingGroup.findFirst({ where: { id, tenantId: t.id }, select: { id: true } });
+    const group = await prisma.tradingGroup.findFirst({
+      where: { id, tenantId: t.id },
+      select: { id: true, clientSymbolGroupId: true },
+    });
     if (!group) return { error: 'group not found' };
-    const result = await this.replaceMappings(t.id, id, body.mappings ?? []);
+    if (group.clientSymbolGroupId) {
+      return { error: 'Edit aliases on the assigned Symbols Group, not on the trading group' };
+    }
+    const result = await replaceMappings(t.id, id, body.mappings ?? []);
     await this.audit.log(t.id, u.id, 'TENANT_CHANGE', 'tradingGroup', id, {
-      after: { symbolMappings: result.count },
+      after: { symbolMappings: (result as any).count },
     });
     return result;
   }
 
-  /** Replace mappings and sync TradingGroupSymbol allowlist from resolved symbolIds. */
-  private async replaceMappings(tenantId: string, groupId: string, raw: MappingInput[]) {
-    const normalized = (raw ?? [])
-      .map((r, i) => normalizeMapping(r, i))
-      .filter((m): m is NonNullable<typeof m> => !!m);
-
-    // Spec §5: Trading Symbol name must be unique system-wide (across all groups).
-    const clientNames = normalized.map((m) => m.clientSymbol);
-    const dupInPayload = clientNames.filter((n, i) => clientNames.indexOf(n) !== i);
-    if (dupInPayload.length) {
-      return { error: `duplicate trading symbol in payload: ${dupInPayload[0]}` };
-    }
-    if (clientNames.length) {
-      const taken = await prisma.tradingGroupSymbolMapping.findMany({
-        where: {
-          clientSymbol: { in: clientNames },
-          tradingGroup: { tenantId },
-          NOT: { tradingGroupId: groupId },
-        },
-        select: { clientSymbol: true, tradingGroup: { select: { name: true } } },
-        take: 5,
-      });
-      if (taken.length) {
-        const t = taken[0];
-        return {
-          error: `trading symbol "${t.clientSymbol}" already used in group "${t.tradingGroup.name}" (must be unique system-wide)`,
-        };
-      }
-    }
-
-    // Resolve lpSymbol → Symbol.id within this tenant.
-    const lpCodes = [...new Set(normalized.map((m) => m.lpSymbol))];
-    const symbols = lpCodes.length
-      ? await prisma.symbol.findMany({
-          where: { tenantId, symbol: { in: lpCodes } },
-          select: { id: true, symbol: true },
-        })
-      : [];
-    const byLp = new Map(symbols.map((s) => [s.symbol.toUpperCase(), s.id]));
-
-    // Dedupe by lpSymbol (last wins). Client symbols already uniqueness-checked.
-    const byKey = new Map<string, (typeof normalized)[0]>();
-    for (const m of normalized) byKey.set(m.lpSymbol, m);
-    const rows = [...byKey.values()];
-
-    await prisma.$transaction(async (tx) => {
-      await tx.tradingGroupSymbolMapping.deleteMany({ where: { tradingGroupId: groupId } });
-      for (const m of rows) {
-        await tx.tradingGroupSymbolMapping.create({
-          data: {
-            tradingGroupId: groupId,
-            lpSymbol: m.lpSymbol,
-            clientSymbol: m.clientSymbol,
-            symbolId: byLp.get(m.lpSymbol) ?? null,
-            pricingMethod: m.pricingMethod,
-            minSpreadPoints: m.minSpreadPoints,
-            maxSpreadPoints: m.maxSpreadPoints,
-            commissionType: m.commissionType,
-            commissionValue: m.commissionValue,
-            enabled: m.enabled,
-            sortOrder: m.sortOrder,
-          },
-        });
-      }
-      // Keep per-symbol allowlist in sync so traders auto-see mapped instruments.
-      const symbolIds = rows
-        .map((m) => byLp.get(m.lpSymbol))
-        .filter((id): id is string => !!id);
-      await tx.tradingGroupSymbol.deleteMany({ where: { tradingGroupId: groupId } });
-      for (const symbolId of [...new Set(symbolIds)]) {
-        await tx.tradingGroupSymbol.create({ data: { tradingGroupId: groupId, symbolId } });
-      }
-      // Spec: Symbol Mapping is the sole pricing path — clear legacy override rules
-      // so markup cannot double-apply via GroupMarkupRule.
-      if (rows.length > 0) {
-        await tx.groupMarkupRule.deleteMany({ where: { groupId } });
-        await tx.tradingGroup.update({
-          where: { id: groupId },
-          data: { markupPoints: 0 },
-        });
-      }
+  /** Empty / missing / null → unassign. Invalid id → error object. */
+  private async resolvePackId(tenantId: string, raw: unknown): Promise<string | null | { error: string }> {
+    if (raw === undefined || raw === null || raw === '') return null;
+    const id = String(raw).trim();
+    if (!id) return null;
+    const pack = await prisma.clientSymbolGroup.findFirst({
+      where: { id, tenantId },
+      select: { id: true },
     });
-
-    const mappings = await prisma.tradingGroupSymbolMapping.findMany({
-      where: { tradingGroupId: groupId },
-      include: { symbol: { select: { id: true, symbol: true, class: true } } },
-      orderBy: [{ sortOrder: 'asc' }, { lpSymbol: 'asc' }],
-    });
-    return { ok: true, count: mappings.length, mappings };
+    if (!pack) return { error: 'symbols group not found' };
+    return pack.id;
   }
 
   // ── Layered markup/commission rules (per instrument-class or per symbol) ───

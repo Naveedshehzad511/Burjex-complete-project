@@ -15,6 +15,7 @@ const _items = [
   (path: '/dealing', label: 'Dealing (A/B)', icon: Icons.account_tree_outlined),
   (path: '/liquidity', label: 'Liquidity', icon: Icons.water_drop_outlined),
   (path: '/symbols', label: 'Symbols', icon: Icons.candlestick_chart_outlined),
+  (path: '/symbol-groups', label: 'Symbols Group', icon: Icons.folder_copy_outlined),
   (path: '/groups', label: 'Trading Groups', icon: Icons.groups_outlined),
   (path: '/financial', label: 'Financial', icon: Icons.payments_outlined),
   (path: '/risk', label: 'Risk', icon: Icons.warning_amber_outlined),

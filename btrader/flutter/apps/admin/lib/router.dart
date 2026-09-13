@@ -22,6 +22,7 @@ import 'screens/tenants_screen.dart';
 import 'screens/hq_screen.dart';
 import 'screens/integrations_screen.dart';
 import 'screens/groups_screen.dart';
+import 'screens/symbol_groups_screen.dart';
 import 'screens/journal_screen.dart';
 
 final adminRouterProvider = Provider<GoRouter>((ref) {
@@ -58,6 +59,7 @@ final adminRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/dealing', builder: (_, __) => const DealingScreen()),
           GoRoute(path: '/liquidity', builder: (_, __) => const LiquidityScreen()),
           GoRoute(path: '/symbols', builder: (_, __) => const SymbolsScreen()),
+          GoRoute(path: '/symbol-groups', builder: (_, __) => const SymbolGroupsScreen()),
           GoRoute(path: '/groups', builder: (_, __) => const GroupsScreen()),
           GoRoute(
             path: '/financial',

@@ -11,26 +11,7 @@ final groupsProvider = FutureProvider.autoDispose((ref) async {
   return (await api.get('/admin/groups') as List).cast<Map<String, dynamic>>();
 });
 
-final lpSymbolsProvider = FutureProvider.autoDispose((ref) async {
-  final api = ref.watch(apiClientProvider);
-  try {
-    return (await api.get('/admin/groups/lp-symbols') as List).cast<Map<String, dynamic>>();
-  } catch (_) {
-    // Fallback: enabled symbols from the book if Market Watch endpoint is unavailable.
-    final syms = await ref.watch(adminSymbolsProvider.future);
-    return syms
-        .map((s) => <String, dynamic>{
-              'id': s.id,
-              'symbol': s.symbol,
-              'class': s.klass,
-              'live': false,
-            })
-        .toList();
-  }
-});
-
 const _commissionTypes = ['NONE', 'PER_LOT', 'PER_SIDE', 'ROUND_TURN', 'PERCENT'];
-const _pricingMethods = ['SPREAD_ONLY', 'COMMISSION_ONLY', 'SPREAD_AND_COMMISSION'];
 const _instrumentClasses = ['FOREX', 'METALS', 'STOCKS', 'INDICES', 'CRYPTO', 'COMMODITIES', 'CUSTOM'];
 
 String _commissionLabel(String type, num value) {
@@ -48,15 +29,8 @@ String _commissionLabel(String type, num value) {
   }
 }
 
-String _pricingMethodLabel(String m) => switch (m) {
-      'COMMISSION_ONLY' => 'Commission Only',
-      'SPREAD_AND_COMMISSION' => 'Spread + Commission',
-      _ => 'Spread Only',
-    };
-
-/// Client trading groups (Standard / Raw / ECN / STP …). Each group sets
-/// Symbol Mappings (LP → Client + per-symbol pricing), plus default leverage
-/// and book. Group names must match the CRM account-type group names.
+/// Client trading groups (Standard / Raw / ECN / STP …). Assign one Symbols
+/// Group (alias pack). CRM account types still map to this name.
 class GroupsScreen extends ConsumerWidget {
   const GroupsScreen({super.key});
 
@@ -84,7 +58,7 @@ class GroupsScreen extends ConsumerWidget {
                 child: AdaptiveTable(
                   columns: const [
                     'Name',
-                    'Mappings',
+                    'Symbols Group',
                     'Commission',
                     'Leverage',
                     'Book',
@@ -93,9 +67,7 @@ class GroupsScreen extends ConsumerWidget {
                   ],
                   rows: list.map((g) {
                     final enabled = g['enabled'] == true;
-                    final mapCount = (g['symbolMappings'] as List?)?.length ??
-                        (g['_count']?['symbolMappings'] as num?)?.toInt() ??
-                        0;
+                    final packName = '${g['clientSymbolGroup']?['name'] ?? ''}'.trim();
                     Future<void> deleteGroup() async {
                       final ok = await _confirm(
                         context,
@@ -142,16 +114,12 @@ class GroupsScreen extends ConsumerWidget {
                               onPressed: deleteGroup,
                             ),
                             TextButton(
-                              onPressed: () => _edit(context, ref, g, refresh),
-                              child: const Text('Symbol Mapping'),
-                            ),
-                            TextButton(
                               onPressed: () => _rules(context, ref, g, refresh),
                               child: const Text('Overrides'),
                             ),
                           ],
                         ),
-                        Text('$mapCount'),
+                        Text(packName.isEmpty ? '—' : packName),
                         Text(_commissionLabel('${g['commissionType']}', _num(g['commissionValue']))),
                         Text('1:${g['defaultLeverage'] ?? 100}'),
                         Text('${g['defaultBook']}'),
@@ -195,25 +163,23 @@ class GroupsScreen extends ConsumerWidget {
       'closeAll': applyFlag('closeAll'),
     };
 
-    final mappings = <_MappingRow>[
-      for (final m in ((g?['symbolMappings'] as List?) ?? []))
-        _MappingRow.fromJson(Map<String, dynamic>.from(m as Map)),
-    ];
-
-    final lpAsync = ref.read(lpSymbolsProvider.future);
+    String packId = '${g?['clientSymbolGroupId'] ?? g?['clientSymbolGroup']?['id'] ?? ''}';
+    final packsAsync = ref.read(apiClientProvider).get('/admin/symbol-groups').then(
+          (v) => (v as List).cast<Map<String, dynamic>>(),
+        );
 
     await showDialog(
       context: context,
       builder: (ctx) => FutureBuilder<List<Map<String, dynamic>>>(
-        future: lpAsync,
+        future: packsAsync,
         builder: (ctx, snap) {
-          final lpSymbols = snap.data ?? const <Map<String, dynamic>>[];
+          final packs = snap.data ?? const <Map<String, dynamic>>[];
           return StatefulBuilder(
             builder: (ctx, setState) => AlertDialog(
               title: Text(isNew ? 'New Trading Group' : 'Edit ${g['name']}'),
               content: SizedBox(
-                width: 720,
-                height: 720,
+                width: 560,
+                height: 640,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -257,7 +223,7 @@ class GroupsScreen extends ConsumerWidget {
                             initialValue: commType,
                             decoration: const InputDecoration(
                               labelText: 'Commission Type (group default)',
-                              helperText: 'Used when a mapping inherits / has no commission',
+                              helperText: 'Legacy default — per-symbol commission is set on the Symbols Group',
                             ),
                             items: _commissionTypes
                                 .map((t) => DropdownMenuItem(value: t, child: Text(_commissionTypeLabel(t))))
@@ -352,11 +318,10 @@ class GroupsScreen extends ConsumerWidget {
                         onChanged: (v) => setState(() => enabled = v),
                       ),
                       const Divider(height: 28),
-                      Text('Symbol Mapping', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      Text('Symbols Group', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 4),
                       Text(
-                        'Map LP Market Watch symbols to client symbols and set per-symbol pricing. '
-                        'Clients on this group (e.g. Standard) automatically get these symbols — no manual Add Symbols.',
+                        'Assign a pack from Symbols → Symbols Group. Clients on this trading group only see those aliases and their spread/commission. Create packs there first (feed XAUUSD → XAUUSD.s).',
                         style: TextStyle(fontSize: 12, color: Theme.of(ctx).hintColor),
                       ),
                       const SizedBox(height: 12),
@@ -365,115 +330,26 @@ class GroupsScreen extends ConsumerWidget {
                           padding: EdgeInsets.symmetric(vertical: 16),
                           child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
                         )
-                      else ...[
-                        _AddMappingRow(
-                          lpSymbols: lpSymbols,
-                          onAdd: (row) => setState(() => mappings.add(row)),
-                        ),
-                        const SizedBox(height: 8),
-                        if (mappings.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Text(
-                              'No mappings yet — add LP → Client symbols above.',
-                              style: TextStyle(color: Theme.of(ctx).hintColor),
-                            ),
+                      else
+                        DropdownButtonFormField<String>(
+                          initialValue: packs.any((p) => '${p['id']}' == packId) ? packId : '',
+                          decoration: InputDecoration(
+                            labelText: 'Symbols Group',
+                            helperText: packs.isEmpty
+                                ? 'Create a pack under Symbols → Symbols Group first'
+                                : 'Aliases + markup come from this pack',
                           ),
-                        ...mappings.asMap().entries.map((e) {
-                          final i = e.key;
-                          final m = e.value;
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(10),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          '${m.lpSymbol}  →  ${m.clientSymbol}',
-                                          style: const TextStyle(fontWeight: FontWeight.w600),
-                                        ),
-                                      ),
-                                      IconButton(
-                                        tooltip: 'Remove',
-                                        icon: const Icon(Icons.close, size: 18),
-                                        onPressed: () => setState(() => mappings.removeAt(i)),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  DropdownButtonFormField<String>(
-                                    initialValue: m.pricingMethod,
-                                    decoration: const InputDecoration(labelText: 'Pricing Method', isDense: true),
-                                    items: _pricingMethods
-                                        .map((p) => DropdownMenuItem(value: p, child: Text(_pricingMethodLabel(p))))
-                                        .toList(),
-                                    onChanged: (v) => setState(() => m.pricingMethod = v ?? 'SPREAD_ONLY'),
-                                  ),
-                                  if (m.pricingMethod != 'COMMISSION_ONLY') ...[
-                                    const SizedBox(height: 8),
-                                    Row(children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: m.minSpread,
-                                          keyboardType: TextInputType.number,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Min Spread (points)',
-                                            isDense: true,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: m.maxSpread,
-                                          keyboardType: TextInputType.number,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Max Spread (points)',
-                                            isDense: true,
-                                            helperText: '0 = no cap',
-                                          ),
-                                        ),
-                                      ),
-                                    ]),
-                                  ],
-                                  if (m.pricingMethod != 'SPREAD_ONLY') ...[
-                                    const SizedBox(height: 8),
-                                    Row(children: [
-                                      Expanded(
-                                        child: DropdownButtonFormField<String>(
-                                          initialValue: m.commissionType == 'NONE' ? 'PER_LOT' : m.commissionType,
-                                          decoration: const InputDecoration(labelText: 'Commission Type', isDense: true),
-                                          items: const [
-                                            DropdownMenuItem(value: 'PER_LOT', child: Text('Per Lot')),
-                                            DropdownMenuItem(value: 'PER_SIDE', child: Text('Per Side')),
-                                            DropdownMenuItem(value: 'ROUND_TURN', child: Text('Round Turn')),
-                                          ],
-                                          onChanged: (v) => setState(() => m.commissionType = v ?? 'PER_LOT'),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: m.commissionValue,
-                                          keyboardType: TextInputType.number,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Commission Value',
-                                            isDense: true,
-                                          ),
-                                        ),
-                                      ),
-                                    ]),
-                                  ],
-                                ],
+                          items: [
+                            const DropdownMenuItem(value: '', child: Text('— None —')),
+                            ...packs.map(
+                              (p) => DropdownMenuItem(
+                                value: '${p['id']}',
+                                child: Text('${p['name']}'),
                               ),
                             ),
-                          );
-                        }),
-                      ],
+                          ],
+                          onChanged: (v) => setState(() => packId = v ?? ''),
+                        ),
                     ],
                   ),
                 ),
@@ -494,15 +370,17 @@ class GroupsScreen extends ConsumerWidget {
                       'executionMode': executionMode,
                       'executionDelayMs': int.tryParse(delayMs.text) ?? 0,
                       'executionApplyTo': Map<String, bool>.from(applyTo),
-                      'symbolMappings': mappings.map((m) => m.toJson()).toList(),
+                      'clientSymbolGroupId': packId.trim().isEmpty ? null : packId,
                     };
                     final api = ref.read(apiClientProvider);
                     try {
+                      dynamic res;
                       if (isNew) {
-                        await api.post('/admin/groups', payload);
+                        res = await api.post('/admin/groups', payload);
                       } else {
-                        await api.patch('/admin/groups/${g['id']}', payload);
+                        res = await api.patch('/admin/groups/${g['id']}', payload);
                       }
+                      if (res is Map && res['error'] != null) throw Exception(res['error']);
                       if (ctx.mounted) Navigator.pop(ctx);
                       await refresh();
                     } catch (e) {
@@ -541,7 +419,7 @@ class GroupsScreen extends ConsumerWidget {
             width: 560,
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text(
-                'Legacy per-class / per-symbol markup. Prefer Symbol Mapping for new groups. '
+                'Legacy per-class / per-symbol markup. Prefer a Symbols Group for new groups. '
                 'A per-symbol rule wins over a per-class rule, which wins over the group default.',
                 style: TextStyle(fontSize: 12),
               ),
@@ -549,7 +427,7 @@ class GroupsScreen extends ConsumerWidget {
               if (rules.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('No overrides — Symbol Mapping / group default applies.'),
+                  child: Text('No overrides — Symbols Group / group default applies.'),
                 ),
               ...rules.asMap().entries.map((e) {
                 final i = e.key;
@@ -682,193 +560,6 @@ class GroupsScreen extends ConsumerWidget {
   }
 }
 
-class _MappingRow {
-  String lpSymbol;
-  String clientSymbol;
-  String pricingMethod;
-  final TextEditingController minSpread;
-  final TextEditingController maxSpread;
-  String commissionType;
-  final TextEditingController commissionValue;
-
-  _MappingRow({
-    required this.lpSymbol,
-    required this.clientSymbol,
-    this.pricingMethod = 'SPREAD_ONLY',
-    int minSpreadPoints = 0,
-    int maxSpreadPoints = 0,
-    this.commissionType = 'NONE',
-    num commissionValue = 0,
-  })  : minSpread = TextEditingController(text: '$minSpreadPoints'),
-        maxSpread = TextEditingController(text: '$maxSpreadPoints'),
-        commissionValue = TextEditingController(text: '$commissionValue');
-
-  factory _MappingRow.fromJson(Map<String, dynamic> j) => _MappingRow(
-        lpSymbol: '${j['lpSymbol'] ?? ''}',
-        clientSymbol: '${j['clientSymbol'] ?? ''}',
-        pricingMethod: '${j['pricingMethod'] ?? 'SPREAD_ONLY'}',
-        minSpreadPoints: (j['minSpreadPoints'] as num?)?.toInt() ?? 0,
-        maxSpreadPoints: (j['maxSpreadPoints'] as num?)?.toInt() ?? 0,
-        commissionType: '${j['commissionType'] ?? 'NONE'}',
-        commissionValue: _num(j['commissionValue']),
-      );
-
-  Map<String, dynamic> toJson() => {
-        'lpSymbol': lpSymbol.trim().toUpperCase(),
-        'clientSymbol': clientSymbol.trim(),
-        'pricingMethod': pricingMethod,
-        'minSpreadPoints': int.tryParse(minSpread.text) ?? 0,
-        'maxSpreadPoints': int.tryParse(maxSpread.text) ?? 0,
-        'commissionType': pricingMethod == 'SPREAD_ONLY' ? 'NONE' : commissionType,
-        'commissionValue': double.tryParse(commissionValue.text) ?? 0,
-        'enabled': true,
-      };
-}
-
-class _AddMappingRow extends StatefulWidget {
-  const _AddMappingRow({required this.lpSymbols, required this.onAdd});
-  final List<Map<String, dynamic>> lpSymbols;
-  final void Function(_MappingRow row) onAdd;
-
-  @override
-  State<_AddMappingRow> createState() => _AddMappingRowState();
-}
-
-class _AddMappingRowState extends State<_AddMappingRow> {
-  final _lpCtrl = TextEditingController();
-  final _clientCtrl = TextEditingController();
-  final _lpFocus = FocusNode();
-  String? _selectedLp;
-
-  @override
-  void dispose() {
-    _lpCtrl.dispose();
-    _clientCtrl.dispose();
-    _lpFocus.dispose();
-    super.dispose();
-  }
-
-  List<Map<String, dynamic>> get _filtered {
-    final q = _lpCtrl.text.trim().toUpperCase();
-    if (q.isEmpty) return widget.lpSymbols.take(40).toList();
-    return widget.lpSymbols
-        .where((s) => '${s['symbol']}'.toUpperCase().contains(q))
-        .take(40)
-        .toList();
-  }
-
-  void _add() {
-    final lp = (_selectedLp ?? _lpCtrl.text).trim().toUpperCase();
-    final client = _clientCtrl.text.trim().isEmpty ? lp : _clientCtrl.text.trim();
-    if (lp.isEmpty) return;
-    widget.onAdd(_MappingRow(lpSymbol: lp, clientSymbol: client));
-    setState(() {
-      _lpCtrl.clear();
-      _clientCtrl.clear();
-      _selectedLp = null;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              flex: 3,
-              child: RawAutocomplete<Map<String, dynamic>>(
-                textEditingController: _lpCtrl,
-                focusNode: _lpFocus,
-                optionsBuilder: (v) {
-                  final q = v.text.trim().toUpperCase();
-                  if (q.isEmpty) return widget.lpSymbols.take(30);
-                  return widget.lpSymbols.where((s) => '${s['symbol']}'.toUpperCase().contains(q)).take(30);
-                },
-                displayStringForOption: (o) => '${o['symbol']}',
-                onSelected: (o) {
-                  setState(() {
-                    _selectedLp = '${o['symbol']}';
-                    _lpCtrl.text = _selectedLp!;
-                    if (_clientCtrl.text.trim().isEmpty) _clientCtrl.text = _selectedLp!;
-                  });
-                },
-                fieldViewBuilder: (ctx, controller, focus, onSubmit) => TextField(
-                  controller: controller,
-                  focusNode: focus,
-                  decoration: InputDecoration(
-                    labelText: 'LP Symbol (Market Watch)',
-                    hintText: widget.lpSymbols.isEmpty ? 'Connect LP / feed first' : 'Search EURUSD, XAUUSD…',
-                    isDense: true,
-                    suffixIcon: widget.lpSymbols.any((s) => s['live'] == true)
-                        ? const Tooltip(message: 'Live feed symbols available', child: Icon(Icons.sensors, size: 18))
-                        : null,
-                  ),
-                  onChanged: (_) => setState(() => _selectedLp = null),
-                  onSubmitted: (_) => onSubmit(),
-                ),
-                optionsViewBuilder: (ctx, onSelected, options) => Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 220, maxWidth: 320),
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: options.length,
-                        itemBuilder: (_, i) {
-                          final o = options.elementAt(i);
-                          final live = o['live'] == true;
-                          return ListTile(
-                            dense: true,
-                            title: Text('${o['symbol']}'),
-                            subtitle: Text('${o['class']}${live ? ' · live' : ''}'),
-                            onTap: () => onSelected(o),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 3,
-              child: TextField(
-                controller: _clientCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Client Symbol',
-                  hintText: 'e.g. XAUUSD.P or BURJ_GOLD',
-                  isDense: true,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: FilledButton.tonal(
-                onPressed: _add,
-                child: const Text('Add Symbol'),
-              ),
-            ),
-          ],
-        ),
-        if (_lpCtrl.text.isNotEmpty && _filtered.isNotEmpty && _selectedLp == null)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              'Suggestions: ${_filtered.take(5).map((s) => s['symbol']).join(', ')}',
-              style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
-            ),
-          ),
-      ],
-    );
-  }
-}
 
 String _commissionTypeLabel(String t) => switch (t) {
       'PER_LOT' => 'Per Lot',
@@ -913,7 +604,7 @@ class _Empty extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'Create Standard, Raw Spread, ECN, STP — names must match your CRM account types. '
-              'Add Symbol Mappings so clients auto-receive those instruments.',
+              'Assign a Symbols Group so clients only receive those aliases.',
               style: TextStyle(color: Theme.of(context).hintColor),
             ),
           ]),

@@ -111,7 +111,8 @@ class _NavLeaf {
   final String path;
   final String label;
   final IconData icon;
-  const _NavLeaf(this.path, this.label, this.icon);
+  final List<_NavLeaf> children;
+  const _NavLeaf(this.path, this.label, this.icon, [this.children = const []]);
 }
 
 const navGroups = [
@@ -124,7 +125,10 @@ const navGroups = [
     _NavLeaf('/demo-accounts', 'Demo Accounts', Icons.science_outlined),
     _NavLeaf('/dealing', 'Dealing (A / B)', Icons.account_tree_outlined),
     _NavLeaf('/liquidity', 'Liquidity', Icons.water_drop_outlined),
-    _NavLeaf('/symbols', 'Symbols', Icons.candlestick_chart_outlined),
+    _NavLeaf('/symbols', 'Symbols', Icons.candlestick_chart_outlined, [
+      _NavLeaf('/symbols', 'Symbols', Icons.candlestick_chart_outlined),
+      _NavLeaf('/symbol-groups', 'Symbols Group', Icons.folder_copy_outlined),
+    ]),
     _NavLeaf('/groups', 'Trading Groups', Icons.groups_outlined),
   ]),
   _NavGroup('Clients & Money', [
@@ -158,7 +162,11 @@ class NavigatorPanel extends StatelessWidget {
                 child: Text(g.name.toUpperCase(),
                     style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: Theme.of(context).hintColor)),
               ),
-              for (final leaf in g.items) _NavRow(leaf: leaf, selected: currentPath == leaf.path),
+              for (final leaf in g.items)
+                if (leaf.children.isNotEmpty)
+                  _NavBranch(leaf: leaf, currentPath: currentPath)
+                else
+                  _NavRow(leaf: leaf, selected: currentPath == leaf.path),
             ],
           ],
         ),
@@ -167,10 +175,50 @@ class NavigatorPanel extends StatelessWidget {
   }
 }
 
+class _NavBranch extends StatelessWidget {
+  const _NavBranch({required this.leaf, required this.currentPath});
+  final _NavLeaf leaf;
+  final String currentPath;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = currentPath == leaf.path || leaf.children.any((c) => currentPath == c.path);
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        key: ValueKey('nav-${leaf.label}-$selected'),
+        initiallyExpanded: selected,
+        tilePadding: const EdgeInsets.only(left: 13, right: 8),
+        childrenPadding: EdgeInsets.zero,
+        iconColor: Theme.of(context).hintColor,
+        collapsedIconColor: Theme.of(context).hintColor,
+        title: Text(
+          leaf.label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        leading: Icon(
+          leaf.icon,
+          size: 17,
+          color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).hintColor,
+        ),
+        children: [
+          for (final c in leaf.children)
+            _NavRow(leaf: c, selected: currentPath == c.path, indent: true),
+        ],
+      ),
+    );
+  }
+}
+
 class _NavRow extends StatelessWidget {
-  const _NavRow({required this.leaf, required this.selected});
+  const _NavRow({required this.leaf, required this.selected, this.indent = false});
   final _NavLeaf leaf;
   final bool selected;
+  final bool indent;
   @override
   Widget build(BuildContext context) {
     final blue = Theme.of(context).colorScheme.primary;
@@ -182,7 +230,7 @@ class _NavRow extends StatelessWidget {
           color: selected ? blue.withValues(alpha: 0.10) : null,
           border: Border(left: BorderSide(color: selected ? blue : Colors.transparent, width: 3)),
         ),
-        padding: const EdgeInsets.only(left: 13, right: 12),
+        padding: EdgeInsets.only(left: indent ? 28 : 13, right: 12),
         child: Row(children: [
           Icon(leaf.icon, size: 17, color: selected ? blue : Theme.of(context).hintColor),
           const SizedBox(width: 10),

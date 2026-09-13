@@ -35,19 +35,52 @@ export class CrmService {
     }));
   }
 
-  /** Broker-created engine symbols (XAUUSD.s), not raw LP feed names. */
+  /** Broker alias symbols from Symbols Groups (XAUUSD.s), never raw LP feed names. */
   async listSymbols(tenantId: string): Promise<Array<{ symbol: string; description: string | null; class: string; enabled: boolean }>> {
-    const rows = await prisma.symbol.findMany({
-      where: { tenantId, enabled: true },
-      select: { symbol: true, description: true, class: true, enabled: true },
-      orderBy: { symbol: 'asc' },
+    const items = await prisma.clientSymbolGroupItem.findMany({
+      where: { enabled: true, group: { tenantId, enabled: true } },
+      select: {
+        clientSymbol: true,
+        lpSymbol: true,
+        enabled: true,
+        symbol: { select: { class: true, description: true } },
+      },
+      orderBy: { clientSymbol: 'asc' },
     });
-    return rows.map((r) => ({
-      symbol: r.symbol,
-      description: r.description,
-      class: r.class,
-      enabled: r.enabled,
-    }));
+    const source = items.length
+      ? items.map((r) => ({
+          symbol: r.clientSymbol,
+          description: r.symbol?.description ?? r.lpSymbol,
+          class: r.symbol?.class ?? 'CUSTOM',
+          enabled: r.enabled,
+        }))
+      : (
+          await prisma.tradingGroupSymbolMapping.findMany({
+            where: { enabled: true, tradingGroup: { tenantId } },
+            select: {
+              clientSymbol: true,
+              lpSymbol: true,
+              enabled: true,
+              symbol: { select: { class: true, description: true } },
+            },
+            orderBy: { clientSymbol: 'asc' },
+          })
+        ).map((r) => ({
+          symbol: r.clientSymbol,
+          description: r.symbol?.description ?? r.lpSymbol,
+          class: r.symbol?.class ?? 'CUSTOM',
+          enabled: r.enabled,
+        }));
+
+    const seen = new Set<string>();
+    const out: Array<{ symbol: string; description: string | null; class: string; enabled: boolean }> = [];
+    for (const r of source) {
+      const key = r.symbol.toUpperCase();
+      if (!r.symbol || seen.has(key)) continue;
+      seen.add(key);
+      out.push(r);
+    }
+    return out;
   }
 
   async createAccount(tenantId: string, body: any): Promise<{ accountId: string; login: string }> {
