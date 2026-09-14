@@ -9,6 +9,7 @@ use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Instant;
 
 impl Engine {
@@ -116,7 +117,7 @@ impl Engine {
         Ok(n)
     }
 
-    pub async fn on_tick_fast(&self, tenant_id: &str, symbol: &str) {
+    pub async fn on_tick_fast(self: &Arc<Self>, tenant_id: &str, symbol: &str) {
         if let Err(e) = self.trigger_pending(tenant_id, symbol).await {
             tracing::debug!(error=%e.message, "pending tick");
         }
@@ -125,7 +126,7 @@ impl Engine {
         }
     }
 
-    pub async fn on_tick_slow(&self, tenant_id: &str, symbol: &str) {
+    pub async fn on_tick_slow(self: &Arc<Self>, tenant_id: &str, symbol: &str) {
         if let Err(e) = self.check_stop_out(tenant_id, symbol).await {
             tracing::debug!(error=%e.message, "stopout tick");
         }
@@ -257,8 +258,30 @@ impl Engine {
         let side: String = o.try_get("side").unwrap_or_default();
         let apply_kind = pending_type_to_apply_kind(&ot, &side);
         let pricing = self.group_pricing(acct.group_id.as_deref(), &sym, tenant_id).await?;
-        let plan = create_plan(&pricing, apply_kind, Instant::now(), now_ms());
-        crate::policy::wait_for_deadline(Some(&plan)).await;
+        let delay_ms = crate::calc::market_execution_delay_ms(&pricing, apply_kind);
+        // Non-blocking: PARTIAL stamp (updated_at) is the trigger. Do not sleep on the
+        // tick loop — retry until group delay has elapsed, then fill once.
+        if delay_ms > 0 {
+            let trigger_at = self
+                .pendings
+                .for_symbol(tenant_id, &sym.id)
+                .into_iter()
+                .find(|r| r.id == order_id)
+                .map(|r| r.updated_at)
+                .unwrap_or_else(Utc::now);
+            let elapsed = (Utc::now() - trigger_at).num_milliseconds();
+            if elapsed < i64::from(delay_ms) {
+                return Ok(());
+            }
+        }
+        let plan = create_plan(
+            &pricing,
+            apply_kind,
+            Instant::now()
+                .checked_sub(std::time::Duration::from_millis(delay_ms.max(0) as u64))
+                .unwrap_or_else(Instant::now),
+            now_ms(),
+        );
         let honour = if apply_kind == "buyStop" || apply_kind == "sellStop" {
             o.try_get::<Option<f64>, _>("stopPrice").ok().flatten().or_else(|| o.try_get("price").ok())
         } else {
@@ -323,7 +346,7 @@ impl Engine {
         Ok(())
     }
 
-    async fn check_protective(&self, tenant_id: &str, symbol: &str) -> BtResult<()> {
+    async fn check_protective(self: &Arc<Self>, tenant_id: &str, symbol: &str) -> BtResult<()> {
         let Some(sym) = self.load_symbol(tenant_id, symbol).await? else {
             return Ok(());
         };
@@ -335,8 +358,8 @@ impl Engine {
         };
         let open = self.book.for_symbol(tenant_id, &sym.id);
         for p in open {
-            // Already claimed: wait only until the ORIGINAL deadline, then close
-            // with skip_delay so MARKET ms is never applied twice.
+            // Already claimed: never sleep on the tick loop. Close only once the
+            // original deadline has passed (MARKET ms applied once).
             if p.exec_claim_kind.is_some() || self.claims.has(&p.id) {
                 if p.exec_claim_kind.as_deref() == Some("sl")
                     || p.exec_claim_kind.as_deref() == Some("tp")
@@ -349,7 +372,9 @@ impl Engine {
                         .or(p.exec_claim_kind.as_deref())
                         .unwrap_or("sl");
                     if let Some(c) = rec.as_ref() {
-                        crate::policy::wait_until_instant(c.deadline, c.delay_ms).await;
+                        if Instant::now() < c.deadline {
+                            continue;
+                        }
                     }
                     let _ = self
                         .close_position(
@@ -359,7 +384,7 @@ impl Engine {
                             None,
                             rec.as_ref().and_then(|c| c.level),
                             Some(kind),
-                            true, // skip_delay — already waited to claim deadline
+                            true,
                             None,
                             false,
                             false,
@@ -414,23 +439,35 @@ impl Engine {
                 self.claims.mark_closed(&p.id);
                 continue;
             }
-            // Wait exactly group executionDelayMs (0 when Instant / apply-to unchecked).
-            crate::policy::wait_for_deadline(Some(&plan)).await;
-            let _ = self
-                .close_position(
-                    tenant_id,
-                    &p.id,
-                    None,
-                    None,
-                    level,
-                    Some(kind),
-                    true, // delay already consumed against claim deadline
-                    None,
-                    false,
-                    false,
-                    Some(p.account_id.clone()),
-                )
-                .await;
+
+            // Do NOT sleep here — that starved other symbols' SL/TP checks and
+            // made chart look "stuck open" while bid ran through the level.
+            // Spawn the exact group delay, then close.
+            let eng = Arc::clone(self);
+            let tenant = tenant_id.to_string();
+            let pid = p.id.clone();
+            let acct = p.account_id.clone();
+            let kind_owned = kind.to_string();
+            let deadline = plan.deadline;
+            let delay_ms = plan.delay_ms;
+            tokio::spawn(async move {
+                crate::policy::wait_until_instant(deadline, delay_ms).await;
+                let _ = eng
+                    .close_position(
+                        &tenant,
+                        &pid,
+                        None,
+                        None,
+                        level,
+                        Some(kind_owned.as_str()),
+                        true,
+                        None,
+                        false,
+                        false,
+                        Some(acct),
+                    )
+                    .await;
+            });
         }
         Ok(())
     }
