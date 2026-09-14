@@ -399,6 +399,34 @@ impl Engine {
             let (hit, level) = protective_hit(&p.side, bid, ask, p.sl_price, p.tp_price);
             let Some(hit) = hit else { continue };
             let kind = if hit == "SL" { "sl" } else { "tp" };
+            let sl_lvl = p.sl_price.unwrap_or(0.0);
+            let tp_lvl = p.tp_price.unwrap_or(0.0);
+            let check_ok = if kind == "sl" {
+                if p.side.eq_ignore_ascii_case("BUY") {
+                    bid <= sl_lvl
+                } else {
+                    ask >= sl_lvl
+                }
+            } else if p.side.eq_ignore_ascii_case("BUY") {
+                ask >= tp_lvl
+            } else {
+                bid <= tp_lvl
+            };
+            tracing::info!(
+                target: "sl_exec",
+                "[TICK] symbol={} bid={:.5} ask={:.5} raw_bid={:.5} raw_ask={:.5}",
+                symbol, bid, ask, raw_bid, raw_ask
+            );
+            tracing::info!(
+                target: "sl_exec",
+                "[POSITION] position_id={} side={} sl={:?} tp={:?} status=OPEN",
+                p.id, p.side, p.sl_price, p.tp_price
+            );
+            tracing::info!(
+                target: "sl_exec",
+                "[SL CHECK] kind={} bid={:.5} ask={:.5} level={:?} result={}",
+                kind, bid, ask, level, if check_ok { "TRUE" } else { "FALSE" }
+            );
             let trigger_mono = Instant::now();
             let trigger_wall = now_ms();
             let plan = create_plan(&pricing, kind, trigger_mono, trigger_wall);
@@ -415,8 +443,14 @@ impl Engine {
                 },
             );
             if !claimed {
+                tracing::warn!(target: "sl_exec", "[SL TRIGGER] position_id={} SKIPPED claim_race", p.id);
                 continue;
             }
+            tracing::info!(
+                target: "sl_exec",
+                "[SL TRIGGER] position_id={} kind={} delay_ms={} trigger_wall={}",
+                p.id, kind, plan.delay_ms, trigger_wall
+            );
             self.book.patch_claim(&p.id, kind);
             let deadline_wall = chrono::Utc::now() + chrono::Duration::milliseconds(i64::from(plan.delay_ms.max(0)));
             let n = sqlx::query(
@@ -437,12 +471,13 @@ impl Engine {
             .rows_affected();
             if n == 0 {
                 self.claims.mark_closed(&p.id);
+                tracing::warn!(target: "sl_exec", "[SL TRIGGER] position_id={} DB claim lost", p.id);
                 continue;
             }
 
             // Do NOT sleep here — that starved other symbols' SL/TP checks and
             // made chart look "stuck open" while bid ran through the level.
-            // Spawn the exact group delay, then close.
+            // Spawn the exact group delay, then close. (SL/TP delay_ms is 0.)
             let eng = Arc::clone(self);
             let tenant = tenant_id.to_string();
             let pid = p.id.clone();
@@ -450,9 +485,16 @@ impl Engine {
             let kind_owned = kind.to_string();
             let deadline = plan.deadline;
             let delay_ms = plan.delay_ms;
+            let t0 = trigger_wall;
             tokio::spawn(async move {
                 crate::policy::wait_until_instant(deadline, delay_ms).await;
-                let _ = eng
+                let t_close_req = now_ms();
+                tracing::info!(
+                    target: "sl_exec",
+                    "[CLOSE REQUEST] position_id={} kind={} t0_trigger={} t_close_req={} wait_ms={}",
+                    pid, kind_owned, t0, t_close_req, t_close_req.saturating_sub(t0)
+                );
+                let res = eng
                     .close_position(
                         &tenant,
                         &pid,
@@ -467,6 +509,19 @@ impl Engine {
                         Some(acct),
                     )
                     .await;
+                let t_done = now_ms();
+                match res {
+                    Ok(r) => tracing::info!(
+                        target: "sl_exec",
+                        "[CLOSE RESPONSE] position_id={} success=true fill={:?} latency_ms={} [POSITION STATUS] OPEN -> CLOSED",
+                        pid, r.fill_price, t_done.saturating_sub(t0)
+                    ),
+                    Err(e) => tracing::error!(
+                        target: "sl_exec",
+                        "[CLOSE RESPONSE] position_id={} success=false code={} msg={}",
+                        pid, e.code, e.message
+                    ),
+                }
             });
         }
         Ok(())

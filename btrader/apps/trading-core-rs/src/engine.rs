@@ -367,12 +367,16 @@ impl Engine {
         let total_markup = symbol_book_markup + pricing.markup_points + news_markup;
         let with_markup = apply_markup(&req.side, px, total_markup, sym.digits);
         let honour_ref = req.price;
-        let instant_eligible = applies
-            && pricing.execution_mode.eq_ignore_ascii_case("INSTANT")
+        // Instant market: honour click. Pending (stop/limit) with apply-to: honour
+        // level even after MARKET delay — same rule as SL/TP closes (no fill through).
+        // Plain MARKET marketBuy/Sell never honour a client price after the delay.
+        let is_market_ot = req.order_type.eq_ignore_ascii_case("MARKET");
+        let honour_level = applies
             && honour_ref.is_some()
-            && clamp_worst.is_none();
+            && clamp_worst.is_none()
+            && (pricing.execution_mode.eq_ignore_ascii_case("INSTANT") || !is_market_ot);
 
-        let mut fill_price = if instant_eligible {
+        let mut fill_price = if honour_level {
             round_price(honour_ref.unwrap(), sym.digits)
         } else {
             if req.one_click.unwrap_or(false) && req.price.is_some() && sym.slippage_points > 0 {
@@ -389,7 +393,9 @@ impl Engine {
             round_price(apply_markup(&req.side, with_markup, pricing.slippage_points, sym.digits), sym.digits)
         };
         if let Some(clamp) = clamp_worst {
-            fill_price = if applies && pricing.execution_mode.eq_ignore_ascii_case("INSTANT") {
+            let honour_clamp = applies
+                && (pricing.execution_mode.eq_ignore_ascii_case("INSTANT") || !is_market_ot);
+            fill_price = if honour_clamp {
                 round_price(clamp, sym.digits)
             } else {
                 round_price(

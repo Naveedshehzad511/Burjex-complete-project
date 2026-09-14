@@ -113,6 +113,12 @@ pub fn market_execution_delay_ms(pricing: &GroupPricing, kind: &str) -> i32 {
     if pricing.execution_mode.to_ascii_uppercase() != "MARKET" {
         return 0;
     }
+    // SL/TP never wait under MARKET delay. Waiting left the position OPEN while
+    // the chart printed through the stop; fill already honours the level when
+    // apply-to includes sl/tp. Group ms still applies to market + pending + close.
+    if kind.eq_ignore_ascii_case("sl") || kind.eq_ignore_ascii_case("tp") {
+        return 0;
+    }
     if !execution_applies(&pricing.execution_apply_to, kind) {
         return 0;
     }
@@ -419,7 +425,22 @@ mod tests {
             execution_apply_to: serde_json::json!({}),
             ..Default::default()
         };
-        assert_eq!(market_execution_delay_ms(&p, "sl"), 80);
+        assert_eq!(market_execution_delay_ms(&p, "sl"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "tp"), 0);
         assert_eq!(market_execution_delay_ms(&p, "marketBuy"), 80);
+        assert_eq!(market_execution_delay_ms(&p, "buyStop"), 80);
+    }
+
+    #[test]
+    fn protective_never_takes_market_delay() {
+        let p = GroupPricing {
+            execution_mode: "MARKET".into(),
+            execution_delay_ms: 100,
+            execution_apply_to: serde_json::json!({"sl": true, "tp": true, "marketBuy": true}),
+            ..Default::default()
+        };
+        assert_eq!(market_execution_delay_ms(&p, "sl"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "tp"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "marketBuy"), 100);
     }
 }
