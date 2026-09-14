@@ -369,25 +369,38 @@ impl Engine {
             wait_for_deadline(plan.as_ref()).await;
         }
 
-        let mut px = if let Some(o) = override_px.filter(|v| *v > 0.0) {
+        let px = if let Some(o) = override_px.filter(|v| *v > 0.0) {
             o
         } else if side.eq_ignore_ascii_case("BUY") {
             self.prices.sell_price(&tenant_id, &symbol).ok_or_else(|| BtError::new(NO_PRICE, "no price"))?
         } else {
             self.prices.buy_price(&tenant_id, &symbol).ok_or_else(|| BtError::new(NO_PRICE, "no price"))?
         };
-        if override_px.is_none() {
-            if let Some(lvl) = protective_level.filter(|v| *v > 0.0) {
-                px = if side.eq_ignore_ascii_case("BUY") { px.min(lvl) } else { px.max(lvl) };
-            }
-        }
         let mut close_px = px;
         if override_px.is_none() {
             if let Some(pricing) = pricing.as_ref() {
-                let applies_prot = protective_kind.as_ref().is_some_and(|k| execution_applies(&pricing.execution_apply_to, k));
-                if applies_prot && pricing.execution_mode.eq_ignore_ascii_case("INSTANT") {
-                    if let Some(lvl) = protective_level.filter(|v| *v > 0.0) {
+                let applies_prot = protective_kind
+                    .as_ref()
+                    .is_some_and(|k| execution_applies(&pricing.execution_apply_to, k));
+                if let Some(lvl) = protective_level.filter(|v| *v > 0.0) {
+                    if applies_prot {
+                        // SL/TP selected in apply-to: honour the trigger level.
+                        // MARKET mode only adds executionDelayMs wait (already done);
+                        // it must NOT fill further through the level after that wait —
+                        // that is what made BUY SL closes print below the SL line.
                         close_px = lvl;
+                    } else {
+                        // apply-to unchecked: live market, gap may slip through the level.
+                        let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
+                        let total = pricing.markup_points + pricing.slippage_points;
+                        if total != 0.0 {
+                            close_px = apply_markup(close_side, px, total, digits);
+                        }
+                        close_px = if side.eq_ignore_ascii_case("BUY") {
+                            close_px.min(lvl)
+                        } else {
+                            close_px.max(lvl)
+                        };
                     }
                 } else {
                     let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
