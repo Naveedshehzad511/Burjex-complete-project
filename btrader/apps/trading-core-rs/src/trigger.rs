@@ -132,6 +132,40 @@ pub fn protective_hit(
     }
 }
 
+/// Validate SL/TP vs the executable prices the trader sees (Redis/client tick).
+/// BUY: SL must be strictly below bid, TP strictly above ask.
+/// SELL: SL strictly above ask, TP strictly below bid.
+pub fn validate_sl_tp(
+    side: &str,
+    bid: f64,
+    ask: f64,
+    sl: Option<f64>,
+    tp: Option<f64>,
+) -> Result<(), String> {
+    let is_buy = side.eq_ignore_ascii_case("BUY");
+    if let Some(slv) = sl.filter(|v| *v > 0.0) {
+        let ok = if is_buy { slv < bid } else { slv > ask };
+        if !ok {
+            return Err(format!(
+                "stop loss must be {} {}",
+                if is_buy { "below bid" } else { "above ask" },
+                if is_buy { bid } else { ask }
+            ));
+        }
+    }
+    if let Some(tpv) = tp.filter(|v| *v > 0.0) {
+        let ok = if is_buy { tpv > ask } else { tpv < bid };
+        if !ok {
+            return Err(format!(
+                "take profit must be {} {}",
+                if is_buy { "above ask" } else { "below bid" },
+                if is_buy { ask } else { bid }
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -645,13 +645,10 @@ impl Engine {
             trading_sessions: None,
         };
         let gid: Option<String> = row.try_get("groupId").ok();
-        let pricing = self.group_pricing(gid.as_deref(), &dummy, tenant_id).await?;
-        let quoted = self.quoted_bid_ask(tenant_id, &symbol, &dummy, &pricing);
-        let close = if is_buy {
-            quoted.map(|q| q.0).or_else(|| self.prices.sell_price(tenant_id, &symbol))
-        } else {
-            quoted.map(|q| q.1).or_else(|| self.prices.buy_price(tenant_id, &symbol))
-        };
+        let _pricing = self.group_pricing(gid.as_deref(), &dummy, tenant_id).await?;
+        // Validate against Redis/client tick (same as chart) — no second markup.
+        let bid = self.prices.sell_price(tenant_id, &symbol);
+        let ask = self.prices.buy_price(tenant_id, &symbol);
         let mut next_sl: Option<f64> = row.try_get("slPrice").ok();
         let mut next_tp: Option<f64> = row.try_get("tpPrice").ok();
         if let Some(v) = sl {
@@ -660,22 +657,10 @@ impl Engine {
         if let Some(v) = tp {
             next_tp = v;
         }
-        if let Some(close) = close {
-            if let Some(slv) = sl.flatten() {
-                if if is_buy { slv >= close } else { slv <= close } {
-                    return Err(BtError::new(
-                        INVALID_PRICE,
-                        format!("stop loss must be {} {close}", if is_buy { "below" } else { "above" }),
-                    ));
-                }
-            }
-            if let Some(tpv) = tp.flatten() {
-                if if is_buy { tpv <= close } else { tpv >= close } {
-                    return Err(BtError::new(
-                        INVALID_PRICE,
-                        format!("take profit must be {} {close}", if is_buy { "above" } else { "below" }),
-                    ));
-                }
+        if let (Some(bid), Some(ask)) = (bid, ask) {
+            if let Err(msg) = crate::trigger::validate_sl_tp(if is_buy { "BUY" } else { "SELL" }, bid, ask, next_sl, next_tp)
+            {
+                return Err(BtError::new(INVALID_PRICE, msg));
             }
         }
         sqlx::query(r#"UPDATE positions SET "slPrice"=$1, "tpPrice"=$2 WHERE id=$3"#)

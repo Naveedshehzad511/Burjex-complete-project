@@ -408,6 +408,14 @@ impl Engine {
                 )
             };
         }
+        if let (Some(bid), Some(ask)) = (
+            self.prices.sell_price(tenant_id, &req.symbol),
+            self.prices.buy_price(tenant_id, &req.symbol),
+        ) {
+            if let Err(msg) = crate::trigger::validate_sl_tp(&req.side, bid, ask, req.sl_price, req.tp_price) {
+                return Err(BtError::new(INVALID_PRICE, msg));
+            }
+        }
         let commission = dealing_commission(&pricing, volume, &spec, fill_price, conv);
         let margin = required_margin(volume, &spec, fill_price, f64::from(account.leverage), conv);
 
