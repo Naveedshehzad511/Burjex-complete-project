@@ -176,8 +176,9 @@ impl Engine {
                 }
             }
             let gid = self.acct_group.get(&o.account_id).and_then(|g| g.clone());
-            let pricing = self.group_pricing(gid.as_deref(), &sym, tenant_id).await?;
-            let (bid, ask) = self.quoted_bid_ask(tenant_id, symbol, &sym, &pricing).unwrap_or((raw_bid, raw_ask));
+            let _pricing = self.group_pricing(gid.as_deref(), &sym, tenant_id).await?;
+            // Redis/client tick only — market-data already applied group markup.
+            let (bid, ask) = (raw_bid, raw_ask);
             let action = pending_fires(
                 &o.order_type,
                 &o.side,
@@ -395,7 +396,9 @@ impl Engine {
                 continue;
             }
             let pricing = self.group_pricing(p.group_id.as_deref(), &sym, tenant_id).await?;
-            let (bid, ask) = self.quoted_bid_ask(tenant_id, symbol, &sym, &pricing).unwrap_or((raw_bid, raw_ask));
+            // Same bid/ask the portal chart sees (Redis tick). Do NOT apply
+            // group markup again — that closed BUY SL before the chart line.
+            let (bid, ask) = (raw_bid, raw_ask);
             let (hit, level) = protective_hit(&p.side, bid, ask, p.sl_price, p.tp_price);
             let Some(hit) = hit else { continue };
             let kind = if hit == "SL" { "sl" } else { "tp" };
@@ -475,54 +478,112 @@ impl Engine {
                 continue;
             }
 
-            // Do NOT sleep here — that starved other symbols' SL/TP checks and
-            // made chart look "stuck open" while bid ran through the level.
-            // Spawn the exact group delay, then close. (SL/TP delay_ms is 0.)
-            let eng = Arc::clone(self);
-            let tenant = tenant_id.to_string();
-            let pid = p.id.clone();
-            let acct = p.account_id.clone();
-            let kind_owned = kind.to_string();
-            let deadline = plan.deadline;
-            let delay_ms = plan.delay_ms;
-            let t0 = trigger_wall;
-            tokio::spawn(async move {
-                crate::policy::wait_until_instant(deadline, delay_ms).await;
+            // Push closing state immediately so the portal stops painting an OPEN
+            // position while bid/ask has already crossed the SL/TP line.
+            self.emit(
+                tenant_id,
+                json!({
+                    "kind":"POSITION_UPDATE","tenantId":tenant_id,
+                    "position":{
+                        "id":p.id,"accountId":p.account_id,"symbolId":p.symbol_id,
+                        "side":p.side,"status":"OPEN","closing":true,
+                        "execClaimKind":kind,"execDelayMs":plan.delay_ms,
+                        "slPrice":p.sl_price,"tpPrice":p.tp_price,
+                        "volume":p.volume,"openPrice":p.open_price
+                    }
+                }),
+            )
+            .await;
+
+            let close_now = async {
                 let t_close_req = now_ms();
                 tracing::info!(
                     target: "sl_exec",
                     "[CLOSE REQUEST] position_id={} kind={} t0_trigger={} t_close_req={} wait_ms={}",
-                    pid, kind_owned, t0, t_close_req, t_close_req.saturating_sub(t0)
+                    p.id, kind, trigger_wall, t_close_req, t_close_req.saturating_sub(trigger_wall)
                 );
-                let res = eng
+                let res = self
                     .close_position(
-                        &tenant,
-                        &pid,
+                        tenant_id,
+                        &p.id,
                         None,
                         None,
                         level,
-                        Some(kind_owned.as_str()),
+                        Some(kind),
                         true,
                         None,
                         false,
                         false,
-                        Some(acct),
+                        Some(p.account_id.clone()),
                     )
                     .await;
                 let t_done = now_ms();
-                match res {
+                match &res {
                     Ok(r) => tracing::info!(
                         target: "sl_exec",
                         "[CLOSE RESPONSE] position_id={} success=true fill={:?} latency_ms={} [POSITION STATUS] OPEN -> CLOSED",
-                        pid, r.fill_price, t_done.saturating_sub(t0)
+                        p.id, r.fill_price, t_done.saturating_sub(trigger_wall)
                     ),
                     Err(e) => tracing::error!(
                         target: "sl_exec",
                         "[CLOSE RESPONSE] position_id={} success=false code={} msg={}",
-                        pid, e.code, e.message
+                        p.id, e.code, e.message
                     ),
                 }
-            });
+                res
+            };
+
+            if plan.delay_ms <= 0 {
+                // News / fast path: close on this tick — no spawn lag.
+                let _ = close_now.await;
+            } else {
+                let eng = Arc::clone(self);
+                let tenant = tenant_id.to_string();
+                let pid = p.id.clone();
+                let acct = p.account_id.clone();
+                let kind_owned = kind.to_string();
+                let deadline = plan.deadline;
+                let delay_ms = plan.delay_ms;
+                let t0 = trigger_wall;
+                let lvl = level;
+                tokio::spawn(async move {
+                    crate::policy::wait_until_instant(deadline, delay_ms).await;
+                    let t_close_req = now_ms();
+                    tracing::info!(
+                        target: "sl_exec",
+                        "[CLOSE REQUEST] position_id={} kind={} t0_trigger={} t_close_req={} wait_ms={}",
+                        pid, kind_owned, t0, t_close_req, t_close_req.saturating_sub(t0)
+                    );
+                    let res = eng
+                        .close_position(
+                            &tenant,
+                            &pid,
+                            None,
+                            None,
+                            lvl,
+                            Some(kind_owned.as_str()),
+                            true,
+                            None,
+                            false,
+                            false,
+                            Some(acct),
+                        )
+                        .await;
+                    let t_done = now_ms();
+                    match res {
+                        Ok(r) => tracing::info!(
+                            target: "sl_exec",
+                            "[CLOSE RESPONSE] position_id={} success=true fill={:?} latency_ms={} [POSITION STATUS] OPEN -> CLOSED",
+                            pid, r.fill_price, t_done.saturating_sub(t0)
+                        ),
+                        Err(e) => tracing::error!(
+                            target: "sl_exec",
+                            "[CLOSE RESPONSE] position_id={} success=false code={} msg={}",
+                            pid, e.code, e.message
+                        ),
+                    }
+                });
+            }
         }
         Ok(())
     }
@@ -598,6 +659,11 @@ impl Engine {
         let mut accounts = Vec::new();
         let mut seen = HashSet::new();
         for p in self.book.for_symbol(tenant_id, &sym.id) {
+            // Already claimed for SL/TP — do not keep pushing OPEN+PnL or the
+            // portal will show the trade as active after the stop has fired.
+            if p.exec_claim_kind.is_some() || self.claims.has(&p.id) {
+                continue;
+            }
             let current = if p.side.eq_ignore_ascii_case("BUY") {
                 self.prices.sell_price(tenant_id, symbol)
             } else {

@@ -20,11 +20,16 @@ pub async fn run_feed(
     let dirty_fast: Arc<DashMap<String, (String, String)>> = Arc::new(DashMap::new());
     let dirty_slow: Arc<DashMap<String, (String, String)>> = Arc::new(DashMap::new());
 
-    let fast_ms = std::env::var("ENGINE_FAST_INTERVAL_MS")
+    let mut fast_ms = std::env::var("ENGINE_FAST_INTERVAL_MS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(40u64)
-        .max(20);
+        .unwrap_or(1u64);
+    // Cap so we never sleep tens of ms between SL checks in news.
+    if fast_ms > 5 {
+        tracing::warn!(fast_ms, "ENGINE_FAST_INTERVAL_MS capped at 5ms for SL/TP latency");
+        fast_ms = 5;
+    }
+    fast_ms = fast_ms.max(1);
     let slow_ms = std::env::var("ENGINE_TICK_INTERVAL_MS")
         .ok()
         .and_then(|v| v.parse().ok())

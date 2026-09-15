@@ -56711,6 +56711,8 @@ s=3
 return A.i(a.aG($.iy(),t.W).nz(0,"/positions",A.ac(["accountId",p,"status","OPEN"],t.N,t.z)),$async$$1)
 case 3:o=n.dY(m.a(c),new A.b9F(),t.C9)
 o=A.Y(o,o.$ti.i("aw.E"))
+if(typeof self!=="undefined"&&self.__bxClosedIds){p=[]
+for(n=J.ap(o);n.q();){m=n.gJ(n);if(!self.__bxClosedIds[m.a])p.push(m)}o=A.b(p,o.$ti.c)}
 q=o
 s=1
 break
@@ -57201,6 +57203,16 @@ break A}g=a0 instanceof A.BL
 if(g)e=a0.a
 else e=a
 if(g){s=J.V(e)
+d=A.f(s.h(e,"id")==null?s.h(e,"positionId")==null?"":s.h(e,"positionId"):s.h(e,"id"))
+c=A.f(s.h(e,"status")==null?"":s.h(e,"status")).toUpperCase()
+p=A.f(s.h(e,"book")==null?"":s.h(e,"book"))
+o=A.f(s.h(e,"execClaimKind")==null?"":s.h(e,"execClaimKind")).toLowerCase()
+n=s.h(e,"closing")===!0||o==="sl"||o==="tp"
+if((c==="CLOSED"||p==="closed"||n)&&d.length!==0){if(typeof self!=="undefined"){self.__bxClosedIds=self.__bxClosedIds||Object.create(null);self.__bxClosedIds[d]=1}try{b.b.ah(0,$.afm().gcd(),t._l).aeE(0,d)}catch(c){}s=b.a
+p=s.a
+if(p!=null)p.aB(0)
+s.a=A.cA(B.rY,new A.b9x(b.b))
+break A}if(d.length!==0&&typeof self!=="undefined"&&self.__bxClosedIds&&self.__bxClosedIds[d])break A
 if(J.c(s.h(e,"stale"),!0)){s=b.a
 p=s.a
 if(p!=null)p.aB(0)
@@ -57354,6 +57366,7 @@ A.nW.prototype={}
 A.pz.prototype={
 aeD(a,b,c){var s,r,q,p,o,n,m,l=this,k=J.V(b),j=A.bP(k.h(b,"id"))
 if(j==null)return
+if(typeof self!=="undefined"&&self.__bxClosedIds&&self.__bxClosedIds[j])return
 s=A.cz(A.f(k.h(b,"profit")))
 if(s==null)s=0
 r=A.f(k.h(b,"side"))
@@ -57371,7 +57384,12 @@ else{n=A.eM(n.b,k,r)
 n.n(0,j,q)}m=l.f
 if(p==null)k=m.c
 else{k=A.eM(m.c,k,r)
-k.n(0,j,p)}l.sbT(0,new A.nW(o,n,k))}}
+k.n(0,j,p)}l.sbT(0,new A.nW(o,n,k))},
+aeE(a,b){var s=this,r=t.N,q=t.i,p=A.eM(s.f.a,r,q),o=A.eM(s.f.b,r,q),n=A.eM(s.f.c,r,q)
+p.H(0,b)
+o.H(0,b)
+n.H(0,b)
+s.sbT(0,new A.nW(p,o,n))}}
 A.b9q.prototype={
 $1(a){return new A.pz(new A.dr(t.KY),B.Y1)},
 $S:496}
