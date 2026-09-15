@@ -52,7 +52,14 @@
 (flutter_cache) {
 	@immutable path /canvaskit/*
 	header @immutable Cache-Control "public, max-age=31536000, immutable"
-	@revalidate not path /canvaskit/*
+	# Entry HTML + bootstrap must always revalidate so ?v= cache-bust works.
+	@entry path /index.html /flutter_bootstrap.js /flutter.js /manifest.json /flutter_service_worker.js
+	header @entry Cache-Control "no-cache, no-store, must-revalidate"
+	header @entry Pragma "no-cache"
+	@revalidate {
+		not path /canvaskit/*
+		not path /index.html /flutter_bootstrap.js /flutter.js /manifest.json /flutter_service_worker.js
+	}
 	header @revalidate Cache-Control "no-cache"
 }
 
