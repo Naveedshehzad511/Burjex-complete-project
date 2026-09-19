@@ -43,7 +43,18 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
         final id = '${data['id'] ?? data['positionId'] ?? ''}';
         final status = '${data['status'] ?? ''}'.toUpperCase();
         final book = '${data['book'] ?? ''}';
-        final closed = status == 'CLOSED' || book == 'closed';
+        final stateVal = '${data['state'] ?? ''}'.toLowerCase();
+        final reason = '${data['reason'] ?? ''}'.toUpperCase();
+        final isClosingFlag = data['closing'] == true;
+
+        // Robust check for any closing condition / SL / TP trigger
+        final closed = status == 'CLOSED' ||
+            book == 'closed' ||
+            stateVal == 'closed' ||
+            isClosingFlag ||
+            reason == 'SL_HIT' ||
+            reason == 'TP_HIT';
+
         if (closed && id.isNotEmpty) {
           ref.read(livePositionNotifierProvider.notifier).forget(id);
           ref.read(closedPositionIdsProvider.notifier).add(id);
@@ -469,7 +480,15 @@ class ServerCandlesNotifier extends StateNotifier<Map<String, Map<int, Candle>>>
   /// and history beyond that comes from the REST endpoint on demand.
   static const _maxPerSeries = 3000;
 
-  static String seriesKey(String symbol, String tf) => '$symbol|$tf';
+  static String seriesKey(String symbol, String tf) => '$symbol\vert{}$tf';
+
+  /// Bars for a series, oldest → newest.
+  List<Candle> series(String symbol, String tf) {
+    final m = state[seriesKey(symbol, tf)];
+    if (m == null || m.isEmpty) return const [];
+    final times = m.keys.toList()..sort();
+    return [for (final t in times) m[t]!];
+  }
 
   void upsert(String symbol, String tf, Candle candle) {
     if (symbol.isEmpty || tf.isEmpty) return;
@@ -484,14 +503,6 @@ class ServerCandlesNotifier extends StateNotifier<Map<String, Map<int, Candle>>>
       }
     }
     state = {...state, key: series};
-  }
-
-  /// Bars for a series, oldest → newest.
-  List<Candle> series(String symbol, String tf) {
-    final m = state[seriesKey(symbol, tf)];
-    if (m == null || m.isEmpty) return const [];
-    final times = m.keys.toList()..sort();
-    return [for (final t in times) m[t]!];
   }
 
   void clearSymbol(String symbol) {

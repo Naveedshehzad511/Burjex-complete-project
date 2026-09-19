@@ -316,15 +316,9 @@ flutter build web --release \
   --dart-define=WS_URL=ws://203.0.113.10:4101 \
   --dart-define=TENANT=demo
 rsync -avz --delete build/web/ root@203.0.113.10:/opt/burjex/web/admin/
-
-# B-Trader web trader (optional)  → http://IP:4400
-cd ../trader
-flutter build web --release \
-  --dart-define=API_BASE=http://203.0.113.10:4100 \
-  --dart-define=WS_URL=ws://203.0.113.10:4101 \
-  --dart-define=TENANT=demo
-rsync -avz --delete build/web/ root@203.0.113.10:/opt/burjex/web/trader/
 ```
+
+Do not rsync a Markets/Portfolio/Settings trader web build onto `web/portal`.
 
 `WS_URL` has **no path and no trailing slash** — the client appends `?token=…`
 directly to it.
@@ -337,14 +331,7 @@ schemes — an `https://` page may not call `http://` or `ws://`.
 
 ## 10. Mobile APKs
 
-```bash
-cd btrader/flutter/apps/trader
-flutter build apk --release \
-  --dart-define=API_BASE=http://203.0.113.10:4100 \
-  --dart-define=WS_URL=ws://203.0.113.10:4101 \
-  --dart-define=TENANT=demo
-# build/app/outputs/flutter-apk/app-release.apk
-```
+The Markets/Portfolio/Settings Flutter trader APK was removed. Do not ship `web/portal/app-release.apk`.
 
 **CRM app (`forexten_mobile`)** — that project is not part of this repository
 checkout, so the define names could not be verified against its source. Per the
@@ -373,11 +360,10 @@ Since Android 9 (API 28), release builds **block cleartext HTTP by default**.
 policy` — and because the failure is inside the HTTP client, it often surfaces
 as nothing more than a spinner that never resolves.
 
-Both B-Trader Android apps are now configured for it:
+B-Trader admin Android is configured for it:
 
 | App | Manifest | Status |
 |---|---|---|
-| `btrader/flutter/apps/trader` | `android/app/src/main/AndroidManifest.xml` | `android:usesCleartextTraffic="true"` — already present |
 | `btrader/flutter/apps/admin` | `android/app/src/main/AndroidManifest.xml` | `android:usesCleartextTraffic="true"` — **added for IP mode** |
 
 For `forexten_mobile`, check its own manifest and add the same attribute to the

@@ -474,6 +474,7 @@ impl Engine {
                     "id": position_id,
                     "accountId": account_id,
                     "status": if kind == "closed" { "CLOSED" } else { "OPEN" },
+                    "closing": kind == "closed",
                     "profit": profit,
                 }
             }),

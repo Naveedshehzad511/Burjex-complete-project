@@ -17,8 +17,8 @@ b-trader/
 │   └── shared/           Shared TS contracts (enums, DTOs, CRM contract, events)
 ├── flutter/              Flutter apps — one codebase, shared btrader_core
 │   ├── packages/btrader_core/   models, API (Dio), WebSocket, Riverpod state, theme
-│   ├── apps/trader/             mobile trader app (iOS + Android)
 │   └── apps/admin/              web admin dashboard (Flutter web)
+│       (client portal is static web/portal — Home/Quotes/Chart/Trade/History)
 ├── infra/                Docker Compose, Dockerfile, K8s, nginx
 ├── mockups/              Static HTML UI previews (trader + admin)
 └── docs/                 The 10 design deliverables + roadmap
@@ -43,16 +43,10 @@ pnpm dev            # runs gateway-api, trading-engine, market-data, ws-gateway
 
 The mock LP bridge generates a live feed so you can place orders end-to-end with no external provider.
 
-### Flutter apps (trader + admin)
+### Flutter admin
 
 ```bash
 dart pub global activate melos && (cd flutter && melos bootstrap)
-
-# Trader app (device/emulator)
-cd flutter/apps/trader && flutter run \
-  --dart-define=API_BASE=http://localhost:4100 \
-  --dart-define=WS_URL=ws://localhost:4101 --dart-define=TENANT=demo
-# sign in: trader@demofx.com / Trader123! (seed)
 
 # Admin (web)
 cd flutter/apps/admin && flutter run -d chrome \
@@ -60,9 +54,7 @@ cd flutter/apps/admin && flutter run -d chrome \
 # sign in: tenant "demo", a TENANT_ADMIN/SUPER_ADMIN account (see seed)
 ```
 
-Trader tabs: Markets, Charts, Trade, Portfolio, Account (+ Settings, Funding, History). Both apps are responsive (phone → tablet/desktop) with light/dark themes. Chart/price feed runs on the built-in mock until a provider is purchased.
-
-Tabs: Markets (live watchlist), Trade (all order types + one-click), Portfolio (modify SL/TP, partial/full/close-all), History, Account. Branding is fetched at launch from `/v1/public/branding` so each white-label build is themed per broker.
+The live client portal is the static Trade+ bundle in `web/portal` (Home, Quotes, Chart, Trade, History). Do not rebuild a Markets/Portfolio/Settings trader app onto it. Admin branding is fetched at launch from `/v1/public/branding`.
 
 ## Documentation
 
