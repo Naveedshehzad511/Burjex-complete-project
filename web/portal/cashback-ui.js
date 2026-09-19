@@ -17,6 +17,35 @@
   var transferMeta = null;
   var savedColorScheme = "";
   var savedTitle = "";
+  var titleObserver = null;
+
+  function lockCashbackTitle() {
+    try {
+      if (document.title !== "Cashback") document.title = "Cashback";
+    } catch (e) {}
+  }
+
+  function startTitleLock() {
+    lockCashbackTitle();
+    if (titleObserver) return;
+    try {
+      var node = document.querySelector("title") || document.head;
+      titleObserver = new MutationObserver(lockCashbackTitle);
+      titleObserver.observe(node, { childList: true, characterData: true, subtree: true });
+    } catch (e) {}
+  }
+
+  function stopTitleLock() {
+    if (titleObserver) {
+      try {
+        titleObserver.disconnect();
+      } catch (e) {}
+      titleObserver = null;
+    }
+    try {
+      if (savedTitle) document.title = savedTitle;
+    } catch (e) {}
+  }
 
   function isAppDark() {
     if (window.__bxPortalDark === true) return true;
@@ -36,9 +65,9 @@
     try {
       if (hide) {
         if (!savedTitle) savedTitle = document.title || "";
-        document.title = "Cashback";
-      } else if (savedTitle) {
-        document.title = savedTitle;
+        startTitleLock();
+      } else {
+        stopTitleLock();
       }
     } catch (e) {}
   }
@@ -533,6 +562,7 @@
     var want = isCashback() && window.__bxCashbackEnabled !== false;
     var visible = shown && shown.style.display !== "none";
     if (want !== !!visible) load();
+    else if (want) lockCashbackTitle();
   }, 400);
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", load);
