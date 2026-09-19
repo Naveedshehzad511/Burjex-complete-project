@@ -117,7 +117,8 @@ impl Engine {
             }
             if let Ok(Some(max_pos)) = r.try_get::<Option<i32>, _>("maxOpenPositions") {
                 let (count,): (i64,) = sqlx::query_as(
-                    r#"SELECT COUNT(*) FROM positions WHERE "tenantId"=$1 AND "accountId"=$2 AND status='OPEN'"#,
+                    r#"SELECT COUNT(*) FROM positions WHERE "tenantId"=$1 AND "accountId"=$2
+                       AND status IN ('OPEN'::"PositionStatus", 'CLOSE_PENDING'::"PositionStatus")"#,
                 )
                 .bind(tenant_id)
                 .bind(account_id)
@@ -129,7 +130,8 @@ impl Engine {
             }
             if let Ok(Some(max_lots)) = r.try_get::<Option<f64>, _>("max_open_lots") {
                 let (sum,): (Option<f64>,) = sqlx::query_as(
-                    r#"SELECT COALESCE(SUM(volume),0)::float8 FROM positions WHERE "tenantId"=$1 AND "accountId"=$2 AND status='OPEN'"#,
+                    r#"SELECT COALESCE(SUM(volume),0)::float8 FROM positions WHERE "tenantId"=$1 AND "accountId"=$2
+                       AND status IN ('OPEN'::"PositionStatus", 'CLOSE_PENDING'::"PositionStatus")"#,
                 )
                 .bind(tenant_id)
                 .bind(account_id)
@@ -385,7 +387,9 @@ impl Engine {
                       s."marginRate"::float8 AS "marginRate", s."marginPercent"::float8 AS "marginPercent",
                       s."quoteCurrency", s."baseCurrency"
                FROM positions p JOIN symbols s ON s.id = p."symbolId"
-               WHERE p."tenantId"=$1 AND p."accountId"=$2 AND p.status='OPEN' ORDER BY p."openedAt""#,
+               WHERE p."tenantId"=$1 AND p."accountId"=$2
+                 AND p.status IN ('OPEN'::"PositionStatus", 'CLOSE_PENDING'::"PositionStatus")
+               ORDER BY p."openedAt""#,
         )
         .bind(tenant_id)
         .bind(account_id)
@@ -407,7 +411,9 @@ impl Engine {
                       s."marginRate"::float8 AS "marginRate", s."marginPercent"::float8 AS "marginPercent",
                       s."quoteCurrency", s."baseCurrency"
                FROM positions p JOIN symbols s ON s.id = p."symbolId"
-               WHERE p."tenantId"=$1 AND p."accountId"=$2 AND p.status='OPEN' ORDER BY p."openedAt""#,
+               WHERE p."tenantId"=$1 AND p."accountId"=$2
+                 AND p.status IN ('OPEN'::"PositionStatus", 'CLOSE_PENDING'::"PositionStatus")
+               ORDER BY p."openedAt""#,
         )
         .bind(tenant_id)
         .bind(account_id)
@@ -461,7 +467,10 @@ impl Engine {
         kind: &str,
         snap: &Snapshot,
         profit: Option<f64>,
+        close_reason: Option<&str>,
     ) {
+        let closed = kind == "closed";
+        let reason = close_reason.unwrap_or(if closed { "CLOSED" } else { "OPENED" });
         self.emit(
             tenant_id,
             json!({
@@ -470,11 +479,15 @@ impl Engine {
                 "positionId": position_id,
                 "accountId": account_id,
                 "book": kind,
+                "event": if closed { "position_closed" } else { "position_opened" },
+                "reason": reason,
                 "position": {
                     "id": position_id,
                     "accountId": account_id,
-                    "status": if kind == "closed" { "CLOSED" } else { "OPEN" },
-                    "closing": kind == "closed",
+                    "status": if closed { "CLOSED" } else { "OPEN" },
+                    "closing": closed,
+                    "event": if closed { "position_closed" } else { "position_opened" },
+                    "reason": reason,
                     "profit": profit,
                 }
             }),

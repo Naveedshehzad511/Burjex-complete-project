@@ -20,6 +20,9 @@ pub struct BookRow {
     pub account_currency: String,
     pub group_id: Option<String>,
     pub exec_claim_kind: Option<String>,
+    pub symbol: String,
+    /// OPEN or CLOSE_PENDING (CLOSED rows are removed from the book).
+    pub status: String,
 }
 
 #[derive(Debug, Clone)]
@@ -109,9 +112,26 @@ impl PositionBook {
             if let Some(b) = self.buckets.get(k.as_str()) {
                 if let Some(mut row) = b.get_mut(id) {
                     row.exec_claim_kind = Some(kind.to_string());
+                    row.status = "CLOSE_PENDING".into();
                 }
             }
         }
+    }
+
+    pub fn for_account(&self, tenant_id: &str, account_id: &str) -> Vec<BookRow> {
+        let prefix = format!("{tenant_id}\u{0000}");
+        let mut out = Vec::new();
+        for bucket in self.buckets.iter() {
+            if !bucket.key().starts_with(&prefix) {
+                continue;
+            }
+            for row in bucket.iter() {
+                if row.account_id == account_id {
+                    out.push(row.clone());
+                }
+            }
+        }
+        out
     }
 
     pub fn for_symbol(&self, tenant_id: &str, symbol_id: &str) -> Vec<BookRow> {

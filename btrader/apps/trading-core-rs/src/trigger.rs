@@ -196,4 +196,33 @@ mod tests {
         assert_eq!(hit, Some("SL"));
         assert_eq!(lvl, Some(1.1));
     }
+
+    #[test]
+    fn sl_short_on_ask() {
+        let (hit, lvl) = protective_hit("SELL", 1.1008, 1.101, Some(1.1), None);
+        assert_eq!(hit, Some("SL"));
+        assert_eq!(lvl, Some(1.1));
+    }
+
+    #[test]
+    fn tp_long_on_bid() {
+        let (hit, lvl) = protective_hit("BUY", 1.21, 1.2102, None, Some(1.2));
+        assert_eq!(hit, Some("TP"));
+        assert_eq!(lvl, Some(1.2));
+    }
+
+    #[test]
+    fn tp_short_on_ask() {
+        let (hit, lvl) = protective_hit("SELL", 1.189, 1.1892, None, Some(1.2));
+        assert_eq!(hit, Some("TP"));
+        assert_eq!(lvl, Some(1.2));
+    }
+
+    #[test]
+    fn no_hit_inside_levels() {
+        let (hit, _) = protective_hit("BUY", 1.105, 1.1052, Some(1.1), Some(1.12));
+        assert_eq!(hit, None);
+        let (hit, _) = protective_hit("SELL", 1.105, 1.1052, Some(1.12), Some(1.09));
+        assert_eq!(hit, None);
+    }
 }
