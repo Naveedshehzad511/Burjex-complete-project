@@ -69,5 +69,7 @@ export type WsFrame =
   | { t: 'candle'; d: CandleEvent }
   | { t: 'account'; d: AccountSnapshot }
   | { t: 'position'; d: PositionDTO }
+  | { t: 'position_closed'; d: PositionDTO }
+  | { t: 'positions'; d: { snapshot: true; accountId: string; positions: PositionDTO[] } }
   | { t: 'order'; d: OrderDTO }
   | { t: 'pong'; d: { ts: number } };

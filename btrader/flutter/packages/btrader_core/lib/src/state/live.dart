@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config.dart';
-import 'chart.dart';
 import '../models/account.dart';
 import '../models/candle.dart';
 import '../models/position.dart';
@@ -11,6 +10,7 @@ import '../models/symbol.dart';
 import '../models/tick.dart';
 import '../ws/market_socket.dart';
 import 'providers.dart';
+import 'position_sync.dart';
 
 /// Owns the WebSocket for the session and routes frames into the live stores.
 /// Auto-connects when authenticated; disposes on logout.
@@ -24,7 +24,8 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
     getToken: () => store.accessToken,
     onAuthExpired: () => api.refreshAccessToken(),
     onReconnected: () {
-      ref.invalidate(openPositionsProvider);
+      // Positions come from the WS open-position snapshot on watch_account.
+      // Do not REST-poll the list on reconnect.
       ref.invalidate(accountsProvider);
     },
   );
@@ -39,44 +40,46 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
         ref.read(serverCandlesProvider.notifier).upsert(symbol, tf, candle);
       case AccountFrame(:final data):
         ref.read(liveAccountProvider.notifier).set(data);
+      case PositionsSnapshotFrame(:final positions):
+        final closed = ref.read(closedPositionIdsProvider);
+        final parsed = <Position>[];
+        for (final row in positions) {
+          final p = positionFromWs(row);
+          if (p != null) parsed.add(p);
+        }
+        ref.read(wsOpenPositionsProvider.notifier).applySnapshot(parsed, closed);
       case PositionFrame(:final data):
         final id = '${data['id'] ?? data['positionId'] ?? ''}';
-        final status = '${data['status'] ?? ''}'.toUpperCase();
-        final book = '${data['book'] ?? ''}';
-        final stateVal = '${data['state'] ?? ''}'.toLowerCase();
-        final reason = '${data['reason'] ?? ''}'.toUpperCase();
-        final isClosingFlag = data['closing'] == true;
+        final closedIds = ref.read(closedPositionIdsProvider);
 
-        // Robust check for any closing condition / SL / TP trigger
-        final closed = status == 'CLOSED' ||
-            book == 'closed' ||
-            stateVal == 'closed' ||
-            isClosingFlag ||
-            reason == 'SL_HIT' ||
-            reason == 'TP_HIT';
-
-        if (closed && id.isNotEmpty) {
+        if (positionEventIsClosed(data) && id.isNotEmpty) {
           ref.read(livePositionNotifierProvider.notifier).forget(id);
           ref.read(closedPositionIdsProvider.notifier).add(id);
+          ref.read(wsOpenPositionsProvider.notifier).remove(id);
+          ref.read(tradeHistoryRevisionProvider.notifier).state++;
           Future.microtask(() {
-            ref.invalidate(openPositionsProvider);
             ref.invalidate(accountsProvider);
           });
           break;
         }
+        if (staleOpenBlocked(id, data, closedIds)) {
+          break;
+        }
         if (data['stale'] == true) {
           Future.microtask(() {
-            ref.invalidate(openPositionsProvider);
             ref.invalidate(accountsProvider);
           });
           break;
+        }
+        final parsed = positionFromWs(data);
+        if (parsed != null) {
+          ref.read(wsOpenPositionsProvider.notifier).upsert(parsed, closedIds);
         }
         final sym = '${data['symbol'] ?? ''}';
         final q = sym.isEmpty ? null : ref.read(quotesProvider)[sym];
         ref.read(livePositionNotifierProvider.notifier).set(data, fallbackQuote: q);
       case OrderFrame():
         Future.microtask(() {
-          ref.invalidate(openPositionsProvider);
           ref.invalidate(accountsProvider);
         });
         break;
@@ -104,6 +107,34 @@ class ClosedPositionIds extends StateNotifier<Set<String>> {
 
 final closedPositionIdsProvider =
     StateNotifierProvider<ClosedPositionIds, Set<String>>((_) => ClosedPositionIds());
+
+/// Bumped on every actual position_closed so History screens can refetch deals
+/// without a polling loop.
+final tradeHistoryRevisionProvider = StateProvider<int>((_) => 0);
+
+class WsOpenPositions extends StateNotifier<List<Position>?> {
+  WsOpenPositions() : super(null);
+
+  void applySnapshot(List<Position> rows, Set<String> closedIds) {
+    state = reconcileOpenSnapshot(rows, closedIds);
+  }
+
+  void upsert(Position next, Set<String> closedIds) {
+    state = upsertLivePosition(state ?? const [], next, closedIds);
+  }
+
+  void remove(String id) {
+    final cur = state;
+    if (cur == null) return;
+    state = removeLivePosition(cur, id);
+  }
+
+  void clear() => state = null;
+}
+
+/// Server-pushed working positions (OPEN + CLOSE_PENDING). Null = not yet snapped.
+final wsOpenPositionsProvider =
+    StateNotifierProvider<WsOpenPositions, List<Position>?>((_) => WsOpenPositions());
 
 /// Subscribes the WebSocket to every available symbol so ticks actually flow.
 /// The WS gateway only forwards ticks for subscribed symbols — watch this

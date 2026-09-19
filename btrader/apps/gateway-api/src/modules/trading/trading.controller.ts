@@ -151,7 +151,14 @@ export class TradingController {
   positions(@CurrentTenant() t: any, @Query('accountId') accountId: string, @Query('status') status = 'OPEN') {
     return ttlWrap(`pos:${t.id}:${accountId}:${status}`, PORTAL_READ_CACHE_MS, () =>
       prisma.position.findMany({
-        where: { tenantId: t.id, accountId, status: status as any },
+        where: {
+          tenantId: t.id,
+          accountId,
+          status:
+            !status || status === 'OPEN'
+              ? { in: ['OPEN', 'CLOSE_PENDING'] as any }
+              : (status as any),
+        },
         include: { symbol: { select: { symbol: true, digits: true } } },
         orderBy: { openedAt: 'desc' },
         take: 500,

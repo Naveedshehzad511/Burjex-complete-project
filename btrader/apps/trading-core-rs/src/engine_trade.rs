@@ -3,6 +3,7 @@ use crate::calc::{
     apply_markup, compute_aggregates, execution_applies, normalize_volume, point_size, required_margin,
     round_price, split_position_charges,
 };
+use crate::close_sync::{on_protective_close, on_user_close, CloseExecute};
 use crate::engine::{Engine, ExecResult, PlaceReq};
 use crate::error::{
     BtError, BtResult, INSUFFICIENT_MARGIN, INVALID_PRICE, INVALID_VOLUME, NO_PRICE, ORDER_NOT_FOUND,
@@ -234,7 +235,7 @@ impl Engine {
         let account_id = if let Some(a) = account_id_hint {
             a
         } else {
-            let row = sqlx::query(r#"SELECT "accountId" FROM positions WHERE id=$1 AND "tenantId"=$2 AND status='OPEN'"#)
+            let row = sqlx::query(r#"SELECT "accountId", status::text AS status FROM positions WHERE id=$1 AND "tenantId"=$2"#)
                 .bind(position_id)
                 .bind(tenant_id)
                 .fetch_optional(&self.pool)
@@ -281,6 +282,7 @@ impl Engine {
                       p."openPrice"::float8 AS "openPrice", p."coveredVolume"::float8 AS "coveredVolume",
                       p.swap::float8 AS swap, p.commission::float8 AS commission,
                       p."slPrice"::float8 AS "slPrice", p."tpPrice"::float8 AS "tpPrice", p."openedAt",
+                      p.status::text AS status,
                       a.currency, a.leverage, a."groupId", a.balance::float8 AS balance, a.credit::float8 AS credit, a.login,
                       s.symbol, s.digits, s."pipSize"::float8 AS "pipSize", s."contractSize"::float8 AS "contractSize",
                       s."marginRate"::float8 AS "marginRate", s."marginPercent"::float8 AS "marginPercent",
@@ -291,13 +293,37 @@ impl Engine {
                FROM positions p
                JOIN accounts a ON a.id = p."accountId"
                JOIN symbols s ON s.id = p."symbolId"
-               WHERE p.id=$1 AND p."tenantId"=$2 AND p.status='OPEN'"#,
+               WHERE p.id=$1 AND p."tenantId"=$2
+                 AND p.status IN ('OPEN'::"PositionStatus", 'CLOSE_PENDING'::"PositionStatus")"#,
         )
         .bind(&position_id)
         .bind(&tenant_id)
         .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| BtError::new(POSITION_NOT_FOUND, "position not found"))?;
+        .await?;
+        let Some(row) = row else {
+            let st = sqlx::query(r#"SELECT status::text AS status FROM positions WHERE id=$1 AND "tenantId"=$2"#)
+                .bind(&position_id)
+                .bind(&tenant_id)
+                .fetch_optional(&self.pool)
+                .await?;
+            if st
+                .as_ref()
+                .map(|r| r.try_get::<String, _>("status").unwrap_or_default())
+                .unwrap_or_default()
+                .eq_ignore_ascii_case("CLOSED")
+            {
+                return Ok(already_done(&position_id, "CLOSED"));
+            }
+            return Err(BtError::new(POSITION_NOT_FOUND, "position not found"));
+        };
+
+        let pos_status: String = row.try_get("status").unwrap_or_else(|_| "OPEN".into());
+        if protective_kind.is_none() && on_user_close(&pos_status) == CloseExecute::IgnoreDuplicate {
+            return Ok(already_done(&position_id, &pos_status));
+        }
+        if protective_kind.is_some() && on_protective_close(&pos_status) == CloseExecute::IgnoreDuplicate {
+            return Ok(already_done(&position_id, "CLOSED"));
+        }
 
         let account_id: String = row.try_get("accountId").unwrap_or_default();
         if let Some(req) = require_account_id {
@@ -434,12 +460,15 @@ impl Engine {
             r#"SELECT volume::float8 AS volume, "coveredVolume"::float8 AS "coveredVolume",
                       swap::float8 AS swap, commission::float8 AS commission, side::text AS side,
                       "openPrice"::float8 AS "openPrice"
-               FROM positions WHERE id=$1 AND status='OPEN'"#,
+               FROM positions WHERE id=$1 AND status IN ('OPEN'::"PositionStatus", 'CLOSE_PENDING'::"PositionStatus")"#,
         )
         .bind(&position_id)
         .fetch_optional(&mut *tx)
-        .await?
-        .ok_or_else(|| BtError::new(POSITION_NOT_FOUND, "position not found"))?;
+        .await?;
+        let Some(fresh) = fresh else {
+            tx.rollback().await.ok();
+            return Ok(already_done(&position_id, "CLOSED"));
+        };
         let acct = sqlx::query(&format!("{ACCOUNT_SELECT} WHERE id=$1"))
             .bind(&account_id)
             .fetch_one(&mut *tx)
@@ -546,6 +575,7 @@ impl Engine {
         } else {
             self.book.remove(&position_id);
         }
+        self.redis_sync_open_positions(&tenant_id, &account_id).await;
         let snap = Snapshot {
             account_id: account_id.clone(),
             login,
@@ -561,6 +591,11 @@ impl Engine {
             ts: now_ms(),
         };
         let alias = self.client_alias(group_id.as_deref(), &symbol).await;
+        let close_reason = match protective_kind.as_deref() {
+            Some("tp") => "TP_HIT",
+            Some("sl") => "SL_HIT",
+            _ => "CLOSED",
+        };
         self.publish_after_fill(
             &tenant_id,
             &account_id,
@@ -573,7 +608,8 @@ impl Engine {
                 "volume": vol,
                 "dealId": deal_id,
                 "tradeId": position_id,
-                "partial": partial
+                "partial": partial,
+                "reason": close_reason
             })),
         )
         .await;
@@ -688,6 +724,8 @@ impl Engine {
             r.sl_price = next_sl;
             r.tp_price = next_tp;
         });
+        let account_id: String = row.try_get("accountId").unwrap_or_default();
+        self.redis_sync_open_positions(tenant_id, &account_id).await;
         Ok(json!({"slPrice": next_sl, "tpPrice": next_tp}))
     }
 
@@ -851,6 +889,28 @@ impl Engine {
             .await?;
         self.book.map(position_id, |r| r.covered_volume = covered + n);
         Ok(json!({"covered": covered + n, "warehoused": warehoused - n}))
+    }
+}
+
+fn already_done(position_id: &str, status: &str) -> ExecResult {
+    let st = if status.eq_ignore_ascii_case("CLOSE_PENDING") {
+        "CLOSE_PENDING"
+    } else {
+        "CLOSED"
+    };
+    ExecResult {
+        accepted: true,
+        order_id: None,
+        position_id: Some(position_id.to_string()),
+        status: st.into(),
+        fill_price: None,
+        filled_volume: None,
+        reason: Some(if st == "CLOSED" {
+            "already_closed".into()
+        } else {
+            "already_closing".into()
+        }),
+        account: None,
     }
 }
 

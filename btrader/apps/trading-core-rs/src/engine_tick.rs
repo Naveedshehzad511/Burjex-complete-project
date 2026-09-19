@@ -1,5 +1,6 @@
 use crate::books::{BookRow, Claim, PendingRow};
 use crate::calc::{compute_aggregates, pending_type_to_apply_kind, position_profit, worst_position};
+use crate::close_sync::{on_protective_hit, ProtectiveClaim};
 use crate::engine::{spec_of, Engine, PlaceReq};
 use crate::error::BtResult;
 use crate::models::{now_ms, Snapshot};
@@ -23,8 +24,12 @@ impl Engine {
                       p."openedAt", p."execClaimKind", p."execDelayMs", p."execDeadlineAt",
                       p."execTriggerBid"::float8 AS "execTriggerBid",
                       p."execTriggerAsk"::float8 AS "execTriggerAsk",
+                      p.status::text AS status, s.symbol,
                       a.currency, a."groupId"
-               FROM positions p JOIN accounts a ON a.id=p."accountId" WHERE p.status='OPEN'"#,
+               FROM positions p
+               JOIN accounts a ON a.id=p."accountId"
+               JOIN symbols s ON s.id=p."symbolId"
+               WHERE p.status IN ('OPEN'::"PositionStatus", 'CLOSE_PENDING'::"PositionStatus")"#,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -75,13 +80,22 @@ impl Engine {
                 account_currency: r.try_get("currency").unwrap_or_else(|_| "USD".into()),
                 group_id: r.try_get("groupId").ok(),
                 exec_claim_kind: kind,
+                symbol: r.try_get("symbol").unwrap_or_default(),
+                status: r.try_get("status").unwrap_or_else(|_| "OPEN".into()),
             }
             })
             .collect();
         let n = rows.len();
+        let mut acct_keys = std::collections::HashSet::new();
+        for r in &rows {
+            acct_keys.insert((r.tenant_id.clone(), r.account_id.clone()));
+        }
         self.book.load(rows);
         for (id, claim) in restore_claims {
             let _ = self.claims.claim(&id, claim);
+        }
+        for (tenant, account) in acct_keys {
+            self.redis_sync_open_positions(&tenant, &account).await;
         }
 
         let pend = sqlx::query(
@@ -361,10 +375,11 @@ impl Engine {
         for p in open {
             // Already claimed: never sleep on the tick loop. Close only once the
             // original deadline has passed (MARKET ms applied once).
-            if p.exec_claim_kind.is_some() || self.claims.has(&p.id) {
+            if p.exec_claim_kind.is_some() || self.claims.has(&p.id) || p.status.eq_ignore_ascii_case("CLOSE_PENDING") {
                 if p.exec_claim_kind.as_deref() == Some("sl")
                     || p.exec_claim_kind.as_deref() == Some("tp")
                     || self.claims.has(&p.id)
+                    || p.status.eq_ignore_ascii_case("CLOSE_PENDING")
                 {
                     let rec = self.claims.get(&p.id);
                     let kind = rec
@@ -401,6 +416,9 @@ impl Engine {
             let (bid, ask) = (raw_bid, raw_ask);
             let (hit, level) = protective_hit(&p.side, bid, ask, p.sl_price, p.tp_price);
             let Some(hit) = hit else { continue };
+            if on_protective_hit(&p.status) != ProtectiveClaim::Claim {
+                continue;
+            }
             let kind = if hit == "SL" { "sl" } else { "tp" };
             let sl_lvl = p.sl_price.unwrap_or(0.0);
             let tp_lvl = p.tp_price.unwrap_or(0.0);
@@ -457,7 +475,8 @@ impl Engine {
             self.book.patch_claim(&p.id, kind);
             let deadline_wall = chrono::Utc::now() + chrono::Duration::milliseconds(i64::from(plan.delay_ms.max(0)));
             let n = sqlx::query(
-                r#"UPDATE positions SET "execClaimKind"=$1, "execClaimedAt"=NOW(), "execClaimedBy"=$2,
+                r#"UPDATE positions SET status='CLOSE_PENDING'::"PositionStatus",
+                   "execClaimKind"=$1, "execClaimedAt"=NOW(), "execClaimedBy"=$2,
                    "execTriggerAt"=NOW(), "execDeadlineAt"=$3, "execDelayMs"=$4,
                    "execTriggerBid"=$5, "execTriggerAsk"=$6
                    WHERE id=$7 AND status='OPEN' AND "execClaimedAt" IS NULL"#,
@@ -477,16 +496,18 @@ impl Engine {
                 tracing::warn!(target: "sl_exec", "[SL TRIGGER] position_id={} DB claim lost", p.id);
                 continue;
             }
+            self.redis_sync_open_positions(tenant_id, &p.account_id).await;
 
-            // Push closing state immediately so the portal stops painting an OPEN
-            // position while bid/ask has already crossed the SL/TP line.
+            // Claimed: CLOSE_PENDING. Chart overlays stay until the actual close
+            // publishes position_closed (after group execution_ms).
             self.emit(
                 tenant_id,
                 json!({
                     "kind":"POSITION_UPDATE","tenantId":tenant_id,
+                    "event":"position_close_pending",
                     "position":{
-                        "id":p.id,"accountId":p.account_id,"symbolId":p.symbol_id,
-                        "side":p.side,"status":"OPEN","closing":true,
+                        "id":p.id,"accountId":p.account_id,"symbol":symbol,"symbolId":p.symbol_id,
+                        "side":p.side,"status":"CLOSE_PENDING","closing":false,
                         "execClaimKind":kind,"execDelayMs":plan.delay_ms,
                         "slPrice":p.sl_price,"tpPrice":p.tp_price,
                         "volume":p.volume,"openPrice":p.open_price
@@ -521,7 +542,7 @@ impl Engine {
                 match &res {
                     Ok(r) => tracing::info!(
                         target: "sl_exec",
-                        "[CLOSE RESPONSE] position_id={} success=true fill={:?} latency_ms={} [POSITION STATUS] OPEN -> CLOSED",
+                        "[CLOSE RESPONSE] position_id={} success=true fill={:?} latency_ms={} [POSITION STATUS] CLOSE_PENDING -> CLOSED",
                         p.id, r.fill_price, t_done.saturating_sub(trigger_wall)
                     ),
                     Err(e) => tracing::error!(
@@ -573,7 +594,7 @@ impl Engine {
                     match res {
                         Ok(r) => tracing::info!(
                             target: "sl_exec",
-                            "[CLOSE RESPONSE] position_id={} success=true fill={:?} latency_ms={} [POSITION STATUS] OPEN -> CLOSED",
+                            "[CLOSE RESPONSE] position_id={} success=true fill={:?} latency_ms={} [POSITION STATUS] CLOSE_PENDING -> CLOSED",
                             pid, r.fill_price, t_done.saturating_sub(t0)
                         ),
                         Err(e) => tracing::error!(
@@ -663,6 +684,7 @@ impl Engine {
             // portal will show the trade as active after the stop has fired.
             if matches!(p.exec_claim_kind.as_deref(), Some("sl") | Some("tp"))
                 || self.claims.has(&p.id)
+                || p.status.eq_ignore_ascii_case("CLOSE_PENDING")
             {
                 continue;
             }
@@ -682,6 +704,7 @@ impl Engine {
             // after the ticket is already CLOSED on the server.
             if matches!(p.exec_claim_kind.as_deref(), Some("sl") | Some("tp"))
                 || self.claims.has(&p.id)
+                || p.status.eq_ignore_ascii_case("CLOSE_PENDING")
                 || !self.book.contains(&p.id)
             {
                 continue;
