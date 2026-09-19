@@ -152,6 +152,25 @@ class CashbackHistoryApiTests(TestCase):
         self.assertNotIn("engine_trade_id", data["items"][0])
         self.assertNotIn("login_id", data["items"][0])
 
+    def test_history_period_total_is_for_selected_range(self):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        old = CashbackPayout.objects.create(
+            engine_trade_id="eng-old",
+            user=self.user,
+            login_id="500001",
+            alias="btcusd.s",
+            amount=Decimal("5.00"),
+        )
+        CashbackPayout.objects.filter(pk=old.pk).update(created_at=timezone.now() - timedelta(days=40))
+        resp = self.api.get("/api/v1/cashback/history/?period=30d")
+        data = resp.json()["data"]
+        self.assertEqual(data["total"], "2.00")
+        self.assertEqual(data["all_total"], "7.00")
+        self.assertEqual(len(data["items"]), 1)
+        self.assertEqual(data["items"][0]["alias"], "xauusd.s")
+
     def test_history_period_today_and_disabled_flag(self):
         resp = self.api.get("/api/v1/cashback/history/?period=today")
         self.assertEqual(resp.status_code, 200)

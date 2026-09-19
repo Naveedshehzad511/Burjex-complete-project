@@ -101,11 +101,13 @@ class ClientCashbackHistoryAPIView(APIView):
             }
             for row in qs.order_by("-created_at")[:limit]
         ]
+        period_total = qs.aggregate(s=Sum("amount"))["s"] or Decimal("0")
         return success_response(
             {
                 "enabled": True,
                 "items": items,
-                "total": _money(all_total),
+                "total": _money(period_total),
+                "all_total": _money(all_total),
                 "period": period,
                 "wallet_balance": _money(_wallet_balance_for_user(request.user)),
             },
