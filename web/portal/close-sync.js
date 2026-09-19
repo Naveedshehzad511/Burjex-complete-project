@@ -126,7 +126,7 @@
 
   var tries = 0;
   (function wait() {
-    if (patchTradeList() || ++tries > 200) return;
+    if (patchTradeList() || ++tries > 1200) return;
     setTimeout(wait, 50);
   })();
 })();
