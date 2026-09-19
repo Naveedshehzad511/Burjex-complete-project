@@ -661,7 +661,9 @@ impl Engine {
         for p in self.book.for_symbol(tenant_id, &sym.id) {
             // Already claimed for SL/TP — do not keep pushing OPEN+PnL or the
             // portal will show the trade as active after the stop has fired.
-            if p.exec_claim_kind.is_some() || self.claims.has(&p.id) {
+            if matches!(p.exec_claim_kind.as_deref(), Some("sl") | Some("tp"))
+                || self.claims.has(&p.id)
+            {
                 continue;
             }
             let current = if p.side.eq_ignore_ascii_case("BUY") {
@@ -678,7 +680,7 @@ impl Engine {
             self.profit_dirty.insert(p.id.clone(), profit);
             // Claim / close can land while this loop awaits. Do not push OPEN
             // after the ticket is already CLOSED on the server.
-            if p.exec_claim_kind.is_some()
+            if matches!(p.exec_claim_kind.as_deref(), Some("sl") | Some("tp"))
                 || self.claims.has(&p.id)
                 || !self.book.contains(&p.id)
             {

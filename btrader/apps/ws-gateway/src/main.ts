@@ -91,17 +91,17 @@ function payloadClosed(obj: unknown): boolean {
   const st = String(p.status ?? '').toUpperCase();
   const book = String(p.book ?? '').toLowerCase();
   const reason = String(p.reason ?? '').toUpperCase();
-  const kind = String(p.execClaimKind ?? '').toLowerCase();
   const stateVal = String(p.state ?? '').toLowerCase();
+  // A/B execution book is "A" / "B". "closed" here is publish_after_fill's
+  // fill-kind, not B-book. Do not treat execClaimKind sl/tp alone as closed
+  // — live OPEN snapshots must keep flowing. Claim events set closing:true.
   return (
     p.closing === true ||
     st === 'CLOSED' ||
     book === 'closed' ||
     stateVal === 'closed' ||
     reason === 'SL_HIT' ||
-    reason === 'TP_HIT' ||
-    kind === 'sl' ||
-    kind === 'tp'
+    reason === 'TP_HIT'
   );
 }
 
@@ -141,13 +141,12 @@ function forceClosed(body: unknown, id: string): Record<string, unknown> {
 
 function coalescePosition(prev: unknown, next: unknown): unknown {
   const id = posIdOf(next) || posIdOf(prev);
-  if (payloadClosed(next) || stillClosed(id)) {
+  if (!id) return next;
+  const nextClosed = payloadClosed(next);
+  const prevClosed = payloadClosed(prev);
+  if (nextClosed || stillClosed(id) || prevClosed) {
     rememberClosed(id);
-    return forceClosed(next, id);
-  }
-  if (payloadClosed(prev)) {
-    rememberClosed(id);
-    return prev;
+    return forceClosed(nextClosed ? next : prevClosed ? prev : next, id);
   }
   return next;
 }
@@ -388,13 +387,17 @@ sub.on('pmessage', (_pattern, channel, message) => {
         : null;
 
     // Ensure closing flags and status are properly enforced on rawPosBody if it exists
-    const posBody = rawPosBody ? {
-      ...rawPosBody,
-      book: isClosedOrSlTp ? 'closed' : (rawPosBody.book || 'open'),
-      status: isClosedOrSlTp ? 'CLOSED' : (rawPosBody.status || 'OPEN'),
-      closing: isClosedOrSlTp ? true : (rawPosBody.closing || false),
-      reason: evt.reason || rawPosBody.reason,
-    } : null;
+    // Keep A/B book ("A"/"B") on live rows. Only overwrite book when the
+    // engine has actually closed the ticket.
+    const posBody = rawPosBody
+      ? {
+          ...rawPosBody,
+          book: isClosedOrSlTp ? 'closed' : rawPosBody.book || evt.book,
+          status: isClosedOrSlTp ? 'CLOSED' : rawPosBody.status || 'OPEN',
+          closing: isClosedOrSlTp ? true : rawPosBody.closing || false,
+          reason: evt.reason || rawPosBody.reason,
+        }
+      : null;
 
     const posAccount = posBody?.accountId;
 

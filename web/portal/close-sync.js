@@ -1,8 +1,13 @@
 /**
- * Keep the Trade+ screen in lockstep with the server: once a ticket is CLOSED
- * (or claimed for SL/TP), it must not stay painted. Wraps WebSocket so Flutter
- * cannot miss/overwrite a close, and polls GET /v1/positions so a dropped WS
- * frame cannot leave a ghost row.
+ * Server CLOSED must drop the Trade row; OPEN rows must keep painting.
+ *
+ * Does not steal WebSocket.addEventListener (Dart2js needs the native
+ * message stream). Does not poll GET /v1/positions (that was forcing every
+ * noted id CLOSED whenever the list was empty/non-array, and 4 Hz polls
+ * 429'd the portal's own /positions read so the provider came back null).
+ *
+ * Only records ids that are already CLOSED/closing so a later REST paint
+ * cannot resurrect them. Does not rewrite OPEN snapshots.
  *
  * Does not replace main.dart.js (Home / Quotes / Chart / Trade / History).
  */
@@ -16,12 +21,18 @@
     window.__bxClosedIds[id] = 1;
   }
 
-  function isClosed(p) {
+  function posId(p) {
+    return p ? String(p.id || p.positionId || "") : "";
+  }
+
+  // A/B book is "A" / "B". Only the fill-kind "closed" (and status/closing)
+  // means the ticket is gone. Do not treat execClaimKind sl/tp on an OPEN
+  // snapshot as closed — that hid live trades.
+  function isServerClosed(p) {
     if (!p || typeof p !== "object") return false;
     var st = String(p.status || "").toUpperCase();
     var book = String(p.book || "").toLowerCase();
     var reason = String(p.reason || "").toUpperCase();
-    var kind = String(p.execClaimKind || "").toLowerCase();
     var stateVal = String(p.state || "").toLowerCase();
     return (
       p.closing === true ||
@@ -29,207 +40,39 @@
       book === "closed" ||
       stateVal === "closed" ||
       reason === "SL_HIT" ||
-      reason === "TP_HIT" ||
-      kind === "sl" ||
-      kind === "tp"
+      reason === "TP_HIT"
     );
   }
 
-  function posId(p) {
-    return p ? String(p.id || p.positionId || "") : "";
+  function markPos(p) {
+    if (isServerClosed(p)) mark(posId(p));
   }
 
-  function forceClosed(p) {
-    var id = posId(p);
-    return Object.assign({}, p || {}, {
-      id: id,
-      positionId: id,
-      status: "CLOSED",
-      book: "closed",
-      closing: true,
-    });
-  }
-
-  function rewritePos(p) {
-    if (!p || typeof p !== "object") return p;
-    var id = posId(p);
-    if (isClosed(p)) {
-      mark(id);
-      return forceClosed(p);
-    }
-    if (id && window.__bxClosedIds[id]) return forceClosed(p);
-    return p;
-  }
-
-  function rewriteFrame(obj) {
-    if (!obj || typeof obj !== "object") return obj;
-    if (obj.t === "position") {
-      return Object.assign({}, obj, { d: rewritePos(obj.d) });
-    }
-    if (obj.t === "evts" && obj.d) {
-      var d = Object.assign({}, obj.d);
-      if (Array.isArray(d.p)) d.p = d.p.map(rewritePos);
-      return Object.assign({}, obj, { d: d });
-    }
-    return obj;
-  }
-
-  function token() {
-    try {
-      var v = localStorage.getItem("flutter.bt_access");
-      if (!v) return "";
-      var p = JSON.parse(v);
-      return typeof p === "string" ? p : "";
-    } catch (e) {
-      return "";
+  function markFrame(obj) {
+    if (!obj || typeof obj !== "object") return;
+    if (obj.t === "position") markPos(obj.d);
+    else if (obj.t === "evts" && obj.d && Array.isArray(obj.d.p)) {
+      for (var i = 0; i < obj.d.p.length; i++) markPos(obj.d.p[i]);
     }
   }
 
   var Orig = window.WebSocket;
   function BxWS(url, protocols) {
-    var ws = protocols !== undefined ? new Orig(url, protocols) : new Orig(url);
-    var msgFns = [];
-    var onMsg = null;
-    var nativeOn = false;
-    var accounts = Object.create(null);
-    var lastOpen = Object.create(null);
-    var pollTimer = null;
-
-    function patchedData(raw) {
+    var ws;
+    if (protocols == null || (Array.isArray(protocols) && protocols.length === 0)) {
+      ws = new Orig(url);
+    } else {
+      ws = new Orig(url, protocols);
+    }
+    Orig.prototype.addEventListener.call(ws, "message", function (ev) {
       try {
-        var obj = JSON.parse(raw);
-        noteOpenFromFrame(obj);
-        return JSON.stringify(rewriteFrame(obj));
-      } catch (e) {
-        return raw;
-      }
-    }
-
-    function fire(data) {
-      var ev = new MessageEvent("message", { data: data });
-      for (var i = 0; i < msgFns.length; i++) {
-        try {
-          msgFns[i](ev);
-        } catch (e) {}
-      }
-      if (typeof onMsg === "function") {
-        try {
-          onMsg(ev);
-        } catch (e) {}
-      }
-    }
-
-    function ensureNative() {
-      if (nativeOn) return;
-      nativeOn = true;
-      Orig.prototype.addEventListener.call(ws, "message", function (ev) {
-        fire(patchedData(ev.data));
-      });
-    }
-
-    function injectClosed(id, accountId) {
-      mark(id);
-      fire(
-        JSON.stringify({
-          t: "position",
-          d: {
-            id: id,
-            positionId: id,
-            accountId: accountId,
-            status: "CLOSED",
-            book: "closed",
-            closing: true,
-          },
-        })
-      );
-    }
-
-    function noteOpenFromFrame(obj) {
-      if (!obj || typeof obj !== "object") return;
-      var rows = [];
-      if (obj.t === "position") rows = [obj.d];
-      else if (obj.t === "evts" && obj.d && Array.isArray(obj.d.p)) rows = obj.d.p;
-      for (var i = 0; i < rows.length; i++) {
-        var p = rows[i];
-        if (!p || isClosed(p)) continue;
-        var id = posId(p);
-        var acct = p.accountId;
-        if (!id || !acct) continue;
-        lastOpen[acct] = lastOpen[acct] || Object.create(null);
-        lastOpen[acct][id] = 1;
-      }
-    }
-
-    async function poll() {
-      var tok = token();
-      var ids = Object.keys(accounts);
-      if (!tok || !ids.length) return;
-      for (var i = 0; i < ids.length; i++) {
-        var acct = ids[i];
-        try {
-          var r = await fetch(
-            "/v1/positions?accountId=" + encodeURIComponent(acct) + "&status=OPEN",
-            { headers: { Authorization: "Bearer " + tok } }
-          );
-          if (!r.ok) continue;
-          var list = await r.json();
-          if (!Array.isArray(list)) continue;
-          var now = Object.create(null);
-          for (var j = 0; j < list.length; j++) {
-            var id = String(list[j].id || "");
-            if (id && !window.__bxClosedIds[id]) now[id] = 1;
-          }
-          var prev = lastOpen[acct] || Object.create(null);
-          Object.keys(prev).forEach(function (id) {
-            if (!now[id]) injectClosed(id, acct);
-          });
-          lastOpen[acct] = now;
-        } catch (e) {}
-      }
-    }
-
-    var origAdd = ws.addEventListener.bind(ws);
-    ws.addEventListener = function (type, fn, opt) {
-      if (type === "message") {
-        ensureNative();
-        if (typeof fn === "function") msgFns.push(fn);
-        return;
-      }
-      return origAdd(type, fn, opt);
-    };
-
-    Object.defineProperty(ws, "onmessage", {
-      configurable: true,
-      enumerable: true,
-      get: function () {
-        return onMsg;
-      },
-      set: function (fn) {
-        ensureNative();
-        onMsg = fn;
-      },
-    });
-
-    var origSend = ws.send.bind(ws);
-    ws.send = function (data) {
-      try {
-        var m = typeof data === "string" ? JSON.parse(data) : null;
-        if (m && m.op === "watch_account" && m.accountId) {
-          accounts[m.accountId] = 1;
-          if (!pollTimer) pollTimer = setInterval(poll, 250);
-          poll();
+        if (typeof ev.data !== "string") return;
+        if (ev.data.indexOf('"t":"position"') === -1 && ev.data.indexOf('"t":"evts"') === -1) {
+          return;
         }
+        markFrame(JSON.parse(ev.data));
       } catch (e) {}
-      return origSend(data);
-    };
-
-    origAdd("close", function () {
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
     });
-
     return ws;
   }
 
