@@ -3267,6 +3267,31 @@ class StabilityProfile(models.Model):
         return obj
 
 
+class CashbackSettings(models.Model):
+    """Master switch for trader cashback. Off = no credits and portal menu hidden."""
+
+    enabled = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cashback_settings_updated",
+    )
+
+    class Meta:
+        db_table = "cashback_settings"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={"enabled": True})
+        return obj
+
+    def __str__(self) -> str:
+        return "enabled" if self.enabled else "disabled"
+
+
 class CashbackRate(models.Model):
     """USD cashback paid to the trader on a full close of this client alias symbol."""
 

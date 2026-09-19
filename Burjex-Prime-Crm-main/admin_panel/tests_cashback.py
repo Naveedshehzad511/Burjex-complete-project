@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import MT5Account
 from admin_panel.cashback import credit_cashback_on_close
-from admin_panel.models import CashbackPayout, CashbackRate
+from admin_panel.models import CashbackPayout, CashbackRate, CashbackSettings
 from transactions.models import Transaction
 
 User = get_user_model()
@@ -45,7 +45,7 @@ class CashbackCreditTests(TestCase):
         payout = CashbackPayout.objects.get(engine_trade_id="trade-abc")
         self.assertEqual(payout.user_id, self.client_user.id)
         self.assertEqual(payout.amount, Decimal("2.00"))
-        self.assertEqual(payout.alias, "XAUUSD.s")
+        self.assertEqual(payout.alias.lower(), "xauusd.s")
         tx = Transaction.objects.get(reference="CB_trade-abc")
         self.assertEqual(tx.tx_type, Transaction.TxType.CASHBACK)
         self.assertEqual(tx.to_user_id, self.client_user.id)
@@ -107,6 +107,18 @@ class CashbackCreditTests(TestCase):
         )
         self.assertEqual(ok["amount"], "1.00")
 
+    def test_disabled_skips_credit(self):
+        cfg = CashbackSettings.get_solo()
+        cfg.enabled = False
+        cfg.save(update_fields=["enabled"])
+        result = credit_cashback_on_close(
+            login="500001", engine_trade_id="t-off", alias="xauusd.s"
+        )
+        self.assertEqual(result["reason"], "disabled")
+        self.assertEqual(CashbackPayout.objects.count(), 0)
+        self.client_user.refresh_from_db()
+        self.assertEqual(self.client_user.wallet_balance, Decimal("0"))
+
 
 class CashbackHistoryApiTests(TestCase):
     def setUp(self):
@@ -125,16 +137,36 @@ class CashbackHistoryApiTests(TestCase):
             amount=Decimal("2.00"),
         )
         self.api = APIClient()
-
-    def test_history_lists_engine_trade_id_and_amount(self):
+        self.api.force_authenticate(user=self.user, token=self.token)
         self.api.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+    def test_history_lists_pair_date_and_amount_without_engine_id(self):
         resp = self.api.get("/api/v1/cashback/history/")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()["data"]
+        self.assertTrue(data["enabled"])
         self.assertEqual(data["total"], "2.00")
-        self.assertEqual(data["items"][0]["engine_trade_id"], "eng-1")
         self.assertEqual(data["items"][0]["amount"], "2.00")
         self.assertEqual(data["items"][0]["alias"], "xauusd.s")
+        self.assertIn("created_at", data["items"][0])
+        self.assertNotIn("engine_trade_id", data["items"][0])
+        self.assertNotIn("login_id", data["items"][0])
+
+    def test_history_period_today_and_disabled_flag(self):
+        resp = self.api.get("/api/v1/cashback/history/?period=today")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["data"]["period"], "today")
+        self.assertEqual(len(resp.json()["data"]["items"]), 1)
+        cfg = CashbackSettings.get_solo()
+        cfg.enabled = False
+        cfg.save(update_fields=["enabled"])
+        off = self.api.get("/api/v1/cashback/history/")
+        self.assertEqual(off.status_code, 200)
+        self.assertFalse(off.json()["data"]["enabled"])
+        self.assertEqual(off.json()["data"]["items"], [])
+        pub = self.api.get("/api/v1/cashback/settings/")
+        self.assertEqual(pub.status_code, 200)
+        self.assertFalse(pub.json()["data"]["enabled"])
 
 
 class CashbackAdminTests(TestCase):
@@ -149,17 +181,37 @@ class CashbackAdminTests(TestCase):
         self.client.force_login(self.admin)
 
     @patch("admin_panel.cashback_views.list_btrader_engine_symbols")
-    def test_admin_lists_aliases_and_saves_rate(self, mocked):
+    def test_admin_add_edit_delete_and_toggle(self, mocked):
         mocked.return_value = (["xauusd.s", "xauusd.c", "eurusd.n"], "")
         resp = self.client.get("/admin/cashback/")
         self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Enable")
+        self.assertContains(resp, "Disable")
+        self.assertContains(resp, "Add symbol")
         self.assertContains(resp, "xauusd.s")
         self.assertContains(resp, "Total cashback paid")
         self.assertContains(resp, "Top 5 clients")
+
+        resp = self.client.post("/admin/cashback/", {"action": "add", "alias": "BTCUSD.s", "amount": "1.25"})
+        self.assertEqual(resp.status_code, 302)
+        row = CashbackRate.objects.get(alias="BTCUSD.s")
+        self.assertEqual(row.amount_usd, Decimal("1.25"))
+
         resp = self.client.post(
             "/admin/cashback/",
-            {"alias": ["xauusd.s", "xauusd.c", "eurusd.n"], "amount": ["2", "1", "0.50"]},
+            {"action": "update", "rate_id": str(row.id), "alias": "BTCUSD.s", "amount": "2.50"},
         )
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(CashbackRate.objects.get(alias="xauusd.s").amount_usd, Decimal("2.00"))
-        self.assertEqual(CashbackRate.objects.get(alias="eurusd.n").amount_usd, Decimal("0.50"))
+        row.refresh_from_db()
+        self.assertEqual(row.amount_usd, Decimal("2.50"))
+
+        resp = self.client.post("/admin/cashback/", {"action": "delete", "rate_id": str(row.id)})
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(CashbackRate.objects.filter(alias="BTCUSD.s").exists())
+
+        resp = self.client.post("/admin/cashback/", {"action": "toggle", "enabled": "0"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(CashbackSettings.get_solo().enabled)
+        resp = self.client.post("/admin/cashback/", {"action": "toggle", "enabled": "1"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(CashbackSettings.get_solo().enabled)

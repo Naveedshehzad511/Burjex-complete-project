@@ -9,7 +9,35 @@
       <i class="fa-solid fa-coins" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-right: 0.5rem;"></i>
       Cashback
     </h1>
-    <p class="bp-page-subtitle">Set $ cashback per client alias from symbol groups. On a full trade close the trader is credited that amount (not an IB). Tracked by BTrader engine trade id.</p>
+    <p class="bp-page-subtitle">Enable or disable cashback, then add symbols and set the $ paid to the trader on a full close.</p>
+  </div>
+</div>
+
+<div class="bp-card mb-6">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title">
+      <i class="fa-solid fa-toggle-on bp-s-5"></i>
+      Enable / Disable
+    </span>
+  </div>
+  <div class="bp-card-body">
+    <form method="post" class="flex flex-wrap items-end gap-4">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="toggle">
+      <div>
+        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Cashback</label>
+        <select name="enabled" class="bp-input min-w-[180px]">
+          <option value="1" {% if cashback_enabled %}selected{% endif %}>Enable</option>
+          <option value="0" {% if not cashback_enabled %}selected{% endif %}>Disable</option>
+        </select>
+      </div>
+      <button type="submit" class="bp-btn btn-gradient font-bold">Save</button>
+    </form>
+    {% if cashback_enabled %}
+    <p class="bp-caption mt-3">Enabled. Clients see Cashback in the portal and get paid on trade close.</p>
+    {% else %}
+    <p class="bp-caption mt-3">Disabled. No cashback is credited and the Cashback menu is hidden for clients.</p>
+    {% endif %}
   </div>
 </div>
 
@@ -48,51 +76,91 @@
 </div>
 {% endif %}
 
+<div class="bp-card mb-6">
+  <div class="bp-card-header">
+    <span class="bp-card-header-title">
+      <i class="fa-solid fa-plus bp-s-5"></i>
+      Add symbol
+    </span>
+  </div>
+  <div class="bp-card-body">
+    <form method="post" class="flex flex-wrap items-end gap-3">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add">
+      <div>
+        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Symbol</label>
+        <input id="cb-add-alias" name="alias" type="text" maxlength="64" class="bp-input w-[200px]" placeholder="XAUUSD.s" required>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Cashback $</label>
+        <input name="amount" type="number" step="0.01" min="0" class="bp-input w-[140px]" value="0.00" required>
+      </div>
+      <button type="submit" class="bp-btn btn-gradient font-bold">Add symbol</button>
+    </form>
+    {% if suggested %}
+    <p class="bp-caption mt-3 mb-2">From symbol groups (click to fill):</p>
+    <div class="flex flex-wrap gap-2">
+      {% for s in suggested %}
+      <button type="button" class="bp-badge bp-badge-primary cursor-pointer" onclick="document.getElementById('cb-add-alias').value='{{ s|escapejs }}'">{{ s }}</button>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
 <div class="bp-card">
   <div class="bp-card-header">
     <span class="bp-card-header-title">
       <i class="fa-solid fa-tags bp-s-5"></i>
-      Alias rates (symbol groups)
+      Saved symbol rates
     </span>
   </div>
   <div class="bp-card-body">
-    <form method="post">
-      {% csrf_token %}
-      <div class="overflow-x-auto w-full">
-        <table class="bp-table min-w-full text-sm">
-          <thead>
-            <tr>
-              <th>Alias</th>
-              <th>Cashback $</th>
-            </tr>
-          </thead>
-          <tbody>
-          {% for r in rows %}
-            <tr>
-              <td class="font-bold">
-                <span class="bp-badge bp-badge-primary">{{ r.alias }}</span>
-                <input type="hidden" name="alias" value="{{ r.alias }}">
-              </td>
-              <td>
-                <input name="amount" type="number" step="0.01" min="0" class="bp-input w-[140px]" value="{{ r.amount }}">
-              </td>
-            </tr>
-          {% empty %}
-            <tr>
-              <td colspan="2" class="bp-s-118">
-                No client alias symbols found. Create aliases in Group Management / symbol groups (XAUUSD.s, not the feed name).
-              </td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% if rows %}
-      <div class="mt-4">
-        <button type="submit" class="bp-btn btn-gradient font-bold">Save rates</button>
-      </div>
-      {% endif %}
-    </form>
+    <div class="overflow-x-auto w-full">
+      <table class="bp-table min-w-full text-sm">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Cashback $</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in saved_rates %}
+          <tr>
+            <td>
+              <form id="cb-edit-{{ r.id }}" method="post" class="flex items-center gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update">
+                <input type="hidden" name="rate_id" value="{{ r.id }}">
+                <input name="alias" type="text" maxlength="64" class="bp-input w-[180px] font-bold" value="{{ r.alias }}">
+              </form>
+            </td>
+            <td>
+              <input form="cb-edit-{{ r.id }}" name="amount" type="number" step="0.01" min="0" class="bp-input w-[140px]" value="{{ r.amount_usd }}">
+            </td>
+            <td>
+              <div class="flex flex-wrap items-center gap-2">
+                <button form="cb-edit-{{ r.id }}" type="submit" class="bp-btn btn-gradient font-bold">Save</button>
+                <form method="post" onsubmit="return confirm('Delete cashback for {{ r.alias|escapejs }}?');">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="rate_id" value="{{ r.id }}">
+                  <button type="submit" class="bp-btn font-bold">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="3" class="bp-s-118">
+              No symbols saved yet. Use Add symbol above (you are not limited to the two group aliases).
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 {% endblock %}

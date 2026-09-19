@@ -125875,13 +125875,13 @@ r=l.d
 r=l.EK(A.b([l.fD("Deposit",new A.aIC(l)),l.fD("Withdraw",new A.aIN(l)),l.fD("Internal Transfer",new A.aIY(l)),l.fD("Transactions",new A.aJ2(l))],h),B.tZ,"My Fund",new A.aJ3(l),r)
 q=l.rC(0,B.jZ,"My Wallet",new A.aJ4(l))
 p=l.rC(0,B.S3,"KYC",new A.aJ5(l))
-cbk=l.rC(0,B.S3,"Cashback",new A.aJCb(l))
+cbk=window.__bxCashbackEnabled===false?null:l.rC(0,B.S3,"Cashback",new A.aJCb(l))
 o=l.e
 o=l.EK(A.b([l.fD("IB Dashboard",new A.aJ6(l)),l.fD("IB Progress",new A.aJ7(l)),l.fD("IB Request",new A.aID(l)),l.fD("My Clients",new A.aIE(l)),l.fD("My Commission",new A.aIF(l)),l.fD("IB Tree Chart",new A.aIG(l)),l.fD("IB Withdraw",new A.aIH(l)),l.fD("Team Deposits",new A.aII(l)),l.fD("Team Withdrawals",new A.aIJ(l))],h),B.RS,"IB Programme",new A.aIK(l),o)
 n=l.f
 n=l.EK(A.b([l.fD("Deposit Report",new A.aIL(l)),l.fD("Withdraw Report",new A.aIM(l)),l.fD("Internal Transfers",new A.aIO(l)),l.fD("Deal Report",new A.aIP(l)),l.fD("Summary Report",new A.aIQ(l))],h),B.RK,"My Data",new A.aIR(l),n)
 m=l.r
-m=A.bq(A.cR(A.b([s,r,q,p,cbk,o,n,l.EK(A.b([l.fD("Security / 2FA",new A.aIS(l)),l.fD("Account History",new A.aIT(l)),l.fD("Notifications",new A.aIU(l))],h),B.RW,"Account",new A.aIV(l),m),l.rC(0,B.RR,"Competition",new A.aIW(l)),l.rC(0,B.RM,"Trade And Win",new A.aIX(l)),l.rC(0,B.Sa,"News",new A.aIZ(l)),l.rC(0,B.RP,"Trading Platform",new A.aJ_(l)),l.rC(0,B.u_,"Legal Agreements",new A.aJ0(l))],h),B.PI,k,B.C,!1),1)
+m=A.bq(A.cR(A.b([s,r,q,p].concat(cbk?[cbk]:[]).concat([o,n,l.EK(A.b([l.fD("Security / 2FA",new A.aIS(l)),l.fD("Account History",new A.aIT(l)),l.fD("Notifications",new A.aIU(l))],h),B.RW,"Account",new A.aIV(l),m),l.rC(0,B.RR,"Competition",new A.aIW(l)),l.rC(0,B.RM,"Trade And Win",new A.aIX(l)),l.rC(0,B.Sa,"News",new A.aIZ(l)),l.rC(0,B.RP,"Trading Platform",new A.aJ_(l)),l.rC(0,B.u_,"Legal Agreements",new A.aJ0(l))]),h),B.PI,k,B.C,!1),1)
 n=A.bb(12)
 o=A.bb(12)
 return new A.Wt(B.i,i.a.a*0.86,A.f_(!0,A.aC(A.b([new A.ao(B.Qa,g,k),B.c0,m,new A.ao(B.Q9,A.dd(!1,n,!0,A.cb(k,A.aS(A.b([A.cb(k,B.Sl,B.o,k,k,new A.bY(B.M.cZ(0.1),k,k,A.bb(10),k,k,B.Q),k,40,k,k,k,k,40),B.pk,B.QJ,B.Sz],h),B.l,B.f,B.j,0),B.o,k,k,new A.bY(B.Lp,k,k,o,k,k,B.Q),k,k,k,B.jG,k,k,k),k,!0,k,k,k,k,k,k,k,k,new A.aJ1(l),k,k,k,k,k,k,k),k),new A.ao(B.PR,new A.b7(1/0,48,A.bcL(B.Sp,B.abu,l.a.c,A.bjx(k,k,k,k,k,k,k,k,k,k,k,k,k,k,new A.cM(A.bb(10),B.v),B.Hz,k,k,k,k)),k),k)],h),B.l,B.f,B.j),!0,!1,B.J,!0,!0),k)},
