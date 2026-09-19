@@ -16,7 +16,17 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import Redis from 'ioredis';
 import jwt from 'jsonwebtoken';
-import { Channels, Tick, WsFrame, CandleEvent } from '@btrader/shared';
+import {
+  Channels,
+  Tick,
+  WsFrame,
+  CandleEvent,
+  posIdOf,
+  payloadClosed,
+  forceClosed,
+  coalescePosition,
+  openPositionsRedisKey,
+} from '@btrader/shared';
 
 const PORT = Number(process.env.WS_PORT ?? 4101);
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6380';
@@ -80,31 +90,6 @@ const EVT_BATCH_MS = Number(process.env.WS_EVT_BATCH_MS ?? 50);
 const CLOSED_TTL_MS = Number(process.env.WS_CLOSED_TTL_MS ?? 10 * 60_000);
 const recentlyClosed = new Map<string, number>();
 
-function posIdOf(body: unknown): string {
-  const p = body as { id?: unknown; positionId?: unknown } | null;
-  return String(p?.id ?? p?.positionId ?? '');
-}
-
-function payloadClosed(obj: unknown): boolean {
-  if (!obj || typeof obj !== 'object') return false;
-  const p = obj as Record<string, unknown>;
-  const st = String(p.status ?? '').toUpperCase();
-  const book = String(p.book ?? '').toLowerCase();
-  const reason = String(p.reason ?? '').toUpperCase();
-  const stateVal = String(p.state ?? '').toLowerCase();
-  // A/B execution book is "A" / "B". "closed" here is publish_after_fill's
-  // fill-kind, not B-book. Do not treat execClaimKind sl/tp alone as closed
-  // — live OPEN snapshots must keep flowing. Claim events set closing:true.
-  return (
-    p.closing === true ||
-    st === 'CLOSED' ||
-    book === 'closed' ||
-    stateVal === 'closed' ||
-    reason === 'SL_HIT' ||
-    reason === 'TP_HIT'
-  );
-}
-
 function rememberClosed(id: string) {
   if (!id) return;
   recentlyClosed.set(id, Date.now() + CLOSED_TTL_MS);
@@ -127,28 +112,8 @@ function stillClosed(id: string): boolean {
   return true;
 }
 
-function forceClosed(body: unknown, id: string): Record<string, unknown> {
-  const prev = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
-  return {
-    ...prev,
-    id: prev.id ?? id,
-    positionId: prev.positionId ?? prev.id ?? id,
-    status: 'CLOSED',
-    book: 'closed',
-    closing: true,
-  };
-}
-
-function coalescePosition(prev: unknown, next: unknown): unknown {
-  const id = posIdOf(next) || posIdOf(prev);
-  if (!id) return next;
-  const nextClosed = payloadClosed(next);
-  const prevClosed = payloadClosed(prev);
-  if (nextClosed || stillClosed(id) || prevClosed) {
-    rememberClosed(id);
-    return forceClosed(nextClosed ? next : prevClosed ? prev : next, id);
-  }
-  return next;
+function mergePosition(prev: unknown, next: unknown): unknown {
+  return coalescePosition(prev, next, stillClosed, rememberClosed);
 }
 
 const clients = new Set<ClientState>();
@@ -212,16 +177,15 @@ const redis = new Redis(REDIS_URL);
 /// and dropping one loses the fill.
 function queueEvt(c: ClientState, kind: 'position' | 'account' | 'order', key: string, body: unknown) {
   if (kind === 'position') {
-    body = coalescePosition(c.wantsEvtBatch ? c.evtPos.get(key) : undefined, body);
+    body = mergePosition(c.wantsEvtBatch ? c.evtPos.get(key) : undefined, body);
     const id = posIdOf(body);
-    // Server CLOSED must hit Trade as `t:"position"` immediately. The portal
-    // paints REST open-rows and only refetches that list on a 120s timer; the
-    // 50ms `evts` batch is too easy to miss, and a later OPEN snapshot in the
-    // same map used to win. Never send d:null — forceClosed always has id.
+    // Actual CLOSED / position_closed must hit the client immediately as
+    // `t:"position"` (and `t:"position_closed"`) — bypass the 50ms evt batch.
     if (id && (payloadClosed(body) || stillClosed(id))) {
       rememberClosed(id);
       body = forceClosed(body, id);
       send(c.ws, { t: 'position', d: body } as WsFrame);
+      send(c.ws, { t: 'position_closed', d: body } as WsFrame);
       if (c.wantsEvtBatch) c.evtPos.delete(key);
       return;
     }
@@ -405,8 +369,9 @@ sub.on('pmessage', (_pattern, channel, message) => {
       ? {
           ...rawPosBody,
           book: isClosedOrSlTp ? 'closed' : rawPosBody.book || evt.book,
-          status: isClosedOrSlTp ? 'CLOSED' : rawPosBody.status || 'OPEN',
+          status: isClosedOrSlTp ? 'CLOSED' : rawPosBody.status || evt.position?.status || 'OPEN',
           closing: isClosedOrSlTp ? true : rawPosBody.closing || false,
+          event: isClosedOrSlTp ? 'position_closed' : rawPosBody.event || evt.event,
           reason: evt.reason || rawPosBody.reason,
         }
       : null;
@@ -483,6 +448,22 @@ wss.on('connection', (ws, req) => {
 function watchAccount(state: ClientState, accountId: string) {
   state.accountIds.add(accountId);
   indexAdd(byAccount, tkey(state.tenantId, accountId), state);
+  void pushOpenSnapshot(state, accountId);
+}
+
+async function pushOpenSnapshot(state: ClientState, accountId: string) {
+  try {
+    const raw = await redis.get(openPositionsRedisKey(state.tenantId, accountId));
+    if (raw == null) return;
+    const parsed = JSON.parse(raw) as { positions?: unknown };
+    const positions = Array.isArray(parsed?.positions) ? parsed.positions : [];
+    send(state.ws, {
+      t: 'positions',
+      d: { snapshot: true, accountId, positions },
+    } as WsFrame);
+  } catch {
+    /* live POSITION_UPDATE events still apply */
+  }
 }
 
 function attachClient(

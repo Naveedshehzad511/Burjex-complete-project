@@ -28,6 +28,7 @@ export 'src/indicators/compute.dart';
 export 'src/state/providers.dart';
 export 'src/state/live.dart';
 export 'src/state/chart.dart';
+export 'src/state/position_sync.dart';
 export 'src/state/indicators.dart';
 export 'src/state/drawings.dart';
 export 'src/state/ui.dart';

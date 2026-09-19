@@ -226,6 +226,32 @@ impl Engine {
         let _: Result<(), _> = r.publish::<_, _, ()>(ch, payload).await;
     }
 
+    /// Authoritative open-position snapshot for WS reconnect (no REST poll).
+    pub(crate) async fn redis_sync_open_positions(&self, tenant_id: &str, account_id: &str) {
+        let positions: Vec<serde_json::Value> = self
+            .book
+            .for_account(tenant_id, account_id)
+            .into_iter()
+            .map(|p| {
+                json!({
+                    "id": p.id,
+                    "accountId": p.account_id,
+                    "symbol": p.symbol,
+                    "side": p.side,
+                    "status": p.status,
+                    "volume": p.volume,
+                    "openPrice": p.open_price,
+                    "slPrice": p.sl_price,
+                    "tpPrice": p.tp_price,
+                })
+            })
+            .collect();
+        let key = format!("bt:{tenant_id}:openpos:{account_id}");
+        let payload = json!({ "v": 1, "positions": positions }).to_string();
+        let mut r = self.redis.lock().await;
+        let _: Result<(), _> = r.set::<_, _, ()>(key, payload).await;
+    }
+
     pub async fn crm_outbox(&self, tenant_id: &str, event_type: &str, payload: serde_json::Value) {
         let id = Uuid::new_v4().to_string();
         let _ = sqlx::query(
@@ -612,8 +638,11 @@ impl Engine {
             account_currency: account.currency.clone(),
             group_id: account.group_id.clone(),
             exec_claim_kind: None,
+            symbol: sym.symbol.clone(),
+            status: "OPEN".into(),
         });
-        self.publish_after_fill(tenant_id, &account.id, &position_id, "opened", &snap, None)
+        self.redis_sync_open_positions(tenant_id, &account.id).await;
+        self.publish_after_fill(tenant_id, &account.id, &position_id, "opened", &snap, None, None)
             .await;
 
         Ok(ExecResult {

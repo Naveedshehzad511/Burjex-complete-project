@@ -156,22 +156,15 @@ export async function sleepMs(ms: number): Promise<void> {
 }
 
 /** MARKET-mode delay in ms for a given apply-to kind (0 when Instant / not selected).
- * SL/TP and pending stops/limits never take MARKET delay — waiting left working
- * orders on screen while price printed through the level (esp. news). */
+ * Pending stops/limits still fill immediately on trigger. SL/TP use the group's
+ * executionDelayMs after the server tick claim (OPEN → CLOSE_PENDING → CLOSED). */
 export function marketExecutionDelayMs(
   pricing: Pick<GroupPricing, 'executionMode' | 'executionDelayMs' | 'executionApplyTo'> | null | undefined,
   kind: ExecutionApplyKind,
 ): number {
   if (!pricing) return 0;
   if ((pricing.executionMode ?? 'MARKET') !== 'MARKET') return 0;
-  if (
-    kind === 'sl' ||
-    kind === 'tp' ||
-    kind === 'buyStop' ||
-    kind === 'sellStop' ||
-    kind === 'buyLimit' ||
-    kind === 'sellLimit'
-  ) {
+  if (kind === 'buyStop' || kind === 'sellStop' || kind === 'buyLimit' || kind === 'sellLimit') {
     return 0;
   }
   if (!executionApplies(pricing.executionApplyTo, kind)) return 0;

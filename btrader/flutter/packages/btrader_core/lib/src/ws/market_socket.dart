@@ -45,6 +45,12 @@ class OrderFrame extends WsFrame {
   OrderFrame(this.data);
 }
 
+class PositionsSnapshotFrame extends WsFrame {
+  final String accountId;
+  final List<Map<String, dynamic>> positions;
+  PositionsSnapshotFrame({required this.accountId, required this.positions});
+}
+
 /// Resilient WebSocket client. Auto-reconnects with backoff, re-sends the
 /// subscription set on reconnect, and exposes a broadcast stream of frames.
 class MarketSocket {
@@ -58,8 +64,8 @@ class MarketSocket {
   final String wsUrl;
   final String? Function() getToken;
   final Future<void> Function()? onAuthExpired;
-  /// After a successful (re)connect + subscription replay. Used to REST-sync
-  /// orders/positions so a dropped socket cannot leave the UI on stale state.
+  /// After a successful (re)connect + subscription replay. Used to apply the
+  /// server open-position WS snapshot (not REST polling).
   final void Function()? onReconnected;
 
   WebSocketChannel? _ch;
@@ -167,6 +173,28 @@ class MarketSocket {
         _controller.add(AccountFrame(f['d']));
       case 'position':
         _controller.add(PositionFrame(f['d']));
+      case 'position_closed':
+        final d = f['d'];
+        if (d is Map) {
+          _controller.add(PositionFrame({
+            ...Map<String, dynamic>.from(d),
+            'status': 'CLOSED',
+            'closing': true,
+            'event': 'position_closed',
+          }));
+        }
+      case 'positions':
+        final d = f['d'];
+        if (d is Map) {
+          final rows = <Map<String, dynamic>>[];
+          for (final p in (d['positions'] as List? ?? const [])) {
+            if (p is Map) rows.add(Map<String, dynamic>.from(p));
+          }
+          _controller.add(PositionsSnapshotFrame(
+            accountId: '${d['accountId'] ?? ''}',
+            positions: rows,
+          ));
+        }
       case 'order':
         _controller.add(OrderFrame(f['d']));
       case 'evts':

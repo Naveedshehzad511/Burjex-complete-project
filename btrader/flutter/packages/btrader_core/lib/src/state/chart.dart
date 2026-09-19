@@ -7,20 +7,25 @@ import '../models/position.dart';
 import '../models/tick.dart';
 import 'providers.dart';
 import 'live.dart';
+import 'position_sync.dart';
 
 /// Open positions for the active account — used to overlay entry/SL/TP lines on
-/// the chart (MT5-style). Refreshed on demand.
+/// the chart (MT5-style). Prefers the WS open-position snapshot; REST is the
+/// first-paint fallback. Closed ids always win so a stale OPEN cannot resurrect.
 final openPositionsProvider = FutureProvider.autoDispose<List<Position>>((ref) async {
-  ref.watch(_chartTicker);
   final closed = ref.watch(closedPositionIdsProvider);
+  final snap = ref.watch(wsOpenPositionsProvider);
+  if (snap != null) {
+    return overlayPositions(snap, closed);
+  }
   final id = ref.watch(activeAccountIdProvider);
   if (id == null) return const <Position>[];
   final api = ref.watch(apiClientProvider);
   final data = await api.get('/positions', query: {'accountId': id, 'status': 'OPEN'}) as List;
-  return data
-      .map((e) => Position.fromJson(e as Map<String, dynamic>))
-      .where((p) => !closed.contains(p.id))
-      .toList();
+  return overlayPositions(
+    data.map((e) => Position.fromJson(e as Map<String, dynamic>)).toList(),
+    closed,
+  );
 });
 
 /// The user's selected chart timeframe. Persisted to disk (SharedPreferences)

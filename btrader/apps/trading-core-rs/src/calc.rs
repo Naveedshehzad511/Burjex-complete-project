@@ -113,14 +113,10 @@ pub fn market_execution_delay_ms(pricing: &GroupPricing, kind: &str) -> i32 {
     if pricing.execution_mode.to_ascii_uppercase() != "MARKET" {
         return 0;
     }
-    // Protective + pending triggers never wait. MARKET delay only left the chart
-    // printing through the level while the order stayed working — fatal in news.
-    // Delay still applies to discretionary market open / manual close / close-all.
+    // Pending stops/limits still fill immediately on trigger. SL/TP honour the
+    // current group's executionDelayMs after the authoritative tick claim.
     let k = kind.to_ascii_lowercase();
-    if matches!(
-        k.as_str(),
-        "sl" | "tp" | "buystop" | "sellstop" | "buylimit" | "selllimit"
-    ) {
+    if matches!(k.as_str(), "buystop" | "sellstop" | "buylimit" | "selllimit") {
         return 0;
     }
     if !execution_applies(&pricing.execution_apply_to, kind) {
@@ -429,14 +425,14 @@ mod tests {
             execution_apply_to: serde_json::json!({}),
             ..Default::default()
         };
-        assert_eq!(market_execution_delay_ms(&p, "sl"), 0);
-        assert_eq!(market_execution_delay_ms(&p, "tp"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "sl"), 80);
+        assert_eq!(market_execution_delay_ms(&p, "tp"), 80);
         assert_eq!(market_execution_delay_ms(&p, "marketBuy"), 80);
         assert_eq!(market_execution_delay_ms(&p, "buyStop"), 0);
     }
 
     #[test]
-    fn protective_and_pending_never_take_market_delay() {
+    fn sl_tp_take_group_execution_delay_pending_do_not() {
         let p = GroupPricing {
             execution_mode: "MARKET".into(),
             execution_delay_ms: 100,
@@ -446,8 +442,8 @@ mod tests {
             }),
             ..Default::default()
         };
-        assert_eq!(market_execution_delay_ms(&p, "sl"), 0);
-        assert_eq!(market_execution_delay_ms(&p, "tp"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "sl"), 100);
+        assert_eq!(market_execution_delay_ms(&p, "tp"), 100);
         assert_eq!(market_execution_delay_ms(&p, "buyStop"), 0);
         assert_eq!(market_execution_delay_ms(&p, "sellLimit"), 0);
         assert_eq!(market_execution_delay_ms(&p, "marketBuy"), 100);
