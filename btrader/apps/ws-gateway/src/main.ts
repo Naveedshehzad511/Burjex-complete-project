@@ -74,6 +74,84 @@ const TICK_BATCH_MS = Number(process.env.WS_TICK_BATCH_MS ?? 40);
 // position. Like TICK_BATCH_MS this batches, it never drops.
 const EVT_BATCH_MS = Number(process.env.WS_EVT_BATCH_MS ?? 50);
 
+/// Ids the engine has already closed (or claimed for SL/TP). A later OPEN
+/// snapshot in the same 50ms coalesce window — or on the next tick — must not
+/// resurrect them on the trader screen.
+const CLOSED_TTL_MS = Number(process.env.WS_CLOSED_TTL_MS ?? 10 * 60_000);
+const recentlyClosed = new Map<string, number>();
+
+function posIdOf(body: unknown): string {
+  const p = body as { id?: unknown; positionId?: unknown } | null;
+  return String(p?.id ?? p?.positionId ?? '');
+}
+
+function payloadClosed(obj: unknown): boolean {
+  if (!obj || typeof obj !== 'object') return false;
+  const p = obj as Record<string, unknown>;
+  const st = String(p.status ?? '').toUpperCase();
+  const book = String(p.book ?? '').toLowerCase();
+  const reason = String(p.reason ?? '').toUpperCase();
+  const kind = String(p.execClaimKind ?? '').toLowerCase();
+  const stateVal = String(p.state ?? '').toLowerCase();
+  return (
+    p.closing === true ||
+    st === 'CLOSED' ||
+    book === 'closed' ||
+    stateVal === 'closed' ||
+    reason === 'SL_HIT' ||
+    reason === 'TP_HIT' ||
+    kind === 'sl' ||
+    kind === 'tp'
+  );
+}
+
+function rememberClosed(id: string) {
+  if (!id) return;
+  recentlyClosed.set(id, Date.now() + CLOSED_TTL_MS);
+  if (recentlyClosed.size > 20_000) {
+    const now = Date.now();
+    for (const [k, exp] of recentlyClosed) {
+      if (exp <= now) recentlyClosed.delete(k);
+    }
+  }
+}
+
+function stillClosed(id: string): boolean {
+  if (!id) return false;
+  const exp = recentlyClosed.get(id);
+  if (exp == null) return false;
+  if (Date.now() > exp) {
+    recentlyClosed.delete(id);
+    return false;
+  }
+  return true;
+}
+
+function forceClosed(body: unknown, id: string): Record<string, unknown> {
+  const prev = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+  return {
+    ...prev,
+    id: prev.id ?? id,
+    positionId: prev.positionId ?? prev.id ?? id,
+    status: 'CLOSED',
+    book: 'closed',
+    closing: true,
+  };
+}
+
+function coalescePosition(prev: unknown, next: unknown): unknown {
+  const id = posIdOf(next) || posIdOf(prev);
+  if (payloadClosed(next) || stillClosed(id)) {
+    rememberClosed(id);
+    return forceClosed(next, id);
+  }
+  if (payloadClosed(prev)) {
+    rememberClosed(id);
+    return prev;
+  }
+  return next;
+}
+
 const clients = new Set<ClientState>();
 
 // ── Routing indexes ────────────────────────────────────────────────────────
@@ -134,13 +212,17 @@ const redis = new Redis(REDIS_URL);
 /// stale one first. Orders pass through unkeyed: each is a distinct transition
 /// and dropping one loses the fill.
 function queueEvt(c: ClientState, kind: 'position' | 'account' | 'order', key: string, body: unknown) {
+  if (kind === 'position') {
+    body = coalescePosition(c.wantsEvtBatch ? c.evtPos.get(key) : undefined, body);
+  }
   if (!c.wantsEvtBatch) {
-    // Old client: unchanged one-frame-per-event behaviour.
+    // Old client: one frame per event, but never resurrect a CLOSED ticket.
     send(c.ws, { t: kind, d: body } as WsFrame);
     return;
   }
-  if (kind === 'position') c.evtPos.set(key, body);
-  else if (kind === 'account') c.evtAcct.set(key, body);
+  if (kind === 'position') {
+    c.evtPos.set(key, body);
+  } else if (kind === 'account') c.evtAcct.set(key, body);
   else c.evtOrders.push(body);
 
   if (c.evtTimer === undefined) {
@@ -281,13 +363,8 @@ sub.on('pmessage', (_pattern, channel, message) => {
   if (kind === Channels.ENGINE_EVT) {
     const evt = JSON.parse(message);
 
-    // Check if position closure or SL/TP hit is triggered
-    const isClosedOrSlTp = 
-      evt.book === 'closed' || 
-      evt.status === 'CLOSED' || 
-      evt.reason === 'SL_HIT' || 
-      evt.reason === 'TP_HIT' ||
-      evt.closing === true;
+    // Nested `position` carries closing/SL/TP; top-level is used by close fills.
+    const isClosedOrSlTp = payloadClosed(evt) || payloadClosed(evt.position);
 
     // A position event arrives in one of two shapes. emitLiveUpdates sends a
     // full snapshot under `position`; open / close / modify send only ids at

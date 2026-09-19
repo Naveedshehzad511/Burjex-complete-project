@@ -82,6 +82,10 @@ impl PositionBook {
         self.where_id.insert(row.id.clone(), k);
     }
 
+    pub fn contains(&self, id: &str) -> bool {
+        self.where_id.contains_key(id)
+    }
+
     pub fn remove(&self, id: &str) {
         if let Some((_, k)) = self.where_id.remove(id) {
             if let Some(b) = self.buckets.get(&k) {

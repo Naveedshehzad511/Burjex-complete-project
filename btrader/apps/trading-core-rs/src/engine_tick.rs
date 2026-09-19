@@ -676,6 +676,14 @@ impl Engine {
                 + p.swap
                 + p.commission;
             self.profit_dirty.insert(p.id.clone(), profit);
+            // Claim / close can land while this loop awaits. Do not push OPEN
+            // after the ticket is already CLOSED on the server.
+            if p.exec_claim_kind.is_some()
+                || self.claims.has(&p.id)
+                || !self.book.contains(&p.id)
+            {
+                continue;
+            }
             self.emit(
                 tenant_id,
                 json!({
