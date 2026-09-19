@@ -57211,12 +57211,12 @@ n=s.h(e,"closing")===!0||o==="sl"||o==="tp"
 if((c==="CLOSED"||p==="closed"||n)&&d.length!==0){if(typeof self!=="undefined"){self.__bxClosedIds=self.__bxClosedIds||Object.create(null);self.__bxClosedIds[d]=1}try{b.b.ah(0,$.afm().gcd(),t._l).aeE(0,d)}catch(c){}s=b.a
 p=s.a
 if(p!=null)p.aB(0)
-s.a=A.cA(B.rY,new A.b9x(b.b))
+s.a=A.cA(new A.aV(0),new A.b9x(b.b))
 break A}if(d.length!==0&&typeof self!=="undefined"&&self.__bxClosedIds&&self.__bxClosedIds[d])break A
 if(J.c(s.h(e,"stale"),!0)){s=b.a
 p=s.a
 if(p!=null)p.aB(0)
-s.a=A.cA(B.rY,new A.b9x(b.b))
+s.a=A.cA(new A.aV(0),new A.b9x(b.b))
 break A}s=s.h(e,"symbol")
 d=A.f(s==null?"":s)
 c=d.length===0?a:J.t(b.b.ah(0,$.m4(),t.iS),d)
@@ -57224,7 +57224,7 @@ b.b.ah(0,$.afm().gcd(),t._l).aeD(0,e,c)
 break A}if(a0 instanceof A.Jt){s=b.a
 p=s.a
 if(p!=null)p.aB(0)
-s.a=A.cA(B.rY,new A.b9x(b.b))
+s.a=A.cA(new A.aV(0),new A.b9x(b.b))
 break A}break A}},
 $S:182}
 A.b9x.prototype={
@@ -59873,6 +59873,7 @@ case 2:B.b.fl(a2,new A.aZ8())
 break}q=r.gba().aG($.r3(),t.N)
 r=A.b([],t.p)
 for(p=a2.length,o=a0.w,n=a0.x,m=a0.c,l=a0.d,k=a0.e,j=a0.f,i=a0.r,h=J.V(l),g=q.length===0,f=0;f<a2.length;a2.length===p||(0,A.D)(a2),++f){e=a2[f]
+if(typeof self!=="undefined"&&self.__bxClosedIds&&self.__bxClosedIds[e.a])continue
 d=e.Q
 c=g?d:d+q
 b=A.b9T(e,j,m,l,k,i)

@@ -1,11 +1,12 @@
 # B-Trader — Flutter apps
 
-One Flutter codebase for both client-facing surfaces, sharing `btrader_core`.
+Flutter admin dashboard, sharing `btrader_core`. The live client portal is the
+static Trade+ bundle in `web/portal` (Home, Quotes, Chart, Trade, History) — not
+a rebuild of a Markets/Portfolio/Settings trader app.
 
 ```
 flutter/
 ├── packages/btrader_core/   shared: models, API (Dio), WebSocket, Riverpod state, Material 3 theme
-├── apps/trader/             mobile trader app (iOS + Android)
 └── apps/admin/              web admin dashboard (Flutter web)
 ```
 
@@ -19,17 +20,11 @@ color injected per tenant.
 dart pub global activate melos
 melos bootstrap                      # resolves all packages with local path overrides
 
-# Trader app (device/emulator)
-cd apps/trader && flutter run \
-  --dart-define=API_BASE=http://localhost:4100 \
-  --dart-define=WS_URL=ws://localhost:4101 \
-  --dart-define=TENANT=demo
-
 # Admin (web)
 cd apps/admin && flutter run -d chrome \
   --dart-define=API_BASE=http://localhost:4100 \
   --dart-define=WS_URL=ws://localhost:4101
 ```
 
-Talks to the existing B-Trader gateway API (`/v1`). Sign in with the seeded
-`trader@demofx.com / Trader123!` (trader) or an admin account.
+Talks to the existing B-Trader gateway API (`/v1`). Sign in with a
+TENANT_ADMIN / SUPER_ADMIN account.
