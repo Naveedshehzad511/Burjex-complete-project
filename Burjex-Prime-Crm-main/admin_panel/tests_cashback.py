@@ -82,11 +82,30 @@ class CashbackCreditTests(TestCase):
         self.assertEqual(missing["reason"], "no_rate")
         self.assertEqual(CashbackPayout.objects.count(), 0)
 
-    def test_eurusd_rate_matches(self):
+    def test_maps_feed_symbol_to_unique_alias_rate(self):
         result = credit_cashback_on_close(
-            login="500001", engine_trade_id="t-eur", alias="eurusd.n"
+            login="500001",
+            engine_trade_id="trade-feed",
+            alias="XAUUSD",
+            deal_id="deal-feed",
         )
-        self.assertEqual(result["amount"], "0.50")
+        self.assertTrue(result["credited"])
+        self.assertEqual(result["amount"], "2.00")
+        self.assertEqual(result["alias"], "xauusd.s")
+        payout = CashbackPayout.objects.get(engine_trade_id="trade-feed")
+        self.assertEqual(payout.alias, "xauusd.s")
+        self.assertEqual(payout.amount, Decimal("2.00"))
+
+    def test_ambiguous_aliases_need_suffix(self):
+        CashbackRate.objects.create(alias="xauusd.c", amount_usd=Decimal("1.00"))
+        missing = credit_cashback_on_close(
+            login="500001", engine_trade_id="t-ambig", alias="XAUUSD"
+        )
+        self.assertEqual(missing["reason"], "no_rate")
+        ok = credit_cashback_on_close(
+            login="500001", engine_trade_id="t-c", alias="xauusd.c"
+        )
+        self.assertEqual(ok["amount"], "1.00")
 
 
 class CashbackHistoryApiTests(TestCase):

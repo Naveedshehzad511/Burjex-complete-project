@@ -38,8 +38,74 @@ def _truthy(value) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "y"}
 
 
+def _alias_base(name: str) -> str:
+    raw = (name or "").strip()
+    if "." not in raw:
+        return raw.lower()
+    head, tail = raw.rsplit(".", 1)
+    if tail and tail.isalpha() and len(tail) <= 4:
+        return head.lower()
+    return raw.lower()
+
+
+def resolve_client_alias(engine_symbol: str) -> str:
+    """Map a close payload symbol (feed or alias) to the CRM alias rate key.
+
+    Matching may send XAUUSD while rates are on XAUUSD.s. Prefer an exact rate
+    row; otherwise a unique alias with the same base, then unique symbol-group
+    alias. Multiple aliases for the same base (xauusd.s vs .c) stay unmatched
+    unless the close already carried the alias.
+    """
+    name = (engine_symbol or "").strip()
+    if not name:
+        return name
+    exact = CashbackRate.objects.filter(alias__iexact=name).first()
+    if exact:
+        return exact.alias
+
+    base = _alias_base(name)
+    rate_hits = [
+        row.alias
+        for row in CashbackRate.objects.all()
+        if row.alias.lower() == name.lower() or _alias_base(row.alias) == base or row.alias.lower() == base
+    ]
+    uniq = []
+    seen = set()
+    for alias in rate_hits:
+        lk = alias.lower()
+        if lk in seen:
+            continue
+        seen.add(lk)
+        uniq.append(alias)
+    if len(uniq) == 1:
+        return uniq[0]
+
+    try:
+        from btrader_integration.services import list_btrader_alias_rows
+
+        aliases, lp_map, _err = list_btrader_alias_rows()
+    except Exception:
+        aliases, lp_map = [], {}
+    pack_hits = []
+    for alias in aliases:
+        lp = (lp_map.get(alias.lower()) or "").strip()
+        if alias.lower() == name.lower() or lp.lower() == name.lower() or _alias_base(alias) == base:
+            pack_hits.append(alias)
+    pack_uniq = []
+    seen = set()
+    for alias in pack_hits:
+        lk = alias.lower()
+        if lk in seen:
+            continue
+        seen.add(lk)
+        pack_uniq.append(alias)
+    if len(pack_uniq) == 1:
+        return pack_uniq[0]
+    return name
+
+
 def resolve_cashback_rate(alias: str) -> Decimal:
-    name = (alias or "").strip()
+    name = resolve_client_alias(alias)
     if not name:
         return _ZERO
     row = CashbackRate.objects.filter(alias__iexact=name).first()
@@ -82,6 +148,7 @@ def credit_cashback_on_close(
         return {"credited": False, "reason": "demo"}
 
     client = mt5.user
+    alias_s = resolve_client_alias(alias_s) or alias_s
     rate = resolve_cashback_rate(alias_s)
     if rate <= 0:
         return {"credited": False, "reason": "no_rate"}

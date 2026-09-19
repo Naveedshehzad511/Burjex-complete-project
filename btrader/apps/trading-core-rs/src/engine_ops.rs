@@ -453,6 +453,52 @@ impl Engine {
             .collect()
     }
 
+    /// Client alias from the account's symbol-group pack (XAUUSD.s), else the engine symbol.
+    pub(crate) async fn client_alias(&self, group_id: Option<&str>, symbol: &str) -> String {
+        let Some(gid) = group_id else {
+            return symbol.to_string();
+        };
+        if symbol.is_empty() {
+            return symbol.to_string();
+        }
+        if let Ok(Some(row)) = sqlx::query(
+            r#"SELECT i."clientSymbol"
+               FROM trading_groups g
+               JOIN client_symbol_group_items i ON i."groupId" = g."clientSymbolGroupId"
+               WHERE g.id=$1 AND i.enabled=true
+                 AND (i."lpSymbol"=$2 OR i."clientSymbol"=$2)
+               LIMIT 1"#,
+        )
+        .bind(gid)
+        .bind(symbol)
+        .fetch_optional(&self.pool)
+        .await
+        {
+            let alias: String = row.try_get("clientSymbol").unwrap_or_default();
+            if !alias.is_empty() {
+                return alias;
+            }
+        }
+        if let Ok(Some(row)) = sqlx::query(
+            r#"SELECT "clientSymbol"
+               FROM trading_group_symbol_mappings
+               WHERE "tradingGroupId"=$1 AND enabled=true
+                 AND ("lpSymbol"=$2 OR "clientSymbol"=$2)
+               LIMIT 1"#,
+        )
+        .bind(gid)
+        .bind(symbol)
+        .fetch_optional(&self.pool)
+        .await
+        {
+            let alias: String = row.try_get("clientSymbol").unwrap_or_default();
+            if !alias.is_empty() {
+                return alias;
+            }
+        }
+        symbol.to_string()
+    }
+
     pub(crate) async fn publish_after_fill(
         &self,
         tenant_id: &str,

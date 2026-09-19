@@ -560,6 +560,7 @@ impl Engine {
             floating_pl: after.floating_pl,
             ts: now_ms(),
         };
+        let alias = self.client_alias(group_id.as_deref(), &symbol).await;
         self.publish_after_fill(
             &tenant_id,
             &account_id,
@@ -568,7 +569,7 @@ impl Engine {
             &snap,
             Some(realized),
             Some(json!({
-                "symbol": symbol,
+                "symbol": alias,
                 "volume": vol,
                 "dealId": deal_id,
                 "tradeId": position_id,

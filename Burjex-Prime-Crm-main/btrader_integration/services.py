@@ -105,20 +105,29 @@ def test_btrader_connection(
 
 
 def list_btrader_engine_symbols() -> tuple[list[str], str]:
-    """Enabled BTrader engine symbols the broker created (XAUUSD.s), not raw feed names."""
+    """Enabled BTrader client aliases from symbol groups (XAUUSD.s), not raw feed names."""
+    names, _lp_map, err = list_btrader_alias_rows()
+    return names, err
+
+
+def list_btrader_alias_rows() -> tuple[list[str], dict[str, str], str]:
+    """Return (aliases, alias_lower -> lp/feed symbol, error)."""
     if not is_btrader_configured():
-        return [], "BTrader integration is not configured."
+        return [], {}, "BTrader integration is not configured."
     try:
         client = _client_from_settings()
         rows = client.list_symbols()
         names: list[str] = []
+        lp_map: dict[str, str] = {}
         seen: set[str] = set()
         for row in rows:
             name = ""
+            lp = ""
             if isinstance(row, str):
                 name = row.strip()
             elif isinstance(row, dict):
-                name = str(row.get("symbol") or row.get("name") or "").strip()
+                name = str(row.get("symbol") or row.get("name") or row.get("clientSymbol") or "").strip()
+                lp = str(row.get("lpSymbol") or row.get("lp_symbol") or "").strip()
             if not name:
                 continue
             key = name.upper()
@@ -126,10 +135,12 @@ def list_btrader_engine_symbols() -> tuple[list[str], str]:
                 continue
             seen.add(key)
             names.append(name)
-        return names, ""
+            if lp:
+                lp_map[name.lower()] = lp
+        return names, lp_map, ""
     except Exception as exc:
         logger.warning("BTrader engine symbol list failed: %s", exc)
-        return [], str(exc)[:250]
+        return [], {}, str(exc)[:250]
 
 
 def fetch_btrader_groups() -> tuple[bool, list[str]]:
