@@ -281,25 +281,44 @@ sub.on('pmessage', (_pattern, channel, message) => {
   if (kind === Channels.ENGINE_EVT) {
     const evt = JSON.parse(message);
 
+    // Check if position closure or SL/TP hit is triggered
+    const isClosedOrSlTp = 
+      evt.book === 'closed' || 
+      evt.status === 'CLOSED' || 
+      evt.reason === 'SL_HIT' || 
+      evt.reason === 'TP_HIT' ||
+      evt.closing === true;
+
     // A position event arrives in one of two shapes. emitLiveUpdates sends a
     // full snapshot under `position`; open / close / modify send only ids at
     // the top level. This used to require `evt.position`, so every one of the
     // second kind was silently dropped - a closed position simply stopped
     // updating on the client and sat there stale, because the close never
     // arrived. Route on whichever carries the account.
-    const posBody =
+    let rawPosBody =
       evt.kind === 'POSITION_UPDATE'
         ? evt.position ??
           (evt.accountId
             ? {
                 id: evt.positionId,
                 accountId: evt.accountId,
-                status: evt.book === 'closed' ? 'CLOSED' : undefined,
-                book: evt.book,
-                stale: evt.book !== 'closed' && !evt.position,
+                status: isClosedOrSlTp ? 'CLOSED' : undefined,
+                book: isClosedOrSlTp ? 'closed' : evt.book,
+                closing: isClosedOrSlTp,
+                stale: !isClosedOrSlTp && !evt.position,
               }
             : null)
         : null;
+
+    // Ensure closing flags and status are properly enforced on rawPosBody if it exists
+    const posBody = rawPosBody ? {
+      ...rawPosBody,
+      book: isClosedOrSlTp ? 'closed' : (rawPosBody.book || 'open'),
+      status: isClosedOrSlTp ? 'CLOSED' : (rawPosBody.status || 'OPEN'),
+      closing: isClosedOrSlTp ? true : (rawPosBody.closing || false),
+      reason: evt.reason || rawPosBody.reason,
+    } : null;
+
     const posAccount = posBody?.accountId;
 
     // Each branch touches only the clients watching that one account.
