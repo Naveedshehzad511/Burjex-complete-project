@@ -213,6 +213,18 @@ const redis = new Redis(REDIS_URL);
 function queueEvt(c: ClientState, kind: 'position' | 'account' | 'order', key: string, body: unknown) {
   if (kind === 'position') {
     body = coalescePosition(c.wantsEvtBatch ? c.evtPos.get(key) : undefined, body);
+    const id = posIdOf(body);
+    // Server CLOSED must hit Trade as `t:"position"` immediately. The portal
+    // paints REST open-rows and only refetches that list on a 120s timer; the
+    // 50ms `evts` batch is too easy to miss, and a later OPEN snapshot in the
+    // same map used to win. Never send d:null — forceClosed always has id.
+    if (id && (payloadClosed(body) || stillClosed(id))) {
+      rememberClosed(id);
+      body = forceClosed(body, id);
+      send(c.ws, { t: 'position', d: body } as WsFrame);
+      if (c.wantsEvtBatch) c.evtPos.delete(key);
+      return;
+    }
   }
   if (!c.wantsEvtBatch) {
     // Old client: one frame per event, but never resurrect a CLOSED ticket.
