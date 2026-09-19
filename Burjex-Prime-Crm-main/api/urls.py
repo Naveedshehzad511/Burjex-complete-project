@@ -43,7 +43,7 @@ from api.views.ib import (
 )
 from api.views.internal_transfer import InternalTransferAPIView
 from api.views.kyc import KYCStatusAPIView, KYCUploadAPIView
-from api.views.cashback import ClientCashbackHistoryAPIView
+from api.views.cashback import ClientCashbackHistoryAPIView, ClientCashbackSettingsAPIView
 from api.views.account_deletion import AccountDeletionAPIView
 from api.views.me import MeAPIView, MeRestrictionsAPIView, SecurityTotpSetupAPIView
 from api.views.notifications import ClientNotificationMarkReadAPIView, ClientNotificationsAPIView
@@ -147,6 +147,7 @@ urlpatterns = [
     # KYC
     path("kyc/status/", KYCStatusAPIView.as_view(), name="kyc-status"),
     path("kyc/upload/", KYCUploadAPIView.as_view(), name="kyc-upload"),
+    path("cashback/settings/", ClientCashbackSettingsAPIView.as_view(), name="cashback-settings"),
     path("cashback/history/", ClientCashbackHistoryAPIView.as_view(), name="cashback-history"),
     # IB
     path("ib/dashboard/", IBDashboardAPIView.as_view(), name="ib-dashboard"),

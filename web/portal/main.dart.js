@@ -68855,6 +68855,7 @@ awO(a,b){var s,r,q,p,o,n,m,l=this,k=null,j=l.a.fx,i=A.bC(a,B.iG),h=i==null?k:i.e
 if(h==null)h=B.az
 if(j!==B.cU)s=j===B.pz&&h===B.an
 else s=!0
+try{window.__bxPortalDark=!!s}catch(a0){}
 i=A.bC(a,B.GL)
 i=i==null?k:i.as
 r=i===!0
@@ -117717,6 +117718,10 @@ $S:823}
 A.ah6.prototype={
 $1(a){return B.a1I},
 $S:144}
+A.ahCb=function ahCb(){}
+A.ahCb.prototype={
+$1(a){return B.a1Cb},
+$S:144}
 A.ah7.prototype={
 $1(a){return B.a1K},
 $S:144}
@@ -122980,6 +122985,7 @@ $0(){return this.a.z=this.b},
 $S:0}
 A.t9.prototype={
 F(a){var s=null,r=this.c
+if(r==="Cashback")return A.hz(A.iY(s,s,!0,B.i,s,s,0,B.aR,s,s,s,A.B(r,s,s,s,s,B.aD,s,s,s),s),B.cI,B.ak,s,s,s,s)
 return A.hz(A.iY(s,s,!0,B.i,s,s,0,B.aR,s,s,s,A.B(r,s,s,s,s,B.aD,s,s,s),s),B.cI,A.e6(new A.ao(B.em,A.aC(A.b([B.SI,B.at,A.B(r,s,s,s,s,B.FY,B.ap,s,s),B.a0,A.B(this.d,s,s,s,s,B.a6O,B.ap,s,s)],t.p),B.l,B.f,B.L),s),s,s),s,s,s,s)}}
 A.wT.prototype={
 T(){var s=A.df()
@@ -125875,13 +125881,13 @@ r=l.d
 r=l.EK(A.b([l.fD("Deposit",new A.aIC(l)),l.fD("Withdraw",new A.aIN(l)),l.fD("Internal Transfer",new A.aIY(l)),l.fD("Transactions",new A.aJ2(l))],h),B.tZ,"My Fund",new A.aJ3(l),r)
 q=l.rC(0,B.jZ,"My Wallet",new A.aJ4(l))
 p=l.rC(0,B.S3,"KYC",new A.aJ5(l))
-cbk=l.rC(0,B.S3,"Cashback",new A.aJCb(l))
+cbk=window.__bxCashbackEnabled===false?null:l.rC(0,B.cbk,"Cashback",new A.aJCb(l))
 o=l.e
 o=l.EK(A.b([l.fD("IB Dashboard",new A.aJ6(l)),l.fD("IB Progress",new A.aJ7(l)),l.fD("IB Request",new A.aID(l)),l.fD("My Clients",new A.aIE(l)),l.fD("My Commission",new A.aIF(l)),l.fD("IB Tree Chart",new A.aIG(l)),l.fD("IB Withdraw",new A.aIH(l)),l.fD("Team Deposits",new A.aII(l)),l.fD("Team Withdrawals",new A.aIJ(l))],h),B.RS,"IB Programme",new A.aIK(l),o)
 n=l.f
 n=l.EK(A.b([l.fD("Deposit Report",new A.aIL(l)),l.fD("Withdraw Report",new A.aIM(l)),l.fD("Internal Transfers",new A.aIO(l)),l.fD("Deal Report",new A.aIP(l)),l.fD("Summary Report",new A.aIQ(l))],h),B.RK,"My Data",new A.aIR(l),n)
 m=l.r
-m=A.bq(A.cR(A.b([s,r,q,p,cbk,o,n,l.EK(A.b([l.fD("Security / 2FA",new A.aIS(l)),l.fD("Account History",new A.aIT(l)),l.fD("Notifications",new A.aIU(l))],h),B.RW,"Account",new A.aIV(l),m),l.rC(0,B.RR,"Competition",new A.aIW(l)),l.rC(0,B.RM,"Trade And Win",new A.aIX(l)),l.rC(0,B.Sa,"News",new A.aIZ(l)),l.rC(0,B.RP,"Trading Platform",new A.aJ_(l)),l.rC(0,B.u_,"Legal Agreements",new A.aJ0(l))],h),B.PI,k,B.C,!1),1)
+m=A.bq(A.cR(A.b([s,r,q,p].concat(cbk?[cbk]:[]).concat([o,n,l.rC(0,B.RR,"Competition",new A.aIW(l)),l.rC(0,B.RM,"Trade And Win",new A.aIX(l)),l.rC(0,B.u_,"Legal Agreements",new A.aJ0(l))]),h),B.PI,k,B.C,!1),1)
 n=A.bb(12)
 o=A.bb(12)
 return new A.Wt(B.i,i.a.a*0.86,A.f_(!0,A.aC(A.b([new A.ao(B.Qa,g,k),B.c0,m,new A.ao(B.Q9,A.dd(!1,n,!0,A.cb(k,A.aS(A.b([A.cb(k,B.Sl,B.o,k,k,new A.bY(B.M.cZ(0.1),k,k,A.bb(10),k,k,B.Q),k,40,k,k,k,k,40),B.pk,B.QJ,B.Sz],h),B.l,B.f,B.j,0),B.o,k,k,new A.bY(B.Lp,k,k,o,k,k,B.Q),k,k,k,B.jG,k,k,k),k,!0,k,k,k,k,k,k,k,k,new A.aJ1(l),k,k,k,k,k,k,k),k),new A.ao(B.PR,new A.b7(1/0,48,A.bcL(B.Sp,B.abu,l.a.c,A.bjx(k,k,k,k,k,k,k,k,k,k,k,k,k,k,new A.cM(A.bb(10),B.v),B.Hz,k,k,k,k)),k),k)],h),B.l,B.f,B.j),!0,!1,B.J,!0,!0),k)},
@@ -135649,6 +135655,7 @@ B.RW=new A.aP(61868,"MaterialIcons",!1)
 B.RX=new A.aP(62056,"MaterialIcons",!1)
 B.S2=new A.aP(62538,"MaterialIcons",!1)
 B.S3=new A.aP(62589,"MaterialIcons",!1)
+B.cbk=new A.aP(61917,"MaterialIcons",!1)
 B.S4=new A.aP(62624,"MaterialIcons",!1)
 B.u1=new A.aP(62625,"MaterialIcons",!1)
 B.u2=new A.aP(983412,"MaterialIcons",!0)
@@ -137466,6 +137473,7 @@ B.fN=new A.t7(4,"bottom")
 B.DR=new A.t7(5,"middle")
 B.a1H=new A.BE(B.T,B.fN,null,null)
 B.a1I=new A.t9("Competition","Same as CRM web \u2014 placeholder until admin enables it.",null)
+B.a1Cb=new A.t9("Cashback","",null)
 B.a1J=new A.t9("News","Same as CRM web \u2014 placeholder until content API is enabled.",null)
 B.a1K=new A.t9("Trade And Win","Same as CRM web \u2014 placeholder until promotions API is enabled.",null)
 B.ic=new A.x3(0,"stopped")
@@ -139422,7 +139430,7 @@ return q})
 s($,"bOf","bs3",()=>new A.axL(A.C(t.N,A.aB("a6<ed?>?(ed?)"))))
 s($,"bIf","boU",()=>A.bvF(null,t.uK))
 s($,"bHi","boz",()=>A.ac(["/",new A.ahf(),"/login",new A.ahg(),"/signup",new A.ahh(),"/forgot-password",new A.ahi(),"/legal",new A.ahj()],t.N,A.aB("d(A)")))
-s($,"bHh","boy",()=>A.ac(["/dashboard",new A.agG(),"/quotes",new A.agH(),"/chart",new A.agI(),"/trade",new A.agT(),"/history",new A.ah3(),"/open-account",new A.ah9(),"/wallet",new A.aha(),"/deposit",new A.ahb(),"/withdraw",new A.ahc(),"/transfer",new A.ahd(),"/transactions",new A.ahe(),"/compliance",new A.agJ(),"/cashback",new A.ah6(),"/ib",new A.agK(),"/ib-progress",new A.agL(),"/ib-clients",new A.agM(),"/ib-commission",new A.agN(),"/ib-tree",new A.agO(),"/ib-withdraw",new A.agP(),"/team-deposits",new A.agQ(),"/team-withdrawals",new A.agR(),"/my-data",new A.agS(),"/security",new A.agU(),"/delete-account",new A.agV(),"/documents",new A.agW(),"/deposit-report",new A.agX(),"/withdraw-report",new A.agY(),"/transfer-report",new A.agZ(),"/deal-report",new A.ah_(),"/summary-report",new A.ah0(),"/accounts-history",new A.ah1(),"/notifications",new A.ah2(),"/support",new A.ah4(),"/trading-platform",new A.ah5(),"/competition",new A.ah6(),"/trade-and-win",new A.ah7(),"/news",new A.ah8()],t.N,A.aB("d(A)")))
+s($,"bHh","boy",()=>A.ac(["/dashboard",new A.agG(),"/quotes",new A.agH(),"/chart",new A.agI(),"/trade",new A.agT(),"/history",new A.ah3(),"/open-account",new A.ah9(),"/wallet",new A.aha(),"/deposit",new A.ahb(),"/withdraw",new A.ahc(),"/transfer",new A.ahd(),"/transactions",new A.ahe(),"/compliance",new A.agJ(),"/cashback",new A.ahCb(),"/ib",new A.agK(),"/ib-progress",new A.agL(),"/ib-clients",new A.agM(),"/ib-commission",new A.agN(),"/ib-tree",new A.agO(),"/ib-withdraw",new A.agP(),"/team-deposits",new A.agQ(),"/team-withdrawals",new A.agR(),"/my-data",new A.agS(),"/security",new A.agU(),"/delete-account",new A.agV(),"/documents",new A.agW(),"/deposit-report",new A.agX(),"/withdraw-report",new A.agY(),"/transfer-report",new A.agZ(),"/deal-report",new A.ah_(),"/summary-report",new A.ah0(),"/accounts-history",new A.ah1(),"/notifications",new A.ah2(),"/support",new A.ah4(),"/trading-platform",new A.ah5(),"/competition",new A.ah6(),"/trade-and-win",new A.ah7(),"/news",new A.ah8()],t.N,A.aB("d(A)")))
 s($,"bHj","boA",()=>{var q,p,o=A.eM($.boz(),t.N,A.aB("d(A)"))
 for(q=$.boy().giy(0).ga6(0);q.q();){p=q.gJ(0)
 o.n(0,p.a,new A.ahk(p))}return o})

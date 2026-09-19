@@ -12,7 +12,7 @@ from django.db import IntegrityError, transaction as db_transaction
 from django.db.models import F
 
 from accounts.models import MT5Account, User
-from admin_panel.models import CashbackPayout, CashbackRate
+from admin_panel.models import CashbackPayout, CashbackRate, CashbackSettings
 from transactions.models import Transaction
 
 logger = logging.getLogger(__name__)
@@ -104,6 +104,14 @@ def resolve_client_alias(engine_symbol: str) -> str:
     return name
 
 
+def cashback_is_enabled() -> bool:
+    try:
+        return bool(CashbackSettings.get_solo().enabled)
+    except Exception:
+        logger.exception("Cashback settings read failed")
+        return True
+
+
 def resolve_cashback_rate(alias: str) -> Decimal:
     name = resolve_client_alias(alias)
     if not name:
@@ -137,6 +145,8 @@ def credit_cashback_on_close(
         return {"credited": False, "reason": "missing_fields"}
     if _truthy(partial):
         return {"credited": False, "reason": "partial"}
+    if not cashback_is_enabled():
+        return {"credited": False, "reason": "disabled"}
 
     if CashbackPayout.objects.filter(engine_trade_id=trade_s).exists():
         return {"credited": False, "reason": "duplicate"}
