@@ -7,7 +7,8 @@ a rebuild of a Markets/Portfolio/Settings trader app.
 ```
 flutter/
 ├── packages/btrader_core/   shared: models, API (Dio), WebSocket, Riverpod state, Material 3 theme
-└── apps/admin/              web admin dashboard (Flutter web)
+├── apps/admin/              web admin dashboard (Flutter web)
+└── apps/portal/             Android APK for the live Trade+ portal (Home/Quotes/Chart/Trade/History)
 ```
 
 Stack: **Riverpod** (state), **go_router** (navigation), **Dio** (HTTP + JWT refresh),
