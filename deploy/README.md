@@ -254,15 +254,11 @@ flutter build web --release \
   --dart-define=WS_URL=wss://ws.burjexprime.com
 rsync -avz --delete build/web/ root@<server-ip>:/opt/burjex/web/admin/
 
-# B-Trader web trader (optional)
-cd ../trader
-flutter build web --release \
-  --dart-define=API_BASE=https://api.burjexprime.com \
-  --dart-define=WS_URL=wss://ws.burjexprime.com
-rsync -avz --delete build/web/ root@<server-ip>:/opt/burjex/web/trader/
+# Do not rebuild or rsync a Markets/Portfolio/Settings trader app onto web/portal.
+# Client portal is the static Trade+ bundle already in web/portal.
 ```
 
-Create the directories once with `mkdir -p /opt/burjex/web/{admin,trader}` before
+Create the directory once with `mkdir -p /opt/burjex/web/admin` before
 the first rsync.
 
 ## 10. Mobile APKs
@@ -284,21 +280,11 @@ flutter build apk --release \
 # build/app/outputs/flutter-apk/app-release.apk
 ```
 
-**B-Trader standalone trader app:**
-
-```bash
-cd btrader/flutter/apps/trader
-flutter build apk --release \
-  --dart-define=API_BASE=https://api.burjexprime.com \
-  --dart-define=WS_URL=wss://ws.burjexprime.com \
-  --dart-define=TENANT=burjex
-```
+The Markets/Portfolio/Settings Flutter trader app was removed. Do not ship that APK.
+The live client UI is `web/portal` (Home, Quotes, Chart, Trade, History).
 
 `WS_URL` has **no path and no trailing slash** — `MarketSocket` appends
 `?token=…` directly.
-
-For an app-store build prefer `--dart-define-from-file=config/prod.json`, the
-pattern the existing B-Trader deploy docs use.
 
 ---
 
