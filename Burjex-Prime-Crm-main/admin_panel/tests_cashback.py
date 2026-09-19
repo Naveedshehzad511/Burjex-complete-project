@@ -6,9 +6,9 @@ from django.contrib.auth import get_user_model
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from accounts.models import MT5Account
+from accounts.models import MT5Account, MT5Group
 from admin_panel.cashback import credit_cashback_on_close
-from admin_panel.models import CashbackPayout, CashbackRate, CashbackSettings
+from admin_panel.models import CashbackPayout, CashbackRate, CashbackSettings, CrmGroupSymbol
 from transactions.models import Transaction
 
 User = get_user_model()
@@ -183,14 +183,24 @@ class CashbackAdminTests(TestCase):
     @patch("admin_panel.cashback_views.list_btrader_engine_symbols")
     def test_admin_add_edit_delete_and_toggle(self, mocked):
         mocked.return_value = (["xauusd.s", "xauusd.c", "eurusd.n"], "")
+        grp = MT5Group.objects.create(name="cb-std", crm_group_name="Standard", platform=MT5Group.BrokerPlatform.BTRADER)
+        CrmGroupSymbol.objects.create(mt5_group=grp, symbol_name="GBPUSD.s")
         resp = self.client.get("/admin/cashback/")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Enable")
         self.assertContains(resp, "Disable")
         self.assertContains(resp, "Add symbol")
+        self.assertContains(resp, "Select symbol")
+        self.assertContains(resp, "<select")
         self.assertContains(resp, "xauusd.s")
+        self.assertContains(resp, "GBPUSD.s")
         self.assertContains(resp, "Total cashback paid")
         self.assertContains(resp, "Top 5 clients")
+
+        CashbackRate.objects.create(alias="xauusd.s", amount_usd=Decimal("2.00"))
+        resp = self.client.get("/admin/cashback/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'value="xauusd.s"')
 
         resp = self.client.post("/admin/cashback/", {"action": "add", "alias": "BTCUSD.s", "amount": "1.25"})
         self.assertEqual(resp.status_code, 302)

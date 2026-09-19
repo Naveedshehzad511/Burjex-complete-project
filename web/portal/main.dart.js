@@ -68855,6 +68855,7 @@ awO(a,b){var s,r,q,p,o,n,m,l=this,k=null,j=l.a.fx,i=A.bC(a,B.iG),h=i==null?k:i.e
 if(h==null)h=B.az
 if(j!==B.cU)s=j===B.pz&&h===B.an
 else s=!0
+try{window.__bxPortalDark=!!s}catch(a0){}
 i=A.bC(a,B.GL)
 i=i==null?k:i.as
 r=i===!0
@@ -125875,7 +125876,7 @@ r=l.d
 r=l.EK(A.b([l.fD("Deposit",new A.aIC(l)),l.fD("Withdraw",new A.aIN(l)),l.fD("Internal Transfer",new A.aIY(l)),l.fD("Transactions",new A.aJ2(l))],h),B.tZ,"My Fund",new A.aJ3(l),r)
 q=l.rC(0,B.jZ,"My Wallet",new A.aJ4(l))
 p=l.rC(0,B.S3,"KYC",new A.aJ5(l))
-cbk=window.__bxCashbackEnabled===false?null:l.rC(0,B.S3,"Cashback",new A.aJCb(l))
+cbk=window.__bxCashbackEnabled===false?null:l.rC(0,B.cbk,"Cashback",new A.aJCb(l))
 o=l.e
 o=l.EK(A.b([l.fD("IB Dashboard",new A.aJ6(l)),l.fD("IB Progress",new A.aJ7(l)),l.fD("IB Request",new A.aID(l)),l.fD("My Clients",new A.aIE(l)),l.fD("My Commission",new A.aIF(l)),l.fD("IB Tree Chart",new A.aIG(l)),l.fD("IB Withdraw",new A.aIH(l)),l.fD("Team Deposits",new A.aII(l)),l.fD("Team Withdrawals",new A.aIJ(l))],h),B.RS,"IB Programme",new A.aIK(l),o)
 n=l.f
@@ -135649,6 +135650,7 @@ B.RW=new A.aP(61868,"MaterialIcons",!1)
 B.RX=new A.aP(62056,"MaterialIcons",!1)
 B.S2=new A.aP(62538,"MaterialIcons",!1)
 B.S3=new A.aP(62589,"MaterialIcons",!1)
+B.cbk=new A.aP(61917,"MaterialIcons",!1)
 B.S4=new A.aP(62624,"MaterialIcons",!1)
 B.u1=new A.aP(62625,"MaterialIcons",!1)
 B.u2=new A.aP(983412,"MaterialIcons",!0)

@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
 from accounts.permissions import role_required
-from admin_panel.models import CashbackPayout, CashbackRate, CashbackSettings
+from admin_panel.models import CashbackPayout, CashbackRate, CashbackSettings, CrmGroupSymbol
 from btrader_integration.services import list_btrader_engine_symbols
 
 _CENT = Decimal("0.01")
@@ -33,19 +33,27 @@ def _clean_alias(raw) -> str:
     return (raw or "").strip()[:64]
 
 
-def _suggested_aliases(saved_lower: set[str]) -> tuple[list[str], str]:
+def _group_aliases() -> tuple[list[str], str]:
+    """Every client alias already present in symbol groups (BTrader + CRM groups)."""
     aliases, symbol_err = list_btrader_engine_symbols()
     names: list[str] = []
     seen: set[str] = set()
-    for name in aliases:
+
+    def add(name) -> None:
         key = (name or "").strip()
         if not key:
-            continue
+            return
         lk = key.lower()
-        if lk in seen or lk in saved_lower:
-            continue
+        if lk in seen:
+            return
         seen.add(lk)
         names.append(key)
+
+    for name in aliases:
+        add(name)
+    for name in CrmGroupSymbol.objects.values_list("symbol_name", flat=True):
+        add(name)
+    names.sort(key=str.lower)
     return names, symbol_err
 
 
@@ -81,7 +89,7 @@ def cashback_admin(request):
             alias_s = _clean_alias(request.POST.get("alias"))
             amount = _parse_amount(request.POST.get("amount"))
             if not alias_s:
-                messages.error(request, "Enter a symbol to add.")
+                messages.error(request, "Select a symbol to add.")
                 return redirect(reverse("admin-cashback"))
             _upsert_rate(alias_s, amount, request.user)
             messages.success(request, f"Cashback saved for {alias_s}.")
@@ -127,8 +135,7 @@ def cashback_admin(request):
         return redirect(reverse("admin-cashback"))
 
     saved = list(CashbackRate.objects.order_by("alias"))
-    saved_lower = {r.alias.lower() for r in saved}
-    suggested, symbol_err = _suggested_aliases(saved_lower)
+    suggested, symbol_err = _group_aliases()
 
     total_paid = CashbackPayout.objects.aggregate(s=Sum("amount"))["s"] or Decimal("0")
     top_clients = list(

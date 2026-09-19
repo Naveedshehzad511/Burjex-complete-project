@@ -1,6 +1,6 @@
 /**
  * Portal Cashback overlay. Shown on /cashback (Home drawer item below KYC).
- * Light theme to match the rest of the portal. Client sees pair, date, time, amount.
+ * Follows the rest of the app: day theme when the portal is day, night when it is night.
  */
 (function () {
   if (window.__bxCashbackUi) return;
@@ -15,6 +15,33 @@
   var transferBusy = false;
   var lastData = null;
   var transferMeta = null;
+  var savedColorScheme = "";
+
+  function isAppDark() {
+    if (window.__bxPortalDark === true) return true;
+    if (window.__bxPortalDark === false) return false;
+    return false;
+  }
+
+  function flutterNodes() {
+    return document.querySelectorAll("flutter-view, flt-glass-pane, flt-scene-host");
+  }
+
+  function setFlutterHidden(hide) {
+    var nodes = flutterNodes();
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].style.visibility = hide ? "hidden" : "";
+    }
+  }
+
+  function applyTheme(el) {
+    var dark = isAppDark();
+    el.classList.toggle("bx-cb-dark", dark);
+    el.style.colorScheme = dark ? "dark" : "light";
+    try {
+      document.documentElement.style.colorScheme = dark ? "dark" : "light";
+    } catch (e) {}
+  }
 
   function isCashback() {
     var path = (location.pathname || "/").replace(/\/+$/, "") || "/";
@@ -57,8 +84,8 @@
     var st = document.createElement("style");
     st.id = "bx-cashback-style";
     st.textContent =
-      "#bx-cashback-root{display:none;position:fixed;inset:0;z-index:2147483000;background:#f7f8fa;color:#0f172a;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:auto;}" +
-      "#bx-cashback-root *{box-sizing:border-box;}" +
+      "#bx-cashback-root{display:none;position:fixed;inset:0;z-index:2147483646;background:#f7f8fa;color:#0f172a;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:auto;color-scheme:light;forced-color-adjust:none;-webkit-text-fill-color:inherit;isolation:isolate;}" +
+      "#bx-cashback-root *{box-sizing:border-box;forced-color-adjust:none;}" +
       "#bx-cashback-root .bx-cb-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:4px;min-height:56px;padding:0 8px;background:#fff;border-bottom:1px solid #e8edf3;}" +
       "#bx-cashback-root .bx-cb-back{width:48px;height:48px;flex:0 0 48px;display:flex;align-items:center;justify-content:center;background:none;border:0;padding:0;margin:0;color:#0f172a;cursor:pointer;border-radius:24px;}" +
       "#bx-cashback-root .bx-cb-back:active{background:rgba(15,23,42,.08);}" +
@@ -82,23 +109,47 @@
       "#bx-cashback-root .bx-cb-amt{font-size:18px;font-weight:700;white-space:nowrap;color:#0f172a;}" +
       "#bx-cashback-root .bx-cb-panel{background:#fff;border:1px solid #e8edf3;border-radius:14px;padding:16px;margin:0 0 14px;}" +
       "#bx-cashback-root .bx-cb-msg{font-size:14px;color:#475569;margin:8px 0;}" +
-      "#bx-cashback-root .bx-cb-err{color:#b42318;}";
+      "#bx-cashback-root .bx-cb-err{color:#b42318;}" +
+      "#bx-cashback-root.bx-cb-dark{background:#171b22;color:#f8fafc;color-scheme:dark;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-bar{background:#171b22;border-bottom-color:#2a3140;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-back{color:#f8fafc;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-back:active{background:rgba(248,250,252,.08);}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-total,#bx-cashback-root.bx-cb-dark .bx-cb-panel{background:#1f2530;border-color:#2a3140;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-total-label,#bx-cashback-root.bx-cb-dark .bx-cb-when,#bx-cashback-root.bx-cb-dark .bx-cb-custom label{color:#94a3b8;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-total-amt,#bx-cashback-root.bx-cb-dark .bx-cb-pair,#bx-cashback-root.bx-cb-dark .bx-cb-amt{color:#f8fafc;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-btn{background:#3b82f6;color:#fff;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-btn-ghost{background:#1f2530;color:#93c5fd;border-color:#2a3140;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-pill{background:#1f2530;border-color:#2a3140;color:#cbd5e1;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-pill.on{background:#3b82f6;border-color:#3b82f6;color:#fff;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-custom input,#bx-cashback-root.bx-cb-dark select,#bx-cashback-root.bx-cb-dark .bx-cb-field{background:#1f2530;border-color:#2a3140;color:#f8fafc;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-row{border-bottom-color:#2a3140;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-msg{color:#cbd5e1;}" +
+      "#bx-cashback-root.bx-cb-dark .bx-cb-err{color:#fca5a5;}";
     document.head.appendChild(st);
   }
 
   function ensureRoot() {
     ensureStyle();
     var el = document.getElementById("bx-cashback-root");
-    if (el) return el;
+    if (el) {
+      applyTheme(el);
+      return el;
+    }
     el = document.createElement("div");
     el.id = "bx-cashback-root";
-    document.body.appendChild(el);
+    (document.documentElement || document.body).appendChild(el);
+    applyTheme(el);
     return el;
   }
 
   function hide() {
     var el = document.getElementById("bx-cashback-root");
     if (el) el.style.display = "none";
+    setFlutterHidden(false);
+    try {
+      if (savedColorScheme) document.documentElement.style.colorScheme = savedColorScheme;
+      else document.documentElement.style.removeProperty("color-scheme");
+    } catch (e) {}
     showTransfer = false;
   }
 
@@ -248,6 +299,8 @@
 
     el.innerHTML = shell(body);
     el.style.display = "block";
+    applyTheme(el);
+    setFlutterHidden(true);
     wire();
   }
 
@@ -255,6 +308,8 @@
     var el = ensureRoot();
     el.innerHTML = html;
     el.style.display = "block";
+    applyTheme(el);
+    setFlutterHidden(true);
     wire();
   }
 
