@@ -262,6 +262,8 @@ services:
       ORDER_RATE_MAX: ${ORDER_RATE_MAX:-40}
       ORDER_RATE_WINDOW_MS: ${ORDER_RATE_WINDOW_MS:-1000}
       ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-8000}
+      # Host must be the hyphen service name. Django rejects bxnet_crm_web (underscore).
+      CRM_WEBHOOK_URL: http://crm-web:8000/api/btrader/webhook/
     depends_on:
       btrader-postgres: { condition: service_healthy }
       btrader-redis: { condition: service_healthy }

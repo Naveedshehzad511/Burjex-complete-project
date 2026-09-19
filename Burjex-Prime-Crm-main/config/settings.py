@@ -55,6 +55,12 @@ elif DEBUG:
 else:
     # Production: set DJANGO_ALLOWED_HOSTS (comma-separated). Fallback avoids empty ALLOWED_HOSTS.
     ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+# Compose service name (hyphen). The container name bxnet_crm_web is RFC-invalid
+# as a Host header — Django rejects underscores even if listed — so BTrader
+# outbox must POST to http://crm-web:8000/..., not http://bxnet_crm_web:8000/...
+for _h in ("crm-web",):
+    if _h not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_h)
 
 CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8000",
