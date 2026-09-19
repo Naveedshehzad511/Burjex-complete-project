@@ -613,7 +613,7 @@ impl Engine {
             group_id: account.group_id.clone(),
             exec_claim_kind: None,
         });
-        self.publish_after_fill(tenant_id, &account.id, &position_id, "opened", &snap, None)
+        self.publish_after_fill(tenant_id, &account.id, &position_id, "opened", &snap, None, None)
             .await;
 
         Ok(ExecResult {

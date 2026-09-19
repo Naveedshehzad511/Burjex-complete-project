@@ -132,6 +132,9 @@ class Transaction(models.Model):
         # IB flows
         IB_WITHDRAW = "IB_WITHDRAW", "IB Withdraw"
 
+        # Trader cashback (not referral) — credited to the client wallet on close
+        CASHBACK = "CASHBACK", "Cashback"
+
         # Platform operations
         INTERNAL_TRANSFER = "INTERNAL_TRANSFER", "Internal Transfer"
 

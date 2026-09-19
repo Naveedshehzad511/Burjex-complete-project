@@ -461,6 +461,7 @@ impl Engine {
         kind: &str,
         snap: &Snapshot,
         profit: Option<f64>,
+        extra: Option<serde_json::Value>,
     ) {
         self.emit(
             tenant_id,
@@ -494,10 +495,18 @@ impl Engine {
             }),
         )
         .await;
+        let mut closed = json!({"login": snap.login, "positionId": position_id, "profit": profit});
+        if let Some(extra) = extra {
+            if let Some(obj) = extra.as_object() {
+                for (k, v) in obj {
+                    closed[k] = v.clone();
+                }
+            }
+        }
         self.crm_outbox(
             tenant_id,
             if kind == "opened" { "position.opened" } else { "position.closed" },
-            json!({"login": snap.login, "positionId": position_id, "profit": profit}),
+            closed,
         )
         .await;
     }
