@@ -114,3 +114,25 @@ pub fn audit_comment(plan: Option<&ExecutionPlan>, extra: serde_json::Value) -> 
 pub fn execution_applies_kind(pricing: &GroupPricing, kind: &str) -> bool {
     execution_applies(&pricing.execution_apply_to, kind)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::calc::GroupPricing;
+
+    #[test]
+    fn sl_tp_plan_uses_group_execution_ms() {
+        let p = GroupPricing {
+            execution_mode: "MARKET".into(),
+            execution_delay_ms: 175,
+            execution_apply_to: serde_json::json!({"sl": true, "tp": true}),
+            ..Default::default()
+        };
+        let now = Instant::now();
+        let sl = create_plan(&p, "sl", now, 0);
+        let tp = create_plan(&p, "tp", now, 0);
+        assert_eq!(sl.delay_ms, 175);
+        assert_eq!(tp.delay_ms, 175);
+        assert_eq!(sl.deadline, now + Duration::from_millis(175));
+    }
+}

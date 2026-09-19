@@ -119,18 +119,41 @@ def btrader_webhook(request):
                     event_id,
                 )
         if event_type in ("position.closed", "POSITION_CLOSED"):
+            login = _extract_login(data) or _extract_login(payload)
+            deal_id = str(data.get("dealId") or data.get("deal_id") or payload.get("dealId") or "")
+            symbol = str(data.get("symbol") or payload.get("symbol") or "")
+            position_id = str(
+                data.get("positionId")
+                or data.get("position_id")
+                or data.get("tradeId")
+                or payload.get("positionId")
+                or payload.get("tradeId")
+                or ""
+            )
             try:
                 from ib.btrader_rebates import credit_btrader_close
 
                 credit_btrader_close(
-                    login=_extract_login(data) or _extract_login(payload),
-                    deal_id=str(data.get("dealId") or data.get("deal_id") or payload.get("dealId") or ""),
-                    symbol=str(data.get("symbol") or payload.get("symbol") or ""),
+                    login=login,
+                    deal_id=deal_id,
+                    symbol=symbol,
                     lots=data.get("volume") if data.get("volume") is not None else payload.get("volume"),
-                    position_id=str(data.get("positionId") or data.get("position_id") or payload.get("positionId") or ""),
+                    position_id=position_id,
                 )
             except Exception:
                 logger.exception("BTrader IB rebate failed type=%s id=%s", event_type, event_id)
+            try:
+                from admin_panel.cashback import credit_cashback_on_close
+
+                credit_cashback_on_close(
+                    login=login,
+                    engine_trade_id=position_id,
+                    alias=symbol,
+                    deal_id=deal_id,
+                    partial=data.get("partial") if "partial" in data else payload.get("partial"),
+                )
+            except Exception:
+                logger.exception("BTrader cashback failed type=%s id=%s", event_type, event_id)
     except Exception:
         logger.exception("BTrader webhook handler error type=%s id=%s", event_type, event_id)
         # Still 200 would skip retries with bad data; return 500 so BTrader retries.

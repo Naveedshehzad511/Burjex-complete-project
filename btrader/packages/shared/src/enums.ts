@@ -17,7 +17,7 @@ export type OrderStatus = 'PENDING' | 'PARTIAL' | 'FILLED' | 'CANCELLED' | 'REJE
 
 export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'DAY' | 'GTD';
 
-export type PositionStatus = 'OPEN' | 'CLOSED';
+export type PositionStatus = 'OPEN' | 'CLOSE_PENDING' | 'CLOSED';
 
 /** Execution book. A = STP (cover to LP). B = warehouse (broker is the house). */
 export type BookType = 'A' | 'B';

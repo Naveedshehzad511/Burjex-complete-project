@@ -2,6 +2,7 @@
 
 mod books;
 mod calc;
+mod close_sync;
 mod engine;
 mod engine_ops;
 mod engine_tick;

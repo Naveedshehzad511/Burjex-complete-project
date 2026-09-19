@@ -27,6 +27,7 @@ from . import white_label_views
 from .settings import views as settings_views
 from . import crm_org_views
 from . import account_manager_views
+from . import cashback_views
 
 urlpatterns = [
     # Dashboard
@@ -446,6 +447,7 @@ urlpatterns = [
     path("ib/settings/application-form/<int:pk>/delete/", ib_application_views.ib_application_question_delete, name="admin-ib-application-form-delete"),
     path("ib/trade-simulator/", symbol_admin_views.trade_simulator_admin, name="admin-ib-trade-simulator"),
     path("ib/commission-matrix/", symbol_admin_views.ib_commission_matrix_admin, name="admin-ib-commission-matrix"),
+    path("cashback/", cashback_views.cashback_admin, name="admin-cashback"),
 
     # Group Management (legacy paths redirected to consolidated module)
     path("groups/add/", RedirectView.as_view(pattern_name="admin-group-add", permanent=False), name="admin-group-add-legacy"),

@@ -96,6 +96,7 @@ enum TimeInForce {
 
 enum PositionStatus {
   OPEN
+  CLOSE_PENDING // SL/TP claimed on the server tick; waiting group executionDelayMs
   CLOSED
 }
 

@@ -117,7 +117,8 @@ impl Engine {
             }
             if let Ok(Some(max_pos)) = r.try_get::<Option<i32>, _>("maxOpenPositions") {
                 let (count,): (i64,) = sqlx::query_as(
-                    r#"SELECT COUNT(*) FROM positions WHERE "tenantId"=$1 AND "accountId"=$2 AND status='OPEN'"#,
+                    r#"SELECT COUNT(*) FROM positions WHERE "tenantId"=$1 AND "accountId"=$2
+                       AND status IN ('OPEN'::"PositionStatus", 'CLOSE_PENDING'::"PositionStatus")"#,
                 )
                 .bind(tenant_id)
                 .bind(account_id)
@@ -129,7 +130,8 @@ impl Engine {
             }
             if let Ok(Some(max_lots)) = r.try_get::<Option<f64>, _>("max_open_lots") {
                 let (sum,): (Option<f64>,) = sqlx::query_as(
-                    r#"SELECT COALESCE(SUM(volume),0)::float8 FROM positions WHERE "tenantId"=$1 AND "accountId"=$2 AND status='OPEN'"#,
+                    r#"SELECT COALESCE(SUM(volume),0)::float8 FROM positions WHERE "tenantId"=$1 AND "accountId"=$2
+                       AND status IN ('OPEN'::"PositionStatus", 'CLOSE_PENDING'::"PositionStatus")"#,
                 )
                 .bind(tenant_id)
                 .bind(account_id)
@@ -385,7 +387,9 @@ impl Engine {
                       s."marginRate"::float8 AS "marginRate", s."marginPercent"::float8 AS "marginPercent",
                       s."quoteCurrency", s."baseCurrency"
                FROM positions p JOIN symbols s ON s.id = p."symbolId"
-               WHERE p."tenantId"=$1 AND p."accountId"=$2 AND p.status='OPEN' ORDER BY p."openedAt""#,
+               WHERE p."tenantId"=$1 AND p."accountId"=$2
+                 AND p.status IN ('OPEN'::"PositionStatus", 'CLOSE_PENDING'::"PositionStatus")
+               ORDER BY p."openedAt""#,
         )
         .bind(tenant_id)
         .bind(account_id)
@@ -407,7 +411,9 @@ impl Engine {
                       s."marginRate"::float8 AS "marginRate", s."marginPercent"::float8 AS "marginPercent",
                       s."quoteCurrency", s."baseCurrency"
                FROM positions p JOIN symbols s ON s.id = p."symbolId"
-               WHERE p."tenantId"=$1 AND p."accountId"=$2 AND p.status='OPEN' ORDER BY p."openedAt""#,
+               WHERE p."tenantId"=$1 AND p."accountId"=$2
+                 AND p.status IN ('OPEN'::"PositionStatus", 'CLOSE_PENDING'::"PositionStatus")
+               ORDER BY p."openedAt""#,
         )
         .bind(tenant_id)
         .bind(account_id)
@@ -453,6 +459,52 @@ impl Engine {
             .collect()
     }
 
+    /// Client alias from the account's symbol-group pack (XAUUSD.s), else the engine symbol.
+    pub(crate) async fn client_alias(&self, group_id: Option<&str>, symbol: &str) -> String {
+        let Some(gid) = group_id else {
+            return symbol.to_string();
+        };
+        if symbol.is_empty() {
+            return symbol.to_string();
+        }
+        if let Ok(Some(row)) = sqlx::query(
+            r#"SELECT i."clientSymbol"
+               FROM trading_groups g
+               JOIN client_symbol_group_items i ON i."groupId" = g."clientSymbolGroupId"
+               WHERE g.id=$1 AND i.enabled=true
+                 AND (i."lpSymbol"=$2 OR i."clientSymbol"=$2)
+               LIMIT 1"#,
+        )
+        .bind(gid)
+        .bind(symbol)
+        .fetch_optional(&self.pool)
+        .await
+        {
+            let alias: String = row.try_get("clientSymbol").unwrap_or_default();
+            if !alias.is_empty() {
+                return alias;
+            }
+        }
+        if let Ok(Some(row)) = sqlx::query(
+            r#"SELECT "clientSymbol"
+               FROM trading_group_symbol_mappings
+               WHERE "tradingGroupId"=$1 AND enabled=true
+                 AND ("lpSymbol"=$2 OR "clientSymbol"=$2)
+               LIMIT 1"#,
+        )
+        .bind(gid)
+        .bind(symbol)
+        .fetch_optional(&self.pool)
+        .await
+        {
+            let alias: String = row.try_get("clientSymbol").unwrap_or_default();
+            if !alias.is_empty() {
+                return alias;
+            }
+        }
+        symbol.to_string()
+    }
+
     pub(crate) async fn publish_after_fill(
         &self,
         tenant_id: &str,
@@ -461,7 +513,14 @@ impl Engine {
         kind: &str,
         snap: &Snapshot,
         profit: Option<f64>,
+        extra: Option<serde_json::Value>,
     ) {
+        let closed = kind == "closed";
+        let reason = extra
+            .as_ref()
+            .and_then(|e| e.get("reason"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(if closed { "CLOSED" } else { "OPENED" });
         self.emit(
             tenant_id,
             json!({
@@ -470,11 +529,15 @@ impl Engine {
                 "positionId": position_id,
                 "accountId": account_id,
                 "book": kind,
+                "event": if closed { "position_closed" } else { "position_opened" },
+                "reason": reason,
                 "position": {
                     "id": position_id,
                     "accountId": account_id,
-                    "status": if kind == "closed" { "CLOSED" } else { "OPEN" },
-                    "closing": kind == "closed",
+                    "status": if closed { "CLOSED" } else { "OPEN" },
+                    "closing": closed,
+                    "event": if closed { "position_closed" } else { "position_opened" },
+                    "reason": reason,
                     "profit": profit,
                 }
             }),
@@ -494,10 +557,18 @@ impl Engine {
             }),
         )
         .await;
+        let mut closed = json!({"login": snap.login, "positionId": position_id, "profit": profit});
+        if let Some(extra) = extra {
+            if let Some(obj) = extra.as_object() {
+                for (k, v) in obj {
+                    closed[k] = v.clone();
+                }
+            }
+        }
         self.crm_outbox(
             tenant_id,
             if kind == "opened" { "position.opened" } else { "position.closed" },
-            json!({"login": snap.login, "positionId": position_id, "profit": profit}),
+            closed,
         )
         .await;
     }

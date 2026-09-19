@@ -3265,3 +3265,53 @@ class StabilityProfile(models.Model):
     def get_solo(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class CashbackRate(models.Model):
+    """USD cashback paid to the trader on a full close of this client alias symbol."""
+
+    alias = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        help_text="Client alias from symbol groups (XAUUSD.s), never the LP feed name.",
+    )
+    amount_usd = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cashback_rates_updated",
+    )
+
+    class Meta:
+        db_table = "cashback_rates"
+        ordering = ["alias"]
+
+    def __str__(self) -> str:
+        return f"{self.alias} ${self.amount_usd}"
+
+
+class CashbackPayout(models.Model):
+    """One cashback credit per engine trade (position id). Paid to the trader, not an IB."""
+
+    engine_trade_id = models.CharField(max_length=64, unique=True, db_index=True)
+    deal_id = models.CharField(max_length=64, blank=True, default="")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="cashback_payouts",
+    )
+    login_id = models.CharField(max_length=64, db_index=True)
+    alias = models.CharField(max_length=64, db_index=True)
+    amount = models.DecimalField(max_digits=20, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = "cashback_payouts"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.engine_trade_id} {self.alias} ${self.amount}"

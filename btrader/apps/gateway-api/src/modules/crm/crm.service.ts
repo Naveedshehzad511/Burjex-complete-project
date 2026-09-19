@@ -36,7 +36,7 @@ export class CrmService {
   }
 
   /** Broker alias symbols from Symbols Groups (XAUUSD.s), never raw LP feed names. */
-  async listSymbols(tenantId: string): Promise<Array<{ symbol: string; description: string | null; class: string; enabled: boolean }>> {
+  async listSymbols(tenantId: string): Promise<Array<{ symbol: string; lpSymbol: string; description: string | null; class: string; enabled: boolean }>> {
     const items = await prisma.clientSymbolGroupItem.findMany({
       where: { enabled: true, group: { tenantId, enabled: true } },
       select: {
@@ -50,6 +50,7 @@ export class CrmService {
     const source = items.length
       ? items.map((r) => ({
           symbol: r.clientSymbol,
+          lpSymbol: r.lpSymbol,
           description: r.symbol?.description ?? r.lpSymbol,
           class: r.symbol?.class ?? 'CUSTOM',
           enabled: r.enabled,
@@ -67,13 +68,14 @@ export class CrmService {
           })
         ).map((r) => ({
           symbol: r.clientSymbol,
+          lpSymbol: r.lpSymbol,
           description: r.symbol?.description ?? r.lpSymbol,
           class: r.symbol?.class ?? 'CUSTOM',
           enabled: r.enabled,
         }));
 
     const seen = new Set<string>();
-    const out: Array<{ symbol: string; description: string | null; class: string; enabled: boolean }> = [];
+    const out: Array<{ symbol: string; lpSymbol: string; description: string | null; class: string; enabled: boolean }> = [];
     for (const r of source) {
       const key = r.symbol.toUpperCase();
       if (!r.symbol || seen.has(key)) continue;

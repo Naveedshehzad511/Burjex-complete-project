@@ -5,6 +5,7 @@ export * from './liquidity';
 export * from './market-data';
 export * from './crm-contract';
 export * from './events';
+export * from './position-sync';
 export * from './errors';
 export * from './latency';
 export * from './metrics';
