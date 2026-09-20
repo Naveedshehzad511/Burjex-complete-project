@@ -12,6 +12,8 @@
 (function () {
   if (window.__bxCloseSync) return;
   window.__bxCloseSync = true;
+  var latestPosition = Object.create(null);
+  var marketSocket = null;
 
   function closedIds() {
     if (typeof window.__bxClosedIds !== "object" || !window.__bxClosedIds) {
@@ -49,6 +51,41 @@
     var id = idOf(obj);
     if (!id) return;
     closedIds()[id] = 1;
+    delete latestPosition[id];
+  }
+
+  function observe(obj) {
+    var id = idOf(obj);
+    if (!id) return;
+    if (isClosed(obj)) {
+      note(obj);
+      return;
+    }
+    latestPosition[id] = obj;
+  }
+
+  // A successful HTTP close has already committed server-side. Replay the
+  // terminal frame into the native Flutter listener so Chart, Trade, and the
+  // live floating-PnL cache converge immediately rather than waiting for a
+  // later WS delivery/reconnect.
+  function dispatchTerminalClose(id) {
+    if (!id) return;
+    var prior = latestPosition[id] || {};
+    var closed = Object.assign({}, prior, {
+      id: prior.id || id,
+      positionId: prior.positionId || prior.id || id,
+      status: "CLOSED",
+      book: "closed",
+      closing: true,
+      event: "position_closed"
+    });
+    note(closed);
+    if (!marketSocket || typeof MessageEvent !== "function") return;
+    try {
+      marketSocket.dispatchEvent(new MessageEvent("message", {
+        data: JSON.stringify({ t: "position_closed", d: closed })
+      }));
+    } catch (e) {}
   }
 
   function noteFrame(raw) {
@@ -63,13 +100,13 @@
     var t = msg.t;
     var d = msg.d;
     if (t === "position" || t === "position_closed") {
-      note(d);
+      observe(d);
       return;
     }
     if (t === "evts" && d && typeof d === "object") {
       var p = d.p;
       if (Array.isArray(p)) {
-        for (var i = 0; i < p.length; i++) note(p[i]);
+        for (var i = 0; i < p.length; i++) observe(p[i]);
       }
     }
   }
@@ -79,6 +116,7 @@
     WebSocket.prototype.addEventListener = function (type, fn, cap) {
       if (String(type).toLowerCase() === "message" && !this.__bxGhostSide) {
         this.__bxGhostSide = true;
+        marketSocket = this;
         origAdd.call(this, "message", function (ev) {
           try {
             noteFrame(ev && ev.data);
@@ -86,6 +124,22 @@
         });
       }
       return origAdd.call(this, type, fn, cap);
+    };
+  }
+
+  var nativeFetch = window.fetch;
+  if (typeof nativeFetch === "function") {
+    window.fetch = function (input, init) {
+      var method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+      var url = typeof input === "string" ? input : (input && input.url) || "";
+      var match = method === "POST" && String(url).match(/\/positions\/([^/?#]+)\/close(?:[/?#]|$)/);
+      var result = nativeFetch.apply(this, arguments);
+      if (match && result && typeof result.then === "function") {
+        result.then(function (response) {
+          if (response && response.ok) dispatchTerminalClose(match[1]);
+        }).catch(function () {});
+      }
+      return result;
     };
   }
 
