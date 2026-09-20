@@ -223,16 +223,23 @@ export class ServersService {
     }
     if (action === 'SET_PRIMARY') {
       if (confirmation !== 'SET PRIMARY') throw new BadRequestException('confirmation must be SET PRIMARY');
+      let previousPrimaryId: string | null = null;
       await prisma.$transaction(async (tx) => {
         const other = await tx.monitoringServer.findFirst({ where: { role: 'PRIMARY', id: { not: id } }, select: { id: true } });
-        if (other) throw new ConflictException('another server is already labelled PRIMARY; clear it before labelling a second server');
+        previousPrimaryId = other?.id ?? null;
+        // Registry-label transfer only. This never starts/stops a process, so
+        // it cannot create a second matcher or act as automatic failover.
+        if (other) await tx.monitoringServer.update({ where: { id: other.id }, data: { role: 'STANDBY' } });
         await tx.monitoringServer.update({ where: { id }, data: { role: 'PRIMARY' } });
       });
+      if (previousPrimaryId) {
+        await this.event(previousPrimaryId, 'PRIMARY_LABEL_CLEARED', 'WARNING', 'PRIMARY label transferred in the registry only; no live service was changed.', { actorId, nextPrimaryId: id });
+      }
       await this.event(id, 'PRIMARY_LABELLED', 'WARNING', 'PRIMARY label changed only; no matcher was started, stopped, or failed over.', { actorId });
       await this.audit.log(null, actorId, 'UPDATE', 'monitoringServerAction', id, {
-        after: { action, simulated: true, execution: 'none' }, ip,
+        after: { action, simulated: true, execution: 'none', previousPrimaryId }, ip,
       });
-      return { ok: true, simulated: true, message: 'PRIMARY label updated only. No live failover was performed.' };
+      return { ok: true, simulated: true, message: 'PRIMARY label transferred only. No live failover was performed.' };
     }
     if (action === 'MAINTENANCE') {
       if (confirmation !== 'MAINTENANCE') throw new BadRequestException('confirmation must be MAINTENANCE');
