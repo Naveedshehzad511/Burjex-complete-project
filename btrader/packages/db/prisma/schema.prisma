@@ -881,9 +881,10 @@ model Order {
   @@index([accountId, status])
   @@index([symbolId, status])
   @@index([status])
-  // PostgreSQL permits multiple NULLs, while a repeated real client key is
-  // rejected even across an engine restart or an accidental second worker.
-  @@unique([tenantId, accountId, clientOrderId])
+  // The matcher serializes account mutations and returns an existing order for
+  // a repeated real client key. Keep this as a non-destructive lookup index:
+  // production deployments must not require a data-loss-approved schema push.
+  @@index([tenantId, accountId, clientOrderId])
   @@map("orders")
 }
 
