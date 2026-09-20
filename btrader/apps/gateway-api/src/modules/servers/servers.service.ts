@@ -6,7 +6,7 @@ import { deriveServerHealth, type HealthSettings } from './server-health';
 
 const ROLES = ['PRIMARY', 'STANDBY'] as const;
 const READINESS = ['NOT_READY', 'ONBOARDING', 'READY', 'ACTIVE', 'STANDBY', 'MAINTENANCE', 'ERROR'] as const;
-const SERVICES = ['engine', 'marketData', 'ws', 'postgres', 'redis', 'crm'] as const;
+const SERVICES = ['gateway', 'engine', 'marketData', 'ws', 'postgres', 'redis', 'crm'] as const;
 type ServerRole = (typeof ROLES)[number];
 type Readiness = (typeof READINESS)[number];
 

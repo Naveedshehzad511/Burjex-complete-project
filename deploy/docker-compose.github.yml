@@ -229,6 +229,31 @@ services:
         limits: { cpus: '1.00', memory: 1536M, pids: 512 }
     networks: [btrader_internal, edge]
 
+  # Off-path operational telemetry only. This container has no trading, Docker,
+  # SSH, or bridge control path; resource limits keep it unable to starve the
+  # matching stack even if a health dependency fails noisily.
+  server-monitor-agent:
+    build: { context: ../btrader/apps/server-monitor-agent, dockerfile: Dockerfile }
+    image: burjex/server-monitor-agent:net
+    container_name: bxnet_server_monitor_agent
+    <<: *restart
+    env_file: .env.github
+    environment:
+      SERVER_MONITOR_API_URL: http://btrader-gateway:4100
+      SERVER_MONITOR_SERVER_ID: forexten-registry-only
+      SERVER_MONITOR_INTERVAL_MS: '30000'
+      SERVER_MONITOR_APP_VERSION: ${SERVER_MONITOR_APP_VERSION:-live}
+      SERVER_MONITOR_SERVICE_URLS_JSON: >-
+        {"gateway":"http://btrader-gateway:4100/v1/health","engine":"http://btrader-matching:4300/health","marketData":"http://btrader-market-data:4200/health","ws":"tcp://btrader-ws:4101","postgres":"tcp://btrader-postgres:5432","redis":"tcp://btrader-redis:6379"}
+    read_only: true
+    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
+    depends_on:
+      btrader-gateway: { condition: service_started }
+    deploy:
+      resources:
+        limits: { cpus: '0.05', memory: 96M, pids: 32 }
+    networks: [btrader_internal]
+
   btrader-matching:
     build: { context: ../btrader/apps/trading-core-rs, dockerfile: Dockerfile }
     image: burjex/btrader-matching:net

@@ -1,5 +1,6 @@
 import { cpus, freemem, homedir, totalmem, uptime } from 'node:os';
 import { statfs } from 'node:fs/promises';
+import { connect } from 'node:net';
 
 const apiBase = required('SERVER_MONITOR_API_URL').replace(/\/+$/, '');
 const serverId = required('SERVER_MONITOR_SERVER_ID');
@@ -28,13 +29,13 @@ function parseServiceUrls(raw: string | undefined): Record<string, string> {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     return Object.fromEntries(
       Object.entries(parsed).filter(([key, value]) =>
-        ['engine', 'marketData', 'ws', 'postgres', 'redis', 'crm'].includes(key) &&
+        ['gateway', 'engine', 'marketData', 'ws', 'postgres', 'redis', 'crm'].includes(key) &&
         typeof value === 'string' &&
-        /^https?:\/\//.test(value),
+        /^(https?|tcp):\/\//.test(value),
       ),
     ) as Record<string, string>;
   } catch {
-    throw new Error('SERVER_MONITOR_SERVICE_URLS_JSON must be a JSON object of HTTP health URLs');
+    throw new Error('SERVER_MONITOR_SERVICE_URLS_JSON must be a JSON object of HTTP health or TCP service URLs');
   }
 }
 
@@ -58,6 +59,22 @@ function cpuPercent() {
 }
 
 async function serviceHealth(url: string): Promise<'UP' | 'DOWN'> {
+  if (url.startsWith('tcp://')) {
+    const target = new URL(url);
+    return new Promise((resolve) => {
+      const socket = connect({ host: target.hostname, port: Number(target.port) || 80 });
+      const timeout = setTimeout(() => socket.destroy(new Error('timeout')), 4_000);
+      socket.once('connect', () => {
+        clearTimeout(timeout);
+        socket.destroy();
+        resolve('UP');
+      });
+      socket.once('error', () => {
+        clearTimeout(timeout);
+        resolve('DOWN');
+      });
+    });
+  }
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(4_000) });
     return response.ok ? 'UP' : 'DOWN';
