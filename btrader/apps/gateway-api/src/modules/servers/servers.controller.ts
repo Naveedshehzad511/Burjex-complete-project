@@ -7,7 +7,7 @@ import { ServersService } from './servers.service';
 @ApiTags('servers')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Roles('SUPER_ADMIN')
+@Roles('SUPER_ADMIN', 'TENANT_ADMIN')
 @Controller('admin/servers')
 export class ServersController {
   constructor(private readonly servers: ServersService) {}

@@ -37,8 +37,8 @@ class ServersScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final role = ref.watch(authControllerProvider).role;
-    if (role != 'SUPER_ADMIN') {
-      return const AdminPage(title: 'Trading Engine → Servers', child: Center(child: Text('Super-admin only.')));
+    if (role != 'SUPER_ADMIN' && role != 'TENANT_ADMIN') {
+      return const AdminPage(title: 'Trading Engine → Servers', child: Center(child: Text('Administrator only.')));
     }
     final data = ref.watch(monitoringServersProvider);
     return AdminPage(
@@ -234,8 +234,8 @@ class ServerDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final role = ref.watch(authControllerProvider).role;
-    if (role != 'SUPER_ADMIN') {
-      return const AdminPage(title: 'Server details', child: Center(child: Text('Super-admin only.')));
+    if (role != 'SUPER_ADMIN' && role != 'TENANT_ADMIN') {
+      return const AdminPage(title: 'Server details', child: Center(child: Text('Administrator only.')));
     }
     final data = ref.watch(monitoringServerDetailProvider(serverId));
     return AdminPage(
