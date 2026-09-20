@@ -102,6 +102,25 @@ final tenantsProvider = FutureProvider.autoDispose<List<Tenant>>((ref) async {
   return data.map((e) => Tenant.fromJson(e)).toList();
 });
 
+/// Infrastructure monitoring is intentionally modest (30s polling), unlike
+/// account/price views. It never attaches to the trading WebSocket hot path.
+final serverMonitoringTicker = StreamProvider.autoDispose<int>(
+  (ref) => Stream<int>.periodic(const Duration(seconds: 30), (i) => i + 1),
+);
+
+final monitoringServersProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  ref.watch(serverMonitoringTicker);
+  final api = ref.watch(apiClientProvider);
+  return Map<String, dynamic>.from(await api.get('/admin/servers') as Map);
+});
+
+final monitoringServerDetailProvider =
+    FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, id) async {
+  ref.watch(serverMonitoringTicker);
+  final api = ref.watch(apiClientProvider);
+  return Map<String, dynamic>.from(await api.get('/admin/servers/$id') as Map);
+});
+
 // ── Dealing desk / A-B book management ──────────────────────────────────────
 
 /// Net warehouse (B-book) exposure + A-book coverage summary.

@@ -25,6 +25,7 @@ import { SymbolGroupsModule } from './modules/symbol-groups/symbol-groups.module
 import { BridgeModule } from './modules/bridge/bridge.module';
 import { LiquidityModule } from './modules/liquidity/liquidity.module';
 import { HqModule } from './modules/hq/hq.module';
+import { ServersModule } from './modules/servers/servers.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { HqModule } from './modules/hq/hq.module';
     BridgeModule,
     LiquidityModule,
     HqModule,
+    ServersModule,
   ],
   controllers: [HealthController],
   providers: [

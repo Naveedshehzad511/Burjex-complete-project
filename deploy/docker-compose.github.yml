@@ -214,6 +214,10 @@ services:
       PORTAL_READ_CACHE_MS: ${PORTAL_READ_CACHE_MS:-2000}
       # Quotes 431: large JWTs (many account ids) exceeded Node's 16KB header cap.
       NODE_OPTIONS: "--max-http-header-size=131072"
+      # Weekend-only host control plane; token is deployment-only and never
+      # returned by the Admin API or shown in Flutter.
+      RESTART_CONTROL_URL: ${RESTART_CONTROL_URL:-http://host.docker.internal:4150}
+      RESTART_CONTROL_TOKEN: ${RESTART_CONTROL_TOKEN:-}
     command: >-
       sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
       cd /app/apps/gateway-api && exec node dist/main.js"
@@ -228,6 +232,30 @@ services:
         reservations: { cpus: '0.50', memory: 512M }
         limits: { cpus: '1.00', memory: 1536M, pids: 512 }
     networks: [btrader_internal, edge]
+
+  # Off-path operational telemetry only. This container has no trading, Docker,
+  # SSH, or bridge control path; resource limits keep it unable to starve the
+  # matching stack even if a health dependency fails noisily.
+  server-monitor-agent:
+    build: { context: ../btrader/apps/server-monitor-agent, dockerfile: Dockerfile }
+    image: burjex/server-monitor-agent:net
+    container_name: bxnet_server_monitor_agent
+    <<: *restart
+    env_file: .env.github
+    environment:
+      SERVER_MONITOR_API_URL: http://btrader-gateway:4100
+      SERVER_MONITOR_SERVER_ID: forexten-registry-only
+      SERVER_MONITOR_INTERVAL_MS: '30000'
+      SERVER_MONITOR_APP_VERSION: ${SERVER_MONITOR_APP_VERSION:-live}
+      SERVER_MONITOR_SERVICE_URLS_JSON: >-
+        {"gateway":"http://btrader-gateway:4100/v1/health","engine":"http://btrader-matching:4300/health","marketData":"http://btrader-market-data:4200/health","ws":"tcp://btrader-ws:4101","postgres":"tcp://btrader-postgres:5432","redis":"tcp://btrader-redis:6379"}
+    read_only: true
+    depends_on:
+      btrader-gateway: { condition: service_started }
+    deploy:
+      resources:
+        limits: { cpus: '0.05', memory: 96M, pids: 32 }
+    networks: [btrader_internal]
 
   btrader-matching:
     build: { context: ../btrader/apps/trading-core-rs, dockerfile: Dockerfile }
