@@ -223,9 +223,6 @@ importers:
 
   packages/engine-core:
     dependencies:
-      '@btrader/db':
-        specifier: workspace:*
-        version: link:../db
       '@btrader/shared':
         specifier: workspace:*
         version: link:../shared

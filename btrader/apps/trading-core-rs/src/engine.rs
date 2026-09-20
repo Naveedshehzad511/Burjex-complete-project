@@ -1,15 +1,14 @@
 use crate::books::{BookRow, MemoryClaims, PendingBook, PositionBook};
 use crate::calc::{
-    apply_markup, compute_aggregates, dealing_commission, execution_applies, pending_type_to_apply_kind,
-    required_margin, round_lots, round_price, snap_volume, slippage_bound, SymbolCalcSpec,
+    apply_markup, compute_aggregates, dealing_commission, execution_applies,
+    pending_type_to_apply_kind, required_margin, round_lots, round_price, slippage_bound,
+    snap_volume, SymbolCalcSpec,
 };
 use crate::error::{
     BtError, BtResult, INSUFFICIENT_MARGIN, INVALID_PRICE, INVALID_VOLUME, MARKET_CLOSED, NO_PRICE,
     RATE_LIMITED, SYMBOL_DISABLED, TRADING_DISABLED, VALIDATION,
 };
-use crate::models::{
-    account_from_row, now_ms, AccountRow, Snapshot, SymbolRow, ACCOUNT_SELECT,
-};
+use crate::models::{account_from_row, now_ms, AccountRow, Snapshot, SymbolRow, ACCOUNT_SELECT};
 use crate::policy::{audit_comment, create_plan, wait_for_deadline, ExecutionPlan};
 use crate::prices::PriceSource;
 use crate::routing::{resolve_routing, RoutingContext, RoutingRuleLike};
@@ -22,7 +21,7 @@ use serde_json::json;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -47,11 +46,13 @@ pub struct Engine {
     pub(crate) live_throttle: DashMap<String, i64>,
     pub(crate) acct_live_at: DashMap<String, i64>,
     pub(crate) stop_out_checked: DashMap<String, i64>,
+    /// Tightest configured quote-age limit. Groups with an execution delay use
+    /// the smaller of this and their delay, so a 1ms group cannot fill a quote
+    /// that was already stale before its configured delay expired.
     pub max_price_age_ms: i64,
     pub max_feed_still_ms: i64,
     order_rate_max: usize,
     order_rate_window_ms: i64,
-    account_queue_wait: Duration,
 }
 
 #[derive(Clone)]
@@ -148,11 +149,42 @@ pub(crate) fn spec_of(sym: &SymbolRow) -> SymbolCalcSpec {
 }
 
 fn env_i64(key: &str, default: i64) -> i64 {
-    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
+
+pub(crate) fn quote_age_limit_ms(
+    configured_max_age_ms: i64,
+    pricing: &crate::calc::GroupPricing,
+    kind: &str,
+) -> i64 {
+    let configured = configured_max_age_ms.max(1);
+    // Pending activation is intentionally permitted to be faster than the
+    // configured delay, but it must still use a quote no older than that
+    // group's budget. Do not derive this from market_execution_delay_ms:
+    // pending orders may have a zero intentional sleep.
+    let group_delay = if pricing.execution_mode.eq_ignore_ascii_case("MARKET")
+        && execution_applies(&pricing.execution_apply_to, kind)
+    {
+        i64::from(pricing.execution_delay_ms.max(0))
+    } else {
+        0
+    };
+    if group_delay > 0 {
+        configured.min(group_delay)
+    } else {
+        configured
+    }
 }
 
 impl Engine {
-    pub fn new(pool: PgPool, redis: redis::aio::MultiplexedConnection, prices: Arc<PriceSource>) -> Self {
+    pub fn new(
+        pool: PgPool,
+        redis: redis::aio::MultiplexedConnection,
+        prices: Arc<PriceSource>,
+    ) -> Self {
         Self {
             pool,
             redis: Mutex::new(redis),
@@ -171,11 +203,10 @@ impl Engine {
             live_throttle: DashMap::new(),
             acct_live_at: DashMap::new(),
             stop_out_checked: DashMap::new(),
-            max_price_age_ms: env_i64("MAX_PRICE_AGE_MS", 8000),
+            max_price_age_ms: env_i64("MAX_PRICE_AGE_MS", 1000),
             max_feed_still_ms: env_i64("MAX_FEED_STILL_MS", 120_000),
             order_rate_max: env_i64("ORDER_RATE_MAX", 40) as usize,
             order_rate_window_ms: env_i64("ORDER_RATE_WINDOW_MS", 1000),
-            account_queue_wait: Duration::from_millis(env_i64("ACCOUNT_QUEUE_WAIT_MS", 8000) as u64),
         }
     }
 
@@ -200,11 +231,17 @@ impl Engine {
                 .or_insert_with(|| Arc::new(Mutex::new(())))
                 .clone()
         };
-        let acquired = tokio::time::timeout(self.account_queue_wait, lock.lock()).await;
-        match acquired {
-            Ok(_g) => f().await,
-            Err(_) => Err(BtError::new(RATE_LIMITED, "account busy — too many queued mutations")),
-        }
+        // The lock guards account-level atomicity and client-order idempotency,
+        // but must never become a hidden 40–100ms execution queue. The caller
+        // receives a retryable busy result immediately instead of waiting past
+        // the trading group's execution_ms budget.
+        let _guard = lock.try_lock().map_err(|_| {
+            BtError::new(
+                RATE_LIMITED,
+                "account busy — retry with the same client order id",
+            )
+        })?;
+        f().await
     }
 
     pub(crate) fn allow_rate(&self, account_id: &str) -> bool {
@@ -219,11 +256,61 @@ impl Engine {
         true
     }
 
-    pub async fn emit(&self, tenant_id: &str, evt: serde_json::Value) {
+    pub(crate) fn quote_age_limit_ms(
+        &self,
+        pricing: &crate::calc::GroupPricing,
+        kind: &str,
+    ) -> i64 {
+        quote_age_limit_ms(self.max_price_age_ms, pricing, kind)
+    }
+
+    pub(crate) fn assert_fresh_quote(
+        &self,
+        tenant_id: &str,
+        symbol: &str,
+        pricing: &crate::calc::GroupPricing,
+        kind: &str,
+    ) -> BtResult<()> {
+        let max_age_ms = self.quote_age_limit_ms(pricing, kind);
+        match self.prices.age_ms(tenant_id, symbol) {
+            Some(age) if age <= max_age_ms => {}
+            _ => {
+                return Err(BtError::new(
+                    NO_PRICE,
+                    format!("no live price (quote exceeds {max_age_ms}ms age limit)"),
+                ));
+            }
+        }
+        if self.max_feed_still_ms > 0
+            && self
+                .prices
+                .still_ms(tenant_id)
+                .is_some_and(|still| still > self.max_feed_still_ms)
+        {
+            return Err(BtError::new(NO_PRICE, "feed frozen — no price movement"));
+        }
+        Ok(())
+    }
+
+    pub async fn emit(&self, tenant_id: &str, mut evt: serde_json::Value) {
+        // This timestamp is carried through Redis to the WS gateway, where it
+        // becomes a measurable matcher→Redis→WS hop instead of an opaque delay.
+        if let Some(obj) = evt.as_object_mut() {
+            obj.entry("emittedAt".to_string())
+                .or_insert_with(|| json!(now_ms()));
+        }
         let ch = format!("bt:{tenant_id}:engine.evt");
         let payload = evt.to_string();
+        let queued = Instant::now();
         let mut r = self.redis.lock().await;
+        let redis_lock_ms = queued.elapsed().as_millis() as u64;
+        let publish_started = Instant::now();
         let _: Result<(), _> = r.publish::<_, _, ()>(ch, payload).await;
+        tracing::debug!(
+            redis_lock_ms,
+            redis_publish_ms = publish_started.elapsed().as_millis() as u64,
+            "trade-hop redis_publish"
+        );
     }
 
     /// Authoritative open-position snapshot for WS reconnect (no REST poll).
@@ -268,10 +355,23 @@ impl Engine {
 
     pub async fn place_order(&self, tenant_id: &str, req: PlaceReq) -> BtResult<ExecResult> {
         let aid = req.account_id.clone();
-        self.with_account(&aid, || self.place_order_exclusive(tenant_id, req)).await
+        let queued = Instant::now();
+        let result = self
+            .with_account(&aid, || self.place_order_exclusive(tenant_id, req))
+            .await;
+        tracing::debug!(
+            account_id = %aid,
+            queue_wait_ms = queued.elapsed().as_millis() as u64,
+            "trade-hop account_queue"
+        );
+        result
     }
 
-    async fn place_order_exclusive(&self, tenant_id: &str, mut req: PlaceReq) -> BtResult<ExecResult> {
+    async fn place_order_exclusive(
+        &self,
+        tenant_id: &str,
+        mut req: PlaceReq,
+    ) -> BtResult<ExecResult> {
         req.side = req.side.to_ascii_uppercase();
         req.order_type = req.order_type.to_ascii_uppercase();
         if !self.allow_rate(&req.account_id) {
@@ -301,9 +401,14 @@ impl Engine {
             return Err(BtError::new(MARKET_CLOSED, "market closed"));
         }
         if sym.news_mode && sym.news_halt_opens {
-            return Err(BtError::new(MARKET_CLOSED, "trading paused — news event (new orders halted)"));
+            return Err(BtError::new(
+                MARKET_CLOSED,
+                "trading paused — news event (new orders halted)",
+            ));
         }
-        let Some(volume) = snap_volume(req.volume, sym.min_lot, sym.max_lot, sym.lot_step).filter(|v| *v > 0.0) else {
+        let Some(volume) =
+            snap_volume(req.volume, sym.min_lot, sym.max_lot, sym.lot_step).filter(|v| *v > 0.0)
+        else {
             return Err(BtError::new(
                 INVALID_VOLUME,
                 format!(
@@ -323,7 +428,8 @@ impl Engine {
                 .execute_market(tenant_id, &account, &sym, &req, volume, None, None, false)
                 .await;
         }
-        self.place_pending(tenant_id, &account, &sym, req, volume).await
+        self.place_pending(tenant_id, &account, &sym, req, volume)
+            .await
     }
 
     pub(crate) async fn execute_market(
@@ -338,7 +444,9 @@ impl Engine {
         skip_delay: bool,
     ) -> BtResult<ExecResult> {
         let spec = spec_of(sym);
-        let pricing = self.group_pricing(account.group_id.as_deref(), sym, tenant_id).await?;
+        let pricing = self
+            .group_pricing(account.group_id.as_deref(), sym, tenant_id)
+            .await?;
         let apply_kind = if req.order_type.eq_ignore_ascii_case("MARKET") {
             if req.side.eq_ignore_ascii_case("BUY") {
                 "marketBuy"
@@ -349,9 +457,16 @@ impl Engine {
             pending_type_to_apply_kind(&req.order_type, &req.side)
         };
         let applies = execution_applies(&pricing.execution_apply_to, apply_kind);
-        let trigger_mono = plan_in.as_ref().map(|p| p.trigger_mono).unwrap_or_else(Instant::now);
-        let trigger_wall = plan_in.as_ref().map(|p| p.trigger_wall).unwrap_or_else(now_ms);
-        let plan = plan_in.unwrap_or_else(|| create_plan(&pricing, apply_kind, trigger_mono, trigger_wall));
+        let trigger_mono = plan_in
+            .as_ref()
+            .map(|p| p.trigger_mono)
+            .unwrap_or_else(Instant::now);
+        let trigger_wall = plan_in
+            .as_ref()
+            .map(|p| p.trigger_wall)
+            .unwrap_or_else(now_ms);
+        let plan = plan_in
+            .unwrap_or_else(|| create_plan(&pricing, apply_kind, trigger_mono, trigger_wall));
         if !skip_delay {
             wait_for_deadline(Some(&plan)).await;
         }
@@ -364,32 +479,24 @@ impl Engine {
         let Some(px) = px else {
             return Err(BtError::new(NO_PRICE, "no price"));
         };
-        if self.max_price_age_ms > 0 {
-            match self.prices.age_ms(tenant_id, &req.symbol) {
-                Some(age) if age <= self.max_price_age_ms => {}
-                _ => {
-                    return Err(BtError::new(NO_PRICE, "no live price (feed stale or late) — order not filled"));
-                }
-            }
-        }
-        if self.max_feed_still_ms > 0 {
-            if let Some(still) = self.prices.still_ms(tenant_id) {
-                if still > self.max_feed_still_ms {
-                    return Err(BtError::new(
-                        NO_PRICE,
-                        format!("feed frozen — no price has moved for {}s", still / 1000),
-                    ));
-                }
-            }
-        }
+        self.assert_fresh_quote(tenant_id, &req.symbol, &pricing, apply_kind)?;
 
-        let conv = self.quote_to_account_strict(tenant_id, &account.currency, &spec.quote_currency)?;
-        let news_markup = if sym.news_mode { f64::from(sym.news_spread_points) } else { 0.0 };
+        let conv =
+            self.quote_to_account_strict(tenant_id, &account.currency, &spec.quote_currency)?;
+        let news_markup = if sym.news_mode {
+            f64::from(sym.news_spread_points)
+        } else {
+            0.0
+        };
         let mapping_owns = matches!(
             pricing.pricing_method.as_deref(),
             Some("SPREAD_ONLY" | "SPREAD_AND_COMMISSION" | "COMMISSION_ONLY")
         );
-        let symbol_book_markup = if mapping_owns { 0.0 } else { f64::from(sym.spread_markup) };
+        let symbol_book_markup = if mapping_owns {
+            0.0
+        } else {
+            f64::from(sym.spread_markup)
+        };
         let total_markup = symbol_book_markup + pricing.markup_points + news_markup;
         let with_markup = apply_markup(&req.side, px, total_markup, sym.digits);
         let honour_ref = req.price;
@@ -406,7 +513,12 @@ impl Engine {
             round_price(honour_ref.unwrap(), sym.digits)
         } else {
             if req.one_click.unwrap_or(false) && req.price.is_some() && sym.slippage_points > 0 {
-                let bound = slippage_bound(&req.side, req.price.unwrap(), f64::from(sym.slippage_points), sym.digits);
+                let bound = slippage_bound(
+                    &req.side,
+                    req.price.unwrap(),
+                    f64::from(sym.slippage_points),
+                    sym.digits,
+                );
                 let worse = if req.side.eq_ignore_ascii_case("BUY") {
                     px > bound
                 } else {
@@ -416,7 +528,10 @@ impl Engine {
                     return Err(BtError::new(INVALID_PRICE, "slippage exceeded"));
                 }
             }
-            round_price(apply_markup(&req.side, with_markup, pricing.slippage_points, sym.digits), sym.digits)
+            round_price(
+                apply_markup(&req.side, with_markup, pricing.slippage_points, sym.digits),
+                sym.digits,
+            )
         };
         if let Some(clamp) = clamp_worst {
             let honour_clamp = applies
@@ -438,7 +553,9 @@ impl Engine {
             self.prices.sell_price(tenant_id, &req.symbol),
             self.prices.buy_price(tenant_id, &req.symbol),
         ) {
-            if let Err(msg) = crate::trigger::validate_sl_tp(&req.side, bid, ask, req.sl_price, req.tp_price) {
+            if let Err(msg) =
+                crate::trigger::validate_sl_tp(&req.side, bid, ask, req.sl_price, req.tp_price)
+            {
                 return Err(BtError::new(INVALID_PRICE, msg));
             }
         }
@@ -477,7 +594,10 @@ impl Engine {
         let order_id = Uuid::new_v4().to_string();
         let deal_id = Uuid::new_v4().to_string();
         let source = req.source.clone().unwrap_or_else(|| "api".into());
-        let comment = audit_comment(Some(&plan), json!({"fillPrice": fill_price, "result": "filled"}));
+        let comment = audit_comment(
+            Some(&plan),
+            json!({"fillPrice": fill_price, "result": "filled"}),
+        );
         let requested = req.price.unwrap_or(px);
 
         let mut tx = self.pool.begin().await?;
@@ -493,12 +613,17 @@ impl Engine {
         if locked.status == "TRADING_DISABLED" || locked.status == "READ_ONLY" {
             return Err(BtError::new(TRADING_DISABLED, "trading disabled"));
         }
-        let views = self.open_views_tx(&mut tx, tenant_id, &account.id, &locked.currency).await?;
+        let views = self
+            .open_views_tx(&mut tx, tenant_id, &account.id, &locked.currency)
+            .await?;
         let live = compute_aggregates(locked.balance, locked.credit, &views);
         if live.free_margin < margin {
             return Err(BtError::new(
                 INSUFFICIENT_MARGIN,
-                format!("insufficient free margin: need {margin}, available {}", live.free_margin),
+                format!(
+                    "insufficient free margin: need {margin}, available {}",
+                    live.free_margin
+                ),
             ));
         }
 
@@ -576,7 +701,9 @@ impl Engine {
         .execute(&mut *tx)
         .await?;
 
-        let views_after = self.open_views_tx(&mut tx, tenant_id, &account.id, &locked.currency).await?;
+        let views_after = self
+            .open_views_tx(&mut tx, tenant_id, &account.id, &locked.currency)
+            .await?;
         let after = compute_aggregates(locked.balance, locked.credit, &views_after);
         sqlx::query(
             r#"UPDATE accounts SET equity=$1, margin=$2, "freeMargin"=$3, "marginLevel"=$4, "floatingPL"=$5
@@ -590,7 +717,13 @@ impl Engine {
         .bind(&locked.id)
         .execute(&mut *tx)
         .await?;
+        let commit_started = Instant::now();
         tx.commit().await?;
+        tracing::debug!(
+            order_id = %order_id,
+            sql_commit_ms = commit_started.elapsed().as_millis() as u64,
+            "trade-hop sql_commit"
+        );
 
         if book == "A" && covered_volume > 0.0 {
             self.cover_open(
@@ -642,8 +775,17 @@ impl Engine {
             status: "OPEN".into(),
         });
         self.redis_sync_open_positions(tenant_id, &account.id).await;
-        self.publish_after_fill(tenant_id, &account.id, &position_id, "opened", &snap, None, None)
-            .await;
+        self.publish_after_fill(
+            tenant_id,
+            &account.id,
+            &position_id,
+            Some(&order_id),
+            "opened",
+            &snap,
+            None,
+            None,
+        )
+        .await;
 
         Ok(ExecResult {
             accepted: true,
@@ -655,5 +797,41 @@ impl Engine {
             reason: None,
             account: Some(snap.json()),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::quote_age_limit_ms;
+    use crate::calc::GroupPricing;
+
+    #[test]
+    fn one_ms_group_rejects_any_older_tradeable_quote() {
+        let pricing = GroupPricing {
+            execution_mode: "MARKET".into(),
+            execution_delay_ms: 1,
+            execution_apply_to: serde_json::json!({
+                "marketBuy": true,
+                "manualClose": true,
+                "buyStop": true,
+                "sl": true,
+                "tp": true,
+            }),
+            ..Default::default()
+        };
+        for kind in ["marketBuy", "manualClose", "buyStop", "sl", "tp"] {
+            assert_eq!(quote_age_limit_ms(1000, &pricing, kind), 1, "{kind}");
+        }
+    }
+
+    #[test]
+    fn unconfigured_execution_kind_uses_tight_global_quote_limit() {
+        let pricing = GroupPricing {
+            execution_mode: "MARKET".into(),
+            execution_delay_ms: 1,
+            execution_apply_to: serde_json::json!({"marketBuy": true}),
+            ..Default::default()
+        };
+        assert_eq!(quote_age_limit_ms(1000, &pricing, "marketSell"), 1000);
     }
 }

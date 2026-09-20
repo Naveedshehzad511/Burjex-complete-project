@@ -1002,8 +1002,16 @@ async function main() {
   let staleLoggedAt = 0;
 
   const lastSeq = new Map<string, number>();
+  // A delayed bridge packet must never replace a quote already accepted from
+  // that source. Equal timestamps remain valid because some venues timestamp
+  // multiple market updates in one millisecond.
+  const lastAcceptedTickMs = new Map<string, number>();
   const handleTickImpl = (raw: RawTick) => {
     const now = Date.now();
+    const priceAgeMs = now - raw.ts;
+    if (Number.isFinite(priceAgeMs) && priceAgeMs >= 0) {
+      latency.record('tick.price_age', priceAgeMs);
+    }
     if (raw.sequence != null) {
       const prev = lastSeq.get(raw.symbol);
       if (prev != null && raw.sequence > prev + 1) {
@@ -1033,6 +1041,13 @@ async function main() {
       }
     }
     const q: BookQuote = { bid: raw.bid, ask: raw.ask, ts: raw.ts, staleMs };
+    const feedKey = `${raw.tenantId ?? 'default'}\u0000${raw.source}\u0000${raw.symbol}`;
+    const previousTickMs = lastAcceptedTickMs.get(feedKey);
+    if (previousTickMs != null && raw.ts < previousTickMs) {
+      noteDrop(`out-of-order:${raw.symbol}`);
+      return;
+    }
+    lastAcceptedTickMs.set(feedKey, raw.ts);
 
     if (isProvider) {
       const tenantId = raw.tenantId!;
@@ -1042,6 +1057,13 @@ async function main() {
       if (!symbol) {
         recordUnmapped(pub, tenantId, raw.source, raw.symbol.trim().toUpperCase());
         dropUnmapped(raw.symbol);
+        return;
+      }
+      // Reject inactive symbols before allocating quote-book/candle state or
+      // publishing Redis work. On the capacity snapshot, no-route MT5 symbols
+      // alone consumed roughly 1,200 ticks/sec of avoidable CPU.
+      if (!routing.has(symbol)) {
+        dropNoRoute(symbol);
         return;
       }
       // Global book + canonical candle stream (one source of truth).
@@ -1063,14 +1085,14 @@ async function main() {
     // Legacy default feed (tenant-agnostic): the adapter already stripped the
     // global suffix, so raw.symbol is canonical. Drives every tenant that isn't
     // pricing off its own providers.
-    (allBook.get(raw.symbol) ?? allBook.set(raw.symbol, new Map()).get(raw.symbol)!).set('default', q);
-    aggregateCanonical(raw.symbol, now);
-    defaultBook.set(raw.symbol, q);
     const targets = routing.get(raw.symbol);
     if (!targets) {
       dropNoRoute(raw.symbol);
       return;
     }
+    (allBook.get(raw.symbol) ?? allBook.set(raw.symbol, new Map()).get(raw.symbol)!).set('default', q);
+    aggregateCanonical(raw.symbol, now);
+    defaultBook.set(raw.symbol, q);
     for (const t of targets) publishForTenant(t.tenantId, raw.symbol, now);
   };
   // Timing wrapper so per-tick processing latency is captured across all the

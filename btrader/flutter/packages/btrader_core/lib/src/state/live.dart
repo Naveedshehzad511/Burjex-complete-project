@@ -188,7 +188,9 @@ class QuotesNotifier extends StateNotifier<Map<String, Tick>> {
   ///
   /// A missing stamp (`ts <= 0`) carries no ordering information, so it is
   /// accepted rather than guessed at.
-  /// Ticks are buffered and published at most once per frame.
+  /// Ticks are coalesced only for a millisecond-class turn. This keeps the
+  /// latest tradeable quote while avoiding a second 16ms presentation delay
+  /// after the matching engine has already accepted its 1ms group budget.
   ///
   /// Every screen that shows a price watches this whole map — indexing it after
   /// `watch` does not narrow the dependency — and the client subscribes to the
@@ -198,16 +200,14 @@ class QuotesNotifier extends StateNotifier<Map<String, Tick>> {
   /// frame budget on it and visibly stutters, which is exactly the difference
   /// between "web is perfect" and "the APK lags".
   ///
-  /// Coalescing costs nothing visually: no display refreshes faster than about
-  /// 60Hz, so publishing more often than that renders frames nobody can see.
   /// The newest tick per symbol still wins, and the ordering guard below still
-  /// rejects genuinely stale ones — it just compares against whatever is
-  /// pending as well as what is already published.
+  /// rejects genuinely stale ones — it compares against whatever is pending
+  /// as well as what is already published.
   void set(Tick t) {
     final prev = _pending[t.symbol] ?? state[t.symbol];
     if (prev != null && t.ts > 0 && prev.ts > 0 && t.ts < prev.ts) return;
     _pending[t.symbol] = t;
-    _flush ??= Timer(const Duration(milliseconds: 16), _publish);
+    _flush ??= Timer(const Duration(milliseconds: 1), _publish);
   }
 
   /// Ticks accepted since the last publish, newest per symbol.
@@ -279,7 +279,8 @@ class DayStatsNotifier extends StateNotifier<Map<String, DayStat>> {
   final Map<String, DayStat> _working = {};
   Timer? _flush;
 
-  /// Accumulates every tick but publishes at most once per frame.
+  /// Accumulates every tick but publishes only the newest state in a
+  /// millisecond-class turn.
   ///
   /// The extremes must see all of them — a high set by a single tick between
   /// two frames is still the day's high — so accumulation stays per-tick and
@@ -295,7 +296,7 @@ class DayStatsNotifier extends StateNotifier<Map<String, DayStat>> {
             high: mid > cur.high ? mid : cur.high,
             low: mid < cur.low ? mid : cur.low,
           );
-    _flush ??= Timer(const Duration(milliseconds: 16), _publish);
+    _flush ??= Timer(const Duration(milliseconds: 1), _publish);
   }
 
   void _publish() {
