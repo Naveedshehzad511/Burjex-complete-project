@@ -14,7 +14,14 @@
   window.__bxCloseSync = true;
   var latestPosition = Object.create(null);
   var marketSocket = null;
+  var marketSockets = [];
   var NativeWebSocket = window.WebSocket;
+
+  function registerSocket(socket) {
+    if (!socket || marketSockets.indexOf(socket) >= 0) return;
+    marketSockets.push(socket);
+    marketSocket = socket;
+  }
 
   function closedIds() {
     if (typeof window.__bxClosedIds !== "object" || !window.__bxClosedIds) {
@@ -81,12 +88,20 @@
       event: "position_closed"
     });
     note(closed);
-    if (!marketSocket || typeof MessageEvent !== "function") return;
-    try {
-      marketSocket.dispatchEvent(new MessageEvent("message", {
+    if (!marketSockets.length || typeof MessageEvent !== "function") return;
+    var event = new MessageEvent("message", {
         data: JSON.stringify({ t: "position_closed", d: closed })
-      }));
-    } catch (e) {}
+      });
+    for (var i = 0; i < marketSockets.length; i++) {
+      var socket = marketSockets[i];
+      try {
+        // Some Flutter browser channels install onmessage; others use
+        // addEventListener. Deliver to both paths so the terminal frame reaches
+        // the same compiled handler the real server frame uses.
+        if (typeof socket.onmessage === "function") socket.onmessage(event);
+        socket.dispatchEvent(event);
+      } catch (e) {}
+    }
   }
 
   function noteFrame(raw) {
@@ -119,7 +134,7 @@
       var socket = arguments.length > 1
         ? new NativeWebSocket(url, protocols)
         : new NativeWebSocket(url);
-      marketSocket = socket;
+      registerSocket(socket);
       return socket;
     };
     TrackedWebSocket.prototype = NativeWebSocket.prototype;
@@ -135,7 +150,7 @@
     NativeWebSocket.prototype.addEventListener = function (type, fn, cap) {
       if (String(type).toLowerCase() === "message" && !this.__bxGhostSide) {
         this.__bxGhostSide = true;
-        marketSocket = this;
+        registerSocket(this);
         origAdd.call(this, "message", function (ev) {
           try {
             noteFrame(ev && ev.data);
