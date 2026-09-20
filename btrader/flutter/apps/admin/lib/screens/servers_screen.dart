@@ -235,7 +235,6 @@ class ServerDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final canRestart = ref.watch(authControllerProvider).role == 'SUPER_ADMIN';
     final role = ref.watch(authControllerProvider).role;
     if (role != 'SUPER_ADMIN' && role != 'TENANT_ADMIN') {
       return const AdminPage(title: 'Server details', child: Center(child: Text('Administrator only.')));
@@ -262,6 +261,7 @@ class _ServerDetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final canRestart = ref.watch(authControllerProvider).role == 'SUPER_ADMIN';
     final health = Map<String, dynamic>.from(server['health'] as Map? ?? const {});
     final latest = Map<String, dynamic>.from(server['latestHeartbeat'] as Map? ?? const {});
     final status = health['status']?.toString() ?? 'OFFLINE';
