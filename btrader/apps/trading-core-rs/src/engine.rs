@@ -175,7 +175,9 @@ impl Engine {
             max_feed_still_ms: env_i64("MAX_FEED_STILL_MS", 120_000),
             order_rate_max: env_i64("ORDER_RATE_MAX", 40) as usize,
             order_rate_window_ms: env_i64("ORDER_RATE_WINDOW_MS", 1000),
-            account_queue_wait: Duration::from_millis(env_i64("ACCOUNT_QUEUE_WAIT_MS", 8000) as u64),
+            // Reject a busy account promptly rather than presenting an
+            // unpredictable multi-second mutation stall to a fast market.
+            account_queue_wait: Duration::from_millis(env_i64("ACCOUNT_QUEUE_WAIT_MS", 100) as u64),
         }
     }
 
@@ -219,11 +221,24 @@ impl Engine {
         true
     }
 
-    pub async fn emit(&self, tenant_id: &str, evt: serde_json::Value) {
+    pub async fn emit(&self, tenant_id: &str, mut evt: serde_json::Value) {
+        // This timestamp is carried through Redis to the WS gateway, where it
+        // becomes a measurable matcher→Redis→WS hop instead of an opaque delay.
+        if let Some(obj) = evt.as_object_mut() {
+            obj.entry("emittedAt".to_string()).or_insert_with(|| json!(now_ms()));
+        }
         let ch = format!("bt:{tenant_id}:engine.evt");
         let payload = evt.to_string();
+        let queued = Instant::now();
         let mut r = self.redis.lock().await;
+        let redis_lock_ms = queued.elapsed().as_millis() as u64;
+        let publish_started = Instant::now();
         let _: Result<(), _> = r.publish::<_, _, ()>(ch, payload).await;
+        tracing::debug!(
+            redis_lock_ms,
+            redis_publish_ms = publish_started.elapsed().as_millis() as u64,
+            "trade-hop redis_publish"
+        );
     }
 
     pub async fn crm_outbox(&self, tenant_id: &str, event_type: &str, payload: serde_json::Value) {
@@ -242,7 +257,14 @@ impl Engine {
 
     pub async fn place_order(&self, tenant_id: &str, req: PlaceReq) -> BtResult<ExecResult> {
         let aid = req.account_id.clone();
-        self.with_account(&aid, || self.place_order_exclusive(tenant_id, req)).await
+        let queued = Instant::now();
+        let result = self.with_account(&aid, || self.place_order_exclusive(tenant_id, req)).await;
+        tracing::debug!(
+            account_id = %aid,
+            queue_wait_ms = queued.elapsed().as_millis() as u64,
+            "trade-hop account_queue"
+        );
+        result
     }
 
     async fn place_order_exclusive(&self, tenant_id: &str, mut req: PlaceReq) -> BtResult<ExecResult> {
@@ -564,7 +586,13 @@ impl Engine {
         .bind(&locked.id)
         .execute(&mut *tx)
         .await?;
+        let commit_started = Instant::now();
         tx.commit().await?;
+        tracing::debug!(
+            order_id = %order_id,
+            sql_commit_ms = commit_started.elapsed().as_millis() as u64,
+            "trade-hop sql_commit"
+        );
 
         if book == "A" && covered_volume > 0.0 {
             self.cover_open(
@@ -613,7 +641,7 @@ impl Engine {
             group_id: account.group_id.clone(),
             exec_claim_kind: None,
         });
-        self.publish_after_fill(tenant_id, &account.id, &position_id, "opened", &snap, None)
+        self.publish_after_fill(tenant_id, &account.id, &position_id, Some(&order_id), "opened", &snap, None)
             .await;
 
         Ok(ExecResult {

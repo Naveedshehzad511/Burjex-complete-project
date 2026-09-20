@@ -531,7 +531,13 @@ impl Engine {
         .bind(&acct.id)
         .execute(&mut *tx)
         .await?;
+        let commit_started = Instant::now();
         tx.commit().await?;
+        tracing::debug!(
+            position_id = %position_id,
+            sql_commit_ms = commit_started.elapsed().as_millis() as u64,
+            "trade-hop sql_commit"
+        );
         self.claims.mark_closed(&position_id);
         if partial {
             let remaining = open_vol - vol;
@@ -560,7 +566,7 @@ impl Engine {
             floating_pl: after.floating_pl,
             ts: now_ms(),
         };
-        self.publish_after_fill(&tenant_id, &account_id, &position_id, "closed", &snap, Some(realized))
+        self.publish_after_fill(&tenant_id, &account_id, &position_id, None, "closed", &snap, Some(realized))
             .await;
         Ok(ExecResult {
             accepted: true,

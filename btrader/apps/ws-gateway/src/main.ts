@@ -16,7 +16,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import Redis from 'ioredis';
 import jwt from 'jsonwebtoken';
-import { Channels, Tick, WsFrame, CandleEvent } from '@btrader/shared';
+import { Channels, Tick, WsFrame, CandleEvent, counters, latency } from '@btrader/shared';
 
 const PORT = Number(process.env.WS_PORT ?? 4101);
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6380';
@@ -68,11 +68,20 @@ interface ClientState {
 // subscribed client. 0 sends each tick in its own frame, as before.
 const TICK_BATCH_MS = Number(process.env.WS_TICK_BATCH_MS ?? 40);
 
-// How long engine events may sit in a client's buffer before being flushed.
-// Small enough to stay imperceptible on a trade action, large enough that a
-// client holding many positions gets one frame per window instead of one per
-// position. Like TICK_BATCH_MS this batches, it never drops.
-const EVT_BATCH_MS = Number(process.env.WS_EVT_BATCH_MS ?? 50);
+// Trade-state changes must reach the client immediately. Tick fan-out may
+// still coalesce, but an order/fill/close must never wait behind a batch timer.
+// Setting this above zero is an explicit compatibility/performance trade-off
+// for clients that opt into `evts:true`; staging must validate that choice.
+const EVT_BATCH_MS = Math.max(0, Number(process.env.WS_EVT_BATCH_MS ?? 0));
+
+// A slow phone must never turn its kernel/WebSocket queue into an unbounded
+// source of stale prices or memory pressure for all other clients. Disconnect
+// it with 1013 ("try again later"); on reconnect it resubscribes and seeds from
+// the current REST/Redis snapshot rather than replaying an obsolete backlog.
+const MAX_BUFFERED_BYTES = Math.max(1, Number(process.env.WS_MAX_BUFFERED_BYTES ?? 1_048_576));
+const MAX_TICK_BUFFER = Math.max(1, Number(process.env.WS_MAX_TICK_BUFFER ?? 2_048));
+const MAX_EVT_BUFFER = Math.max(1, Number(process.env.WS_MAX_EVENT_BUFFER ?? 512));
+const METRICS_LOG_MS = Math.max(0, Number(process.env.WS_METRICS_LOG_MS ?? 15_000));
 
 const clients = new Set<ClientState>();
 
@@ -127,6 +136,14 @@ function dropClient(c: ClientState) {
 const sub = new Redis(REDIS_URL);
 const redis = new Redis(REDIS_URL);
 
+function disconnectSlowClient(c: ClientState, reason: string): void {
+  counters.inc(`ws.disconnect.${reason}`);
+  if (c.ws.readyState === WebSocket.OPEN || c.ws.readyState === WebSocket.CLOSING) {
+    c.ws.close(1013, 'slow consumer: reconnect to resync');
+  }
+  dropClient(c);
+}
+
 /// Buffer one engine event for a client, coalescing where it is safe to.
 ///
 /// Snapshot kinds (position, account) key by id so a later state replaces an
@@ -134,15 +151,21 @@ const redis = new Redis(REDIS_URL);
 /// stale one first. Orders pass through unkeyed: each is a distinct transition
 /// and dropping one loses the fill.
 function queueEvt(c: ClientState, kind: 'position' | 'account' | 'order', key: string, body: unknown) {
-  if (!c.wantsEvtBatch) {
-    // Old client: unchanged one-frame-per-event behaviour.
-    send(c.ws, { t: kind, d: body } as WsFrame);
+  if (!c.wantsEvtBatch || EVT_BATCH_MS <= 0) {
+    // The default is immediate, for old and new clients alike. Fills and
+    // closes are state transitions, not a UI update that can sit 50 ms behind
+    // a last-write-wins buffer.
+    send(c, { t: kind, d: body } as WsFrame);
     return;
   }
   if (kind === 'position') c.evtPos.set(key, body);
   else if (kind === 'account') c.evtAcct.set(key, body);
   else c.evtOrders.push(body);
 
+  if (c.evtPos.size + c.evtAcct.size + c.evtOrders.length > MAX_EVT_BUFFER) {
+    disconnectSlowClient(c, 'event_buffer');
+    return;
+  }
   if (c.evtTimer === undefined) {
     c.evtTimer = setTimeout(() => flushEvts(c), EVT_BATCH_MS);
   }
@@ -163,11 +186,22 @@ function flushEvts(c: ClientState) {
   c.evtPos = new Map();
   c.evtAcct = new Map();
   c.evtOrders = [];
-  send(c.ws, frame as unknown as WsFrame);
+  send(c, frame as unknown as WsFrame);
 }
 
-function send(ws: WebSocket, frame: WsFrame) {
-  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame));
+function send(c: ClientState, frame: WsFrame): boolean {
+  if (c.ws.readyState !== WebSocket.OPEN) return false;
+  if (c.ws.bufferedAmount > MAX_BUFFERED_BYTES) {
+    disconnectSlowClient(c, 'socket_buffer');
+    return false;
+  }
+  const stop = latency.start('ws.enqueue');
+  try {
+    c.ws.send(JSON.stringify(frame));
+    return true;
+  } finally {
+    stop();
+  }
 }
 
 /// Emit this client's buffered ticks as one frame.
@@ -189,7 +223,7 @@ function flushTicks(c: ClientState): void {
   const batch = c.tickBuf;
   c.tickBuf = [];
   if (!c.wantsCompact) {
-    send(c.ws, { t: 'ticks', d: batch } as unknown as WsFrame);
+    send(c, { t: 'ticks', d: batch } as unknown as WsFrame);
     return;
   }
   const rows: Array<[number, number, number, number]> = [];
@@ -198,7 +232,7 @@ function flushTicks(c: ClientState): void {
     if (id === undefined) continue; // never assigned: cannot be decoded
     rows.push([id, t.bid, t.ask, t.ts]);
   }
-  if (rows.length > 0) send(c.ws, { t: 'k', d: rows } as unknown as WsFrame);
+  if (rows.length > 0) send(c, { t: 'k', d: rows } as unknown as WsFrame);
 }
 
 /// Assign ids to any newly subscribed symbols and tell the client the mapping.
@@ -212,7 +246,7 @@ function announceSymbolIds(c: ClientState, symbols: string[]): void {
     fresh[sym] = id;
   }
   if (Object.keys(fresh).length > 0) {
-    send(c.ws, { t: 'sym', d: fresh } as unknown as WsFrame);
+    send(c, { t: 'sym', d: fresh } as unknown as WsFrame);
   }
 }
 
@@ -249,9 +283,15 @@ sub.on('pmessage', (_pattern, channel, message) => {
     // one: N ticks arrive as one frame and cost one parse instead of N. The
     // client unpacks the array and applies every tick in order, so day
     // high/low and anything else derived per tick stay exact.
+    const priceAgeMs = Date.now() - tick.ts;
+    if (Number.isFinite(priceAgeMs) && priceAgeMs >= 0) latency.record('ws.price_age', priceAgeMs);
     for (const c of byTenantSymbol.get(tkey(tenantId, tick.symbol)) ?? EMPTY) {
       if (TICK_BATCH_MS <= 0 || !c.wantsBatch) {
-        send(c.ws, { t: 'tick', d: tick });
+        send(c, { t: 'tick', d: tick });
+        continue;
+      }
+      if (c.tickBuf.length >= MAX_TICK_BUFFER) {
+        disconnectSlowClient(c, 'tick_buffer');
         continue;
       }
       c.tickBuf.push(tick);
@@ -273,13 +313,22 @@ sub.on('pmessage', (_pattern, channel, message) => {
       return;
     }
     for (const c of byTenantSymbol.get(tkey(tenantId, candle.symbol)) ?? EMPTY) {
-      send(c.ws, { t: 'candle', d: candle });
+      send(c, { t: 'candle', d: candle });
     }
     return;
   }
 
   if (kind === Channels.ENGINE_EVT) {
-    const evt = JSON.parse(message);
+    let evt: any;
+    try {
+      evt = JSON.parse(message);
+    } catch {
+      counters.inc('ws.invalid_engine_event');
+      return;
+    }
+    const emittedAt = Number(evt.emittedAt);
+    const eventAgeMs = Date.now() - emittedAt;
+    if (Number.isFinite(eventAgeMs) && eventAgeMs >= 0) latency.record('ws.engine_event_age', eventAgeMs);
 
     // Check if position closure or SL/TP hit is triggered
     const isClosedOrSlTp = 
@@ -464,7 +513,7 @@ function attachClient(
         }
         break;
       case 'ping':
-        send(ws, { t: 'pong', d: { ts: Date.now() } });
+        send(state, { t: 'pong', d: { ts: Date.now() } });
         break;
     }
   });
@@ -486,6 +535,26 @@ setInterval(() => {
     if (c.ws.readyState === WebSocket.OPEN) c.ws.ping();
   }
 }, 30_000);
+
+if (METRICS_LOG_MS > 0) {
+  setInterval(() => {
+    const queuedTicks = [...clients].reduce((n, c) => n + c.tickBuf.length, 0);
+    const queuedEvents = [...clients].reduce(
+      (n, c) => n + c.evtPos.size + c.evtAcct.size + c.evtOrders.length,
+      0,
+    );
+    console.log(
+      '[ws-metrics]',
+      JSON.stringify({
+        clients: clients.size,
+        queuedTicks,
+        queuedEvents,
+        counters: counters.snapshot(),
+        latency: latency.snapshot(),
+      }),
+    );
+  }, METRICS_LOG_MS);
+}
 
 // eslint-disable-next-line no-console
 console.log(`[ws-gateway] listening on :${PORT}`);

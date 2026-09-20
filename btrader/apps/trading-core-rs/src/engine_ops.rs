@@ -458,6 +458,7 @@ impl Engine {
         tenant_id: &str,
         account_id: &str,
         position_id: &str,
+        order_id: Option<&str>,
         kind: &str,
         snap: &Snapshot,
         profit: Option<f64>,
@@ -468,6 +469,7 @@ impl Engine {
                 "kind": "POSITION_UPDATE",
                 "tenantId": tenant_id,
                 "positionId": position_id,
+                "orderId": order_id,
                 "accountId": account_id,
                 "book": kind,
                 "position": {
