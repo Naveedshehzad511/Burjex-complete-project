@@ -135,6 +135,9 @@ const navGroups = [
     _NavLeaf('/clients', 'Clients', Icons.people_outline),
     _NavLeaf('/financial', 'Financial', Icons.payments_outlined),
   ]),
+  _NavGroup('Trading Engine', [
+    _NavLeaf('/servers', 'Servers', Icons.dns_outlined),
+  ]),
   _NavGroup('Administration', [
     _NavLeaf('/risk', 'Risk', Icons.warning_amber_outlined),
     _NavLeaf('/audit', 'Audit', Icons.receipt_long_outlined),
