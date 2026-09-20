@@ -57229,6 +57229,7 @@ break A}s=s.h(e,"symbol")
 d=A.f(s==null?"":s)
 c=d.length===0?a:J.t(b.b.ah(0,$.m4(),t.iS),d)
 b.b.ah(0,$.afm().gcd(),t._l).aeD(0,e,c)
+if(o==="position_opened"||o==="position_close_pending")try{A.bxRef(b.b)}catch(c){}
 break A}if(a0 instanceof A.Jt){s=b.a
 p=s.a
 if(p!=null)p.aB(0)
