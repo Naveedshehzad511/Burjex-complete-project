@@ -36,6 +36,23 @@ enum UserRole {
   SERVICE       // machine account (CRM, bridges)
 }
 
+// Registry labels only. PRIMARY never starts, stops, or promotes an engine;
+// matching remains protected by its existing Redis singleton lock.
+enum MonitoringServerRole {
+  PRIMARY
+  STANDBY
+}
+
+enum MonitoringServerReadiness {
+  NOT_READY
+  ONBOARDING
+  READY
+  ACTIVE
+  STANDBY
+  MAINTENANCE
+  ERROR
+}
+
 enum AccountStatus {
   ACTIVE
   TRADING_DISABLED  // can view/close, cannot open
@@ -1298,6 +1315,88 @@ model CrmSyncOutbox {
   @@index([status, nextAttempt])
   @@index([tenantId])
   @@map("crm_sync_outbox")
+}
+
+// Platform-level registry for monitored infrastructure. This is deliberately
+// separate from tenants and trading/execution configuration: rows describe
+// machines, but cannot start a matcher or alter any order path.
+model MonitoringServer {
+  id              String                    @id @default(uuid())
+  name            String                    @unique
+  host            String
+  sshPort         Int                       @default(22)
+  region          String?
+  environment     String                    @default("production")
+  role            MonitoringServerRole      @default(STANDBY)
+  readiness       MonitoringServerReadiness @default(NOT_READY)
+  enabled         Boolean                   @default(true)
+  appVersion      String?
+  lastHeartbeatAt DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  heartbeats MonitoringServerHeartbeat[]
+  events     MonitoringServerEvent[]
+
+  @@index([enabled, readiness])
+  @@index([role])
+  @@map("monitoring_servers")
+}
+
+// Bounded by the gateway before insert. Snapshots intentionally omit
+// credentials and any order/deal data; they are operational telemetry only.
+model MonitoringServerHeartbeat {
+  id            String   @id @default(uuid())
+  serverId      String
+  reportedAt    DateTime?
+  receivedAt    DateTime @default(now())
+  cpuPercent    Float?
+  ramPercent    Float?
+  diskPercent   Float?
+  uptimeSeconds Int?
+  appVersion    String?
+  network       Json?
+  services      Json?
+
+  server MonitoringServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, receivedAt])
+  @@map("monitoring_server_heartbeats")
+}
+
+// Human-readable operational history. Restart/promotion requests are recorded
+// here as audit-only events and never invoke SSH, WinRM, Docker, or the engine.
+model MonitoringServerEvent {
+  id        String   @id @default(uuid())
+  serverId  String
+  kind      String
+  severity  String   @default("INFO")
+  message   String
+  detail    Json?
+  createdAt DateTime @default(now())
+
+  server MonitoringServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, createdAt])
+  @@map("monitoring_server_events")
+}
+
+// One global row. Thresholds are configurable rather than encoded in the UI or
+// matching engine; heartbeat state is evaluated only by the admin gateway.
+model MonitoringServerHealthSetting {
+  id                      String   @id @default("default")
+  cpuWarningPercent       Int      @default(70)
+  cpuCriticalPercent      Int      @default(85)
+  ramWarningPercent       Int      @default(70)
+  ramCriticalPercent      Int      @default(85)
+  diskWarningPercent      Int      @default(70)
+  diskCriticalPercent     Int      @default(85)
+  heartbeatWarningSeconds Int      @default(90)
+  heartbeatOfflineSeconds Int      @default(180)
+  maxHeartbeatsPerServer  Int      @default(1440)
+  updatedAt               DateTime @updatedAt
+
+  @@map("monitoring_server_health_settings")
 }
 
 // Central HQ dashboard registry: one row per separately-deployed company

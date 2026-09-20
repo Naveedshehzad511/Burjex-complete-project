@@ -127,6 +127,21 @@ async function main() {
     },
   });
 
+  // Registry-only record for the current singleton deployment. It does not
+  // configure an agent, start a service, or imply a failover target.
+  await prisma.monitoringServer.upsert({
+    where: { name: 'FOREXTEN (registry only)' },
+    update: {},
+    create: {
+      name: 'FOREXTEN (registry only)',
+      host: '5.226.139.8',
+      environment: 'production',
+      role: 'PRIMARY',
+      readiness: 'NOT_READY',
+      enabled: true,
+    },
+  });
+
   console.log('Seed complete: tenant=%s symbols=%d', tenant.slug, seedSymbols.length);
   console.log('Logins → super@btrader.io / ChangeMe123!  ·  admin@demofx.com / Admin123!  ·  trader@demofx.com / Trader123!');
 }

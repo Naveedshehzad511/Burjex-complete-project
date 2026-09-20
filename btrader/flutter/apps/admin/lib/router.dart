@@ -24,6 +24,7 @@ import 'screens/integrations_screen.dart';
 import 'screens/groups_screen.dart';
 import 'screens/symbol_groups_screen.dart';
 import 'screens/journal_screen.dart';
+import 'screens/servers_screen.dart';
 
 final adminRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -70,6 +71,11 @@ final adminRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/tenants', builder: (_, __) => const TenantsScreen()),
           GoRoute(path: '/hq', builder: (_, __) => const HqScreen()),
           GoRoute(path: '/integrations', builder: (_, __) => const IntegrationsScreen()),
+          GoRoute(path: '/servers', builder: (_, __) => const ServersScreen()),
+          GoRoute(
+            path: '/servers/:id',
+            builder: (_, state) => ServerDetailScreen(serverId: state.pathParameters['id']!),
+          ),
         ],
       ),
     ],

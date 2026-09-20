@@ -22,6 +22,7 @@ const _items = [
   (path: '/audit', label: 'Audit', icon: Icons.receipt_long_outlined),
   (path: '/tenants', label: 'Tenants', icon: Icons.apartment_outlined),
   (path: '/hq', label: 'Companies (HQ)', icon: Icons.public_outlined),
+  (path: '/servers', label: 'Trading Engine → Servers', icon: Icons.dns_outlined),
   (path: '/integrations', label: 'CRM / Integrations', icon: Icons.cable_outlined),
 ];
 
