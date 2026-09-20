@@ -9656,7 +9656,9 @@ ajL:function ajL(){},
 ajK:function ajK(){},
 ajM:function ajM(a){this.a=a},
 b8k:function b8k(){},
-b9T(a,b,c,d,e,f){var s,r,q,p,o,n,m,l,k=a.a,j=J.t(c,k),i=a.Q,h=J.t(d,i),g=J.ap(e)
+b9T(a,b,c,d,e,f){var s,r,q,p,o,n,m,l,k=a.a
+if(typeof self!=="undefined"&&self.__bxClosedIds&&self.__bxClosedIds[k])return 0
+j=J.t(c,k),i=a.Q,h=J.t(d,i),g=J.ap(e)
 for(;;){if(!g.q()){s=null
 break}s=g.gJ(g)
 if(s.b===i)break}r=s==null?null:s.y
@@ -58267,6 +58269,7 @@ f.toString
 a1=A.b([],t.qh)
 a2=A.aU(r)
 for(a0=B.b.ga6(a0),a3=new A.mW(a0,new A.aNG(c6)),a4=c6.ax,a5=f.b,a6=f.e,a7=f.d,a8=f.c;a3.q();){a9=a0.gJ(0)
+if(typeof self!=="undefined"&&self.__bxClosedIds&&self.__bxClosedIds[a9.a])continue
 b0=a9.d
 b1=a9.r
 if(!a2.D(0,b0+"-"+B.d.P(b1,l)))continue
