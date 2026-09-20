@@ -214,6 +214,10 @@ services:
       PORTAL_READ_CACHE_MS: ${PORTAL_READ_CACHE_MS:-2000}
       # Quotes 431: large JWTs (many account ids) exceeded Node's 16KB header cap.
       NODE_OPTIONS: "--max-http-header-size=131072"
+      # Weekend-only host control plane; token is deployment-only and never
+      # returned by the Admin API or shown in Flutter.
+      RESTART_CONTROL_URL: ${RESTART_CONTROL_URL:-http://host.docker.internal:4150}
+      RESTART_CONTROL_TOKEN: ${RESTART_CONTROL_TOKEN:-}
     command: >-
       sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
       cd /app/apps/gateway-api && exec node dist/main.js"

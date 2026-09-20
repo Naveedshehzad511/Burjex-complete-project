@@ -49,9 +49,9 @@ export class ServersController {
   }
 
   @Post(':id/actions')
-  @ApiOperation({ summary: 'Confirmation + audit only for restart, primary labels, and maintenance' })
+  @ApiOperation({ summary: 'Confirmed server actions; live restart is SUPER_ADMIN weekend-only and safety-gated' })
   action(@Param('id') id: string, @Body() body: any, @CurrentUser() user: any, @Ip() ip: string) {
-    return this.servers.action(id, body, user.id, ip);
+    return this.servers.action(id, body, user.id, user.role, ip);
   }
 }
 

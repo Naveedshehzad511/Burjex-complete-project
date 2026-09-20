@@ -1,5 +1,5 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
-import { createHash, timingSafeEqual } from 'crypto';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import { createHash, randomUUID, timingSafeEqual } from 'crypto';
 import { prisma } from '@btrader/db';
 import { AuditService } from '../audit/audit.service';
 import { deriveServerHealth, type HealthSettings } from './server-health';
@@ -208,18 +208,50 @@ export class ServersService {
     return row;
   }
 
-  async action(id: string, body: any, actorId: string, ip?: string) {
+  async action(id: string, body: any, actorId: string, actorRole: string, ip?: string) {
     const action = String(body?.action ?? '').toUpperCase();
     const confirmation = String(body?.confirmation ?? '').trim().toUpperCase();
     const server = await prisma.monitoringServer.findUnique({ where: { id } });
     if (!server) throw new NotFoundException('server not found');
     if (action === 'RESTART') {
-      if (confirmation !== 'RESTART') throw new BadRequestException('confirmation must be RESTART');
-      await this.event(id, 'RESTART_REQUESTED', 'WARNING', 'Restart requested and recorded only; no host, container, bridge, or engine was restarted.', { actorId });
+      if (actorRole !== 'SUPER_ADMIN') throw new ForbiddenException('restart requires SUPER_ADMIN');
+      if (id !== 'forexten-registry-only') throw new BadRequestException('live restart is approved only for FOREXTEN');
+      if (confirmation !== 'RESTART FOREXTEN') throw new BadRequestException('confirmation must be RESTART FOREXTEN');
+      const day = new Date().getUTCDay();
+      if (day !== 0 && day !== 6) throw new BadRequestException('live restart is restricted to the UTC weekend');
+      const openPositions = await prisma.position.count({ where: { status: 'OPEN' } });
+      if (openPositions > 0) {
+        await this.event(id, 'RESTART_BLOCKED', 'CRITICAL', 'Restart blocked because open client positions exist.', { actorId, openPositions });
+        throw new ConflictException('restart blocked: open client positions exist');
+      }
+      const controllerUrl = process.env.RESTART_CONTROL_URL;
+      const controllerToken = process.env.RESTART_CONTROL_TOKEN;
+      if (!controllerUrl || !controllerToken) throw new ServiceUnavailableException('restart controller is not configured');
+      const requestId = randomUUID();
+      try {
+        const response = await fetch(`${controllerUrl.replace(/\/+$/, '')}/restart`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-restart-control-token': controllerToken,
+          },
+          body: JSON.stringify({ requestId, serverId: id }),
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (!response.ok) throw new Error(`controller HTTP ${response.status}`);
+      } catch (error) {
+        await this.event(id, 'RESTART_FAILED', 'CRITICAL', 'Restart controller did not accept the request; no container restart was started.', {
+          actorId,
+          requestId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw new ServiceUnavailableException('restart controller unavailable; no restart was started');
+      }
+      await this.event(id, 'RESTART_SCHEDULED', 'WARNING', 'Weekend restart scheduled for matching, gateway, WS, market-data, and engine only. Postgres, Redis, MT5 bridge, and Windows are excluded.', { actorId, requestId, openPositions });
       await this.audit.log(null, actorId, 'UPDATE', 'monitoringServerAction', id, {
-        after: { action, simulated: true, execution: 'none' }, ip,
+        after: { action, requestId, services: ['btrader-matching', 'btrader-gateway', 'btrader-ws', 'btrader-market-data', 'btrader-engine'], openPositions }, ip,
       });
-      return { ok: true, simulated: true, message: 'Restart request recorded only. No live action was performed.' };
+      return { ok: true, scheduled: true, requestId, message: 'Restart scheduled. Clients may reconnect briefly; balances and positions remain in the running Postgres database.' };
     }
     if (action === 'SET_PRIMARY') {
       if (confirmation !== 'SET PRIMARY') throw new BadRequestException('confirmation must be SET PRIMARY');

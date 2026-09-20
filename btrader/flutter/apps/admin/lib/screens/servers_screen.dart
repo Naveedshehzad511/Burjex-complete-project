@@ -16,7 +16,7 @@ String _shortError(Object error) {
 Color _healthColor(BuildContext context, String status) => switch (status) {
       'HEALTHY' => const Color(0xFF1B9C62),
       'WARNING' => const Color(0xFFD98A00),
-      'DEGRADED' => const Color(0xFFD65F00),
+      'DEGRADED' => Theme.of(context).colorScheme.error,
       'CRITICAL' || 'OFFLINE' => Theme.of(context).colorScheme.error,
       'MAINTENANCE' => Theme.of(context).colorScheme.primary,
       _ => Theme.of(context).disabledColor,
@@ -147,6 +147,7 @@ class _ServerCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final canRestart = ref.watch(authControllerProvider).role == 'SUPER_ADMIN';
     final health = Map<String, dynamic>.from(server['health'] as Map? ?? const {});
     final latest = server['latestHeartbeat'] as Map?;
     final status = health['status']?.toString() ?? 'OFFLINE';
@@ -201,10 +202,11 @@ class _ServerCard extends ConsumerWidget {
                   onPressed: () => _showActionConfirmation(context, ref, server, 'SET_PRIMARY'),
                   child: const Text('Set Primary'),
                 ),
-              TextButton(
-                onPressed: () => _showActionConfirmation(context, ref, server, 'RESTART'),
-                child: const Text('Restart…'),
-              ),
+              if (canRestart)
+                TextButton(
+                  onPressed: () => _showActionConfirmation(context, ref, server, 'RESTART'),
+                  child: const Text('Restart…'),
+                ),
             ]),
           ]),
         ),
@@ -233,6 +235,7 @@ class ServerDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final canRestart = ref.watch(authControllerProvider).role == 'SUPER_ADMIN';
     final role = ref.watch(authControllerProvider).role;
     if (role != 'SUPER_ADMIN' && role != 'TENANT_ADMIN') {
       return const AdminPage(title: 'Server details', child: Center(child: Text('Administrator only.')));
@@ -277,7 +280,8 @@ class _ServerDetailBody extends ConsumerWidget {
         if (server['role'] != 'PRIMARY')
           OutlinedButton(onPressed: () => _showActionConfirmation(context, ref, server, 'SET_PRIMARY'), child: const Text('Set Primary')),
         OutlinedButton(onPressed: () => _showActionConfirmation(context, ref, server, 'MAINTENANCE'), child: const Text('Maintenance')),
-        OutlinedButton(onPressed: () => _showActionConfirmation(context, ref, server, 'RESTART'), child: const Text('Restart…')),
+        if (canRestart)
+          OutlinedButton(onPressed: () => _showActionConfirmation(context, ref, server, 'RESTART'), child: const Text('Restart…')),
       ]),
       const SizedBox(height: 14),
       _Section(
@@ -479,11 +483,15 @@ Future<void> _showServerEditor(BuildContext context, WidgetRef ref, {Map<String,
 
 Future<void> _showActionConfirmation(BuildContext context, WidgetRef ref, Map<String, dynamic> server, String action) async {
   final confirmation = TextEditingController();
-  final required = action == 'SET_PRIMARY' ? 'SET PRIMARY' : action;
+  final required = switch (action) {
+    'SET_PRIMARY' => 'SET PRIMARY',
+    'RESTART' => 'RESTART FOREXTEN',
+    _ => action,
+  };
   var busy = false;
   String? error;
   final explanation = switch (action) {
-    'RESTART' => 'This records an audited restart request only. It cannot SSH, WinRM, restart Docker, restart BurjexMt5Bridge, or restart any live service.',
+    'RESTART' => 'Weekend-only: this restarts matching, gateway, WS, market-data, and engine after the safety gate confirms there are no open client positions. Postgres, Redis, MT5 bridge, Windows, balances, and stored positions are excluded. Clients may reconnect briefly.',
     'SET_PRIMARY' => 'This changes only the registry label. It does not start a matcher or perform failover; a second live matcher remains unsafe.',
     'MAINTENANCE' => 'This changes only the monitoring readiness label. It does not change any running service.',
     _ => '',

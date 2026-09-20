@@ -147,12 +147,32 @@ const navGroups = [
   ]),
 ];
 
-class NavigatorPanel extends StatelessWidget {
+bool serversNeedRedAlert(Map<String, dynamic> payload) {
+  final servers = payload['servers'] as List? ?? const [];
+  for (final raw in servers) {
+    final server = Map<String, dynamic>.from(raw as Map);
+    final health = Map<String, dynamic>.from(server['health'] as Map? ?? const {});
+    final status = health['status']?.toString();
+    if (status == 'OFFLINE' || status == 'CRITICAL' || status == 'DEGRADED') return true;
+    final problems = health['problems'] as List? ?? const [];
+    if (problems.any((problem) => problem.toString().toLowerCase().contains('heartbeat'))) return true;
+    final services = (server['latestHeartbeat'] as Map?)?['services'] as Map? ?? const {};
+    if (services.values.any((value) => value == false || value.toString().toUpperCase() == 'DOWN')) return true;
+  }
+  return false;
+}
+
+class NavigatorPanel extends ConsumerWidget {
   const NavigatorPanel({super.key, required this.currentPath});
   final String currentPath;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final role = ref.watch(authControllerProvider).role;
+    final monitoring = (role == 'SUPER_ADMIN' || role == 'TENANT_ADMIN')
+        ? ref.watch(monitoringServersProvider).valueOrNull
+        : null;
+    final serversAlert = monitoring != null && serversNeedRedAlert(monitoring);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const _PanelHeader(icon: Icons.account_tree, title: 'Navigator'),
       Expanded(
@@ -169,7 +189,7 @@ class NavigatorPanel extends StatelessWidget {
                 if (leaf.children.isNotEmpty)
                   _NavBranch(leaf: leaf, currentPath: currentPath)
                 else
-                  _NavRow(leaf: leaf, selected: currentPath == leaf.path),
+                  _NavRow(leaf: leaf, selected: currentPath == leaf.path, alert: leaf.path == '/servers' && serversAlert),
             ],
           ],
         ),
@@ -218,13 +238,15 @@ class _NavBranch extends StatelessWidget {
 }
 
 class _NavRow extends StatelessWidget {
-  const _NavRow({required this.leaf, required this.selected, this.indent = false});
+  const _NavRow({required this.leaf, required this.selected, this.indent = false, this.alert = false});
   final _NavLeaf leaf;
   final bool selected;
   final bool indent;
+  final bool alert;
   @override
   Widget build(BuildContext context) {
     final blue = Theme.of(context).colorScheme.primary;
+    final alertColor = Theme.of(context).colorScheme.error;
     return InkWell(
       onTap: () => context.go(leaf.path),
       child: Container(
@@ -235,7 +257,7 @@ class _NavRow extends StatelessWidget {
         ),
         padding: EdgeInsets.only(left: indent ? 28 : 13, right: 12),
         child: Row(children: [
-          Icon(leaf.icon, size: 17, color: selected ? blue : Theme.of(context).hintColor),
+          Icon(leaf.icon, size: 17, color: alert ? alertColor : (selected ? blue : Theme.of(context).hintColor)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(leaf.label,
@@ -243,8 +265,14 @@ class _NavRow extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 13,
                     fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    color: selected ? blue : Theme.of(context).colorScheme.onSurface)),
+                    color: alert ? alertColor : (selected ? blue : Theme.of(context).colorScheme.onSurface))),
           ),
+          if (alert)
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: alertColor, shape: BoxShape.circle),
+            ),
         ]),
       ),
     );

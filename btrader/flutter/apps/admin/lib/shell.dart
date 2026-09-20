@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import 'admin_providers.dart';
 import 'widgets/mt5_sidebar.dart';
 
 const _items = [
@@ -56,6 +57,11 @@ class _AdminShellState extends ConsumerState<AdminShell> {
     final ref = this.ref;
     final mode = ref.watch(themeModeProvider);
     final brand = ref.watch(brandingProvider).valueOrNull ?? Branding.fallback;
+    final role = ref.watch(authControllerProvider).role;
+    final monitoring = (role == 'SUPER_ADMIN' || role == 'TENANT_ADMIN')
+        ? ref.watch(monitoringServersProvider).valueOrNull
+        : null;
+    final serversAlert = monitoring != null && serversNeedRedAlert(monitoring);
 
     void toggleTheme() => ref.read(themeModeProvider.notifier).set(
           mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light,
@@ -82,6 +88,9 @@ class _AdminShellState extends ConsumerState<AdminShell> {
                 ListTile(
                   leading: Icon(_items[i].icon),
                   title: Text(_items[i].label),
+                  trailing: _items[i].path == '/servers' && serversAlert
+                      ? Container(width: 8, height: 8, decoration: BoxDecoration(color: Theme.of(context).colorScheme.error, shape: BoxShape.circle))
+                      : null,
                   selected: i == _index,
                   onTap: () {
                     Navigator.pop(context);
