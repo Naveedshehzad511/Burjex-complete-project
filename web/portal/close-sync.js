@@ -23,16 +23,19 @@
   function isClosed(obj) {
     if (!obj || typeof obj !== "object") return false;
     var st = String(obj.status || "").toUpperCase();
+    // SL/TP protection first claims the ticket as CLOSE_PENDING. It remains an
+    // open position through the configured execution delay, so its Trade row
+    // and chart entry/SL/TP overlays must remain visible until terminal close.
+    if (st === "CLOSE_PENDING") return false;
     var book = String(obj.book || "").toLowerCase();
-    var reason = String(obj.reason || "").toUpperCase();
     var stateVal = String(obj.state || "").toLowerCase();
+    var event = String(obj.event || "").toLowerCase();
     return (
       obj.closing === true ||
       st === "CLOSED" ||
       book === "closed" ||
       stateVal === "closed" ||
-      reason === "SL_HIT" ||
-      reason === "TP_HIT"
+      event === "position_closed"
     );
   }
 
@@ -59,7 +62,7 @@
     if (!msg || typeof msg !== "object") return;
     var t = msg.t;
     var d = msg.d;
-    if (t === "position") {
+    if (t === "position" || t === "position_closed") {
       note(d);
       return;
     }

@@ -57857,6 +57857,8 @@ case"account":e.f.D(0,new A.uN(J.t(c,d)))
 break
 case"position":e.f.D(0,new A.BL(J.t(c,d)))
 break
+case"position_closed":e.f.D(0,new A.BL(J.t(c,d)))
+break
 case"order":e.f.D(0,new A.Jt(J.t(c,d)))
 break
 case"evts":i=J.f7(t.f.a(J.t(c,d)),t.N,t.z)
