@@ -34,6 +34,7 @@ from api.views.social_auth import (
     google_start,
 )
 from api.views.dashboard import ClientDashboardAPIView
+from api.views.market_events import DailyMarketEventsAPIView
 from api.views.ib import (
     IBApplyAPIView,
     IBClientsAPIView,
@@ -115,6 +116,7 @@ urlpatterns = [
     path("me/deletion-request/", AccountDeletionAPIView.as_view(), name="me-deletion-request"),
     # Dashboard
     path("dashboard/", ClientDashboardAPIView.as_view(), name="dashboard"),
+    path("market-events/", DailyMarketEventsAPIView.as_view(), name="market-events"),
     # Wallet / treasury
     path("wallet/", WalletAPIView.as_view(), name="wallet"),
     path("deposits/methods/", DepositMethodsAPIView.as_view(), name="deposit-methods"),
