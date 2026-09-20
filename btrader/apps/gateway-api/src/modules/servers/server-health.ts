@@ -92,7 +92,7 @@ export function deriveServerHealth(
 
   for (const [name, value] of serviceEntries(latest?.services)) {
     if (serviceIsDown(value)) {
-      if (status !== 'CRITICAL') status = 'DEGRADED';
+      if ((status as ServerHealthStatus) !== 'CRITICAL') status = 'DEGRADED';
       problems.push(`${name} service reports down.`);
     }
   }

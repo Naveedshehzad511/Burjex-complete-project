@@ -158,7 +158,7 @@ export class ServersService {
       if (primary) throw new ConflictException('a PRIMARY server is already labelled; use the confirmed Set Primary action instead');
     }
     const row = await prisma.monitoringServer.create({
-      data: { ...data, role: requestedRole as ServerRole, readiness: (data.readiness ?? 'NOT_READY') as Readiness },
+      data: { ...data, role: requestedRole as ServerRole, readiness: (data.readiness ?? 'NOT_READY') as Readiness } as any,
     });
     await this.event(row.id, 'SERVER_ADDED', 'INFO', 'Server registry entry created; it is not an active trading server.', { actorId });
     await this.audit.log(null, actorId, 'CREATE', 'monitoringServer', row.id, { after: { name: row.name, host: row.host }, ip });
@@ -275,7 +275,17 @@ export class ServersService {
       return { ok: true, captured: false, reason: 'heartbeat storage cap reached' };
     }
     await prisma.monitoringServerHeartbeat.create({
-      data: { serverId, reportedAt, ...metrics },
+      data: {
+        serverId,
+        reportedAt,
+        cpuPercent: metrics.cpuPercent,
+        ramPercent: metrics.ramPercent,
+        diskPercent: metrics.diskPercent,
+        uptimeSeconds: metrics.uptimeSeconds,
+        appVersion: metrics.appVersion,
+        ...(metrics.network ? { network: metrics.network } : {}),
+        ...(metrics.services ? { services: metrics.services } : {}),
+      },
     });
     return { ok: true, captured: true };
   }
@@ -290,7 +300,7 @@ export class ServersService {
 
   private event(serverId: string, kind: string, severity: string, message: string, detail?: Record<string, unknown>) {
     return prisma.monitoringServerEvent.create({
-      data: { serverId, kind, severity, message, detail },
+      data: { serverId, kind, severity, message, detail: detail as any },
     });
   }
 }
