@@ -57213,8 +57213,9 @@ if(g){s=J.V(e)
 d=A.f(s.h(e,"id")==null?s.h(e,"positionId")==null?"":s.h(e,"positionId"):s.h(e,"id"))
 c=A.f(s.h(e,"status")==null?"":s.h(e,"status")).toUpperCase()
 p=A.f(s.h(e,"book")==null?"":s.h(e,"book"))
-o=A.f(s.h(e,"execClaimKind")==null?"":s.h(e,"execClaimKind")).toLowerCase()
-n=s.h(e,"closing")===!0||o==="sl"||o==="tp"
+o=A.f(s.h(e,"event")==null?"":s.h(e,"event")).toLowerCase()
+n=s.h(e,"closing")===!0||o==="position_closed"
+if(c==="CLOSE_PENDING")n=!1
 if((c==="CLOSED"||p==="closed"||n)&&d.length!==0){if(typeof self!=="undefined"){self.__bxClosedIds=self.__bxClosedIds||Object.create(null);self.__bxClosedIds[d]=1}try{b.b.ah(0,$.afm().gcd(),t._l).aeE(0,d)}catch(c){}s=b.a
 p=s.a
 if(p!=null)p.aB(0)
