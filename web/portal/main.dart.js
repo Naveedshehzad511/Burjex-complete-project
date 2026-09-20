@@ -59472,7 +59472,8 @@ if(b!=null)n=A.ac(["volume",b],t.N,t.i)
 else{n=t.z
 n=A.C(n,n)}s=6
 return A.i(o.b.qD("/positions/"+a+"/close",n),$async$$2$volume)
-case 6:$.l5().CZ()
+case 6:if(typeof self!=="undefined"){self.__bxClosedIds=self.__bxClosedIds||Object.create(null);self.__bxClosedIds[a]=1}try{o.c.a.gba().ah(0,$.afm().gcd(),t._l).aeE(0,a)}catch(c){}
+$.l5().CZ()
 s=7
 return A.i(o.c.$0(),$async$$2$volume)
 case 7:q=1
