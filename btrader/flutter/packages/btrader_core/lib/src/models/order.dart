@@ -39,8 +39,9 @@ class PlaceOrderRequest {
   final bool oneClick;
   /// Idempotency key. Generated if omitted so a double-tap cannot open two trades.
   final String? clientOrderId;
+  late final String _resolvedClientOrderId = clientOrderId ?? _clientOrderId();
 
-  const PlaceOrderRequest({
+  PlaceOrderRequest({
     required this.accountId,
     required this.symbol,
     required this.side,
@@ -65,7 +66,9 @@ class PlaceOrderRequest {
         if (slPrice != null) 'slPrice': slPrice,
         if (tpPrice != null) 'tpPrice': tpPrice,
         'oneClick': oneClick,
-        'clientOrderId': clientOrderId ?? _clientOrderId(),
+        // The request object may be submitted again after a network retry. Keep
+        // its key stable so the server returns the original ticket.
+        'clientOrderId': _resolvedClientOrderId,
       };
 }
 

@@ -12,7 +12,12 @@ pub struct ExecutionPlan {
     pub deadline: Instant,
 }
 
-pub fn create_plan(pricing: &GroupPricing, kind: &str, trigger_mono: Instant, trigger_wall: i64) -> ExecutionPlan {
+pub fn create_plan(
+    pricing: &GroupPricing,
+    kind: &str,
+    trigger_mono: Instant,
+    trigger_wall: i64,
+) -> ExecutionPlan {
     let mode = if pricing.execution_mode.eq_ignore_ascii_case("INSTANT") {
         "INSTANT"
     } else {
@@ -76,7 +81,12 @@ pub async fn wait_until_instant(deadline: Instant, delay_ms: i32) {
     .await;
 }
 
-pub fn close_apply_kind(protective_kind: Option<&str>, close_all: bool, stop_out: bool, dealer: bool) -> Option<&'static str> {
+pub fn close_apply_kind(
+    protective_kind: Option<&str>,
+    close_all: bool,
+    stop_out: bool,
+    dealer: bool,
+) -> Option<&'static str> {
     if stop_out || dealer {
         return None;
     }
@@ -134,5 +144,43 @@ mod tests {
         assert_eq!(sl.delay_ms, 175);
         assert_eq!(tp.delay_ms, 175);
         assert_eq!(sl.deadline, now + Duration::from_millis(175));
+    }
+
+    #[test]
+    fn one_ms_budget_is_shared_by_place_close_pending_and_protection() {
+        let p = GroupPricing {
+            execution_mode: "MARKET".into(),
+            execution_delay_ms: 1,
+            execution_apply_to: serde_json::json!({
+                "marketBuy": true,
+                "marketSell": true,
+                "manualClose": true,
+                "buyStop": true,
+                "sellStop": true,
+                "buyLimit": true,
+                "sellLimit": true,
+                "sl": true,
+                "tp": true,
+            }),
+            ..Default::default()
+        };
+        let now = Instant::now();
+        for kind in [
+            "marketBuy",
+            "marketSell",
+            "manualClose",
+            "buyStop",
+            "sellStop",
+            "buyLimit",
+            "sellLimit",
+            "sl",
+            "tp",
+        ] {
+            let plan = create_plan(&p, kind, now, 0);
+            // Pending fills may be faster (0ms), but no path may exceed the
+            // 1ms group budget or restart it after a tick/claim.
+            assert!(plan.delay_ms <= 1, "{kind}");
+            assert!(plan.deadline <= now + Duration::from_millis(1), "{kind}");
+        }
     }
 }

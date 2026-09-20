@@ -56676,6 +56676,12 @@ if(s!=null)q.n(0,"slPrice",s)
 s=r.x
 if(s!=null)q.n(0,"tpPrice",s)
 q.n(0,"oneClick",r.y)
+// Keep the same key when Dio retries this request: a retry must resolve to
+// the original order, never create another ticket.
+s=r.Q
+if(s==null){s=typeof crypto!=="undefined"&&typeof crypto.randomUUID==="function"?crypto.randomUUID():Date.now().toString(36)+"-"+Math.random().toString(36).slice(2)
+r.Q=s}
+q.n(0,"clientOrderId",s)
 return q}}
 A.dt.prototype={}
 A.eO.prototype={}
@@ -59980,7 +59986,9 @@ A.tN.prototype={
 T(){var s=$.a7()
 return new A.acq(B.cy,new A.bz(B.R,s),new A.bz(B.R,s),new A.bz(B.R,s))}}
 A.acq.prototype={
-a1f(a){return a==null||Date.now()-a.d>8000},
+// Never leave a tradeable control on a quote older than the portal's
+// documented 1s stale threshold; the matcher applies the tighter group budget.
+a1f(a){return a==null||Date.now()-a.d>1000},
 gQx(){var s,r,q=this,p=q.at
 if(p===$){s=B.d.P(q.y,2)
 r=$.a7()
@@ -60040,7 +60048,9 @@ else a1=null
 else a1=A.cz(m.z.a.a)
 a6=B.c.m(A.Zu(m.x),"STOP")?A.cz(m.z.a.a):null
 g=new A.ZO(b0,a2,b2,a5,a4,a1,a6,A.cz(m.Q.a.a),A.cz(m.as.a.a),l)
-if(!l)m.u(new A.b4s(m))
+// Buy/Sell controls stay disabled until their request is acknowledged,
+// including one-click market orders.
+m.u(new A.b4s(m))
 p=4
 s=7
 return A.i(a9.ah(0,$.iy(),t.W).qD("/orders",g.ed()),$async$A0)
@@ -60077,7 +60087,7 @@ s=5
 break
 case 3:n=[2]
 case 5:p=2
-if(m.c!=null&&!l)m.u(new A.b4w(m))
+if(m.c!=null)m.u(new A.b4w(m))
 s=n.pop()
 break
 case 6:case 1:return A.n(q,r)

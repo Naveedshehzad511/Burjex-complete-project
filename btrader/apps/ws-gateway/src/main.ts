@@ -26,6 +26,8 @@ import {
   forceClosed,
   coalescePosition,
   openPositionsRedisKey,
+  counters,
+  latency,
 } from '@btrader/shared';
 
 const PORT = Number(process.env.WS_PORT ?? 4101);
@@ -46,8 +48,10 @@ interface ClientState {
   symbols: Set<string>;
   accountIds: Set<string>;
   alive: boolean;
-  /// Ticks awaiting the next batch flush, in arrival order.
-  tickBuf: Tick[];
+  /// Latest tick per symbol awaiting the next flush. Quotes are snapshots, so
+  /// retaining an older tick would make the app paint a price that is already
+  /// obsolete by the time it arrives.
+  tickBuf: Map<string, Tick>;
   tickTimer?: ReturnType<typeof setTimeout>;
   /// True once the client has told us it understands batched tick frames.
   /// Older builds have not, and must keep receiving one tick per frame.
@@ -73,16 +77,25 @@ interface ClientState {
   evtTimer?: ReturnType<typeof setTimeout>;
 }
 
-// How long ticks may sit in a client's outbound buffer before being flushed as
-// one batch. This BATCHES, it never drops: every tick still reaches every
-// subscribed client. 0 sends each tick in its own frame, as before.
-const TICK_BATCH_MS = Number(process.env.WS_TICK_BATCH_MS ?? 40);
+// Quotes are snapshots, not a replay log. Coalesce only to the latest quote
+// and flush in the next millisecond-class turn. A larger 40–50ms batch makes a
+// tradeable bid/ask stale before the portal can paint it.
+const TICK_FLUSH_MS = Math.min(1, Math.max(0, Number(process.env.WS_TICK_FLUSH_MS ?? 1)));
 
-// How long engine events may sit in a client's buffer before being flushed.
-// Small enough to stay imperceptible on a trade action, large enough that a
-// client holding many positions gets one frame per window instead of one per
-// position. Like TICK_BATCH_MS this batches, it never drops.
-const EVT_BATCH_MS = Number(process.env.WS_EVT_BATCH_MS ?? 50);
+// Trade-state changes must reach the client immediately. Tick fan-out may
+// still coalesce, but an order/fill/close must never wait behind a batch timer.
+// Setting this above zero is an explicit compatibility/performance trade-off
+// for clients that opt into `evts:true`; staging must validate that choice.
+const EVT_BATCH_MS = Math.max(0, Number(process.env.WS_EVT_BATCH_MS ?? 0));
+
+// A slow phone must never turn its kernel/WebSocket queue into an unbounded
+// source of stale prices or memory pressure for all other clients. Disconnect
+// it with 1013 ("try again later"); on reconnect it resubscribes and seeds from
+// the current REST/Redis snapshot rather than replaying an obsolete backlog.
+const MAX_BUFFERED_BYTES = Math.max(1, Number(process.env.WS_MAX_BUFFERED_BYTES ?? 1_048_576));
+const MAX_TICK_BUFFER = Math.max(1, Number(process.env.WS_MAX_TICK_BUFFER ?? 2_048));
+const MAX_EVT_BUFFER = Math.max(1, Number(process.env.WS_MAX_EVENT_BUFFER ?? 512));
+const METRICS_LOG_MS = Math.max(0, Number(process.env.WS_METRICS_LOG_MS ?? 15_000));
 
 /// Ids the engine has already closed (or claimed for SL/TP). A later OPEN
 /// snapshot in the same 50ms coalesce window — or on the next tick — must not
@@ -169,6 +182,14 @@ function dropClient(c: ClientState) {
 const sub = new Redis(REDIS_URL);
 const redis = new Redis(REDIS_URL);
 
+function disconnectSlowClient(c: ClientState, reason: string): void {
+  counters.inc(`ws.disconnect.${reason}`);
+  if (c.ws.readyState === WebSocket.OPEN || c.ws.readyState === WebSocket.CLOSING) {
+    c.ws.close(1013, 'slow consumer: reconnect to resync');
+  }
+  dropClient(c);
+}
+
 /// Buffer one engine event for a client, coalescing where it is safe to.
 ///
 /// Snapshot kinds (position, account) key by id so a later state replaces an
@@ -184,15 +205,17 @@ function queueEvt(c: ClientState, kind: 'position' | 'account' | 'order', key: s
     if (id && (payloadClosed(body) || stillClosed(id))) {
       rememberClosed(id);
       body = forceClosed(body, id);
-      send(c.ws, { t: 'position', d: body } as WsFrame);
-      send(c.ws, { t: 'position_closed', d: body } as WsFrame);
+      send(c, { t: 'position', d: body } as WsFrame);
+      send(c, { t: 'position_closed', d: body } as WsFrame);
       if (c.wantsEvtBatch) c.evtPos.delete(key);
       return;
     }
   }
-  if (!c.wantsEvtBatch) {
-    // Old client: one frame per event, but never resurrect a CLOSED ticket.
-    send(c.ws, { t: kind, d: body } as WsFrame);
+  if (!c.wantsEvtBatch || EVT_BATCH_MS <= 0) {
+    // The default is immediate, for old and new clients alike. Fills and
+    // closes are state transitions, not a UI update that can sit 50 ms behind
+    // a last-write-wins buffer.
+    send(c, { t: kind, d: body } as WsFrame);
     return;
   }
   if (kind === 'position') {
@@ -200,6 +223,10 @@ function queueEvt(c: ClientState, kind: 'position' | 'account' | 'order', key: s
   } else if (kind === 'account') c.evtAcct.set(key, body);
   else c.evtOrders.push(body);
 
+  if (c.evtPos.size + c.evtAcct.size + c.evtOrders.length > MAX_EVT_BUFFER) {
+    disconnectSlowClient(c, 'event_buffer');
+    return;
+  }
   if (c.evtTimer === undefined) {
     c.evtTimer = setTimeout(() => flushEvts(c), EVT_BATCH_MS);
   }
@@ -220,11 +247,22 @@ function flushEvts(c: ClientState) {
   c.evtPos = new Map();
   c.evtAcct = new Map();
   c.evtOrders = [];
-  send(c.ws, frame as unknown as WsFrame);
+  send(c, frame as unknown as WsFrame);
 }
 
-function send(ws: WebSocket, frame: WsFrame) {
-  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame));
+function send(c: ClientState, frame: WsFrame): boolean {
+  if (c.ws.readyState !== WebSocket.OPEN) return false;
+  if (c.ws.bufferedAmount > MAX_BUFFERED_BYTES) {
+    disconnectSlowClient(c, 'socket_buffer');
+    return false;
+  }
+  const stop = latency.start('ws.enqueue');
+  try {
+    c.ws.send(JSON.stringify(frame));
+    return true;
+  } finally {
+    stop();
+  }
 }
 
 /// Emit this client's buffered ticks as one frame.
@@ -242,11 +280,11 @@ function send(ws: WebSocket, frame: WsFrame) {
 /// frames stay readable in a debugger.
 function flushTicks(c: ClientState): void {
   c.tickTimer = undefined;
-  if (c.tickBuf.length === 0) return;
-  const batch = c.tickBuf;
-  c.tickBuf = [];
+  if (c.tickBuf.size === 0) return;
+  const batch = [...c.tickBuf.values()];
+  c.tickBuf.clear();
   if (!c.wantsCompact) {
-    send(c.ws, { t: 'ticks', d: batch } as unknown as WsFrame);
+    send(c, { t: 'ticks', d: batch } as unknown as WsFrame);
     return;
   }
   const rows: Array<[number, number, number, number]> = [];
@@ -255,7 +293,7 @@ function flushTicks(c: ClientState): void {
     if (id === undefined) continue; // never assigned: cannot be decoded
     rows.push([id, t.bid, t.ask, t.ts]);
   }
-  if (rows.length > 0) send(c.ws, { t: 'k', d: rows } as unknown as WsFrame);
+  if (rows.length > 0) send(c, { t: 'k', d: rows } as unknown as WsFrame);
 }
 
 /// Assign ids to any newly subscribed symbols and tell the client the mapping.
@@ -269,7 +307,7 @@ function announceSymbolIds(c: ClientState, symbols: string[]): void {
     fresh[sym] = id;
   }
   if (Object.keys(fresh).length > 0) {
-    send(c.ws, { t: 'sym', d: fresh } as unknown as WsFrame);
+    send(c, { t: 'sym', d: fresh } as unknown as WsFrame);
   }
 }
 
@@ -292,28 +330,25 @@ sub.on('pmessage', (_pattern, channel, message) => {
       console.error('[ws-gateway] Invalid tick JSON:', message);
       return;
     }
-    // Batch, do not drop.
-    //
-    // The feed carries roughly two thousand ticks a second. Sending each in its
-    // own WebSocket frame means a separate parse, allocation and event-loop
-    // wake-up per tick on the client. A desktop absorbs that; a phone cannot
-    // keep up, its receive queue backs up, and — because a queue only grows —
-    // the prices on screen fall further behind the market the longer the app
-    // is open.
-    //
-    // Dropping ticks would fix the symptom and lose data the platform is
-    // supposed to deliver. Batching fixes the same cost without losing a single
-    // one: N ticks arrive as one frame and cost one parse instead of N. The
-    // client unpacks the array and applies every tick in order, so day
-    // high/low and anything else derived per tick stay exact.
+    // Coalesce only snapshots for the same symbol. A delayed replay of every
+    // intermediary quote is worse than dropping superseded snapshots because
+    // it makes the visible bid/ask lag the price accepted by the engine.
+    const priceAgeMs = Date.now() - tick.ts;
+    if (Number.isFinite(priceAgeMs) && priceAgeMs >= 0) latency.record('ws.price_age', priceAgeMs);
     for (const c of byTenantSymbol.get(tkey(tenantId, tick.symbol)) ?? EMPTY) {
-      if (TICK_BATCH_MS <= 0 || !c.wantsBatch) {
-        send(c.ws, { t: 'tick', d: tick });
+      if (TICK_FLUSH_MS <= 0 || !c.wantsBatch) {
+        send(c, { t: 'tick', d: tick });
         continue;
       }
-      c.tickBuf.push(tick);
+      if (c.tickBuf.size >= MAX_TICK_BUFFER && !c.tickBuf.has(tick.symbol)) {
+        disconnectSlowClient(c, 'tick_buffer');
+        continue;
+      }
+      const previous = c.tickBuf.get(tick.symbol);
+      if (previous && tick.ts < previous.ts) continue;
+      c.tickBuf.set(tick.symbol, tick);
       if (c.tickTimer === undefined) {
-        c.tickTimer = setTimeout(() => flushTicks(c), TICK_BATCH_MS);
+        c.tickTimer = setTimeout(() => flushTicks(c), TICK_FLUSH_MS);
       }
     }
     return;
@@ -330,13 +365,22 @@ sub.on('pmessage', (_pattern, channel, message) => {
       return;
     }
     for (const c of byTenantSymbol.get(tkey(tenantId, candle.symbol)) ?? EMPTY) {
-      send(c.ws, { t: 'candle', d: candle });
+      send(c, { t: 'candle', d: candle });
     }
     return;
   }
 
   if (kind === Channels.ENGINE_EVT) {
-    const evt = JSON.parse(message);
+    let evt: any;
+    try {
+      evt = JSON.parse(message);
+    } catch {
+      counters.inc('ws.invalid_engine_event');
+      return;
+    }
+    const emittedAt = Number(evt.emittedAt);
+    const eventAgeMs = Date.now() - emittedAt;
+    if (Number.isFinite(eventAgeMs) && eventAgeMs >= 0) latency.record('ws.engine_event_age', eventAgeMs);
 
     // Nested `position` carries closing/SL/TP; top-level is used by close fills.
     const isClosedOrSlTp = payloadClosed(evt) || payloadClosed(evt.position);
@@ -457,7 +501,7 @@ async function pushOpenSnapshot(state: ClientState, accountId: string) {
     if (raw == null) return;
     const parsed = JSON.parse(raw) as { positions?: unknown };
     const positions = Array.isArray(parsed?.positions) ? parsed.positions : [];
-    send(state.ws, {
+    send(state, {
       t: 'positions',
       d: { snapshot: true, accountId, positions },
     } as WsFrame);
@@ -481,7 +525,7 @@ function attachClient(
     symbols: new Set(),
     accountIds: new Set(),
     alive: true,
-    tickBuf: [],
+    tickBuf: new Map(),
     wantsBatch: false,
     wantsCompact: false,
     symbolIds: new Map(),
@@ -537,7 +581,7 @@ function attachClient(
         }
         break;
       case 'ping':
-        send(ws, { t: 'pong', d: { ts: Date.now() } });
+        send(state, { t: 'pong', d: { ts: Date.now() } });
         break;
     }
   });
@@ -559,6 +603,26 @@ setInterval(() => {
     if (c.ws.readyState === WebSocket.OPEN) c.ws.ping();
   }
 }, 30_000);
+
+if (METRICS_LOG_MS > 0) {
+  setInterval(() => {
+    const queuedTicks = [...clients].reduce((n, c) => n + c.tickBuf.size, 0);
+    const queuedEvents = [...clients].reduce(
+      (n, c) => n + c.evtPos.size + c.evtAcct.size + c.evtOrders.length,
+      0,
+    );
+    console.log(
+      '[ws-metrics]',
+      JSON.stringify({
+        clients: clients.size,
+        queuedTicks,
+        queuedEvents,
+        counters: counters.snapshot(),
+        latency: latency.snapshot(),
+      }),
+    );
+  }, METRICS_LOG_MS);
+}
 
 // eslint-disable-next-line no-console
 console.log(`[ws-gateway] listening on :${PORT}`);

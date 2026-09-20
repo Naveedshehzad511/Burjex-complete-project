@@ -1,7 +1,8 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import Redis from 'ioredis';
 import { prisma } from '@btrader/db';
-import { BtError, BtErrorCode, Channels, Tick } from '@btrader/shared';
+import { BtError, BtErrorCode, Channels, Tick, latency } from '@btrader/shared';
 import { PriceSource, LpExecutionRouter, venueKeyFor } from '@btrader/engine-core';
 
 /**
@@ -15,14 +16,16 @@ class RustMatchingClient {
     private readonly token: string,
   ) {}
 
-  private async rpc(method: string, path: string, body: unknown): Promise<any> {
+  private async rpc(method: string, path: string, body: unknown, traceId?: string): Promise<any> {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (this.token) headers['x-engine-token'] = this.token;
+    if (traceId) headers['x-bt-trace-id'] = traceId;
+    const stop = latency.start('gateway.matcher_rpc');
     const res = await fetch(`${this.url}${path}`, {
       method,
       headers,
       body: body == null ? undefined : JSON.stringify(body),
-    });
+    }).finally(stop);
     const text = await res.text();
     let json: any = {};
     try {
@@ -38,7 +41,8 @@ class RustMatchingClient {
   }
 
   placeOrder(tenantId: string, req: any) {
-    return this.rpc('POST', '/v1/place', { tenantId, ...req, type: req.type });
+    const traceId = `order:${req.clientOrderId || randomUUID()}`;
+    return this.rpc('POST', '/v1/place', { tenantId, ...req, type: req.type }, traceId);
   }
 
   modifyOrder(tenantId: string, id: string, dto: any) {

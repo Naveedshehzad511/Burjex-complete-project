@@ -1,13 +1,13 @@
 use crate::books::PendingRow;
 use crate::calc::{
-    apply_markup, compute_aggregates, execution_applies, normalize_volume, point_size, required_margin,
-    round_price, split_position_charges,
+    apply_markup, compute_aggregates, execution_applies, normalize_volume, point_size,
+    required_margin, round_price, split_position_charges,
 };
 use crate::close_sync::{on_protective_close, on_user_close, CloseExecute};
 use crate::engine::{Engine, ExecResult, PlaceReq};
 use crate::error::{
-    BtError, BtResult, INSUFFICIENT_MARGIN, INVALID_PRICE, INVALID_VOLUME, NO_PRICE, ORDER_NOT_FOUND,
-    POSITION_NOT_FOUND, RATE_LIMITED, STOPS_TOO_CLOSE,
+    BtError, BtResult, INSUFFICIENT_MARGIN, INVALID_PRICE, INVALID_VOLUME, NO_PRICE,
+    ORDER_NOT_FOUND, POSITION_NOT_FOUND, RATE_LIMITED, STOPS_TOO_CLOSE,
 };
 use crate::models::{account_from_row, now_ms, AccountRow, Snapshot, SymbolRow, ACCOUNT_SELECT};
 use crate::policy::{audit_comment, close_apply_kind, create_plan, wait_for_deadline};
@@ -32,8 +32,24 @@ impl Engine {
         let Some(trigger_price) = trigger_price else {
             return Err(BtError::new(INVALID_PRICE, "pending order needs price"));
         };
-        self.assert_pending_trigger(tenant_id, &req.symbol, &req.order_type, &req.side, trigger_price, sym)?;
-        let tif = req.time_in_force.clone().unwrap_or_else(|| "GTC".into()).to_ascii_uppercase();
+        self.assert_pending_trigger(
+            tenant_id,
+            &req.symbol,
+            &req.order_type,
+            &req.side,
+            trigger_price,
+            sym,
+        )?;
+        let pricing = self
+            .group_pricing(account.group_id.as_deref(), sym, tenant_id)
+            .await?;
+        let apply_kind = crate::calc::pending_type_to_apply_kind(&req.order_type, &req.side);
+        self.assert_fresh_quote(tenant_id, &req.symbol, &pricing, apply_kind)?;
+        let tif = req
+            .time_in_force
+            .clone()
+            .unwrap_or_else(|| "GTC".into())
+            .to_ascii_uppercase();
         let mut expires_at = req
             .expires_at
             .as_ref()
@@ -52,14 +68,26 @@ impl Engine {
             quote_currency: sym.quote_currency.clone(),
             base_currency: sym.base_currency.clone(),
         };
-        let conv = self.quote_to_account_strict(tenant_id, &account.currency, &spec.quote_currency)?;
-        let est = required_margin(volume, &spec, trigger_price, f64::from(account.leverage), conv);
-        let views = self.open_views(tenant_id, &account.id, &account.currency).await?;
+        let conv =
+            self.quote_to_account_strict(tenant_id, &account.currency, &spec.quote_currency)?;
+        let est = required_margin(
+            volume,
+            &spec,
+            trigger_price,
+            f64::from(account.leverage),
+            conv,
+        );
+        let views = self
+            .open_views(tenant_id, &account.id, &account.currency)
+            .await?;
         let agg = compute_aggregates(account.balance, account.credit, &views);
         if agg.free_margin < est {
             return Err(BtError::new(
                 INSUFFICIENT_MARGIN,
-                format!("insufficient free margin for pending order: need ~{est}, available {}", agg.free_margin),
+                format!(
+                    "insufficient free margin for pending order: need ~{est}, available {}",
+                    agg.free_margin
+                ),
             ));
         }
         let order_id = Uuid::new_v4().to_string();
@@ -97,18 +125,33 @@ impl Engine {
         let bid = self.prices.sell_price(tenant_id, &req.symbol);
         let ask = self.prices.buy_price(tenant_id, &req.symbol);
         let action = if let (Some(bid), Some(ask)) = (bid, ask) {
-            pending_fires(&req.order_type, &req.side, bid, ask, trigger_price, req.stop_price, req.price, false)
+            pending_fires(
+                &req.order_type,
+                &req.side,
+                bid,
+                ask,
+                trigger_price,
+                req.stop_price,
+                req.price,
+                false,
+            )
         } else {
             PendingAction::None
         };
         if (tif == "IOC" || tif == "FOK") && action != PendingAction::Fill {
-            let st = if tif == "FOK" { "REJECTED" } else { "CANCELLED" };
-            sqlx::query(r#"UPDATE orders SET status=$1::"OrderStatus", "rejectReason"=$2 WHERE id=$3"#)
-                .bind(st)
-                .bind("IOC/FOK not immediately marketable")
-                .bind(&order_id)
-                .execute(&self.pool)
-                .await?;
+            let st = if tif == "FOK" {
+                "REJECTED"
+            } else {
+                "CANCELLED"
+            };
+            sqlx::query(
+                r#"UPDATE orders SET status=$1::"OrderStatus", "rejectReason"=$2 WHERE id=$3"#,
+            )
+            .bind(st)
+            .bind("IOC/FOK not immediately marketable")
+            .bind(&order_id)
+            .execute(&self.pool)
+            .await?;
             return Ok(ExecResult {
                 accepted: false,
                 order_id: Some(order_id),
@@ -187,22 +230,36 @@ impl Engine {
         };
         let t = order_type.to_ascii_uppercase();
         let s = side.to_ascii_uppercase();
-        let is_buy = t == "BUY_LIMIT" || t == "BUY_STOP" || (s == "BUY" && matches!(t.as_str(), "LIMIT" | "STOP" | "STOP_LIMIT"));
+        let is_buy = t == "BUY_LIMIT"
+            || t == "BUY_STOP"
+            || (s == "BUY" && matches!(t.as_str(), "LIMIT" | "STOP" | "STOP_LIMIT"));
         if t == "BUY_LIMIT" || (t == "LIMIT" && is_buy) {
             if !(trigger_price < ask) {
-                return Err(BtError::new(INVALID_PRICE, format!("Buy Limit must be below Ask ({ask})")));
+                return Err(BtError::new(
+                    INVALID_PRICE,
+                    format!("Buy Limit must be below Ask ({ask})"),
+                ));
             }
         } else if t == "BUY_STOP" || (t == "STOP" && is_buy) || (t == "STOP_LIMIT" && is_buy) {
             if !(trigger_price > ask) {
-                return Err(BtError::new(INVALID_PRICE, format!("Buy Stop must be above Ask ({ask})")));
+                return Err(BtError::new(
+                    INVALID_PRICE,
+                    format!("Buy Stop must be above Ask ({ask})"),
+                ));
             }
         } else if t == "SELL_LIMIT" || (t == "LIMIT" && !is_buy) {
             if !(trigger_price > bid) {
-                return Err(BtError::new(INVALID_PRICE, format!("Sell Limit must be above Bid ({bid})")));
+                return Err(BtError::new(
+                    INVALID_PRICE,
+                    format!("Sell Limit must be above Bid ({bid})"),
+                ));
             }
         } else if t == "SELL_STOP" || (t == "STOP" && !is_buy) || (t == "STOP_LIMIT" && !is_buy) {
             if !(trigger_price < bid) {
-                return Err(BtError::new(INVALID_PRICE, format!("Sell Stop must be below Bid ({bid})")));
+                return Err(BtError::new(
+                    INVALID_PRICE,
+                    format!("Sell Stop must be below Bid ({bid})"),
+                ));
             }
         }
         if sym.stops_level > 0 {
@@ -301,11 +358,13 @@ impl Engine {
         .fetch_optional(&self.pool)
         .await?;
         let Some(row) = row else {
-            let st = sqlx::query(r#"SELECT status::text AS status FROM positions WHERE id=$1 AND "tenantId"=$2"#)
-                .bind(&position_id)
-                .bind(&tenant_id)
-                .fetch_optional(&self.pool)
-                .await?;
+            let st = sqlx::query(
+                r#"SELECT status::text AS status FROM positions WHERE id=$1 AND "tenantId"=$2"#,
+            )
+            .bind(&position_id)
+            .bind(&tenant_id)
+            .fetch_optional(&self.pool)
+            .await?;
             if st
                 .as_ref()
                 .map(|r| r.try_get::<String, _>("status").unwrap_or_default())
@@ -318,20 +377,31 @@ impl Engine {
         };
 
         let pos_status: String = row.try_get("status").unwrap_or_else(|_| "OPEN".into());
-        if protective_kind.is_none() && on_user_close(&pos_status) == CloseExecute::IgnoreDuplicate {
+        if protective_kind.is_none() && on_user_close(&pos_status) == CloseExecute::IgnoreDuplicate
+        {
             return Ok(already_done(&position_id, &pos_status));
         }
-        if protective_kind.is_some() && on_protective_close(&pos_status) == CloseExecute::IgnoreDuplicate {
+        if protective_kind.is_some()
+            && on_protective_close(&pos_status) == CloseExecute::IgnoreDuplicate
+        {
             return Ok(already_done(&position_id, "CLOSED"));
         }
 
         let account_id: String = row.try_get("accountId").unwrap_or_default();
         if let Some(req) = require_account_id {
             if req != account_id {
-                return Err(BtError::new(crate::error::VALIDATION, "position access denied"));
+                return Err(BtError::new(
+                    crate::error::VALIDATION,
+                    "position access denied",
+                ));
             }
         }
-        if !floor_balance && protective_kind.is_none() && !skip_delay && !close_all && !self.allow_rate(&account_id) {
+        if !floor_balance
+            && protective_kind.is_none()
+            && !skip_delay
+            && !close_all
+            && !self.allow_rate(&account_id)
+        {
             return Err(BtError::new(RATE_LIMITED, "order rate limit"));
         }
 
@@ -345,7 +415,9 @@ impl Engine {
             contract_size: row.try_get("contractSize").unwrap_or(100_000.0),
             margin_rate: row.try_get("marginRate").unwrap_or(1.0),
             margin_percent: row.try_get("marginPercent").ok(),
-            quote_currency: row.try_get("quoteCurrency").unwrap_or_else(|_| "USD".into()),
+            quote_currency: row
+                .try_get("quoteCurrency")
+                .unwrap_or_else(|_| "USD".into()),
             base_currency: row.try_get("baseCurrency").unwrap_or_else(|_| "USD".into()),
         };
         let dummy_sym = SymbolRow {
@@ -376,7 +448,10 @@ impl Engine {
         };
 
         let pricing = if override_px.is_none() {
-            Some(self.group_pricing(group_id.as_deref(), &dummy_sym, &tenant_id).await?)
+            Some(
+                self.group_pricing(group_id.as_deref(), &dummy_sym, &tenant_id)
+                    .await?,
+            )
         } else {
             None
         };
@@ -398,10 +473,17 @@ impl Engine {
         let px = if let Some(o) = override_px.filter(|v| *v > 0.0) {
             o
         } else if side.eq_ignore_ascii_case("BUY") {
-            self.prices.sell_price(&tenant_id, &symbol).ok_or_else(|| BtError::new(NO_PRICE, "no price"))?
+            self.prices
+                .sell_price(&tenant_id, &symbol)
+                .ok_or_else(|| BtError::new(NO_PRICE, "no price"))?
         } else {
-            self.prices.buy_price(&tenant_id, &symbol).ok_or_else(|| BtError::new(NO_PRICE, "no price"))?
+            self.prices
+                .buy_price(&tenant_id, &symbol)
+                .ok_or_else(|| BtError::new(NO_PRICE, "no price"))?
         };
+        if let (Some(pricing), Some(kind)) = (pricing.as_ref(), apply_kind) {
+            self.assert_fresh_quote(&tenant_id, &symbol, pricing, kind)?;
+        }
         let mut close_px = px;
         if override_px.is_none() {
             if let Some(pricing) = pricing.as_ref() {
@@ -417,7 +499,11 @@ impl Engine {
                         close_px = lvl;
                     } else {
                         // apply-to unchecked: live market, gap may slip through the level.
-                        let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
+                        let close_side = if side.eq_ignore_ascii_case("BUY") {
+                            "SELL"
+                        } else {
+                            "BUY"
+                        };
                         let total = pricing.markup_points + pricing.slippage_points;
                         if total != 0.0 {
                             close_px = apply_markup(close_side, px, total, digits);
@@ -429,7 +515,11 @@ impl Engine {
                         };
                     }
                 } else {
-                    let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
+                    let close_side = if side.eq_ignore_ascii_case("BUY") {
+                        "SELL"
+                    } else {
+                        "BUY"
+                    };
                     let total = pricing.markup_points + pricing.slippage_points;
                     if total != 0.0 {
                         close_px = apply_markup(close_side, px, total, digits);
@@ -438,7 +528,12 @@ impl Engine {
             }
         }
         let close_price = round_price(close_px, digits);
-        let conv = self.quote_to_account(&tenant_id, &row.try_get::<String, _>("currency").unwrap_or_else(|_| "USD".into()), &spec.quote_currency);
+        let conv = self.quote_to_account(
+            &tenant_id,
+            &row.try_get::<String, _>("currency")
+                .unwrap_or_else(|_| "USD".into()),
+            &spec.quote_currency,
+        );
         let _currency: String = row.try_get("currency").unwrap_or_else(|_| "USD".into());
         let leverage: i32 = row.try_get("leverage").unwrap_or(100);
         let login: String = row.try_get("login").unwrap_or_default();
@@ -482,27 +577,37 @@ impl Engine {
             vol = open_vol;
         }
         if !(vol > 0.0) {
-            return Err(BtError::new(INVALID_VOLUME, "close volume must be positive"));
+            return Err(BtError::new(
+                INVALID_VOLUME,
+                "close volume must be positive",
+            ));
         }
         let partial = vol < open_vol;
         let covered_before: f64 = fresh.try_get("coveredVolume").unwrap_or(0.0);
         let cover_to_close = if open_vol > 0.0 {
-            covered_before.min(round_lots_local((covered_before * vol) / open_vol, lot_step))
+            covered_before.min(round_lots_local(
+                (covered_before * vol) / open_vol,
+                lot_step,
+            ))
         } else {
             0.0
         };
         let swap: f64 = fresh.try_get("swap").unwrap_or(0.0);
         let commission: f64 = fresh.try_get("commission").unwrap_or(0.0);
         let charges = split_position_charges(swap, commission, vol, open_vol);
-        let mut realized = crate::calc::position_profit(&side, vol, open_price, close_price, &spec, conv)
-            + charges.0
-            + charges.1;
+        let mut realized =
+            crate::calc::position_profit(&side, vol, open_price, close_price, &spec, conv)
+                + charges.0
+                + charges.1;
         if floor_balance && acct.balance + realized < 0.0 {
             realized = -acct.balance;
         }
         let new_balance = acct.balance + realized;
         let deal_id = Uuid::new_v4().to_string();
-        let comment = audit_comment(plan.as_ref(), json!({"fillPrice": close_price, "result": "closed", "partial": partial}));
+        let comment = audit_comment(
+            plan.as_ref(),
+            json!({"fillPrice": close_price, "result": "closed", "partial": partial}),
+        );
         sqlx::query(
             r#"INSERT INTO deals (id, "tenantId", "accountId", "positionId", "symbolId", type, side, volume, price, profit, "balanceAfter", comment)
                VALUES ($1,$2,$3,$4,$5,$6::"DealType",$7::"OrderSide",$8,$9,$10,$11,$12)"#,
@@ -523,7 +628,8 @@ impl Engine {
         .await?;
         if partial {
             let remaining = open_vol - vol;
-            let new_margin = required_margin(remaining, &spec, open_price, f64::from(leverage), conv);
+            let new_margin =
+                required_margin(remaining, &spec, open_price, f64::from(leverage), conv);
             sqlx::query(
                 r#"UPDATE positions SET volume=$1, "marginUsed"=$2, "coveredVolume"=$3, swap=$4, commission=$5 WHERE id=$6"#,
             )
@@ -546,7 +652,9 @@ impl Engine {
             .execute(&mut *tx)
             .await?;
         }
-        let views = self.open_views_tx(&mut tx, &tenant_id, &account_id, &acct.currency).await?;
+        let views = self
+            .open_views_tx(&mut tx, &tenant_id, &account_id, &acct.currency)
+            .await?;
         let after = compute_aggregates(new_balance, acct.credit, &views);
         sqlx::query(
             r#"UPDATE accounts SET balance=$1, equity=$2, margin=$3, "freeMargin"=$4, "marginLevel"=$5, "floatingPL"=$6 WHERE id=$7"#,
@@ -560,11 +668,18 @@ impl Engine {
         .bind(&acct.id)
         .execute(&mut *tx)
         .await?;
+        let commit_started = Instant::now();
         tx.commit().await?;
+        tracing::debug!(
+            position_id = %position_id,
+            sql_commit_ms = commit_started.elapsed().as_millis() as u64,
+            "trade-hop sql_commit"
+        );
         self.claims.mark_closed(&position_id);
         if partial {
             let remaining = open_vol - vol;
-            let new_margin = required_margin(remaining, &spec, open_price, f64::from(leverage), conv);
+            let new_margin =
+                required_margin(remaining, &spec, open_price, f64::from(leverage), conv);
             self.book.map(&position_id, |r| {
                 r.volume = remaining;
                 r.margin_used = new_margin;
@@ -575,7 +690,8 @@ impl Engine {
         } else {
             self.book.remove(&position_id);
         }
-        self.redis_sync_open_positions(&tenant_id, &account_id).await;
+        self.redis_sync_open_positions(&tenant_id, &account_id)
+            .await;
         let snap = Snapshot {
             account_id: account_id.clone(),
             login,
@@ -600,6 +716,7 @@ impl Engine {
             &tenant_id,
             &account_id,
             &position_id,
+            None,
             "closed",
             &snap,
             Some(realized),
@@ -628,20 +745,36 @@ impl Engine {
     pub async fn close_all(&self, tenant_id: &str, account_id: &str) -> BtResult<i64> {
         let aid = account_id.to_string();
         let tenant = tenant_id.to_string();
-        self.with_account(&aid, || self.close_all_exclusive(tenant.clone(), aid.clone())).await
+        self.with_account(&aid, || {
+            self.close_all_exclusive(tenant.clone(), aid.clone())
+        })
+        .await
     }
 
     async fn close_all_exclusive(&self, tenant_id: String, account_id: String) -> BtResult<i64> {
-        let rows = sqlx::query(r#"SELECT id FROM positions WHERE "tenantId"=$1 AND "accountId"=$2 AND status='OPEN'"#)
-            .bind(&tenant_id)
-            .bind(&account_id)
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = sqlx::query(
+            r#"SELECT id FROM positions WHERE "tenantId"=$1 AND "accountId"=$2 AND status='OPEN'"#,
+        )
+        .bind(&tenant_id)
+        .bind(&account_id)
+        .fetch_all(&self.pool)
+        .await?;
         let mut closed = 0i64;
         for r in rows {
             let id: String = r.try_get("id").unwrap_or_default();
             if self
-                .close_exclusive(tenant_id.clone(), id, None, None, None, None, true, None, true, false)
+                .close_exclusive(
+                    tenant_id.clone(),
+                    id,
+                    None,
+                    None,
+                    None,
+                    None,
+                    true,
+                    None,
+                    true,
+                    false,
+                )
                 .await
                 .is_ok()
             {
@@ -651,7 +784,13 @@ impl Engine {
         Ok(closed)
     }
 
-    pub async fn modify_position(&self, tenant_id: &str, position_id: &str, sl: Option<Option<f64>>, tp: Option<Option<f64>>) -> BtResult<serde_json::Value> {
+    pub async fn modify_position(
+        &self,
+        tenant_id: &str,
+        position_id: &str,
+        sl: Option<Option<f64>>,
+        tp: Option<Option<f64>>,
+    ) -> BtResult<serde_json::Value> {
         let row = sqlx::query(
             r#"SELECT p.id, p.side::text AS side, p."slPrice"::float8 AS "slPrice", p."tpPrice"::float8 AS "tpPrice",
                       p."accountId", a."groupId", s.symbol, s.digits, s.id AS sid, s.class::text AS class,
@@ -666,7 +805,10 @@ impl Engine {
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| BtError::new(POSITION_NOT_FOUND, "position not found"))?;
-        let is_buy: bool = row.try_get::<String, _>("side").unwrap_or_default().eq_ignore_ascii_case("BUY");
+        let is_buy: bool = row
+            .try_get::<String, _>("side")
+            .unwrap_or_default()
+            .eq_ignore_ascii_case("BUY");
         let symbol: String = row.try_get("symbol").unwrap_or_default();
         let digits: i32 = row.try_get("digits").unwrap_or(5);
         let dummy = SymbolRow {
@@ -683,7 +825,9 @@ impl Engine {
             lot_step: 0.01,
             margin_rate: row.try_get("marginRate").unwrap_or(1.0),
             margin_percent: None,
-            quote_currency: row.try_get("quoteCurrency").unwrap_or_else(|_| "USD".into()),
+            quote_currency: row
+                .try_get("quoteCurrency")
+                .unwrap_or_else(|_| "USD".into()),
             base_currency: row.try_get("baseCurrency").unwrap_or_else(|_| "USD".into()),
             slippage_points: row.try_get("slippagePoints").unwrap_or(0),
             spread_markup: row.try_get("spreadMarkup").unwrap_or(0),
@@ -696,7 +840,9 @@ impl Engine {
             trading_sessions: None,
         };
         let gid: Option<String> = row.try_get("groupId").ok();
-        let _pricing = self.group_pricing(gid.as_deref(), &dummy, tenant_id).await?;
+        let _pricing = self
+            .group_pricing(gid.as_deref(), &dummy, tenant_id)
+            .await?;
         // Validate against Redis/client tick (same as chart) — no second markup.
         let bid = self.prices.sell_price(tenant_id, &symbol);
         let ask = self.prices.buy_price(tenant_id, &symbol);
@@ -709,8 +855,13 @@ impl Engine {
             next_tp = v;
         }
         if let (Some(bid), Some(ask)) = (bid, ask) {
-            if let Err(msg) = crate::trigger::validate_sl_tp(if is_buy { "BUY" } else { "SELL" }, bid, ask, next_sl, next_tp)
-            {
+            if let Err(msg) = crate::trigger::validate_sl_tp(
+                if is_buy { "BUY" } else { "SELL" },
+                bid,
+                ask,
+                next_sl,
+                next_tp,
+            ) {
                 return Err(BtError::new(INVALID_PRICE, msg));
             }
         }
@@ -729,15 +880,29 @@ impl Engine {
         Ok(json!({"slPrice": next_sl, "tpPrice": next_tp}))
     }
 
-    pub(crate) fn quoted_bid_ask(&self, tenant_id: &str, symbol: &str, sym: &SymbolRow, pricing: &crate::calc::GroupPricing) -> Option<(f64, f64)> {
+    pub(crate) fn quoted_bid_ask(
+        &self,
+        tenant_id: &str,
+        symbol: &str,
+        sym: &SymbolRow,
+        pricing: &crate::calc::GroupPricing,
+    ) -> Option<(f64, f64)> {
         let bid = self.prices.sell_price(tenant_id, symbol)?;
         let ask = self.prices.buy_price(tenant_id, symbol)?;
-        let news = if sym.news_mode { f64::from(sym.news_spread_points) } else { 0.0 };
+        let news = if sym.news_mode {
+            f64::from(sym.news_spread_points)
+        } else {
+            0.0
+        };
         let mapping_owns = matches!(
             pricing.pricing_method.as_deref(),
             Some("SPREAD_ONLY" | "SPREAD_AND_COMMISSION" | "COMMISSION_ONLY")
         );
-        let symbol_book = if mapping_owns { 0.0 } else { f64::from(sym.spread_markup) };
+        let symbol_book = if mapping_owns {
+            0.0
+        } else {
+            f64::from(sym.spread_markup)
+        };
         let total = symbol_book + pricing.markup_points + news;
         Some((
             apply_markup("SELL", bid, total, sym.digits),
@@ -797,7 +962,9 @@ impl Engine {
             Some(v) => v,
             None => cur_stop,
         };
-        let trigger = next_stop.or(next_price).ok_or_else(|| BtError::new(INVALID_PRICE, "pending order needs price"))?;
+        let trigger = next_stop
+            .or(next_price)
+            .ok_or_else(|| BtError::new(INVALID_PRICE, "pending order needs price"))?;
         let dummy = SymbolRow {
             id: row.try_get("sid").unwrap_or_default(),
             tenant_id: tenant_id.into(),
@@ -851,7 +1018,12 @@ impl Engine {
         Ok(())
     }
 
-    pub async fn set_open_price(&self, tenant_id: &str, position_id: &str, new_open: f64) -> BtResult<()> {
+    pub async fn set_open_price(
+        &self,
+        tenant_id: &str,
+        position_id: &str,
+        new_open: f64,
+    ) -> BtResult<()> {
         if !(new_open > 0.0) {
             return Err(BtError::new(INVALID_PRICE, "open price must be positive"));
         }
@@ -865,7 +1037,12 @@ impl Engine {
         Ok(())
     }
 
-    pub async fn cover_more(&self, tenant_id: &str, position_id: &str, lots: f64) -> BtResult<serde_json::Value> {
+    pub async fn cover_more(
+        &self,
+        tenant_id: &str,
+        position_id: &str,
+        lots: f64,
+    ) -> BtResult<serde_json::Value> {
         let row = sqlx::query(
             r#"SELECT volume::float8 AS volume, "coveredVolume"::float8 AS covered FROM positions
                WHERE id=$1 AND "tenantId"=$2 AND status='OPEN'"#,
@@ -887,7 +1064,8 @@ impl Engine {
             .bind(position_id)
             .execute(&self.pool)
             .await?;
-        self.book.map(position_id, |r| r.covered_volume = covered + n);
+        self.book
+            .map(position_id, |r| r.covered_volume = covered + n);
         Ok(json!({"covered": covered + n, "warehoused": warehoused - n}))
     }
 }

@@ -34,6 +34,7 @@ Edit **config.json**:
 | `FeedUrl` | `https://feed.example.com` |
 | `FeedToken` | your `MT5_FEED_TOKEN` |
 | `Symbols` | empty = all symbols, or `EURUSD,XAUUSD,GBPUSD` |
+| `TickFlushMs` | manager poll cadence; start staging at `10` (minimum `5`) and measure source-to-ingest price age |
 | `SymbolSuffixStrip` | e.g. `.r` to map `EURUSD.r` → `EURUSD` |
 | `Timeframes` | `1m,5m,15m,30m,1h,4h,1d` |
 | `HistoryBars` | M1 bars to seed (1000 ≈ 16h; raise for deeper charts) |
@@ -62,6 +63,12 @@ nssm set BTraderFeed AppDirectory "C:\path"
 nssm start BTraderFeed
 ```
 The script auto-reconnects if the manager session drops.
+
+For a fast-market path, do not leave `Symbols` empty: streaming every server
+symbol wastes bridge, ingest, and Redis capacity on symbols that no tenant can
+trade. The bridge publishes each changed quote on its next `TickFlushMs` poll;
+it no longer has the legacy 50 ms minimum. Validate the resulting CPU and price
+age on staging before reducing the interval further.
 
 ## Notes / verifying the API surface
 

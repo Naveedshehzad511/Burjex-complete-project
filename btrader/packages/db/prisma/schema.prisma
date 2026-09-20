@@ -881,7 +881,9 @@ model Order {
   @@index([accountId, status])
   @@index([symbolId, status])
   @@index([status])
-  @@index([tenantId, accountId, clientOrderId])
+  // PostgreSQL permits multiple NULLs, while a repeated real client key is
+  // rejected even across an engine restart or an accidental second worker.
+  @@unique([tenantId, accountId, clientOrderId])
   @@map("orders")
 }
 

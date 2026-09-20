@@ -821,7 +821,11 @@ def run(cfg):
 
 
 def tick_loop(src, client, cfg, symbols, suffix, stop, canon_by_mt5=None):
-    flush_ms = max(50, int(cfg.get("TickFlushMs", 200)))
+    # The legacy 50 ms floor alone consumed half of a fast-market latency
+    # budget. Manager API polling is still not event-driven, but a 5 ms floor
+    # lets staging measure a 10 ms default without silently coalescing the most
+    # recent tradable quote behind that 50 ms wait.
+    flush_ms = max(5, int(cfg.get("TickFlushMs", 10)))
     # Self-healing: editing a symbol (e.g. spread) in the MT5 Manager resets the
     # server-side tick pump. Re-subscribe periodically, and if no ticks arrive
     # for a while, reconnect (which re-lists + re-subscribes everything).
@@ -830,6 +834,7 @@ def tick_loop(src, client, cfg, symbols, suffix, stop, canon_by_mt5=None):
     last_data = time.time()
     last_resub = time.time()
     canon_by_mt5 = canon_by_mt5 or {}
+    last_sent = {}
     while not stop.is_set():
         now = time.time()
         if now - last_resub >= resub_sec:
@@ -839,17 +844,27 @@ def tick_loop(src, client, cfg, symbols, suffix, stop, canon_by_mt5=None):
                 pass
             last_resub = now
         batch = []
+        saw_tick = False
         for sym in symbols:
             try:
                 t = src.last_tick(sym)
             except Exception as e:
                 raise RuntimeError(f"tick read failed ({sym}): {e}")
             if t:
+                saw_tick = True
                 bid, ask, ms = t
                 out_sym = canon_by_mt5.get(sym) or feed_canon(sym, suffix)
-                batch.append({"symbol": out_sym, "bid": bid, "ask": ask, "ts": ms})
+                quote = (bid, ask, ms)
+                # Do not burn HTTP/Redis/WS capacity publishing the same quote
+                # repeatedly between real market changes. Each changed quote is
+                # sent on the next short poll; no changed tradeable tick is
+                # intentionally dropped by this bridge.
+                if last_sent.get(out_sym) != quote:
+                    last_sent[out_sym] = quote
+                    batch.append({"symbol": out_sym, "bid": bid, "ask": ask, "ts": ms})
         if batch:
             client.send_ticks(batch)
+        if saw_tick:
             last_data = now
         elif now - last_data >= stale_sec:
             raise RuntimeError(f"no ticks for {stale_sec}s — reconnecting")
