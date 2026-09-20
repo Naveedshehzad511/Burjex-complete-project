@@ -16,9 +16,9 @@ const settings: HealthSettings = {
 const now = new Date('2026-09-20T00:10:00.000Z');
 const server = { enabled: true, readiness: 'READY' };
 
-test('a single missed heartbeat is warning before offline grace', () => {
+test('a stale heartbeat is warning before offline grace', () => {
   const health = deriveServerHealth(
-    { ...server, lastHeartbeatAt: new Date('2026-09-20T00:08:40.000Z') },
+    { ...server, lastHeartbeatAt: new Date('2026-09-20T00:08:20.000Z') },
     null,
     settings,
     now,
