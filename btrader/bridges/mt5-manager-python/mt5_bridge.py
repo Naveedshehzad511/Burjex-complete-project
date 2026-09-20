@@ -74,6 +74,7 @@ class BTraderClient:
         self.failures = 0
         self._tick_lock = threading.Lock()
         self._tick_pending = None  # latest batch waiting to ship (coalesced)
+        self._tick_ready = threading.Event()
         self._tick_worker = threading.Thread(target=self._tick_sender_loop, daemon=True)
         self._tick_worker.start()
         self._stats_worker = threading.Thread(target=self._stats_loop, daemon=True)
@@ -92,17 +93,19 @@ class BTraderClient:
                 for t in batch:
                     by_sym[t["symbol"]] = t
                 self._tick_pending = list(by_sym.values())
+        self._tick_ready.set()
 
     def send_candles(self, symbol, tf, bars):
         self._post(self._candle_s, self.candles, {"symbol": symbol, "tf": tf, "bars": bars}, tick=False)
 
     def _tick_sender_loop(self):
         while True:
+            self._tick_ready.wait()
+            self._tick_ready.clear()
             with self._tick_lock:
                 batch = self._tick_pending
                 self._tick_pending = None
             if not batch:
-                time.sleep(0.01)
                 continue
             # Chunk so a 400+ symbol dump never times out the ingest handler.
             chunk_size = 80
@@ -821,11 +824,10 @@ def run(cfg):
 
 
 def tick_loop(src, client, cfg, symbols, suffix, stop, canon_by_mt5=None):
-    # The legacy 50 ms floor alone consumed half of a fast-market latency
-    # budget. Manager API polling is still not event-driven, but a 5 ms floor
-    # lets staging measure a 10 ms default without silently coalescing the most
-    # recent tradable quote behind that 50 ms wait.
-    flush_ms = max(5, int(cfg.get("TickFlushMs", 10)))
+    # Manager API polling is not event-driven, so its floor must remain
+    # millisecond-class. Changed quotes are handed to the sender immediately;
+    # there is no second sender-loop sleep.
+    flush_ms = max(1, int(cfg.get("TickFlushMs", 1)))
     # Self-healing: editing a symbol (e.g. spread) in the MT5 Manager resets the
     # server-side tick pump. Re-subscribe periodically, and if no ticks arrive
     # for a while, reconnect (which re-lists + re-subscribes everything).

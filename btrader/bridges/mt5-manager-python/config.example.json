@@ -3,7 +3,7 @@
   "Mt5Login": 0,
   "Mt5Password": "CHANGE_ME",
   "FeedToken": "CHANGE_ME",
-  "TickFlushMs": 10,
+  "TickFlushMs": 1,
   "Symbols": "EURUSD,XAUUSD",
   "BridgeApiUrl": "https://api.example.com/v1",
   "BridgeToken": "CHANGE_ME",
