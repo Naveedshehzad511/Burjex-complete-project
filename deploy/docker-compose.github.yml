@@ -148,11 +148,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    pids_limit: 256
     deploy:
       resources:
         reservations: { cpus: '0.75', memory: 1G }
-        limits: { cpus: '1.50', memory: 3G }
+        limits: { cpus: '1.50', memory: 3G, pids: 256 }
     networks: [btrader_internal]
 
   btrader-redis:
@@ -169,11 +168,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    pids_limit: 128
     deploy:
       resources:
         reservations: { cpus: '0.25', memory: 256M }
-        limits: { cpus: '0.75', memory: 1G }
+        limits: { cpus: '0.75', memory: 1G, pids: 128 }
     networks: [btrader_internal]
 
   btrader-gateway:
@@ -223,11 +221,10 @@ services:
       btrader-matching: { condition: service_started }
     volumes:
       - bxnet_bt_uploads:/app/uploads
-    pids_limit: 512
     deploy:
       resources:
         reservations: { cpus: '0.50', memory: 512M }
-        limits: { cpus: '1.00', memory: 1536M }
+        limits: { cpus: '1.00', memory: 1536M, pids: 512 }
     networks: [btrader_internal, edge]
 
   btrader-matching:
@@ -254,11 +251,10 @@ services:
       btrader-redis: { condition: service_healthy }
     # The matcher has its own hard cgroup. It still needs host-level core
     # pinning in Phase 3; do not claim otherwise from compose quotas alone.
-    pids_limit: 256
     deploy:
       resources:
         reservations: { cpus: '1.50', memory: 1G }
-        limits: { cpus: '2.00', memory: 2G }
+        limits: { cpus: '2.00', memory: 2G, pids: 256 }
     networks: [btrader_internal]
 
   btrader-ws:
@@ -281,11 +277,10 @@ services:
       WS_MAX_EVENT_BUFFER: ${WS_MAX_EVENT_BUFFER:-512}
     depends_on:
       btrader-redis: { condition: service_healthy }
-    pids_limit: 2048
     deploy:
       resources:
         reservations: { cpus: '0.50', memory: 512M }
-        limits: { cpus: '1.00', memory: 1536M }
+        limits: { cpus: '1.00', memory: 1536M, pids: 2048 }
     networks: [btrader_internal, edge]
 
   btrader-engine:
@@ -337,11 +332,10 @@ services:
       btrader-postgres: { condition: service_healthy }
       btrader-redis: { condition: service_healthy }
       btrader-gateway: { condition: service_started }
-    pids_limit: 256
     deploy:
       resources:
         reservations: { cpus: '0.50', memory: 512M }
-        limits: { cpus: '1.00', memory: 1280M }
+        limits: { cpus: '1.00', memory: 1280M, pids: 256 }
     networks: [btrader_internal, edge]
 
 volumes:

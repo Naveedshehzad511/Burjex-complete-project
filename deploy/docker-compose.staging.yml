@@ -47,11 +47,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    pids_limit: 256
     deploy:
       resources:
         reservations: { cpus: '0.75', memory: 1G }
-        limits: { cpus: '1.50', memory: 3G }
+        limits: { cpus: '1.50', memory: 3G, pids: 256 }
     networks: [staging_internal]
 
   redis:
@@ -68,11 +67,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    pids_limit: 128
     deploy:
       resources:
         reservations: { cpus: '0.25', memory: 256M }
-        limits: { cpus: '0.75', memory: 1G }
+        limits: { cpus: '0.75', memory: 1G, pids: 128 }
     networks: [staging_internal]
 
   # ── REST gateway. Applies the Prisma schema on boot so a fresh staging DB
@@ -101,11 +99,10 @@ services:
       redis: { condition: service_healthy }
     volumes:
       - btrader_stg_uploads:/app/uploads
-    pids_limit: 512
     deploy:
       resources:
         reservations: { cpus: '0.50', memory: 512M }
-        limits: { cpus: '1.00', memory: 1536M }
+        limits: { cpus: '1.00', memory: 1536M, pids: 512 }
     networks: [staging_internal]
 
   ws-gateway:
@@ -128,11 +125,10 @@ services:
       redis: { condition: service_healthy }
       # Shares JWT_SECRET with the gateway; wait for it so tables/tenant exist.
       gateway-api: { condition: service_started }
-    pids_limit: 2048
     deploy:
       resources:
         reservations: { cpus: '0.50', memory: 512M }
-        limits: { cpus: '1.00', memory: 1536M }
+        limits: { cpus: '1.00', memory: 1536M, pids: 2048 }
     networks: [staging_internal]
 
   # ── The single Rust matcher under test. The Node trading-engine is an
@@ -157,11 +153,10 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     expose: ['4300']
-    pids_limit: 256
     deploy:
       resources:
         reservations: { cpus: '1.50', memory: 1G }
-        limits: { cpus: '2.00', memory: 2G }
+        limits: { cpus: '2.00', memory: 2G, pids: 256 }
     networks: [staging_internal]
 
   # ── Price feed. Default driver is `mock` (safe synthetic ticks) so staging
@@ -189,11 +184,10 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       gateway-api: { condition: service_started }
-    pids_limit: 256
     deploy:
       resources:
         reservations: { cpus: '0.50', memory: 512M }
-        limits: { cpus: '1.00', memory: 1280M }
+        limits: { cpus: '1.00', memory: 1280M, pids: 256 }
     networks: [staging_internal]
 
 volumes:
