@@ -14,6 +14,7 @@
   window.__bxCloseSync = true;
   var latestPosition = Object.create(null);
   var marketSocket = null;
+  var NativeWebSocket = window.WebSocket;
 
   function closedIds() {
     if (typeof window.__bxClosedIds !== "object" || !window.__bxClosedIds) {
@@ -111,9 +112,27 @@
     }
   }
 
-  var origAdd = WebSocket.prototype.addEventListener;
+  // Capture the actual socket even when Flutter uses `onmessage` instead of
+  // addEventListener. This sidecar loads before Flutter bootstraps.
+  if (typeof NativeWebSocket === "function") {
+    var TrackedWebSocket = function (url, protocols) {
+      var socket = arguments.length > 1
+        ? new NativeWebSocket(url, protocols)
+        : new NativeWebSocket(url);
+      marketSocket = socket;
+      return socket;
+    };
+    TrackedWebSocket.prototype = NativeWebSocket.prototype;
+    ["CONNECTING", "OPEN", "CLOSING", "CLOSED"].forEach(function (key) {
+      TrackedWebSocket[key] = NativeWebSocket[key];
+    });
+    window.WebSocket = TrackedWebSocket;
+    self.WebSocket = TrackedWebSocket;
+  }
+
+  var origAdd = NativeWebSocket && NativeWebSocket.prototype.addEventListener;
   if (typeof origAdd === "function") {
-    WebSocket.prototype.addEventListener = function (type, fn, cap) {
+    NativeWebSocket.prototype.addEventListener = function (type, fn, cap) {
       if (String(type).toLowerCase() === "message" && !this.__bxGhostSide) {
         this.__bxGhostSide = true;
         marketSocket = this;
@@ -140,6 +159,29 @@
         }).catch(function () {});
       }
       return result;
+    };
+  }
+
+  var NativeXhr = window.XMLHttpRequest;
+  if (typeof NativeXhr === "function") {
+    var xhrOpen = NativeXhr.prototype.open;
+    var xhrSend = NativeXhr.prototype.send;
+    NativeXhr.prototype.open = function (method, url) {
+      this.__bxCloseMethod = String(method || "GET").toUpperCase();
+      this.__bxCloseUrl = String(url || "");
+      return xhrOpen.apply(this, arguments);
+    };
+    NativeXhr.prototype.send = function () {
+      var xhr = this;
+      var match = xhr.__bxCloseMethod === "POST" &&
+        xhr.__bxCloseUrl.match(/\/positions\/([^/?#]+)\/close(?:[/?#]|$)/);
+      if (match && !xhr.__bxCloseObserved) {
+        xhr.__bxCloseObserved = true;
+        xhr.addEventListener("loadend", function () {
+          if (xhr.status >= 200 && xhr.status < 300) dispatchTerminalClose(match[1]);
+        });
+      }
+      return xhrSend.apply(this, arguments);
     };
   }
 
