@@ -246,7 +246,6 @@ services:
       SERVER_MONITOR_SERVICE_URLS_JSON: >-
         {"gateway":"http://btrader-gateway:4100/v1/health","engine":"http://btrader-matching:4300/health","marketData":"http://btrader-market-data:4200/health","ws":"tcp://btrader-ws:4101","postgres":"tcp://btrader-postgres:5432","redis":"tcp://btrader-redis:6379"}
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
     depends_on:
       btrader-gateway: { condition: service_started }
     deploy:
