@@ -56711,6 +56711,13 @@ $1(a){return this.ads(a)},
 ads(a){var s=0,r=A.q(t.V2),q,p,o,n,m
 var $async$$1=A.r(function(b,c){if(b===1)return A.m(c,r)
 for(;;)switch(s){case 0:a.aG($.baG(),t.o3)
+if(typeof self!=="undefined"&&self.__bxOpenPositionsReady){q=(function(rows){var out=[],keys=Object.keys(rows),i,id
+for(i=0;i<keys.length;++i){id=keys[i]
+if(self.__bxClosedIds&&self.__bxClosedIds[id])continue
+try{out.push(new A.b9F().$1(rows[id]))}catch(_){}}return A.b(out,t.C9)
+})(self.__bxOpenPositions||Object.create(null))
+s=1
+break}
 p=a.aG($.ix(),t.T)
 if(p==null){q=B.dS
 s=1
@@ -57236,6 +57243,7 @@ if(r!=null){p=new A.b9F().$1(e)
 for(q=0;q<r.length;++q)if(r[q].a===p.a){r[q]=p
 p=a
 break}if(p!==a)r.push(p)}
+A.bxRef(b.b)
 if(typeof self!=="undefined"&&typeof Event==="function")self.dispatchEvent(new Event("resize"))
 }catch(c){}
 else if(o==="position_close_pending")try{A.bxRef(b.b)}catch(c){}

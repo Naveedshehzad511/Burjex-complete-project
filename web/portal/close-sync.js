@@ -13,6 +13,7 @@
   if (window.__bxCloseSync) return;
   window.__bxCloseSync = true;
   window.__bxOpenPositions = window.__bxOpenPositions || Object.create(null);
+  window.__bxOpenPositionsReady = window.__bxOpenPositionsReady || false;
   var latestPosition = Object.create(null);
   var marketSocket = null;
   var marketSockets = [];
@@ -143,6 +144,13 @@
     var d = msg.d;
     if (t === "position" || t === "position_closed") {
       observe(d);
+      return;
+    }
+    if (t === "positions" && d && typeof d === "object") {
+      var snapshot = Array.isArray(d.positions) ? d.positions : [];
+      window.__bxOpenPositionsReady = true;
+      window.__bxOpenPositions = Object.create(null);
+      for (var j = 0; j < snapshot.length; j++) observe(snapshot[j]);
       return;
     }
     if (t === "evts" && d && typeof d === "object") {
