@@ -144,6 +144,11 @@ const clients = new Set<ClientState>();
 // another's client.
 const byTenantSymbol = new Map<string, Set<ClientState>>();
 const byAccount = new Map<string, Set<ClientState>>();
+// Last account snapshot per watched account. An OPEN event is expanded
+// asynchronously from Redis, so its original ACCOUNT_UPDATE can overtake it.
+// Replaying this authoritative snapshot immediately after the full position
+// keeps the portal's Trade parent rebuild ordered after the new ticket lands.
+const latestAccountSnapshot = new Map<string, unknown>();
 
 // Shared empty set for the `?? EMPTY` fallback - allocating one per miss would
 // churn the hot path. Never mutated.
@@ -451,6 +456,7 @@ sub.on('pmessage', async (_pattern, channel, message) => {
 
     // Each branch touches only the clients watching that one account.
     if (evt.kind === 'ACCOUNT_UPDATE' && evt.account?.accountId) {
+      latestAccountSnapshot.set(tkey(tenantId, evt.account.accountId), evt.account);
       for (const c of byAccount.get(tkey(tenantId, evt.account.accountId)) ?? EMPTY) {
         queueEvt(c, 'account', evt.account.accountId, evt.account);
       }
@@ -459,6 +465,10 @@ sub.on('pmessage', async (_pattern, channel, message) => {
       const key = String(posBody.id ?? posBody.positionId);
       for (const c of byAccount.get(tkey(tenantId, posAccount)) ?? EMPTY) {
         queueEvt(c, 'position', key, posBody);
+        if (posBody.event === 'position_opened') {
+          const account = latestAccountSnapshot.get(tkey(tenantId, posAccount));
+          if (account !== undefined) queueEvt(c, 'account', posAccount, account);
+        }
       }
     }
     if (evt.kind === 'ORDER_UPDATE' && evt.order?.accountId) {
