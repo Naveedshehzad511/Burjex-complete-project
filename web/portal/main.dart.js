@@ -57236,6 +57236,7 @@ if(r!=null){p=new A.b9F().$1(e)
 for(q=0;q<r.length;++q)if(r[q].a===p.a){r[q]=p
 p=a
 break}if(p!==a)r.push(p)}
+if(typeof self!=="undefined"&&typeof Event==="function")self.dispatchEvent(new Event("resize"))
 }catch(c){}
 else if(o==="position_close_pending")try{A.bxRef(b.b)}catch(c){}
 break A}if(a0 instanceof A.Jt){s=b.a
