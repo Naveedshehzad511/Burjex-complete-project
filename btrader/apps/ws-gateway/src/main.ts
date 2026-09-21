@@ -317,7 +317,7 @@ sub.psubscribe(
   `bt:*:${Channels.CANDLES}`,
   `bt:*:${Channels.ENGINE_EVT}`,
 );
-sub.on('pmessage', (_pattern, channel, message) => {
+sub.on('pmessage', async (_pattern, channel, message) => {
   const parts = channel.split(':');
   const tenantId = parts[1];
   const kind = parts[2];
@@ -409,7 +409,7 @@ sub.on('pmessage', (_pattern, channel, message) => {
     // Ensure closing flags and status are properly enforced on rawPosBody if it exists
     // Keep A/B book ("A"/"B") on live rows. Only overwrite book when the
     // engine has actually closed the ticket.
-    const posBody = rawPosBody
+    let posBody = rawPosBody
       ? {
           ...rawPosBody,
           book: isClosedOrSlTp ? 'closed' : rawPosBody.book || evt.book,
@@ -421,6 +421,33 @@ sub.on('pmessage', (_pattern, channel, message) => {
       : null;
 
     const posAccount = posBody?.accountId;
+    // The compact fill event intentionally used to contain only an id and
+    // account. That is sufficient for a REST reconciliation but not for a
+    // live portal session that must render the new Trade row and Chart SL/TP
+    // lines without a page refresh. The matcher has already written the
+    // authoritative snapshot before publishing position_opened, so enrich
+    // this one transition from Redis rather than polling REST from clients.
+    if (posBody?.event === 'position_opened' && posAccount) {
+      try {
+        const raw = await redis.get(openPositionsRedisKey(tenantId, posAccount));
+        const snapshot = raw ? JSON.parse(raw) as { positions?: unknown } : null;
+        const positions = Array.isArray(snapshot?.positions) ? snapshot.positions : [];
+        const id = String(posBody.id ?? posBody.positionId ?? '');
+        const full = positions.find((p: any) => String(p?.id ?? p?.positionId ?? '') === id);
+        if (full && typeof full === 'object') {
+          posBody = {
+            ...posBody,
+            ...(full as Record<string, unknown>),
+            status: 'OPEN',
+            closing: false,
+            event: 'position_opened',
+          };
+        }
+      } catch {
+        // The original event still reaches the client; reconnect snapshot
+        // remains the fallback if Redis is temporarily unavailable.
+      }
+    }
 
     // Each branch touches only the clients watching that one account.
     if (evt.kind === 'ACCOUNT_UPDATE' && evt.account?.accountId) {

@@ -57231,7 +57231,13 @@ break A}s=s.h(e,"symbol")
 d=A.f(s==null?"":s)
 c=d.length===0?a:J.t(b.b.ah(0,$.m4(),t.iS),d)
 b.b.ah(0,$.afm().gcd(),t._l).aeD(0,e,c)
-if(o==="position_opened"||o==="position_close_pending")try{A.bxRef(b.b)}catch(c){}
+if(o==="position_opened"||s.h(e,"symbol")!=null&&s.h(e,"openPrice")!=null)try{r=A.cK(b.b.ah(0,$.jv().gcd(),t.Op))
+if(r!=null){p=new A.b9F().$1(e)
+for(q=0;q<r.length;++q)if(r[q].a===p.a){r[q]=p
+p=a
+break}if(p!==a)r.push(p)}
+A.bxRef(b.b)}catch(c){}
+else if(o==="position_close_pending")try{A.bxRef(b.b)}catch(c){}
 break A}if(a0 instanceof A.Jt){s=b.a
 p=s.a
 if(p!=null)p.aB(0)
@@ -57861,6 +57867,10 @@ break
 case"position":e.f.D(0,new A.BL(J.t(c,d)))
 break
 case"position_closed":e.f.D(0,new A.BL(J.t(c,d)))
+break
+case"positions":i=J.f7(t.f.a(J.t(c,d)),t.N,t.z)
+q=J.ap(t.g.a(i.h(0,"positions"))||B.P)
+while(q.q())e.f.D(0,new A.BL(q.gJ(q)))
 break
 case"order":e.f.D(0,new A.Jt(J.t(c,d)))
 break
