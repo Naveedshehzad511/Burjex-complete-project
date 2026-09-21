@@ -127,24 +127,6 @@
     }
   }
 
-  // Capture the actual socket even when Flutter uses `onmessage` instead of
-  // addEventListener. This sidecar loads before Flutter bootstraps.
-  if (typeof NativeWebSocket === "function") {
-    var TrackedWebSocket = function (url, protocols) {
-      var socket = arguments.length > 1
-        ? new NativeWebSocket(url, protocols)
-        : new NativeWebSocket(url);
-      registerSocket(socket);
-      return socket;
-    };
-    TrackedWebSocket.prototype = NativeWebSocket.prototype;
-    ["CONNECTING", "OPEN", "CLOSING", "CLOSED"].forEach(function (key) {
-      TrackedWebSocket[key] = NativeWebSocket[key];
-    });
-    window.WebSocket = TrackedWebSocket;
-    self.WebSocket = TrackedWebSocket;
-  }
-
   var origAdd = NativeWebSocket && NativeWebSocket.prototype.addEventListener;
   if (typeof origAdd === "function") {
     NativeWebSocket.prototype.addEventListener = function (type, fn, cap) {
