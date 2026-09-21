@@ -775,6 +775,7 @@ impl Engine {
             status: "OPEN".into(),
         });
         self.redis_sync_open_positions(tenant_id, &account.id).await;
+        let alias = self.client_alias(account.group_id.as_deref(), &sym.symbol).await;
         self.publish_after_fill(
             tenant_id,
             &account.id,
@@ -783,7 +784,27 @@ impl Engine {
             "opened",
             &snap,
             None,
-            None,
+            Some(json!({
+                "position": {
+                    "id": position_id.clone(),
+                    "accountId": account.id.clone(),
+                    "symbol": alias,
+                    "side": req.side.clone(),
+                    "status": "OPEN",
+                    "book": book.clone(),
+                    "volume": volume,
+                    "openPrice": fill_price,
+                    "currentPrice": fill_price,
+                    "slPrice": req.sl_price,
+                    "tpPrice": req.tp_price,
+                    "profit": 0.0,
+                    "swap": 0.0,
+                    "commission": commission,
+                    "marginUsed": margin,
+                    "digits": sym.digits,
+                    "openedAt": Utc::now().to_rfc3339(),
+                }
+            })),
         )
         .await;
 
