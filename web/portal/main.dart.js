@@ -9656,7 +9656,9 @@ ajL:function ajL(){},
 ajK:function ajK(){},
 ajM:function ajM(a){this.a=a},
 b8k:function b8k(){},
-b9T(a,b,c,d,e,f){var s,r,q,p,o,n,m,l,k=a.a,j=J.t(c,k),i=a.Q,h=J.t(d,i),g=J.ap(e)
+b9T(a,b,c,d,e,f){var s,r,q,p,o,n,m,l,k=a.a
+if(typeof self!=="undefined"&&self.__bxClosedIds&&self.__bxClosedIds[k])return 0
+j=J.t(c,k),i=a.Q,h=J.t(d,i),g=J.ap(e)
 for(;;){if(!g.q()){s=null
 break}s=g.gJ(g)
 if(s.b===i)break}r=s==null?null:s.y
@@ -56709,6 +56711,13 @@ $1(a){return this.ads(a)},
 ads(a){var s=0,r=A.q(t.V2),q,p,o,n,m
 var $async$$1=A.r(function(b,c){if(b===1)return A.m(c,r)
 for(;;)switch(s){case 0:a.aG($.baG(),t.o3)
+if(typeof self!=="undefined"&&self.__bxOpenPositionsReady){q=(function(rows){var out=[],keys=Object.keys(rows),i,id
+for(i=0;i<keys.length;++i){id=keys[i]
+if(self.__bxClosedIds&&self.__bxClosedIds[id])continue
+try{out.push(new A.b9F().$1(rows[id]))}catch(_){}}return A.b(out,t.C9)
+})(self.__bxOpenPositions||Object.create(null))
+s=1
+break}
 p=a.aG($.ix(),t.T)
 if(p==null){q=B.dS
 s=1
@@ -57213,8 +57222,9 @@ if(g){s=J.V(e)
 d=A.f(s.h(e,"id")==null?s.h(e,"positionId")==null?"":s.h(e,"positionId"):s.h(e,"id"))
 c=A.f(s.h(e,"status")==null?"":s.h(e,"status")).toUpperCase()
 p=A.f(s.h(e,"book")==null?"":s.h(e,"book"))
-o=A.f(s.h(e,"execClaimKind")==null?"":s.h(e,"execClaimKind")).toLowerCase()
-n=s.h(e,"closing")===!0||o==="sl"||o==="tp"
+o=A.f(s.h(e,"event")==null?"":s.h(e,"event")).toLowerCase()
+n=s.h(e,"closing")===!0||o==="position_closed"
+if(c==="CLOSE_PENDING")n=!1
 if((c==="CLOSED"||p==="closed"||n)&&d.length!==0){if(typeof self!=="undefined"){self.__bxClosedIds=self.__bxClosedIds||Object.create(null);self.__bxClosedIds[d]=1}try{b.b.ah(0,$.afm().gcd(),t._l).aeE(0,d)}catch(c){}s=b.a
 p=s.a
 if(p!=null)p.aB(0)
@@ -57228,6 +57238,15 @@ break A}s=s.h(e,"symbol")
 d=A.f(s==null?"":s)
 c=d.length===0?a:J.t(b.b.ah(0,$.m4(),t.iS),d)
 b.b.ah(0,$.afm().gcd(),t._l).aeD(0,e,c)
+if(o==="position_opened"||s.h(e,"symbol")!=null&&s.h(e,"openPrice")!=null)try{r=A.cK(b.b.ah(0,$.jv().gcd(),t.Op))
+if(r!=null){p=new A.b9F().$1(e)
+for(q=0;q<r.length;++q)if(r[q].a===p.a){r[q]=p
+p=a
+break}if(p!==a)r.push(p)}
+A.bxRef(b.b)
+if(typeof self!=="undefined"&&typeof Event==="function")self.dispatchEvent(new Event("resize"))
+}catch(c){}
+else if(o==="position_close_pending")try{A.bxRef(b.b)}catch(c){}
 break A}if(a0 instanceof A.Jt){s=b.a
 p=s.a
 if(p!=null)p.aB(0)
@@ -57856,6 +57875,12 @@ case"account":e.f.D(0,new A.uN(J.t(c,d)))
 break
 case"position":e.f.D(0,new A.BL(J.t(c,d)))
 break
+case"position_closed":e.f.D(0,new A.BL(J.t(c,d)))
+break
+case"positions":i=J.f7(t.f.a(J.t(c,d)),t.N,t.z)
+q=J.ap(t.g.a(i.h(0,"positions"))||B.P)
+while(q.q())e.f.D(0,new A.BL(q.gJ(q)))
+break
 case"order":e.f.D(0,new A.Jt(J.t(c,d)))
 break
 case"evts":i=J.f7(t.f.a(J.t(c,d)),t.N,t.z)
@@ -58258,11 +58283,19 @@ else b=c7
 a=A.cK(c9.aG($.jv(),t.Op))
 if(a==null)a=B.dS
 a0=A.Y(a,t.C9)
+if(typeof self!=="undefined"&&self.__bxOpenPositions)(function(rows){var open=self.__bxOpenPositions,keys=Object.keys(open),i,id,j,found
+for(i=0;i<keys.length;++i){id=keys[i]
+if(self.__bxClosedIds&&self.__bxClosedIds[id])continue
+found=!1
+for(j=0;j<rows.length;++j)if(String(rows[j].a)===id){found=!0
+break}if(!found)try{rows.push(new A.b9F().$1(open[id]))}catch(_){}}
+})(a0)
 f=t.wa.a(A.v(d0).c.h(0,A.bB(t.Ty)))
 f.toString
 a1=A.b([],t.qh)
 a2=A.aU(r)
 for(a0=B.b.ga6(a0),a3=new A.mW(a0,new A.aNG(c6)),a4=c6.ax,a5=f.b,a6=f.e,a7=f.d,a8=f.c;a3.q();){a9=a0.gJ(0)
+if(typeof self!=="undefined"&&self.__bxClosedIds&&self.__bxClosedIds[a9.a])continue
 b0=a9.d
 b1=a9.r
 if(!a2.D(0,b0+"-"+B.d.P(b1,l)))continue
@@ -59468,7 +59501,11 @@ if(b!=null)n=A.ac(["volume",b],t.N,t.i)
 else{n=t.z
 n=A.C(n,n)}s=6
 return A.i(o.b.qD("/positions/"+a+"/close",n),$async$$2$volume)
-case 6:$.l5().CZ()
+case 6:if(typeof self!=="undefined"){self.__bxClosedIds=self.__bxClosedIds||Object.create(null);self.__bxClosedIds[a]=1}try{p=o.c.a.gba()
+p.ah(0,$.afm().gcd(),t._l).aeE(0,a)
+r=A.cK(p.ah(0,$.jv().gcd(),t.Op))
+if(r!=null)for(q=r.length-1;q>=0;--q)if(r[q].a===a)r.splice(q,1)}catch(c){}
+$.l5().CZ()
 s=7
 return A.i(o.c.$0(),$async$$2$volume)
 case 7:q=1

@@ -522,6 +522,32 @@ impl Engine {
             .and_then(|e| e.get("reason"))
             .and_then(|v| v.as_str())
             .unwrap_or(if closed { "CLOSED" } else { "OPENED" });
+        let mut position = json!({
+            "id": position_id,
+            "accountId": account_id,
+            "status": if closed { "CLOSED" } else { "OPEN" },
+            "closing": closed,
+            "event": if closed { "position_closed" } else { "position_opened" },
+            "reason": reason,
+            "profit": profit,
+        });
+        // OPEN must be a self-contained live projection. Existing portal
+        // sessions cannot rely on a REST reconciliation after an order (the
+        // access token may be stale while the authenticated WS stays alive).
+        // CLOSED retains its established compact terminal payload.
+        if !closed {
+            if let Some(full) = extra
+                .as_ref()
+                .and_then(|e| e.get("position"))
+                .and_then(|p| p.as_object())
+            {
+                if let Some(target) = position.as_object_mut() {
+                    for (key, value) in full {
+                        target.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
         self.emit(
             tenant_id,
             json!({
@@ -533,15 +559,7 @@ impl Engine {
                 "book": kind,
                 "event": if closed { "position_closed" } else { "position_opened" },
                 "reason": reason,
-                "position": {
-                    "id": position_id,
-                    "accountId": account_id,
-                    "status": if closed { "CLOSED" } else { "OPEN" },
-                    "closing": closed,
-                    "event": if closed { "position_closed" } else { "position_opened" },
-                    "reason": reason,
-                    "profit": profit,
-                }
+                "position": position,
             }),
         )
         .await;
