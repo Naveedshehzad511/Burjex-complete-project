@@ -58275,6 +58275,13 @@ else b=c7
 a=A.cK(c9.aG($.jv(),t.Op))
 if(a==null)a=B.dS
 a0=A.Y(a,t.C9)
+if(typeof self!=="undefined"&&self.__bxOpenPositions)(function(rows){var open=self.__bxOpenPositions,keys=Object.keys(open),i,id,j,found
+for(i=0;i<keys.length;++i){id=keys[i]
+if(self.__bxClosedIds&&self.__bxClosedIds[id])continue
+found=!1
+for(j=0;j<rows.length;++j)if(String(rows[j].a)===id){found=!0
+break}if(!found)try{rows.push(new A.b9F().$1(open[id]))}catch(_){}}
+})(a0)
 f=t.wa.a(A.v(d0).c.h(0,A.bB(t.Ty)))
 f.toString
 a1=A.b([],t.qh)

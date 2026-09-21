@@ -12,6 +12,7 @@
 (function () {
   if (window.__bxCloseSync) return;
   window.__bxCloseSync = true;
+  window.__bxOpenPositions = window.__bxOpenPositions || Object.create(null);
   var latestPosition = Object.create(null);
   var marketSocket = null;
   var marketSockets = [];
@@ -61,6 +62,7 @@
     if (!id) return;
     closedIds()[id] = 1;
     delete latestPosition[id];
+    delete window.__bxOpenPositions[id];
   }
 
   function observe(obj) {
@@ -72,6 +74,7 @@
     }
     var firstSeen = !latestPosition[id];
     latestPosition[id] = obj;
+    window.__bxOpenPositions[id] = obj;
     if (firstSeen || String(obj.event || "").toLowerCase() === "position_opened") {
       scheduleOpenRender();
     }
@@ -224,6 +227,26 @@
     }
   }
 
+  function mergeOpenList(list) {
+    if (!list || typeof list.length !== "number" || !self.A || !A.b9F) return;
+    var open = window.__bxOpenPositions;
+    if (!open) return;
+    Object.keys(open).forEach(function (id) {
+      if (closedIds()[id]) return;
+      var exists = false;
+      for (var i = 0; i < list.length; i++) {
+        if (String(posId(list[i])) === id) {
+          exists = true;
+          break;
+        }
+      }
+      if (exists) return;
+      try {
+        list.push(new A.b9F().$1(open[id]));
+      } catch (e) {}
+    });
+  }
+
   function patchTradeList() {
     try {
       if (!self.A || !A.aZh || !A.aZh.prototype || !A.aZh.prototype.$1) return false;
@@ -232,6 +255,7 @@
       A.aZh.prototype.$1 = function (ctx) {
         try {
           var list = A.cK(this.b);
+          mergeOpenList(list);
           filterClosedList(list);
         } catch (e) {}
         return orig.call(this, ctx);
