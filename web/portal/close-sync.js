@@ -18,7 +18,6 @@
   var marketSocket = null;
   var marketSockets = [];
   var NativeWebSocket = window.WebSocket;
-  var openRenderQueued = false;
 
   function registerSocket(socket) {
     if (!socket || marketSockets.indexOf(socket) >= 0) return;
@@ -73,30 +72,8 @@
       note(obj);
       return;
     }
-    var firstSeen = !latestPosition[id];
     latestPosition[id] = obj;
     window.__bxOpenPositions[id] = obj;
-    if (firstSeen || String(obj.event || "").toLowerCase() === "position_opened") {
-      scheduleOpenRender();
-    }
-  }
-
-  // The compiled Trade+ portal mutates its active-position projection from a
-  // WS frame. Its parent widgets may not rebuild because no REST state changed
-  // (notably when REST has a stale/expired session). Rebuild just those two
-  // stateful surfaces on an OPEN frame after Flutter has consumed it.
-  function scheduleOpenRender() {
-    if (openRenderQueued) return;
-    openRenderQueued = true;
-    setTimeout(function () {
-      openRenderQueued = false;
-      ["__bxTradeState", "__bxChartState"].forEach(function (key) {
-        var state = window[key];
-        try {
-          if (state && typeof state.u === "function") state.u(function () {});
-        } catch (e) {}
-      });
-    }, 0);
   }
 
   // A successful HTTP close has already committed server-side. Replay the
@@ -275,37 +252,9 @@
     }
   }
 
-  function patchOpenRenderStates() {
-    try {
-      if (!self.A) return false;
-      var trade = A.a8Y && A.a8Y.prototype;
-      var chart = A.aNv && A.aNv.prototype;
-      if (!trade || typeof trade.F !== "function" || !chart || typeof chart.F !== "function") return false;
-      if (!trade.__bxOpenRenderPatched) {
-        var tradeF = trade.F;
-        trade.F = function (ctx) {
-          window.__bxTradeState = this;
-          return tradeF.call(this, ctx);
-        };
-        trade.__bxOpenRenderPatched = true;
-      }
-      if (!chart.__bxOpenRenderPatched) {
-        var chartF = chart.F;
-        chart.F = function (ctx) {
-          window.__bxChartState = this;
-          return chartF.call(this, ctx);
-        };
-        chart.__bxOpenRenderPatched = true;
-      }
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
   var tries = 0;
   (function wait() {
-    if (patchTradeList() && patchOpenRenderStates() || ++tries > 1200) return;
+    if (patchTradeList() || ++tries > 1200) return;
     setTimeout(wait, 50);
   })();
 })();
