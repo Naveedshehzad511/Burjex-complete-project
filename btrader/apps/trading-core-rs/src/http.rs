@@ -7,6 +7,7 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use std::time::Instant;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -63,6 +64,12 @@ pub struct PlaceBody {
 
 async fn place(State(st): State<AppState>, headers: HeaderMap, Json(b): Json<PlaceBody>) -> Result<Json<Value>, BtError> {
     auth(&headers, &st.token)?;
+    let trace_id = headers
+        .get("x-bt-trace-id")
+        .and_then(|v| v.to_str().ok())
+        .filter(|v| !v.is_empty())
+        .unwrap_or("missing");
+    let started = Instant::now();
     let req = PlaceReq {
         account_id: b.account_id,
         symbol: b.symbol,
@@ -80,7 +87,14 @@ async fn place(State(st): State<AppState>, headers: HeaderMap, Json(b): Json<Pla
         client_order_id: b.client_order_id,
         source: b.source,
     };
-    Ok(Json(st.engine.place_order(&b.tenant_id, req).await?.json()))
+    let mut result = st.engine.place_order(&b.tenant_id, req).await?.json();
+    result["traceId"] = Value::String(trace_id.to_string());
+    tracing::info!(
+        trace_id,
+        matcher_ms = started.elapsed().as_millis() as u64,
+        "trade-hop matcher_complete"
+    );
+    Ok(Json(result))
 }
 
 #[derive(Deserialize)]

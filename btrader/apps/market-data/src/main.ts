@@ -1004,6 +1004,10 @@ async function main() {
   const lastSeq = new Map<string, number>();
   const handleTickImpl = (raw: RawTick) => {
     const now = Date.now();
+    const priceAgeMs = now - raw.ts;
+    if (Number.isFinite(priceAgeMs) && priceAgeMs >= 0) {
+      latency.record('tick.price_age', priceAgeMs);
+    }
     if (raw.sequence != null) {
       const prev = lastSeq.get(raw.symbol);
       if (prev != null && raw.sequence > prev + 1) {
@@ -1044,6 +1048,13 @@ async function main() {
         dropUnmapped(raw.symbol);
         return;
       }
+      // Reject inactive symbols before allocating quote-book/candle state or
+      // publishing Redis work. On the capacity snapshot, no-route MT5 symbols
+      // alone consumed roughly 1,200 ticks/sec of avoidable CPU.
+      if (!routing.has(symbol)) {
+        dropNoRoute(symbol);
+        return;
+      }
       // Global book + canonical candle stream (one source of truth).
       (allBook.get(symbol) ?? allBook.set(symbol, new Map()).get(symbol)!).set(`${tenantId}:${raw.source}`, q);
       aggregateCanonical(symbol, now);
@@ -1063,14 +1074,14 @@ async function main() {
     // Legacy default feed (tenant-agnostic): the adapter already stripped the
     // global suffix, so raw.symbol is canonical. Drives every tenant that isn't
     // pricing off its own providers.
-    (allBook.get(raw.symbol) ?? allBook.set(raw.symbol, new Map()).get(raw.symbol)!).set('default', q);
-    aggregateCanonical(raw.symbol, now);
-    defaultBook.set(raw.symbol, q);
     const targets = routing.get(raw.symbol);
     if (!targets) {
       dropNoRoute(raw.symbol);
       return;
     }
+    (allBook.get(raw.symbol) ?? allBook.set(raw.symbol, new Map()).get(raw.symbol)!).set('default', q);
+    aggregateCanonical(raw.symbol, now);
+    defaultBook.set(raw.symbol, q);
     for (const t of targets) publishForTenant(t.tenantId, raw.symbol, now);
   };
   // Timing wrapper so per-tick processing latency is captured across all the

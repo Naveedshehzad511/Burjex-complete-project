@@ -3,6 +3,8 @@
   "Mt5Login": 0,
   "Mt5Password": "CHANGE_ME",
   "FeedToken": "CHANGE_ME",
+  "TickFlushMs": 10,
+  "Symbols": "EURUSD,XAUUSD",
   "BridgeApiUrl": "https://api.example.com/v1",
   "BridgeToken": "CHANGE_ME",
   "BtTenantId": "YOUR_TENANT_ID",

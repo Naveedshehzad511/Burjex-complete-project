@@ -30,6 +30,10 @@ services:
     image: postgres:16-alpine
     container_name: btrader_stg_postgres
     <<: *restart
+    command: >-
+      postgres -c max_connections=400 -c shared_buffers=1GB
+      -c wal_compression=on -c max_wal_size=4GB
+      -c checkpoint_completion_target=0.9
     environment:
       POSTGRES_USER: ${BT_POSTGRES_USER}
       POSTGRES_PASSWORD: ${BT_POSTGRES_PASSWORD}
@@ -43,6 +47,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        reservations: { cpus: '0.75', memory: 1G }
+        limits: { cpus: '1.50', memory: 3G, pids: 256 }
     networks: [staging_internal]
 
   redis:
@@ -51,7 +59,7 @@ services:
     <<: *restart
     command: >
       redis-server --requirepass ${BT_REDIS_PASSWORD} --appendonly yes
-      --maxmemory 256mb --maxmemory-policy noeviction
+      --maxmemory 1gb --maxmemory-policy noeviction
     volumes:
       - btrader_stg_redis:/data
     healthcheck:
@@ -59,6 +67,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        reservations: { cpus: '0.25', memory: 256M }
+        limits: { cpus: '0.75', memory: 1G, pids: 128 }
     networks: [staging_internal]
 
   # ── REST gateway. Applies the Prisma schema on boot so a fresh staging DB
@@ -72,8 +84,11 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       API_PORT: '4100'
-      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@postgres:5432/${BT_POSTGRES_DB}?schema=public
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=160&pool_timeout=2
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@redis:6379
+      RUST_ENGINE_URL: http://matching:4300
+      RUST_ENGINE_TOKEN: ${RUST_ENGINE_TOKEN:-}
+      ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-100}
     command: >-
       sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
       cd /app/apps/gateway-api && exec node dist/main.js"
@@ -84,6 +99,10 @@ services:
       redis: { condition: service_healthy }
     volumes:
       - btrader_stg_uploads:/app/uploads
+    deploy:
+      resources:
+        reservations: { cpus: '0.50', memory: 512M }
+        limits: { cpus: '1.00', memory: 1536M, pids: 512 }
     networks: [staging_internal]
 
   ws-gateway:
@@ -95,31 +114,49 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       WS_PORT: '4101'
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@redis:6379
+      WS_TICK_BATCH_MS: ${WS_TICK_BATCH_MS:-40}
+      WS_EVT_BATCH_MS: ${WS_EVT_BATCH_MS:-0}
+      WS_MAX_BUFFERED_BYTES: ${WS_MAX_BUFFERED_BYTES:-1048576}
+      WS_MAX_TICK_BUFFER: ${WS_MAX_TICK_BUFFER:-2048}
+      WS_MAX_EVENT_BUFFER: ${WS_MAX_EVENT_BUFFER:-512}
     ports:
       - '5101:4101'
     depends_on:
       redis: { condition: service_healthy }
       # Shares JWT_SECRET with the gateway; wait for it so tables/tenant exist.
       gateway-api: { condition: service_started }
+    deploy:
+      resources:
+        reservations: { cpus: '0.50', memory: 512M }
+        limits: { cpus: '1.00', memory: 1536M, pids: 2048 }
     networks: [staging_internal]
 
-  # ── The engine under test. ENGINE_TICK_INTERVAL_MS is surfaced in the env
-  #    template specifically so #2A fix #3 (lower the coalescing drain) can be
-  #    exercised here without a code change. ──────────────────────────────────
-  trading-engine:
-    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: trading-engine } }
-    container_name: btrader_stg_engine
+  # ── The single Rust matcher under test. The Node trading-engine is an
+  #    auxiliary auto-hedge worker, not the order matcher, and must not replace
+  #    this service in a capacity run. ───────────────────────────────────────
+  matching:
+    build: { context: ../btrader/apps/trading-core-rs, dockerfile: Dockerfile }
+    container_name: btrader_stg_matching
     <<: *restart
     env_file: .env.staging
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@postgres:5432/${BT_POSTGRES_DB}?schema=public
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@redis:6379
+      ENGINE_HTTP_PORT: '4300'
+      ENGINE_PG_POOL: ${ENGINE_PG_POOL:-64}
+      ENGINE_FAST_INTERVAL_MS: ${ENGINE_FAST_INTERVAL_MS:-5}
       ENGINE_TICK_INTERVAL_MS: ${ENGINE_TICK_INTERVAL_MS:-250}
+      ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-100}
+      RUST_ENGINE_TOKEN: ${RUST_ENGINE_TOKEN:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-      gateway-api: { condition: service_started }
+    expose: ['4300']
+    deploy:
+      resources:
+        reservations: { cpus: '1.50', memory: 1G }
+        limits: { cpus: '2.00', memory: 2G, pids: 256 }
     networks: [staging_internal]
 
   # ── Price feed. Default driver is `mock` (safe synthetic ticks) so staging
@@ -147,6 +184,10 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       gateway-api: { condition: service_started }
+    deploy:
+      resources:
+        reservations: { cpus: '0.50', memory: 512M }
+        limits: { cpus: '1.00', memory: 1280M, pids: 256 }
     networks: [staging_internal]
 
 volumes:

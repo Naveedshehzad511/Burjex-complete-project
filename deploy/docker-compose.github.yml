@@ -129,7 +129,14 @@ services:
     image: postgres:16-alpine
     container_name: bxnet_bt_postgres
     <<: *restart
-    command: postgres -c max_connections=400
+    # Sized for 160 gateway + 64 matcher + 20 market-data + 40 worker
+    # connections, leaving burst/restart headroom below max_connections.
+    # Validate WAL/checkpoint latency on the isolated staging disk before any
+    # production rollout; these settings are not a capacity certification.
+    command: >-
+      postgres -c max_connections=400 -c shared_buffers=1GB
+      -c wal_compression=on -c max_wal_size=4GB
+      -c checkpoint_completion_target=0.9
     environment:
       POSTGRES_USER: ${BT_POSTGRES_USER}
       POSTGRES_PASSWORD: ${BT_POSTGRES_PASSWORD}
@@ -141,6 +148,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        reservations: { cpus: '0.75', memory: 1G }
+        limits: { cpus: '1.50', memory: 3G, pids: 256 }
     networks: [btrader_internal]
 
   btrader-redis:
@@ -149,7 +160,7 @@ services:
     <<: *restart
     command: >
       redis-server --requirepass ${BT_REDIS_PASSWORD} --appendonly yes
-      --maxmemory 256mb --maxmemory-policy noeviction
+      --maxmemory 1gb --maxmemory-policy noeviction
     volumes:
       - bxnet_bt_redis:/data
     healthcheck:
@@ -157,6 +168,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        reservations: { cpus: '0.25', memory: 256M }
+        limits: { cpus: '0.75', memory: 1G, pids: 128 }
     networks: [btrader_internal]
 
   btrader-gateway:
@@ -173,10 +188,11 @@ services:
       NODE_ENV: production
       API_PORT: '4100'
       # HTTP + in-process engine: 200 vs previous 80. Postgres max_connections
-      # is 400 so gateway 200 + engine 40 + market-data still fit. pool_timeout
-      # 10s so a saturated pool fails before k6's 60s hang.
-      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=200&pool_timeout=10
-      ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-8000}
+      # is 400 so gateway 160 + matcher 64 + market-data 20 + worker 40 fit.
+      # A saturated pool should fail quickly; it must not hide a multi-second
+      # trading queue behind an HTTP request.
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=160&pool_timeout=2
+      ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-100}
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
       RUST_ENGINE_URL: http://btrader-matching:4300
       RUST_ENGINE_TOKEN: ${RUST_ENGINE_TOKEN:-}
@@ -205,6 +221,10 @@ services:
       btrader-matching: { condition: service_started }
     volumes:
       - bxnet_bt_uploads:/app/uploads
+    deploy:
+      resources:
+        reservations: { cpus: '0.50', memory: 512M }
+        limits: { cpus: '1.00', memory: 1536M, pids: 512 }
     networks: [btrader_internal, edge]
 
   btrader-matching:
@@ -217,8 +237,10 @@ services:
       DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
       ENGINE_HTTP_PORT: '4300'
+      ENGINE_PG_POOL: ${ENGINE_PG_POOL:-64}
       ENGINE_FAST_INTERVAL_MS: ${ENGINE_FAST_INTERVAL_MS:-40}
       ENGINE_TICK_INTERVAL_MS: ${ENGINE_TICK_INTERVAL_MS:-250}
+      ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-100}
       MAX_PRICE_AGE_MS: ${MAX_PRICE_AGE_MS:-8000}
       MAX_FEED_STILL_MS: ${MAX_FEED_STILL_MS:-120000}
       RUST_ENGINE_TOKEN: ${RUST_ENGINE_TOKEN:-}
@@ -227,6 +249,12 @@ services:
     depends_on:
       btrader-postgres: { condition: service_healthy }
       btrader-redis: { condition: service_healthy }
+    # The matcher has its own hard cgroup. It still needs host-level core
+    # pinning in Phase 3; do not claim otherwise from compose quotas alone.
+    deploy:
+      resources:
+        reservations: { cpus: '1.50', memory: 1G }
+        limits: { cpus: '2.00', memory: 2G, pids: 256 }
     networks: [btrader_internal]
 
   btrader-ws:
@@ -242,8 +270,17 @@ services:
       WS_PORT: '4101'
       REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
       NODE_OPTIONS: "--max-http-header-size=131072"
+      WS_TICK_BATCH_MS: ${WS_TICK_BATCH_MS:-40}
+      WS_EVT_BATCH_MS: ${WS_EVT_BATCH_MS:-0}
+      WS_MAX_BUFFERED_BYTES: ${WS_MAX_BUFFERED_BYTES:-1048576}
+      WS_MAX_TICK_BUFFER: ${WS_MAX_TICK_BUFFER:-2048}
+      WS_MAX_EVENT_BUFFER: ${WS_MAX_EVENT_BUFFER:-512}
     depends_on:
       btrader-redis: { condition: service_healthy }
+    deploy:
+      resources:
+        reservations: { cpus: '0.50', memory: 512M }
+        limits: { cpus: '1.00', memory: 1536M, pids: 2048 }
     networks: [btrader_internal, edge]
 
   btrader-engine:
@@ -261,7 +298,7 @@ services:
       ENGINE_TICK_CONCURRENCY: ${ENGINE_TICK_CONCURRENCY:-4}
       ORDER_RATE_MAX: ${ORDER_RATE_MAX:-40}
       ORDER_RATE_WINDOW_MS: ${ORDER_RATE_WINDOW_MS:-1000}
-      ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-8000}
+      ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-100}
     depends_on:
       btrader-postgres: { condition: service_healthy }
       btrader-redis: { condition: service_healthy }
@@ -295,6 +332,10 @@ services:
       btrader-postgres: { condition: service_healthy }
       btrader-redis: { condition: service_healthy }
       btrader-gateway: { condition: service_started }
+    deploy:
+      resources:
+        reservations: { cpus: '0.50', memory: 512M }
+        limits: { cpus: '1.00', memory: 1280M, pids: 256 }
     networks: [btrader_internal, edge]
 
 volumes:
