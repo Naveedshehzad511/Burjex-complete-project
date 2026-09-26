@@ -370,8 +370,8 @@ class IBCommissionAPIView(APIView):
                 status__in=[Transaction.Status.APPROVED, Transaction.Status.COMPLETED],
             )
             .select_related("from_user", "payment_gateway")
-            .order_by("-created_at")[:limit]
-        )
+            .order_by("-created_at")
+        )[:limit]  # slice AFTER the ledger filter: a sliced queryset cannot be filtered
         transactions = [
             {
                 "id": tx.id,

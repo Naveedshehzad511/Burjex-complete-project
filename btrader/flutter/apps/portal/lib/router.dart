@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'crm/crm.dart';
 import 'screens/account_pages.dart';
+import 'screens/crm_pages.dart';
 import 'screens/charts_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/funding_screen.dart';
@@ -77,6 +78,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
       GoRoute(path: '/kyc', builder: (_, __) => const KycScreen()),
       GoRoute(path: '/wallet', builder: (_, __) => const WalletScreen()),
+      GoRoute(path: '/transfer', builder: (_, __) => const InternalTransferScreen()),
+      GoRoute(path: '/p/:key', builder: (_, state) => CrmDataScreen(pageKey: state.pathParameters['key'] ?? '')),
+      GoRoute(path: '/soon/:title', builder: (_, state) => ComingSoonScreen(title: state.pathParameters['title'] ?? '')),
       ShellRoute(
         builder: (context, state, child) => PortalShell(state: state, child: child),
         routes: [

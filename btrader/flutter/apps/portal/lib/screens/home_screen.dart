@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../crm/crm.dart';
 import '../main.dart' show kNavy;
 import '../session/sessions.dart';
+import '../widgets/portal_drawer.dart';
 import '../widgets/portal_ui.dart';
 
 const _kHideBalanceKey = 'bx_hide_balance';
@@ -86,7 +87,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       key: _scaffold,
-      drawer: const _PortalDrawer(),
+      drawer: const PortalDrawer(),
       backgroundColor: dark ? null : const Color(0xFFF4F6F9),
       body: SafeArea(
         child: RefreshIndicator(
@@ -407,79 +408,6 @@ class _AccountCard extends ConsumerWidget {
               : null),
         ]),
       ]),
-    );
-  }
-}
-
-class _PortalDrawer extends ConsumerWidget {
-  const _PortalDrawer();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    Widget item(IconData icon, String label, VoidCallback onTap, {bool selected = false}) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          child: ListTile(
-            selected: selected,
-            selectedTileColor: kNavy,
-            selectedColor: Colors.white,
-            iconColor: kNavy,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            leading: Icon(icon, size: 26),
-            title: Text(label, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-            onTap: () {
-              Navigator.of(context).pop();
-              onTap();
-            },
-          ),
-        );
-    return Drawer(
-      child: SafeArea(
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
-            child: Row(children: [
-              Image.asset('assets/branding/logo_mark.png', width: 44, height: 44, errorBuilder: (_, __, ___) => const SizedBox(width: 44)),
-              const SizedBox(width: 12),
-              const Expanded(child: Text('Burjex Prime', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: kNavy))),
-              IconButton.filled(
-                style: IconButton.styleFrom(backgroundColor: kNavy, foregroundColor: Colors.white),
-                icon: const Icon(Icons.keyboard_double_arrow_left),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ]),
-          ),
-          Expanded(
-            child: ListView(children: [
-              item(Icons.home, 'Dashboard', () {}, selected: true),
-              item(Icons.add_card_outlined, 'Deposit', () => context.push('/deposit')),
-              item(Icons.payments_outlined, 'Withdraw', () => context.push('/withdraw')),
-              item(Icons.account_balance_wallet_outlined, 'My Wallet', () => context.push('/wallet')),
-              item(Icons.verified_user_outlined, 'KYC', () => context.push('/kyc')),
-              item(Icons.person_add_alt_1_outlined, 'Open Account', () => context.push('/open-account')),
-              item(Icons.manage_accounts_outlined, 'My Data / Profile', () => context.push('/profile')),
-            ]),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: OutlinedButton.icon(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                ref.read(tradingSessionProvider.notifier).reset();
-                await ref.read(managedAccountsProvider.notifier).clear();
-                await ref.read(crmSessionProvider.notifier).logout();
-              },
-              icon: const Icon(Icons.logout),
-              label: const Text('Logout', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFD33F3A),
-                side: const BorderSide(color: Color(0xFFD33F3A), width: 1.5),
-                minimumSize: const Size.fromHeight(52),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-          ),
-        ]),
-      ),
     );
   }
 }
