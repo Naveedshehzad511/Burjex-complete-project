@@ -49,6 +49,28 @@ export class TenantMiddleware implements NestMiddleware {
       );
     }
 
+    if (!tenant) {
+      const auth = req.header('authorization') || '';
+      if (auth.startsWith('Bearer ')) {
+        try {
+          const parts = auth.slice(7).split('.');
+          if (parts.length >= 2) {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+            if (payload?.tenantId) {
+              tenant = await this.byKey('id:' + payload.tenantId, () =>
+                prisma.tenant.findUnique({ where: { id: payload.tenantId } }),
+              );
+            }
+          }
+        } catch {}
+      }
+    }
+    if (!tenant) {
+      tenant = await this.byKey('first-active-tenant', () =>
+        prisma.tenant.findFirst({ where: { status: 'ACTIVE' } }),
+      );
+    }
+
     if (tenant) {
       req.tenant = {
         id: tenant.id,

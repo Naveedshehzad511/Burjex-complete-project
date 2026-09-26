@@ -431,101 +431,104 @@
 </style>
 
 {% if kyc_alert %}
-<div class="mb-4 rounded-xl p-3 flex items-center justify-between gap-3"
-  style="background:rgba(251,191,36,0.10);border:1px solid rgba(251,191,36,0.35);">
-  <div class="text-sm font-medium flex items-center gap-2" style="color:var(--portal-text-main);">
-    <span aria-hidden="true">⚠</span>
+<div class="mb-4 rounded-xl px-3.5 py-2 flex items-center justify-between gap-3 text-xs"
+  style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.22);color:var(--portal-text-main);">
+  <div class="flex items-center gap-2 font-medium">
+    <span style="color:#f59e0b;">⚠</span>
     <span>{{ kyc_alert }}</span>
   </div>
-  <a href="{% url 'user-compliance' %}" class="portal-btn-primary text-sm px-3 py-1.5">Complete Now</a>
+  <a href="{% url 'user-compliance' %}" class="font-semibold underline" style="color:var(--portal-brand-primary, #002D58);">Verify</a>
 </div>
 {% endif %}
 
-<div class="mb-4">
-  <div class="flex items-center justify-between gap-2 flex-wrap">
+<!-- Unified Account Performance Card (Navy-Blue Theme) -->
+<div class="portal-main-performance-card mb-6" id="dashBalanceGrid" style="
+  background: linear-gradient(135deg, #071527 0%, #002D58 100%);
+  border-radius: 18px;
+  padding: 24px 28px;
+  color: #ffffff;
+  box-shadow: 0 10px 25px -5px rgba(0, 45, 88, 0.35);
+  position: relative;
+  min-height: fit-content;
+  overflow: visible;
+">
+  <!-- Top bar of card: Account mode tag & Open Account button -->
+  <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+    <div class="flex items-center gap-2">
+      <span id="dashCardAccountType" class="px-3 py-1 rounded-full text-xs font-semibold" style="background: rgba(255,255,255,0.14); letter-spacing: 0.03em;">
+        {% if tab == 'demo' %}Demo Account{% else %}Real Account{% endif %}
+      </span>
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold text-emerald-400" style="background: rgba(16, 185, 129, 0.18); border: 1px solid rgba(16, 185, 129, 0.3);">
+        ▲ +4.2%
+      </span>
+    </div>
     {% if dashboard_settings.enable_open_new_account %}
     <a id="dashOpenAccountLink"
       href="{% url 'accounts-open-account' %}?type={% if tab == 'demo' %}demo{% else %}real{% endif %}"
-      class="inline-flex items-center rounded-xl portal-btn-primary px-4 py-2 text-sm font-semibold">+ Open Account</a>
+      class="inline-flex items-center rounded-xl px-4 py-2 text-xs font-bold text-white shadow-sm transition-all"
+      style="background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.28);"
+      onmouseover="this.style.background='rgba(255,255,255,0.28)'"
+      onmouseout="this.style.background='rgba(255,255,255,0.18)'">
+      + Open Account
+    </a>
     {% endif %}
   </div>
-</div>
 
-{% if dashboard_settings.enable_real_demo_tabs %}
-<div class="dash-tabs" id="dashAccountTabs" role="tablist" aria-label="Account type">
-  <button type="button" role="tab" id="dashTabReal"
-    class="dash-tab-btn dash-tab--real{% if tab == 'real' %} is-active{% endif %}" data-dash-tab="real"
-    aria-selected="{% if tab == 'real' %}true{% else %}false{% endif %}">Real</button>
-  <button type="button" role="tab" id="dashTabDemo"
-    class="dash-tab-btn dash-tab--demo{% if tab == 'demo' %} is-active{% endif %}" data-dash-tab="demo"
-    aria-selected="{% if tab == 'demo' %}true{% else %}false{% endif %}">Demo</button>
-</div>
-{% if tab_metrics %}{{ tab_metrics|json_script:"dashTabMetrics" }}{% endif %}
-{% endif %}
-
-{% if dashboard_settings.show_balance %}
-<div
-  class="balance-grid mb-6{% if dashboard_settings.enable_real_demo_tabs and tab == 'demo' %} balance-grid--demo-tab{% endif %}"
-  id="dashBalanceGrid">
-  <div class="balance-card">
-    <div class="balance-title">Total Balance</div>
-    <div class="balance-value"><span class="js-dash-metric" data-metric="total_balance">{{ total_balance }}</span> USD
+  <!-- Total Balance with Hide/Show Eye Button -->
+  <div class="mb-5">
+    <div class="text-xs uppercase tracking-wider font-semibold opacity-75 flex items-center gap-2">
+      <span>Total Balance</span>
+      <button type="button" id="dashToggleBalanceVisibility" title="Toggle balance visibility" class="text-white/70 hover:text-white transition-opacity text-sm cursor-pointer p-1" style="background:none;border:none;line-height:1;">
+        <i class="fa-solid fa-eye" id="dashEyeIcon"></i>
+      </button>
+    </div>
+    <div class="text-3xl font-extrabold mt-1.5 tracking-tight flex items-baseline gap-2">
+      <span id="dashBalanceDisplay" class="js-dash-metric" data-metric="total_balance">{{ total_balance }}</span>
+      <span class="text-base font-normal text-white/75">USD</span>
     </div>
   </div>
-  <div
-    class="balance-card js-dash-stat-real-only{% if dashboard_settings.enable_real_demo_tabs and tab == 'demo' %} dash-tab-hidden{% endif %}">
-    <div class="balance-title">Equity</div>
-    <div class="balance-value"><span class="js-dash-metric" data-metric="total_equity">{{ total_equity }}</span> USD
+
+  <!-- Sub-metrics inside card: Equity, Withdrawable, Open PnL -->
+  <div id="dashSubMetricsGrid" class="grid {% if tab == 'demo' %}grid-cols-2{% else %}grid-cols-3{% endif %} gap-4 pt-4 border-t border-white/10 text-xs">
+    <div>
+      <div class="text-white/60 font-medium">Equity</div>
+      <div class="font-bold text-sm mt-0.5"><span id="dashEquityDisplay" class="js-dash-metric" data-metric="total_equity">{{ total_equity }}</span> <span class="text-[10px] text-white/60">USD</span></div>
+    </div>
+    <div class="js-dash-stat-real-only{% if dashboard_settings.enable_real_demo_tabs and tab == 'demo' %} dash-tab-hidden{% endif %}">
+      <div class="text-white/60 font-medium">Withdrawable</div>
+      <div class="font-bold text-sm mt-0.5"><span id="dashWithdrawableDisplay" class="js-dash-metric" data-metric="available_to_withdraw">{{ available_to_withdraw }}</span> <span class="text-[10px] text-white/60">USD</span></div>
+    </div>
+    <div>
+      <div class="text-white/60 font-medium">Open PnL</div>
+      <div class="font-bold text-sm mt-0.5"><span id="dashPnlDisplay" class="js-dash-metric" data-metric="open_pnl">{{ open_pnl }}</span> <span class="text-[10px] text-white/60">USD</span></div>
     </div>
   </div>
-  <div
-    class="balance-card js-dash-stat-real-only{% if dashboard_settings.enable_real_demo_tabs and tab == 'demo' %} dash-tab-hidden{% endif %}">
-    <div class="balance-title">{% if wallet_only_withdrawal_ui %}Withdrawable (Wallet){% else %}Available to Withdraw
-      {% endif %}</div>
-    <div class="balance-value"><span class="js-dash-metric" data-metric="available_to_withdraw">{{ available_to_withdraw
-        }}</span> USD</div>
-
-  </div>
-  <div class="balance-card">
-    <div class="balance-title">Open PnL</div>
-    <div class="balance-value"><span class="js-dash-metric" data-metric="open_pnl">{{ open_pnl }}</span> USD</div>
-  </div>
-</div>
-{% endif %}
-
-<!-- 1. Quick Actions -->
-<div
-  class="portal-card mb-6{% if dashboard_settings.enable_real_demo_tabs and tab == 'demo' %} dash-tab-hidden{% endif %}"
-  id="dashQuickActions">
-  <h2 class="text-sm font-bold mb-3" style="color:var(--portal-text-main);">Quick Actions</h2>
-  <div class="quick-actions">
-    {% if dashboard_settings.enable_deposit_button %}
-    <button type="button" class="action-btn deposit" onclick="window.location.href='{% url 'user-deposit' %}'">
-      Deposit
-    </button>
-    {% endif %}
-    {% if dashboard_settings.enable_withdraw_button %}
-    <button type="button" class="action-btn withdraw" onclick="window.location.href='{% url 'user-withdraw' %}'">
-      Withdraw
-    </button>
-    {% endif %}
-    {% if show_transfer_to_wallet_cta %}
-    <button type="button" class="action-btn deposit"
-      onclick="window.location.href='{% url 'user-internal-transfer' %}'">
-      Internal Transfer
-    </button>
-    {% endif %}
-  </div>
 </div>
 
-<!-- 2-3. No Trading Accounts Found / Account List -->
+<!-- Account List Header with Real/Demo Tabs Beside It -->
 {% if dashboard_settings.show_trading_accounts %}
 {% if accounts|length == 0 %}
 <div class="broker-card p-5 text-slate-600 mb-6">
   No Trading Accounts Found
 </div>
 {% else %}
-<h2 class="text-sm font-bold mb-3" style="color:var(--portal-text-main);">Account List</h2>
+<div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+  <h2 class="text-base font-bold" style="color:var(--portal-text-main);">Account List</h2>
+  {% if dashboard_settings.enable_real_demo_tabs %}
+  <div class="dash-tabs" id="dashAccountTabs" role="tablist" aria-label="Account type" style="margin: 0; display: inline-flex; background: rgba(0,45,88,0.06); padding: 3px; border-radius: 12px; gap: 4px;">
+    <button type="button" role="tab" id="dashTabReal"
+      class="dash-tab-btn dash-tab--real{% if tab == 'real' %} is-active{% endif %}" data-dash-tab="real"
+      aria-selected="{% if tab == 'real' %}true{% else %}false{% endif %}"
+      style="padding: 6px 16px; border-radius: 9px; font-size: 13px; font-weight: 600;">Real</button>
+    <button type="button" role="tab" id="dashTabDemo"
+      class="dash-tab-btn dash-tab--demo{% if tab == 'demo' %} is-active{% endif %}" data-dash-tab="demo"
+      aria-selected="{% if tab == 'demo' %}true{% else %}false{% endif %}"
+      style="padding: 6px 16px; border-radius: 9px; font-size: 13px; font-weight: 600;">Demo</button>
+  </div>
+  {% if tab_metrics %}{{ tab_metrics|json_script:"dashTabMetrics" }}{% endif %}
+  {% endif %}
+</div>
+
 {% if dashboard_settings.enable_real_demo_tabs and tab_metrics %}
 <div id="dashTabEmptyState" class="broker-card p-5 text-slate-600 mb-6 hidden text-center text-sm font-medium"
   role="status" aria-live="polite"></div>
@@ -766,6 +769,18 @@
 
     startMetricsPolling();
 
+    var balanceHidden = false;
+
+    function formatOrMask(el, val) {
+      if (!el) return;
+      el.setAttribute("data-raw-val", val);
+      if (balanceHidden) {
+        el.textContent = "••••••";
+      } else {
+        el.textContent = val;
+      }
+    }
+
     // Recalculate totals across visible accounts
     document.addEventListener('accountMetricsUpdated', function () {
       var balGrid = document.getElementById("dashBalanceGrid");
@@ -788,22 +803,33 @@
       // Update the DOM elements with live totals from trading accounts
       var pnl = sum_equity - sum_balance;
       var pnlEl = balGrid.querySelector('.js-dash-metric[data-metric="open_pnl"]');
-      if (pnlEl) pnlEl.textContent = pnl.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      if (pnlEl) {
+        var str = pnl.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        formatOrMask(pnlEl, str);
+      }
 
       var tbEl = balGrid.querySelector('.js-dash-metric[data-metric="total_balance"]');
       var teEl = balGrid.querySelector('.js-dash-metric[data-metric="total_equity"]');
       if (tbEl) {
-        tbEl.textContent = sum_balance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        var tbStr = sum_balance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        formatOrMask(tbEl, tbStr);
       }
       if (teEl) {
-        teEl.textContent = sum_equity.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        var teStr = sum_equity.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        formatOrMask(teEl, teStr);
       }
 
       var availEl = balGrid.querySelector('.js-dash-metric[data-metric="available_to_withdraw"]');
       if (availEl && t === "real" && availEl.parentElement.innerText.indexOf("Wallet") === -1) {
-        availEl.textContent = Math.max(0, sum_free_margin).toFixed(2);
+        var avStr = Math.max(0, sum_free_margin).toFixed(2);
+        formatOrMask(availEl, avStr);
       }
     });
+
+    function tabFromUrl() {
+      var p = new URLSearchParams(window.location.search).get("tab");
+      return p === "demo" ? "demo" : "real";
+    }
 
     if (tabBar) {
       var tabMetrics = {};
@@ -813,11 +839,6 @@
         } catch (e) {
           tabMetrics = {};
         }
-      }
-
-      function tabFromUrl() {
-        var p = new URLSearchParams(window.location.search).get("tab");
-        return p === "demo" ? "demo" : "real";
       }
 
       function setUrlTab(t) {
@@ -836,7 +857,9 @@
         var m = tabMetrics[t] || {};
         document.querySelectorAll(".js-dash-metric").forEach(function (el) {
           var key = el.getAttribute("data-metric");
-          if (key && m[key] !== undefined) el.textContent = m[key];
+          if (key && m[key] !== undefined) {
+            formatOrMask(el, m[key]);
+          }
         });
         var visible = 0;
         document.querySelectorAll(".account-card-wrap[data-account-kind]").forEach(function (wrap) {
@@ -867,13 +890,47 @@
             qa.classList.remove("dash-tab-hidden");
           }
         }
+        var cardTypeEl = document.getElementById("dashCardAccountType");
+        if (cardTypeEl) {
+          cardTypeEl.textContent = t === "demo" ? "Demo Account" : "Real Account";
+        }
         document.querySelectorAll(".js-dash-stat-real-only").forEach(function (el) {
           el.classList.toggle("dash-tab-hidden", t === "demo");
         });
-        var balGrid = document.getElementById("dashBalanceGrid");
-        if (balGrid) {
-          balGrid.classList.toggle("balance-grid--demo-tab", t === "demo");
+        var subGrid = document.getElementById("dashSubMetricsGrid");
+        if (subGrid) {
+          if (t === "demo") {
+            subGrid.classList.remove("grid-cols-3");
+            subGrid.classList.add("grid-cols-2");
+          } else {
+            subGrid.classList.remove("grid-cols-2");
+            subGrid.classList.add("grid-cols-3");
+          }
         }
+      }
+
+      var eyeBtn = document.getElementById("dashToggleBalanceVisibility");
+      if (eyeBtn) {
+        eyeBtn.addEventListener("click", function () {
+          balanceHidden = !balanceHidden;
+          var icon = document.getElementById("dashEyeIcon");
+          if (icon) {
+            icon.className = balanceHidden ? "fa-solid fa-eye-slash" : "fa-solid fa-eye";
+          }
+          document.querySelectorAll(".js-dash-metric").forEach(function (el) {
+            var key = el.getAttribute("data-metric");
+            if (key === "total_balance" || key === "total_equity" || key === "available_to_withdraw" || key === "open_pnl") {
+              if (balanceHidden) {
+                if (!el.getAttribute("data-raw-val")) {
+                  el.setAttribute("data-raw-val", el.textContent.trim());
+                }
+                el.textContent = "••••••";
+              } else {
+                el.textContent = el.getAttribute("data-raw-val") || el.textContent;
+              }
+            }
+          });
+        });
       }
 
       tabBar.querySelectorAll(".dash-tab-btn").forEach(function (btn) {

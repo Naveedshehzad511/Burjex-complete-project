@@ -221,10 +221,11 @@ export class NativeMockAdapter implements ChartFeedAdapter {
     const seeds: Record<string, number> = { EURUSD: 1.1, GBPUSD: 1.27, XAUUSD: 2350, BTCUSD: 68000, USDJPY: 157 };
     return seeds[symbol] ?? 100;
   }
-  async fetchCandles(q: CandleQuery): Promise<Candle[]> {
+  async fetchCandles(q: CandleQuery, targetPrice?: number): Promise<Candle[]> {
     const step = TF_SECONDS[q.tf];
     const now = Math.floor(Date.now() / 1000);
-    const start = now - (q.limit - 1) * step;
+    const currentBucket = Math.floor(now / step) * step;
+    const start = currentBucket - (q.limit - 1) * step;
     let price = this.seedBase(q.symbol);
     let rng = Array.from(q.symbol).reduce((a, c) => a + c.charCodeAt(0), 0);
     const rand = () => {
@@ -240,6 +241,17 @@ export class NativeMockAdapter implements ChartFeedAdapter {
       const l = Math.min(o, c) - rand() * vol * 0.5;
       out.push({ t: start + i * step, o, h, l, c, v: Math.round(rand() * 1000) });
       price = c;
+    }
+    if (typeof targetPrice === 'number' && targetPrice > 0 && out.length > 0) {
+      const lastClose = out[out.length - 1].c;
+      const shift = targetPrice - lastClose;
+      const digits = q.symbol.includes('JPY') ? 3 : (targetPrice > 100 ? 2 : 5);
+      for (const bar of out) {
+        bar.o = Number((bar.o + shift).toFixed(digits));
+        bar.h = Number((bar.h + shift).toFixed(digits));
+        bar.l = Number((bar.l + shift).toFixed(digits));
+        bar.c = Number((bar.c + shift).toFixed(digits));
+      }
     }
     return out;
   }

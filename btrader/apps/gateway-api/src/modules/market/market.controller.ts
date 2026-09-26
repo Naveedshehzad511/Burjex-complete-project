@@ -41,8 +41,9 @@ export class MarketController {
   @Get('quotes')
   @ApiOperation({ summary: 'Last-known quote per symbol — seeds the watchlist so it is never blank.' })
   @ApiQuery({ name: 'symbol', required: false, example: 'XAUUSD' })
-  getQuotes(@CurrentTenant() t: any, @Query('symbol') symbol?: string) {
-    return this.quotes.snapshot(t.id, symbol);
+  async getQuotes(@CurrentTenant() t: any, @Query('symbol') symbol?: string) {
+    const tenantId = t?.id || (await this.quotes.getDefaultTenantId());
+    return this.quotes.snapshot(tenantId, symbol);
   }
 
   @Get('candles')
@@ -51,14 +52,32 @@ export class MarketController {
   @ApiQuery({ name: 'tf', example: '1m', enum: ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1mn'] })
   @ApiQuery({ name: 'limit', required: false, example: 300 })
   async getCandles(
-    @CurrentTenant() _t: any,
+    @CurrentTenant() t: any,
     @Query('symbol') symbol: string,
     @Query('tf') tf: string,
     @Query('limit') limit?: string,
   ) {
     if (!symbol) throw new BadRequestException('symbol required');
-    if (!this.candles.validTimeframe(tf)) throw new BadRequestException('invalid timeframe');
+    const normalizedTf = this.normalizeTimeframe(tf);
+    if (!this.candles.validTimeframe(normalizedTf)) throw new BadRequestException('invalid timeframe');
     const n = Math.min(Math.max(parseInt(limit ?? '300', 10) || 300, 10), 5000);
-    return this.candles.candles({ symbol, tf: tf as Timeframe, limit: n });
+    return this.candles.candles({ symbol, tf: normalizedTf as Timeframe, limit: n }, t?.id);
+  }
+
+  private normalizeTimeframe(tf: string): string {
+    if (!tf) return '1m';
+    const s = tf.trim().toLowerCase();
+    const map: Record<string, string> = {
+      m1: '1m', '1m': '1m',
+      m5: '5m', '5m': '5m',
+      m15: '15m', '15m': '15m',
+      m30: '30m', '30m': '30m',
+      h1: '1h', '1h': '1h',
+      h4: '4h', '4h': '4h',
+      d1: '1d', '1d': '1d',
+      w1: '1w', '1w': '1w',
+      mn: '1mn', '1mn': '1mn', '1mo': '1mn',
+    };
+    return map[s] ?? s;
   }
 }

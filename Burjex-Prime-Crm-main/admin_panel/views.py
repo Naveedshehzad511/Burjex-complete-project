@@ -1967,6 +1967,18 @@ def pending_deposit(request):
     redirect_qs = request.GET.urlencode()
     back_url = f"{reverse('admin-pending-deposit')}?{redirect_qs}" if redirect_qs else reverse("admin-pending-deposit")
 
+    def _notify_client_transaction(target_user, title, message, notif_type):
+        try:
+            from accounts.models import ClientNotification
+            ClientNotification.objects.create(
+                user=target_user,
+                title=title,
+                message=message,
+                notification_type=notif_type,
+            )
+        except Exception as e:
+            logger.warning("Could not record client notification: %s", e)
+
     if request.method == "POST":
         tx_id = request.POST.get("tx_id") or ""
         action = request.POST.get("action") or ""
@@ -2065,6 +2077,12 @@ def pending_deposit(request):
                                 request,
                                 f"Approved deposit #{tx.id} to BTrader account {target_account}.",
                             )
+                            _notify_client_transaction(
+                                target_user=user,
+                                title="Deposit Approved",
+                                message=f"Your deposit of {amt} {tx.currency or 'USD'} to trading account #{target_account} has been approved.",
+                                notif_type="deposit",
+                            )
                             db_transaction.on_commit(
                                 lambda login=login: sync_btrader_account(login)
                             )
@@ -2080,6 +2098,12 @@ def pending_deposit(request):
                             messages.success(
                                 request,
                                 f"Approved deposit #{tx.id} to account {target_account}.",
+                            )
+                            _notify_client_transaction(
+                                target_user=user,
+                                title="Deposit Approved",
+                                message=f"Your deposit of {amt} {tx.currency or 'USD'} to account #{target_account} has been approved.",
+                                notif_type="deposit",
                             )
                             # Defer sync until after DB commit so locks are released.
                             db_transaction.on_commit(lambda: sync_account(mt5_login))
@@ -2111,6 +2135,12 @@ def pending_deposit(request):
                         note="Deposit approved",
                     )
                     messages.success(request, f"Approved deposit #{tx.id} to Wallet.")
+                    _notify_client_transaction(
+                        target_user=user,
+                        title="Wallet Deposit Approved",
+                        message=f"Your wallet deposit of {amt} {tx.currency or 'USD'} has been approved.",
+                        notif_type="deposit",
+                    )
                 try:
                     log_audit(
                         action="DEPOSIT_APPROVE",
@@ -2405,6 +2435,16 @@ def pending_withdraw(request):
                         note="Withdrawal approved — wallet debited; pending reservation cleared",
                     )
                     messages.success(request, f"Approved withdraw #{tx.id}.")
+                    try:
+                        from accounts.models import ClientNotification
+                        ClientNotification.objects.create(
+                            user=user,
+                            title="Withdrawal Approved",
+                            message=f"Your withdrawal of {amt} {tx.currency or 'USD'} has been approved and processed.",
+                            notification_type="withdrawal",
+                        )
+                    except Exception as e:
+                        logger.warning("Could not record client withdrawal notification: %s", e)
                     try:
                         log_audit(
                             action="WITHDRAW_APPROVE",

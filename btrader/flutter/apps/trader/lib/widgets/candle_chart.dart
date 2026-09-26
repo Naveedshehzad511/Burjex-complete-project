@@ -582,7 +582,7 @@ class _CandlePainter extends CustomPainter {
   final Color up, down, grid, text, line, surface, onSurface;
 
   static const double axisW = 62; // right price-ladder width
-  static const double padV = 12; // top padding
+  static const double padV = 2; // top padding (reduced empty space above candles)
   static const double timeAxisH = 18; // bottom time-axis height
   static const int priceRows = 8; // price-ladder rows
 

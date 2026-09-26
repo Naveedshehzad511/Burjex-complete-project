@@ -36,5 +36,5 @@ export interface CandleQuery {
  */
 export interface ChartFeedAdapter {
   readonly name: string;
-  fetchCandles(q: CandleQuery): Promise<Candle[]>;
+  fetchCandles(q: CandleQuery, targetPrice?: number): Promise<Candle[]>;
 }

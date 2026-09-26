@@ -58816,7 +58816,18 @@ $0(){},
 $S:0}
 A.NR.prototype={
 F(a){var s=this,r=null,q=s.d,p=q==null,o=p?r:s.r,n=A.aob(s.f,r,B.a4H,B.Pw,r,B.i2),m=A.B(s.c,r,r,r,r,B.a9g,r,r,r)
-return A.nG(A.aC(A.b([m,A.B(p?"\u2014":B.d.P(q,s.e),r,r,r,r,B.a86,r,r,r)],t.p),B.l,B.f,B.L),o,n)}}
+var st=B.a86
+if(q!=null&&(s.c==="BUY"||s.c==="SELL")){
+var H=self.__bxDealTicks||(self.__bxDealTicks={BUY:{l:null,c:null,t:null},SELL:{l:null,c:null,t:null}}),d=H[s.c]
+if(d){
+if(d.l!=null&&q!==d.l&&Math.abs(q-d.l)/d.l<0.05){
+d.c=(q>d.l)?1:-1
+if(d.t)clearTimeout(d.t)
+d.t=setTimeout(function(){d.c=null;try{if(a&&typeof a.cH==="function")a.cH()}catch(e){}},650)}
+d.l=q
+if(d.c===1)st=B.a86.c1(self.__bxUpC||(self.__bxUpC=new A.l(4281925112)))
+else if(d.c===-1)st=B.a86.c1(self.__bxDnC||(self.__bxDnC=new A.l(4294922834)))}}
+return A.nG(A.aC(A.b([m,A.B(p?"\u2014":B.d.P(q,s.e),r,r,r,r,st,r,r,r)],t.p),B.l,B.f,B.L),o,n)}}
 A.Rf.prototype={
 F(a){var s=null
 return A.dd(!1,A.bb(8),!0,new A.ao(B.eo,A.cB(this.c,s,s,18),s),s,!0,s,s,s,s,s,s,s,s,this.d,s,s,s,s,s,s,s)}}
@@ -60493,7 +60504,7 @@ k=J.bss(d8.a.c,l,m)
 j=A.bod(d8.a.y,l,m)
 i=B.b.or(d8.a.y,0,new A.aLf())
 p=d6.c
-h=A.bmJ(e0.d,p.length,d8.w,12,18)
+h=A.bmJ(e0.d,p.length,d8.w,2,18)
 d8._ph=h.b
 g=d8.r/(k.length+n+i)
 f=d8.a
@@ -61398,7 +61409,7 @@ if(e8.gae(e7))return
 s=f0.a-52
 r=f0.b
 q=e5.ay
-p=A.bmJ(r,q.length,e5.ch,12,18)
+p=A.bmJ(r,q.length,e5.ch,2,18)
 o=p.a
 n=p.b
 m=e5.z
@@ -135403,10 +135414,10 @@ B.Qo=new A.aa(4,10,4,10)
 B.mO=new A.aa(4,2,4,2)
 B.du=new A.aa(4,4,4,4)
 B.ahi=new A.aa(4,4,4,5)
-B.Qp=new A.aa(4,6,0,4)
+B.Qp=new A.aa(4,0,0,4)
 B.tg=new A.aa(6,0,6,0)
 B.Qq=new A.aa(6,6,6,6)
-B.Qr=new A.aa(6,8,2,4)
+B.Qr=new A.aa(6,0,2,4)
 B.Qs=new A.aa(7,2,7,2)
 B.en=new A.aa(8,0,8,0)
 B.Qt=new A.aa(8,2,8,5)
