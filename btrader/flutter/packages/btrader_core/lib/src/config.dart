@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'platform_stub.dart' if (dart.library.io) 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 
