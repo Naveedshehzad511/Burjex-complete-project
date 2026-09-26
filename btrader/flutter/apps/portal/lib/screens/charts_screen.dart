@@ -815,10 +815,9 @@ class _BarCountdownState extends State<_BarCountdown> {
   }
 }
 
-/// SELL / BUY panel. The PRICE TEXT takes its colour from the direction of the
+/// SELL / BUY panel. The whole panel takes its colour from the direction of the
 /// latest tick on that side — blue when it moved up, red when it moved down — and
-/// settles back to the normal text colour shortly after (MT5-style). The panel is
-/// a light card, so both colours stay readable.
+/// settles back to its normal colour shortly after (MT5-style).
 class _DealCard extends StatefulWidget {
   const _DealCard({
     required this.label,
@@ -871,26 +870,29 @@ class _DealCardState extends State<_DealCard> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final active = widget.enabled && !widget.locked;
-    return Material(
-      color: widget.base.withValues(alpha: 0.10),
-      shape: RoundedRectangleBorder(
+    // MT5 style: the whole panel takes the colour of the latest tick on this side
+    // (blue = moved up, red = moved down), white text. It settles back to the
+    // side's normal colour (SELL red / BUY blue) after a moment.
+    final fill = _flash ?? widget.base;
+    return Opacity(
+      opacity: active || widget.locked ? 1 : 0.6,
+      child: Material(
+        color: fill,
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: widget.base.withValues(alpha: active ? 0.9 : 0.35), width: 1.4),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: active ? widget.onTap : (widget.locked ? widget.onTap : null),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(widget.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: widget.base, letterSpacing: 0.6)),
-            Text(
-              widget.price == null ? '—' : widget.price!.toStringAsFixed(widget.digits),
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _flash ?? cs.onSurface, fontFeatures: const [FontFeature.tabularFigures()]),
-            ),
-          ]),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: active ? widget.onTap : (widget.locked ? widget.onTap : null),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(widget.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 0.6)),
+              Text(
+                widget.price == null ? '—' : widget.price!.toStringAsFixed(widget.digits),
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]),
+              ),
+            ]),
+          ),
         ),
       ),
     );
