@@ -113,17 +113,9 @@ rsync -av build/web/ root@your-hetzner-ip:/var/www/btrader-admin/
 Mount `/var/www/btrader-admin` into the CRM nginx container (read-only) if it
 isn't already, then reload nginx. Visit `https://admin.btrader.YOURDOMAIN.com`.
 
-## Step 8 — Point the mobile trader app at the server
+## Step 8 — Client portal
 
-Build with the same URLs and distribute (APK / Firebase App Distribution / TestFlight):
-
-```bash
-cd flutter/apps/trader
-flutter build apk --release \
-  --dart-define=API_BASE=https://api.btrader.YOURDOMAIN.com \
-  --dart-define=WS_URL=wss://ws.btrader.YOURDOMAIN.com \
-  --dart-define=TENANT=demo
-```
+The live client UI is the static Trade+ bundle (`web/portal`: Home, Quotes, Chart, Trade, History). Do not rebuild or distribute a Markets/Portfolio/Settings trader APK.
 
 ## Step 9 — Wire the CRM → B-Trader (internal, no public hop)
 

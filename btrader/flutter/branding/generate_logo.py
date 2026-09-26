@@ -110,7 +110,6 @@ def build(out_dir):
 if __name__ == "__main__":
     import sys
     targets = sys.argv[1:] or [
-        "apps/trader/assets/branding",
         "apps/admin/assets/branding",
     ]
     print(f"Example brand assets (green bg {GREEN_HEX}):")
