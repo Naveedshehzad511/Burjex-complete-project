@@ -23,8 +23,27 @@ class BtConfig {
   );
   static const bool _useLan = bool.fromEnvironment('USE_LAN', defaultValue: false);
 
+  /// Runtime overrides used by `forexten_mobile` so native builds hit live
+  /// portal.burjexprime.net instead of localhost:4100. dart-define still wins.
+  static String? apiBaseOverride;
+  static String? wsUrlOverride;
+  static String? tenantOverride;
+
+  static const String livePortalHost = 'https://portal.burjexprime.net';
+  static const String liveWsHost = 'wss://portal.burjexprime.net';
+  static const String liveCrmHost = 'https://crm.burjexprime.net/api/v1';
+
+  /// Point REST + WS at the live portal host. Empty tenant lets the gateway
+  /// resolve the broker from `Host: portal.burjexprime.net` (not `demo`).
+  static void useLivePortalHosts() {
+    apiBaseOverride = livePortalHost;
+    wsUrlOverride = liveWsHost;
+    tenantOverride = '';
+  }
+
   // Dev: sent as X-BT-Tenant. Production resolves the tenant by host instead.
-  static const tenant = String.fromEnvironment('TENANT', defaultValue: 'demo');
+  static String get tenant =>
+      tenantOverride ?? const String.fromEnvironment('TENANT', defaultValue: 'demo');
 
   static const int apiPort = 4100;
   static const int wsPort = 4101;
@@ -50,6 +69,9 @@ class BtConfig {
     if (_envApiBase.isNotEmpty) {
       return _envApiBase.replaceAll(RegExp(r'/+$'), '');
     }
+    if (apiBaseOverride != null && apiBaseOverride!.isNotEmpty) {
+      return apiBaseOverride!.replaceAll(RegExp(r'/+$'), '');
+    }
     // Web builds are served behind Caddy on portal/admin.burjexprime.net —
     // same-origin /v1 (no hardcoded :4100, which breaks HTTPS / mixed content).
     if (kIsWeb) return Uri.base.origin;
@@ -58,6 +80,7 @@ class BtConfig {
 
   static String get wsUrl {
     if (_envWsUrl.isNotEmpty) return _envWsUrl;
+    if (wsUrlOverride != null && wsUrlOverride!.isNotEmpty) return wsUrlOverride!;
     if (kIsWeb) {
       final u = Uri.base;
       final scheme = u.scheme == 'https' ? 'wss' : 'ws';

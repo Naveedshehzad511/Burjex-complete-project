@@ -315,7 +315,9 @@ final brandingProvider = FutureProvider<Branding>((ref) async {
   final seed = Branding.fallback;
   try {
     final dio = Dio(BaseOptions(baseUrl: '${BtConfig.apiBase}/v1'));
-    final res = await dio.get('/public/branding', options: Options(headers: {'X-BT-Tenant': BtConfig.tenant}));
+    final headers = <String, dynamic>{};
+    if (BtConfig.tenant.isNotEmpty) headers['X-BT-Tenant'] = BtConfig.tenant;
+    final res = await dio.get('/public/branding', options: Options(headers: headers));
     final data = res.data;
     if (data is! Map) return seed;
     final api = Branding.fromJson(Map<String, dynamic>.from(data));

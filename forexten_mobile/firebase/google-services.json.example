@@ -1,0 +1,30 @@
+{
+  "_comment": "PLACEHOLDER ONLY. Copy the real file from Firebase Console to android/app/google-services.json. Do not invent project_number, mobilesdk_app_id, or api_key.",
+  "project_info": {
+    "project_number": "REPLACE_ME_PROJECT_NUMBER",
+    "project_id": "REPLACE_ME_PROJECT_ID",
+    "storage_bucket": "REPLACE_ME_PROJECT_ID.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "REPLACE_ME_ANDROID_APP_ID",
+        "android_client_info": {
+          "package_name": "net.burjexprime.forexten_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "REPLACE_ME_ANDROID_API_KEY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
