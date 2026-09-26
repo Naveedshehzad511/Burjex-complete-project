@@ -1,0 +1,24 @@
+{
+  "app": "forexten_mobile",
+  "package_name": "forexten_mobile",
+  "application_id": "net.burjexprime.forexten_mobile",
+  "source_branch": "cursor/new-portal-flutter-a0ee",
+  "source_pr": 15,
+  "parent_source_commit": "913be52adac9d8109528681d5835fbf36ece2e36",
+  "cache_bust": "forexten1",
+  "nav": [
+    "Home",
+    "Quotes",
+    "Chart",
+    "Trade",
+    "History"
+  ],
+  "web_main_dart_js_sha256": "4a97c9f85af6808e2b99670c0e00546771d06323ad4b88eee71d7885f1447601",
+  "web_main_dart_js_bytes": 2988320,
+  "apk_path": "web/portal/downloads/forexten_mobile-1.0.0+1.apk",
+  "apk_sha256": "11ca570802f59c87b0b27e96657dc22cbd1a01a78634d785dae0d5ef5b91bbe5",
+  "apk_bytes": 54437371,
+  "built_at_utc": "2026-09-26T12:44:12Z",
+  "flutter": "3.47.5",
+  "dart": "3.13.4"
+}
