@@ -56,6 +56,24 @@ class BtConfig {
     return 'http://$resolvedHost:$apiPort';
   }
 
+  static const String _envCrmBase = String.fromEnvironment('CRM_BASE');
+
+  /// CRM client API root. Override with `--dart-define=CRM_BASE=...`. On the web,
+  /// a page served from localhost / a LAN address talks to the CRM behind the
+  /// same origin (so a local stack never calls the live domain); every other
+  /// host uses the production CRM.
+  static String get crmBase {
+    if (_envCrmBase.isNotEmpty) return _envCrmBase.replaceAll(RegExp(r'/+$'), '');
+    if (kIsWeb) {
+      final h = Uri.base.host;
+      final local = h == 'localhost' ||
+          h == '127.0.0.1' ||
+          RegExp(r'^(10|192\.168|172\.(1[6-9]|2\d|3[01]))[.\d]*$').hasMatch(h);
+      if (local) return '${Uri.base.origin}/api/v1';
+    }
+    return 'https://crm.burjexprime.net/api/v1';
+  }
+
   static String get wsUrl {
     if (_envWsUrl.isNotEmpty) return _envWsUrl;
     if (kIsWeb) {

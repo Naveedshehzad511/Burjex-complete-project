@@ -658,6 +658,46 @@ class ClientNotification(models.Model):
         return f"{self.user_id}: {self.title[:50]}"
 
 
+class PushDevice(models.Model):
+    """A mobile device registered to receive push notifications for one user.
+
+    `token` is the FCM registration token (iOS devices are reached through FCM's
+    APNs bridge, so the Apple key is configured once in Firebase).
+    """
+
+    class Platform(models.TextChoices):
+        IOS = "ios", "iOS"
+        ANDROID = "android", "Android"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="push_devices")
+    token = models.CharField(max_length=512, unique=True)
+    platform = models.CharField(max_length=10, choices=Platform.choices)
+    is_active = models.BooleanField(default=True, db_index=True)
+    last_error = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "is_active"])]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.platform}"
+
+
+class PushDelivery(models.Model):
+    """One push attempt per (notification, device); the unique key prevents duplicates."""
+
+    notification = models.ForeignKey(ClientNotification, on_delete=models.CASCADE, related_name="push_deliveries")
+    device = models.ForeignKey(PushDevice, on_delete=models.CASCADE, related_name="deliveries")
+    status = models.CharField(max_length=10, default="pending")  # pending | sent | failed
+    error = models.CharField(max_length=255, blank=True, default="")
+    attempts = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["notification", "device"], name="uniq_push_per_notification_device")]
+
+
 class AccountDeletionRequest(models.Model):
     """A client's request to have their account and personal data erased.
 

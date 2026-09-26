@@ -207,7 +207,17 @@ export class AuthService {
     if (account.status === 'ARCHIVED' || !account.user.isActive) throw new UnauthorizedException('account disabled');
 
     const tokens = await this.issue(account.user, ip, ua, account.id, readonly);
-    return { ...tokens, accountId: account.id, login: account.login };
+    // Summary for the app's saved "managed accounts" list (name, number, balance, investor flag).
+    // Tokens, not the password, are what the app persists to re-open the account later.
+    const holderName = [account.user.firstName, account.user.lastName].filter(Boolean).join(' ').trim();
+    return {
+      ...tokens,
+      accountId: account.id,
+      login: account.login,
+      holderName: holderName || account.user.email,
+      balance: Number(account.balance),
+      isDemo: account.isDemo,
+    };
   }
 
   private async issue(

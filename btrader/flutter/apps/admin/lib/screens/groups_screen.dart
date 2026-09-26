@@ -259,7 +259,7 @@ class GroupsScreen extends ConsumerWidget {
                         initialValue: executionMode,
                         decoration: const InputDecoration(
                           labelText: 'Execution type',
-                          helperText: 'Instant = fill at click/level. Market = delay then fill (SL/TP always close at level immediately).',
+                          helperText: 'Instant = fill at click/level. Market = delay then fill (applies to every checked kind, incl. SL/TP).',
                         ),
                         items: const [
                           DropdownMenuItem(value: 'INSTANT', child: Text('Instant execution')),
@@ -285,7 +285,7 @@ class GroupsScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Checked types: Instant honour or Market delay. SL/TP always honour level with no delay. Unchecked types fill at live market. Delay ms applies to market/pending/close only.',
+                        'Checked types: Instant honour or Market delay. Unchecked types fill at live market with no delay. Delay ms applies to every checked kind (market, pending, SL, TP, manual close, close all) using the value current at execution time.',
                         style: TextStyle(fontSize: 12, color: Theme.of(ctx).hintColor),
                       ),
                       const SizedBox(height: 4),

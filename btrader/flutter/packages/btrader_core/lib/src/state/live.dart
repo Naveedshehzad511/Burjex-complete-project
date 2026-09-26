@@ -16,6 +16,7 @@ import 'providers.dart';
 /// Auto-connects when authenticated; disposes on logout.
 final marketSocketProvider = Provider<MarketSocket?>((ref) {
   final auth = ref.watch(authControllerProvider);
+  ref.watch(sessionEpochProvider);
   if (!auth.authenticated) return null;
   final store = ref.watch(authStoreProvider);
   final api = ref.watch(apiClientProvider);
@@ -62,7 +63,16 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
         }
         final sym = '${data['symbol'] ?? ''}';
         final q = sym.isEmpty ? null : ref.read(quotesProvider)[sym];
+        // A position this session has not seen yet is a NEW trade: refetch the
+        // list right away so Chart / Trade / PnL show it without a manual refresh.
+        final isNew = id.isNotEmpty && !ref.read(livePositionNotifierProvider).pl.containsKey(id);
         ref.read(livePositionNotifierProvider.notifier).set(data, fallbackQuote: q);
+        if (isNew) {
+          Future.microtask(() {
+            ref.invalidate(openPositionsProvider);
+            ref.invalidate(accountsProvider);
+          });
+        }
       case OrderFrame():
         Future.microtask(() {
           ref.invalidate(openPositionsProvider);
@@ -204,6 +214,7 @@ final quotesProvider = StateNotifierProvider<QuotesNotifier, Map<String, Tick>>(
 /// (MT5-style), instead of a blank. Live WS ticks then take over.
 final quotesSeedProvider = FutureProvider<void>((ref) async {
   final auth = ref.watch(authControllerProvider);
+  ref.watch(sessionEpochProvider);
   if (!auth.authenticated) return;
   final api = ref.watch(apiClientProvider);
   try {

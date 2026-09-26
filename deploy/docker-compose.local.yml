@@ -1,0 +1,6 @@
+# Local-only override: `-f docker-compose.github.yml -f docker-compose.local.yml`
+# Makes :6200 (admin) and :6500 (portal) proxy /v1, websockets and /api like the live hostnames do.
+services:
+  caddy:
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro

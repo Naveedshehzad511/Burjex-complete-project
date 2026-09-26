@@ -156,24 +156,14 @@ export async function sleepMs(ms: number): Promise<void> {
 }
 
 /** MARKET-mode delay in ms for a given apply-to kind (0 when Instant / not selected).
- * SL/TP and pending stops/limits never take MARKET delay — waiting left working
- * orders on screen while price printed through the level (esp. news). */
+ * Every checked kind (market, pending, SL, TP, manual close, close all) takes the
+ * group's current delay, per client requirement. */
 export function marketExecutionDelayMs(
   pricing: Pick<GroupPricing, 'executionMode' | 'executionDelayMs' | 'executionApplyTo'> | null | undefined,
   kind: ExecutionApplyKind,
 ): number {
   if (!pricing) return 0;
   if ((pricing.executionMode ?? 'MARKET') !== 'MARKET') return 0;
-  if (
-    kind === 'sl' ||
-    kind === 'tp' ||
-    kind === 'buyStop' ||
-    kind === 'sellStop' ||
-    kind === 'buyLimit' ||
-    kind === 'sellLimit'
-  ) {
-    return 0;
-  }
   if (!executionApplies(pricing.executionApplyTo, kind)) return 0;
   return Math.max(0, Math.floor(Number(pricing.executionDelayMs) || 0));
 }

@@ -458,8 +458,8 @@
       <span id="dashCardAccountType" class="px-3 py-1 rounded-full text-xs font-semibold" style="background: rgba(255,255,255,0.14); letter-spacing: 0.03em;">
         {% if tab == 'demo' %}Demo Account{% else %}Real Account{% endif %}
       </span>
-      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold text-emerald-400" style="background: rgba(16, 185, 129, 0.18); border: 1px solid rgba(16, 185, 129, 0.3);">
-        ▲ +4.2%
+      <span id="dashPerfBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold text-emerald-400" style="background: rgba(16, 185, 129, 0.18); border: 1px solid rgba(16, 185, 129, 0.3);" title="Open PnL as % of balance">
+        <span id="dashPerfText">—</span>
       </span>
     </div>
     {% if dashboard_settings.enable_open_new_account %}
@@ -817,6 +817,18 @@
       if (teEl) {
         var teStr = sum_equity.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         formatOrMask(teEl, teStr);
+      }
+
+      // Real performance signal: open PnL as % of balance (green up / red down).
+      var perfBadge = document.getElementById("dashPerfBadge");
+      var perfText = document.getElementById("dashPerfText");
+      if (perfBadge && perfText && sum_balance > 0) {
+        var pct = (pnl / sum_balance) * 100;
+        var up = pct >= 0;
+        perfText.textContent = (up ? "▲ +" : "▼ ") + pct.toFixed(2) + "%";
+        perfBadge.style.color = up ? "#34d399" : "#f87171";
+        perfBadge.style.background = up ? "rgba(16,185,129,0.18)" : "rgba(239,68,68,0.18)";
+        perfBadge.style.borderColor = up ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)";
       }
 
       var availEl = balGrid.querySelector('.js-dash-metric[data-metric="available_to_withdraw"]');

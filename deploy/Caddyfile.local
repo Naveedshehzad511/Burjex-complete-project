@@ -1,0 +1,172 @@
+# Isolated edge for burjexprime.net GitHub stack.
+# Host ports only (live duafx.com already owns :80/:443).
+# auto_https off: TLS for *.burjexprime.net is terminated by live burjex_caddy
+# which reverse-proxies to these ports.
+
+{
+	auto_https off
+	admin off
+}
+
+(api_proxy) {
+	reverse_proxy {args[0]} {
+		header_up Host {host}
+		# Do not overwrite the TLS terminator's client IP with this hop's address.
+		# Overwriting made Nest's 300/min throttle a site-wide bucket (all users = Caddy).
+		header_up X-Real-IP {http.request.header.X-Real-IP}
+		header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
+		# Keep outer TLS terminator's proto when present (live Caddy → this Caddy).
+		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+		lb_try_duration 3s
+		lb_try_interval 200ms
+		transport http {
+			dial_timeout 10s
+			read_timeout 120s
+		}
+	}
+}
+
+(ws_proxy) {
+	reverse_proxy {args[0]} {
+		header_up Host {host}
+		header_up X-Real-IP {http.request.header.X-Real-IP}
+		header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
+		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+		flush_interval -1
+		transport http {
+			dial_timeout 10s
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}
+
+(ip_headers) {
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+(flutter_cache) {
+	@immutable path /canvaskit/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	# Entry HTML + bootstrap must always revalidate so ?v= cache-bust works.
+	@entry path /index.html /flutter_bootstrap.js /flutter.js /manifest.json /flutter_service_worker.js
+	header @entry Cache-Control "no-cache, no-store, must-revalidate"
+	header @entry Pragma "no-cache"
+	@revalidate {
+		not path /canvaskit/*
+		not path /index.html /flutter_bootstrap.js /flutter.js /manifest.json /flutter_service_worker.js
+	}
+	header @revalidate Cache-Control "no-cache"
+}
+
+(spa_site) {
+	import ip_headers
+	root * {args[0]}
+	encode zstd gzip
+	try_files {path} {path}/ /index.html
+	file_server
+	import flutter_cache
+}
+
+(portal_spa) {
+	import ip_headers
+	root * /srv/burjex-portal
+	encode zstd gzip
+	redir /bt /bt/
+	handle_path /bt/* {
+		root * /srv/burjex-portal/bt
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	handle {
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	import flutter_cache
+}
+
+(crm_site) {
+	import ip_headers
+	handle_path /static/* {
+		root * /srv/crm/static
+		file_server
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+	handle_path /media/* {
+		root * /srv/crm/media
+		file_server
+	}
+	# Use container_name, not Compose service name. bxnet_caddy is also on
+	# live burjex_edge where live `crm-web` exists — short names can route
+	# :6800 to duafx CRM (CSRF 403) and :6100 to the live gateway.
+	@crm_ws path /ws/*
+	handle @crm_ws {
+		import ws_proxy bxnet_crm_web:8000
+	}
+	handle {
+		import api_proxy bxnet_crm_web:8000
+	}
+	request_body {
+		max_size 25MB
+	}
+	encode zstd gzip
+}
+
+:6800 {
+	import crm_site
+}
+
+# Use unique container names, never Compose service name `btrader-gateway`.
+# bxnet_caddy is also on live burjex_edge, where duafx's `btrader-gateway`
+# exists — that short name resolved to duafx and made Quotes/Chart 401.
+:6100 {
+	import ip_headers
+	import api_proxy bxnet_bt_gateway:4100
+	request_body {
+		max_size 10MB
+	}
+	encode zstd gzip
+}
+
+:6101 {
+	import ip_headers
+	import ws_proxy bxnet_bt_ws:4101
+}
+
+(local_api) {
+	@bt_api path /v1/* /docs /docs/*
+	handle @bt_api {
+		import api_proxy bxnet_bt_gateway:4100
+	}
+	@bt_ws header Upgrade websocket
+	handle @bt_ws {
+		import ws_proxy bxnet_bt_ws:4101
+	}
+	@crm_api path /api/* /static/* /media/*
+	handle @crm_api {
+		import api_proxy bxnet_crm_web:8000
+	}
+}
+
+:6200 {
+	import local_api
+	handle {
+		import spa_site /srv/btrader-admin
+	}
+}
+
+:6300 {
+	import ip_headers
+	@blocked not remote_ip {$FEED_ALLOWED_IPS:0.0.0.0/0 ::/0}
+	respond @blocked "forbidden" 403
+	import api_proxy bxnet_bt_market_data:4200
+}
+
+:6500 {
+	import local_api
+	import portal_spa
+}

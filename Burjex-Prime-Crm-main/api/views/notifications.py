@@ -3,9 +3,9 @@ from __future__ import annotations
 from django.utils import timezone
 from rest_framework.views import APIView
 
-from accounts.models import ClientNotification
+from accounts.models import ClientNotification, PushDevice
 from api.permissions import IsAuthenticatedClient
-from api.responses import not_found_response, success_response
+from api.responses import not_found_response, success_response, validation_error_response
 
 
 def _serialize_notification(n: ClientNotification) -> dict:
@@ -50,3 +50,26 @@ class ClientNotificationMarkReadAPIView(APIView):
             if not exists:
                 return not_found_response("Notification not found.")
         return success_response({"updated": bool(updated)}, message="Notification marked as read.")
+
+
+class PushDeviceRegisterAPIView(APIView):
+    """POST {token, platform} registers/refreshes this device; DELETE {token} unregisters (logout)."""
+
+    permission_classes = [IsAuthenticatedClient]
+
+    def post(self, request):
+        token = str(request.data.get("token") or "").strip()
+        platform = str(request.data.get("platform") or "").strip().lower()
+        if not token or len(token) > 512 or platform not in PushDevice.Platform.values:
+            return validation_error_response({"token": "token and platform (ios|android) are required."})
+        # A token belongs to whoever registered last, so it follows the device on account switch.
+        PushDevice.objects.update_or_create(
+            token=token,
+            defaults={"user": request.user, "platform": platform, "is_active": True, "last_error": "", "last_seen_at": timezone.now()},
+        )
+        return success_response({"registered": True}, message="Device registered.")
+
+    def delete(self, request):
+        token = str(request.data.get("token") or "").strip()
+        PushDevice.objects.filter(token=token, user=request.user).delete()
+        return success_response({"unregistered": True}, message="Device unregistered.")

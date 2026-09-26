@@ -58,13 +58,14 @@ export class TradingController {
     return pos.accountId;
   }
 
-  private async assertOrderAccess(tenantId: string, u: any, orderId: string): Promise<void> {
+  private async assertOrderAccess(tenantId: string, u: any, orderId: string): Promise<string> {
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
       select: { accountId: true },
     });
     if (!order) throw new ForbiddenException('order access denied');
     await this.assertAccountAccess(tenantId, u, order.accountId);
+    return order.accountId;
   }
 
   // ── Orders ────────────────────────────────────────────────────────────────
@@ -109,8 +110,15 @@ export class TradingController {
 
   @Get('orders')
   @ApiOperation({ summary: 'List orders for an account (optionally by status)' })
-  orders(@CurrentTenant() t: any, @Query('accountId') accountId: string, @Query('status') status?: string) {
-    return ttlWrap(`orders:${t.id}:${accountId}:${status || ''}`, PORTAL_READ_CACHE_MS, () =>
+  orders(
+    @CurrentTenant() t: any,
+    @Query('accountId') accountId: string,
+    @Query('status') status?: string,
+    @Query('fresh') fresh?: string,
+  ) {
+    // `fresh=1`: the client is reacting to a change it just made or was told about,
+    // so it must not be served the 2s read cache.
+    return ttlWrap(`orders:${t.id}:${accountId}:${status || ''}`, fresh ? 0 : PORTAL_READ_CACHE_MS, () =>
       prisma.order.findMany({
         where: { tenantId: t.id, accountId, ...(status ? { status: status as any } : {}) },
         include: { symbol: { select: { symbol: true, digits: true } } },
@@ -129,8 +137,9 @@ export class TradingController {
     @Param('id') id: string,
     @Body() dto: ModifyOrderDto,
   ) {
-    await this.assertOrderAccess(t.id, u, id);
+    const accountId = await this.assertOrderAccess(t.id, u, id);
     await this.eng.engine.modifyOrder(t.id, id, dto);
+    ttlDelPrefix(`orders:${t.id}:${accountId}`);
     void this.audit.log(t.id, u.id, 'ORDER_MODIFY', 'order', id, { after: dto });
     return { ok: true };
   }
@@ -139,8 +148,10 @@ export class TradingController {
   @ForbidReadOnly()
   @ApiOperation({ summary: 'Cancel a pending order' })
   async cancel(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string) {
-    await this.assertOrderAccess(t.id, u, id);
+    const accountId = await this.assertOrderAccess(t.id, u, id);
     await this.eng.engine.cancelOrder(t.id, id);
+    ttlDelPrefix(`orders:${t.id}:${accountId}`);
+    ttlDelPrefix(`pos:${t.id}:${accountId}`);
     void this.audit.log(t.id, u.id, 'ORDER_CANCEL', 'order', id);
     return { ok: true };
   }
@@ -148,8 +159,13 @@ export class TradingController {
   // ── Positions ───────────────────────────────────────────────────────────
   @Get('positions')
   @ApiOperation({ summary: 'List open positions for an account' })
-  positions(@CurrentTenant() t: any, @Query('accountId') accountId: string, @Query('status') status = 'OPEN') {
-    return ttlWrap(`pos:${t.id}:${accountId}:${status}`, PORTAL_READ_CACHE_MS, () =>
+  positions(
+    @CurrentTenant() t: any,
+    @Query('accountId') accountId: string,
+    @Query('status') status = 'OPEN',
+    @Query('fresh') fresh?: string,
+  ) {
+    return ttlWrap(`pos:${t.id}:${accountId}:${status}`, fresh ? 0 : PORTAL_READ_CACHE_MS, () =>
       prisma.position.findMany({
         where: { tenantId: t.id, accountId, status: status as any },
         include: { symbol: { select: { symbol: true, digits: true } } },

@@ -11,3 +11,6 @@
 # Local TLS/state if you ever run Caddy outside Docker.
 caddy_data/
 caddy_config/
+
+# CRM integration key material (never commit)
+BT_CRM_KEY.txt
