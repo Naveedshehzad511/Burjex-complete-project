@@ -1,0 +1,322 @@
+# Burjex Prime — standalone production stack for burjexprime.net.
+#
+# Same services as docker-compose.github.yml (correct Rust matching engine,
+# btrader-matching / RUST_ENGINE_URL — NOT the old Node `trading-engine`
+# used by docker-compose.ip.yml / docker-compose.prod.yml). The only
+# difference is the edge: this Caddy owns the real :80/:443 itself and gets
+# real Let's Encrypt certificates for the burjexprime.net hostnames directly,
+# instead of depending on another, already-running Caddy in front of it.
+#
+# Use this on a fresh/empty server that ONLY runs Burjex Prime.
+#
+#   docker compose -f deploy/docker-compose.live.yml --env-file deploy/.env.live up -d --build
+#
+# Host ports: 80, 443 (Caddy only — every other service is internal-only).
+
+name: burjex_live
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: bxnet_caddy
+    <<: *restart
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3
+    env_file: .env.live
+    volumes:
+      - ./Caddyfile.live:/etc/caddy/Caddyfile:ro
+      - bxnet_caddy_data:/data
+      - bxnet_caddy_config:/config
+      - bxnet_crm_static:/srv/crm/static:ro
+      - bxnet_crm_media:/srv/crm/media:ro
+      - ${BURJEX_WEB_ADMIN}:/srv/btrader-admin:ro
+      - ${BURJEX_WEB_PORTAL}:/srv/burjex-portal:ro
+    depends_on: [crm-web, btrader-gateway, btrader-ws, btrader-market-data]
+    networks: [edge]
+
+  crm-postgres:
+    image: postgres:16-alpine
+    command: postgres -c max_connections=120
+    container_name: bxnet_crm_postgres
+    <<: *restart
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - bxnet_crm_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [crm_internal]
+
+  crm-redis:
+    image: redis:7-alpine
+    container_name: bxnet_crm_redis
+    <<: *restart
+    command: >
+      redis-server --requirepass ${CRM_REDIS_PASSWORD} --appendonly yes
+      --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - bxnet_crm_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${CRM_REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [crm_internal]
+
+  crm-web:
+    build:
+      context: ../Burjex-Prime-Crm-main
+      dockerfile: ../deploy/crm/Dockerfile
+    image: burjex/crm:live
+    container_name: bxnet_crm_web
+    <<: *restart
+    env_file: .env.live
+    command: >-
+      sh -lc "python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${CRM_WEB_WORKERS:-2} --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile -"
+    volumes:
+      - bxnet_crm_static:/app/staticfiles
+      - bxnet_crm_media:/app/media
+      - bxnet_crm_logs:/app/logs
+      - bxnet_crm_backups:/app/storage/backups
+    depends_on:
+      crm-postgres: { condition: service_healthy }
+      crm-redis: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8000/health/ready/']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    networks: [crm_internal, edge]
+
+  crm-worker:
+    build:
+      context: ../Burjex-Prime-Crm-main
+      dockerfile: ../deploy/crm/Dockerfile
+    image: burjex/crm:live
+    container_name: bxnet_crm_worker
+    <<: *restart
+    env_file: .env.live
+    command: celery -A config worker -l info --concurrency=${CELERY_CONCURRENCY:-2}
+    volumes:
+      - bxnet_crm_media:/app/media
+      - bxnet_crm_logs:/app/logs
+      - bxnet_crm_backups:/app/storage/backups
+    depends_on:
+      crm-web: { condition: service_healthy }
+    networks: [crm_internal, edge]
+
+  crm-beat:
+    build:
+      context: ../Burjex-Prime-Crm-main
+      dockerfile: ../deploy/crm/Dockerfile
+    image: burjex/crm:live
+    container_name: bxnet_crm_beat
+    <<: *restart
+    env_file: .env.live
+    command: celery -A config beat -l info --schedule /tmp/celerybeat-schedule
+    depends_on:
+      crm-web: { condition: service_healthy }
+    networks: [crm_internal, edge]
+
+  btrader-postgres:
+    image: postgres:16-alpine
+    container_name: bxnet_bt_postgres
+    <<: *restart
+    command: postgres -c max_connections=400
+    environment:
+      POSTGRES_USER: ${BT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${BT_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${BT_POSTGRES_DB}
+    volumes:
+      - bxnet_bt_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${BT_POSTGRES_USER} -d ${BT_POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [btrader_internal]
+
+  btrader-redis:
+    image: redis:7-alpine
+    container_name: bxnet_bt_redis
+    <<: *restart
+    command: >
+      redis-server --requirepass ${BT_REDIS_PASSWORD} --appendonly yes
+      --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - bxnet_bt_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${BT_REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [btrader_internal]
+
+  btrader-gateway:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: gateway-api } }
+    image: burjex/btrader-gateway:live
+    container_name: bxnet_bt_gateway
+    <<: *restart
+    expose: ['4100']
+    env_file: .env.live
+    environment:
+      NODE_ENV: production
+      API_PORT: '4100'
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=200&pool_timeout=10
+      ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-8000}
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+      RUST_ENGINE_URL: http://btrader-matching:4300
+      RUST_ENGINE_TOKEN: ${RUST_ENGINE_TOKEN:-}
+      CHART_PROVIDER: ${CHART_PROVIDER:-internal}
+      BROKER_UTC_OFFSET_SEC: ${BROKER_UTC_OFFSET_SEC:-10800}
+      ORDER_RATE_MAX: ${ORDER_RATE_MAX:-40}
+      ORDER_RATE_WINDOW_MS: ${ORDER_RATE_WINDOW_MS:-1000}
+      THROTTLE_TTL_MS: ${THROTTLE_TTL_MS:-60000}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-12000}
+      THROTTLE_AUTH_LIMIT: ${THROTTLE_AUTH_LIMIT:-600}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      LOAD_TEST_KEY: ${LOAD_TEST_KEY:-}
+      PORTAL_READ_CACHE_MS: ${PORTAL_READ_CACHE_MS:-2000}
+      # Quotes 431: large JWTs (many account ids) exceeded Node's 16KB header cap.
+      NODE_OPTIONS: "--max-http-header-size=131072"
+    command: >-
+      sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
+      cd /app/apps/gateway-api && exec node dist/main.js"
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+      btrader-matching: { condition: service_started }
+    volumes:
+      - bxnet_bt_uploads:/app/uploads
+    networks: [btrader_internal, edge]
+
+  # The correct trading engine — everything from execution delay / Instant vs
+  # Market execution / SL-TP timing / Close-All in this session's work lives
+  # here. gateway-api calls it over HTTP via RUST_ENGINE_URL above.
+  btrader-matching:
+    build: { context: ../btrader/apps/trading-core-rs, dockerfile: Dockerfile }
+    image: burjex/btrader-matching:live
+    container_name: bxnet_bt_matching
+    <<: *restart
+    env_file: .env.live
+    environment:
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+      ENGINE_HTTP_PORT: '4300'
+      ENGINE_FAST_INTERVAL_MS: ${ENGINE_FAST_INTERVAL_MS:-40}
+      ENGINE_TICK_INTERVAL_MS: ${ENGINE_TICK_INTERVAL_MS:-250}
+      MAX_PRICE_AGE_MS: ${MAX_PRICE_AGE_MS:-8000}
+      MAX_FEED_STILL_MS: ${MAX_FEED_STILL_MS:-120000}
+      RUST_ENGINE_TOKEN: ${RUST_ENGINE_TOKEN:-}
+      RUST_LOG: info
+    expose: ['4300']
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+    networks: [btrader_internal]
+
+  btrader-ws:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: ws-gateway } }
+    image: burjex/btrader-ws:live
+    container_name: bxnet_bt_ws
+    <<: *restart
+    expose: ['4101']
+    env_file: .env.live
+    environment:
+      NODE_ENV: production
+      WS_PORT: '4101'
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+      NODE_OPTIONS: "--max-http-header-size=131072"
+    depends_on:
+      btrader-redis: { condition: service_healthy }
+    networks: [btrader_internal, edge]
+
+  # Legacy background worker — kept running alongside btrader-matching in
+  # case anything besides order execution still depends on it (margin/swap
+  # housekeeping etc.). It is NOT what handles Buy/Sell/SL/TP/Close anymore —
+  # that is entirely btrader-matching above.
+  btrader-engine:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: trading-engine } }
+    image: burjex/btrader-engine:live
+    container_name: bxnet_bt_engine
+    <<: *restart
+    env_file: .env.live
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${BT_POSTGRES_USER}:${BT_POSTGRES_PASSWORD}@btrader-postgres:5432/${BT_POSTGRES_DB}?schema=public&connection_limit=40&pool_timeout=30
+      REDIS_URL: redis://:${BT_REDIS_PASSWORD}@btrader-redis:6379
+      ENGINE_FAST_INTERVAL_MS: ${ENGINE_FAST_INTERVAL_MS:-40}
+      ENGINE_TICK_INTERVAL_MS: ${ENGINE_TICK_INTERVAL_MS:-250}
+      ENGINE_TICK_CONCURRENCY: ${ENGINE_TICK_CONCURRENCY:-4}
+      ORDER_RATE_MAX: ${ORDER_RATE_MAX:-40}
+      ORDER_RATE_WINDOW_MS: ${ORDER_RATE_WINDOW_MS:-1000}
+      ACCOUNT_QUEUE_WAIT_MS: ${ACCOUNT_QUEUE_WAIT_MS:-8000}
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+      btrader-gateway: { condition: service_started }
+    networks: [btrader_internal, edge]
+
+  btrader-market-data:
+    build: { context: ../btrader, dockerfile: infra/Dockerfile, args: { SERVICE: market-data } }
+    image: burjex/btrader-market-data:live
+    container_name: bxnet_bt_market_data
+    <<: *restart
+    env_file: .env.live
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${BTRADER_DATABASE_URL}
+      REDIS_URL: ${BTRADER_REDIS_URL}
+      LP_BRIDGE_DRIVER: ${LP_BRIDGE_DRIVER:-mock}
+      MT5_INGEST_PORT: '4200'
+      MT5_FEED_TOKEN: ${MT5_FEED_TOKEN:-}
+      MT5_SYMBOL_SUFFIX: ${MT5_SYMBOL_SUFFIX:-}
+      MT5_MAX_TICK_AGE_MS: ${MT5_MAX_TICK_AGE_MS:-0}
+      CANDLE_FLUSH_SCAN_MS: ${CANDLE_FLUSH_SCAN_MS:-5000}
+      CANDLE_TIP_MIN_MS: ${CANDLE_TIP_MIN_MS:-20000}
+      CANDLE_BATCH_SIZE: ${CANDLE_BATCH_SIZE:-80}
+      CANDLE_MAX_PER_FLUSH: ${CANDLE_MAX_PER_FLUSH:-400}
+      CANDLE_FLUSH_YIELD_MS: ${CANDLE_FLUSH_YIELD_MS:-75}
+      CANDLE_HISTORY_QUEUE_CAP: ${CANDLE_HISTORY_QUEUE_CAP:-40000}
+      BROKER_UTC_OFFSET_SEC: ${BROKER_UTC_OFFSET_SEC:-10800}
+    expose: ['4200']
+    depends_on:
+      btrader-postgres: { condition: service_healthy }
+      btrader-redis: { condition: service_healthy }
+      btrader-gateway: { condition: service_started }
+    networks: [btrader_internal, edge]
+
+volumes:
+  bxnet_caddy_data:
+  bxnet_caddy_config:
+  bxnet_crm_pg:
+  bxnet_crm_redis:
+  bxnet_crm_static:
+  bxnet_crm_media:
+  bxnet_crm_logs:
+  bxnet_crm_backups:
+  bxnet_bt_pg:
+  bxnet_bt_redis:
+  bxnet_bt_uploads:
+
+networks:
+  edge:
+    name: burjex_live_edge
+    driver: bridge
+  crm_internal:
+    name: burjex_live_crm
+    driver: bridge
+  btrader_internal:
+    name: burjex_live_bt
+    driver: bridge

@@ -84,7 +84,7 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Dio _crmDio() => Dio(BaseOptions(
-        baseUrl: 'https://crm.burjexprime.net/api/v1',
+        baseUrl: BtConfig.crmBase,
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: const Duration(seconds: 30),
       ));
@@ -148,7 +148,7 @@ class AuthController extends StateNotifier<AuthState> {
     required String confirm,
   }) async {
     final dio = Dio(BaseOptions(
-      baseUrl: 'https://crm.burjexprime.net/api/v1',
+      baseUrl: BtConfig.crmBase,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 20),
     ));
@@ -213,7 +213,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<String> verifyEmailToken(String token) async {
     final dio = Dio(BaseOptions(
-      baseUrl: 'https://crm.burjexprime.net/api/v1',
+      baseUrl: BtConfig.crmBase,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 20),
     ));
@@ -237,6 +237,12 @@ class AuthController extends StateNotifier<AuthState> {
     final data = await _api.post('/auth/account-login', {'login': accountNumber, 'password': password});
     await _store4(data, activeAccountId: data['accountId'] as String?);
   }
+
+  /// Adopt an already-issued gateway session (tokens from `/auth/account-login` or
+  /// `/auth/refresh`) as the active one. Used by the portal to switch between the
+  /// user's own trading accounts and saved managed accounts.
+  Future<void> adoptSession(Map<String, dynamic> tokens, {String? activeAccountId}) =>
+      _store4(tokens, activeAccountId: activeAccountId);
 
   /// CRM client signup — same fields as portal Create Account.
   Future<String> signupCrm(Map<String, dynamic> body) async {
@@ -289,7 +295,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> _tryCrmLogin(String email, String password) async {
     try {
       final dio = Dio(BaseOptions(
-        baseUrl: 'https://crm.burjexprime.net/api/v1',
+        baseUrl: BtConfig.crmBase,
         connectTimeout: const Duration(seconds: 4),
         receiveTimeout: const Duration(seconds: 6),
       ));
@@ -306,6 +312,11 @@ class AuthController extends StateNotifier<AuthState> {
     } catch (_) {}
   }
 }
+
+/// Bumped whenever the active gateway session changes (e.g. the user switches to a
+/// managed trading account). Everything that depends on "who am I on the gateway"
+/// watches this so it re-fetches and the WebSocket reconnects with the new token.
+final sessionEpochProvider = StateProvider<int>((_) => 0);
 
 final authControllerProvider =
     StateNotifierProvider<AuthController, AuthState>((ref) => AuthController(ref));
@@ -338,6 +349,7 @@ final brandingProvider = FutureProvider<Branding>((ref) async {
 /// The signed-in trader's accounts.
 final accountsProvider = FutureProvider<List<Account>>((ref) async {
   ref.watch(authControllerProvider); // refetch after login
+  ref.watch(sessionEpochProvider);
   final api = ref.watch(apiClientProvider);
   final data = await api.get('/accounts/me') as List;
   return data.map((e) => Account.fromJson(e)).toList();
@@ -356,6 +368,7 @@ final activeAccountIdProvider = StateProvider<String?>((ref) {
 /// when the user switches accounts on Home → Trade.
 final symbolsProvider = FutureProvider<List<TradeSymbol>>((ref) async {
   ref.watch(authControllerProvider);
+  ref.watch(sessionEpochProvider);
   final accountId = ref.watch(activeAccountIdProvider);
   final api = ref.watch(apiClientProvider);
   final query = <String, dynamic>{'enabled': 'true'};
@@ -380,7 +393,7 @@ final ibReferralProvider = FutureProvider<IbReferralInfo?>((ref) async {
   if (token.isEmpty) return null;
   try {
     final dio = Dio(BaseOptions(
-      baseUrl: 'https://crm.burjexprime.net/api/v1',
+      baseUrl: BtConfig.crmBase,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 20),
       headers: {'Authorization': 'Token $token'},

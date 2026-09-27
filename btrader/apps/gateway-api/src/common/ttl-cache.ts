@@ -27,10 +27,13 @@ export function ttlSet<T>(key: string, value: T, ttlMs: number): T {
 const inflight = new Map<string, Promise<unknown>>();
 
 export async function ttlWrap<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
-  const hit = ttlGet<T>(key);
-  if (hit !== undefined) return hit;
-  const pending = inflight.get(key) as Promise<T> | undefined;
-  if (pending) return pending;
+  // ttlMs <= 0 means "bypass the cache" (caller needs a fresh read).
+  if (ttlMs > 0) {
+    const hit = ttlGet<T>(key);
+    if (hit !== undefined) return hit;
+    const pending = inflight.get(key) as Promise<T> | undefined;
+    if (pending) return pending;
+  }
   const p = fn()
     .then((v) => {
       ttlSet(key, v, ttlMs);

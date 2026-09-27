@@ -1,0 +1,10 @@
+{
+  "_comment": "Broker trader build. Broker is currently a tenant on the shared Example server, so the API/WS hosts are the same; TENANT pins the app to the broker tenant. BRAND_* seed the instant cold-start branding (live branding still fetched from the API). If Broker moves to its own server, change API_BASE/WS_URL.",
+  "API_BASE": "https://api.example.com",
+  "WS_URL": "wss://ws.example.com",
+  "TENANT": "broker",
+  "BRAND_NAME": "Broker",
+  "BRAND_LOGO": "",
+  "BRAND_PRIMARY": "#1652F0",
+  "BRAND_ACCENT": "#0BB07B"
+}

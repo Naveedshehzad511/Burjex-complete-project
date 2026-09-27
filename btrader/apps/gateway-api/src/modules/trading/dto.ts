@@ -40,6 +40,8 @@ export class ModifyOrderDto {
   @IsOptional() @IsNumber() stopPrice?: number | null;
   @IsOptional() @IsNumber() slPrice?: number | null;
   @IsOptional() @IsNumber() tpPrice?: number | null;
+  /** New lot size for a working order; the engine applies the symbol's min / max / step. */
+  @IsOptional() @IsNumber() @Min(0) volume?: number;
 }
 
 export class ClosePositionDto {

@@ -1,7 +1,7 @@
 use crate::books::PendingRow;
 use crate::calc::{
-    apply_markup, compute_aggregates, execution_applies, normalize_volume, point_size, required_margin,
-    round_price, split_position_charges,
+    apply_markup, compute_aggregates, execution_applies, instant_honours, normalize_volume, point_size, required_margin,
+    round_price, snap_volume, split_position_charges,
 };
 use crate::engine::{Engine, ExecResult, PlaceReq};
 use crate::error::{
@@ -15,12 +15,81 @@ use crate::trigger::{pending_fires, PendingAction};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::Row;
+use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
 impl Engine {
+    /// Publish the FULL current state of an order, read back from the database, so
+    /// clients can redraw it without a refetch. It carries `accountId` because the
+    /// ws-gateway routes order events to the sockets watching that account; events
+    /// without it were silently dropped, which left pending lines stale on screen.
+    pub(crate) async fn emit_order(&self, tenant_id: &str, order_id: &str) {
+        let row = sqlx::query(
+            r#"SELECT o.id, o."accountId" AS "accountId", o.side::text AS side, o.type::text AS type,
+                      o.status::text AS status, o.volume::float8 AS volume, o.price::float8 AS price,
+                      o."stopPrice"::float8 AS "stopPrice", o."slPrice"::float8 AS "slPrice",
+                      o."tpPrice"::float8 AS "tpPrice", o."positionId" AS "positionId",
+                      o."avgFillPrice"::float8 AS "avgFillPrice", o."rejectReason" AS "rejectReason", s.symbol
+               FROM orders o JOIN symbols s ON s.id = o."symbolId"
+               WHERE o.id = $1 AND o."tenantId" = $2"#,
+        )
+        .bind(order_id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await;
+        let Ok(Some(r)) = row else { return };
+        let order = json!({
+            "id": order_id,
+            "accountId": r.try_get::<String, _>("accountId").unwrap_or_default(),
+            "symbol": r.try_get::<String, _>("symbol").unwrap_or_default(),
+            "side": r.try_get::<String, _>("side").unwrap_or_default(),
+            "type": r.try_get::<String, _>("type").unwrap_or_default(),
+            "status": r.try_get::<String, _>("status").unwrap_or_default(),
+            "volume": r.try_get::<Option<f64>, _>("volume").ok().flatten(),
+            "price": r.try_get::<Option<f64>, _>("price").ok().flatten(),
+            "stopPrice": r.try_get::<Option<f64>, _>("stopPrice").ok().flatten(),
+            "slPrice": r.try_get::<Option<f64>, _>("slPrice").ok().flatten(),
+            "tpPrice": r.try_get::<Option<f64>, _>("tpPrice").ok().flatten(),
+            "positionId": r.try_get::<Option<String>, _>("positionId").ok().flatten(),
+            "avgFillPrice": r.try_get::<Option<f64>, _>("avgFillPrice").ok().flatten(),
+            "rejectReason": r.try_get::<Option<String>, _>("rejectReason").ok().flatten(),
+        });
+        self.emit(tenant_id, json!({"kind": "ORDER_UPDATE", "tenantId": tenant_id, "order": order})).await;
+    }
+
+    /// SL / TP of a pending order must sit on the protective side of ITS entry price
+    /// (buy: SL below, TP above; sell: the reverse).
+    fn assert_pending_protective(order_type: &str, side: &str, entry: f64, sl: Option<f64>, tp: Option<f64>) -> BtResult<()> {
+        let t = order_type.to_ascii_uppercase();
+        let buy = t.starts_with("BUY") || (!t.starts_with("SELL") && side.eq_ignore_ascii_case("BUY"));
+        if let Some(sl) = sl {
+            if !(sl > 0.0) {
+                return Err(BtError::new(INVALID_PRICE, "stop loss must be positive"));
+            }
+            if buy && !(sl < entry) {
+                return Err(BtError::new(INVALID_PRICE, format!("Stop loss must be below the entry price ({entry})")));
+            }
+            if !buy && !(sl > entry) {
+                return Err(BtError::new(INVALID_PRICE, format!("Stop loss must be above the entry price ({entry})")));
+            }
+        }
+        if let Some(tp) = tp {
+            if !(tp > 0.0) {
+                return Err(BtError::new(INVALID_PRICE, "take profit must be positive"));
+            }
+            if buy && !(tp > entry) {
+                return Err(BtError::new(INVALID_PRICE, format!("Take profit must be above the entry price ({entry})")));
+            }
+            if !buy && !(tp < entry) {
+                return Err(BtError::new(INVALID_PRICE, format!("Take profit must be below the entry price ({entry})")));
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) async fn place_pending(
-        &self,
+        self: &Arc<Self>,
         tenant_id: &str,
         account: &AccountRow,
         sym: &SymbolRow,
@@ -32,6 +101,7 @@ impl Engine {
             return Err(BtError::new(INVALID_PRICE, "pending order needs price"));
         };
         self.assert_pending_trigger(tenant_id, &req.symbol, &req.order_type, &req.side, trigger_price, sym)?;
+        Self::assert_pending_protective(&req.order_type, &req.side, trigger_price, req.sl_price, req.tp_price)?;
         let tif = req.time_in_force.clone().unwrap_or_else(|| "GTC".into()).to_ascii_uppercase();
         let mut expires_at = req
             .expires_at
@@ -147,14 +217,10 @@ impl Engine {
             .rows_affected();
             if n > 0 {
                 self.pendings.patch(&order_id, Some("PARTIAL"), None);
-                let _ = self.fill_pending(tenant_id, &order_id).await;
+                self.start_pending_fill(tenant_id, &order_id);
             }
         }
-        self.emit(
-            tenant_id,
-            json!({"kind":"ORDER_UPDATE","tenantId":tenant_id,"order":{"id":order_id,"status":"PENDING","symbol":req.symbol}}),
-        )
-        .await;
+        self.emit_order(tenant_id, &order_id).await;
         Ok(ExecResult {
             accepted: true,
             order_id: Some(order_id),
@@ -242,11 +308,19 @@ impl Engine {
                 .ok_or_else(|| BtError::new(POSITION_NOT_FOUND, "position not found"))?;
             row.try_get("accountId").unwrap_or_default()
         };
+        // Wait the group's CURRENT delay for this close kind before taking the account lock.
+        let t0 = Instant::now();
+        let mut prewaited = false;
+        if !skip_delay && !floor_balance && close_price_override.is_none() {
+            if let Some(kind) = close_apply_kind(protective_kind, close_all, floor_balance, false) {
+                prewaited = self.pre_wait(tenant_id, &account_id, kind).await?;
+            }
+        }
         let pid = position_id.to_string();
         let tenant = tenant_id.to_string();
         let req_acct = require_account_id.map(|s| s.to_string());
         let pk = protective_kind.map(|s| s.to_string());
-        self.with_account(&account_id, || {
+        let res = self.with_account(&account_id, || {
             self.close_exclusive(
                 tenant.clone(),
                 pid.clone(),
@@ -258,9 +332,19 @@ impl Engine {
                 req_acct.clone(),
                 close_all,
                 floor_balance,
+                prewaited,
             )
         })
-        .await
+        .await;
+        if let (Ok(r), true) = (&res, prewaited) {
+            tracing::info!(
+                target: "exec_audit",
+                "[EXEC] kind={} account={} measured_ms={} fill={:?}",
+                close_apply_kind(protective_kind, close_all, floor_balance, false).unwrap_or("close"),
+                account_id, t0.elapsed().as_millis(), r.fill_price
+            );
+        }
+        res
     }
 
     async fn close_exclusive(
@@ -275,6 +359,7 @@ impl Engine {
         require_account_id: Option<String>,
         close_all: bool,
         floor_balance: bool,
+        prewaited: bool,
     ) -> BtResult<ExecResult> {
         let row = sqlx::query(
             r#"SELECT p.id, p."accountId", p."symbolId", p.side::text AS side, p.volume::float8 AS volume,
@@ -365,7 +450,7 @@ impl Engine {
         } else {
             None
         };
-        if pricing.is_some() && !skip_delay && !floor_balance && override_px.is_none() {
+        if pricing.is_some() && !skip_delay && !prewaited && !floor_balance && override_px.is_none() {
             wait_for_deadline(plan.as_ref()).await;
         }
 
@@ -379,6 +464,12 @@ impl Engine {
         let mut close_px = px;
         if override_px.is_none() {
             if let Some(pricing) = pricing.as_ref() {
+                // Instant + checked kind: exact price, no group slippage (markup stays).
+                let slip_points = if apply_kind.is_some_and(|k| instant_honours(pricing, k)) {
+                    0.0
+                } else {
+                    pricing.slippage_points
+                };
                 let applies_prot = protective_kind
                     .as_ref()
                     .is_some_and(|k| execution_applies(&pricing.execution_apply_to, k));
@@ -392,7 +483,7 @@ impl Engine {
                     } else {
                         // apply-to unchecked: live market, gap may slip through the level.
                         let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
-                        let total = pricing.markup_points + pricing.slippage_points;
+                        let total = pricing.markup_points + slip_points;
                         if total != 0.0 {
                             close_px = apply_markup(close_side, px, total, digits);
                         }
@@ -404,7 +495,7 @@ impl Engine {
                     }
                 } else {
                     let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
-                    let total = pricing.markup_points + pricing.slippage_points;
+                    let total = pricing.markup_points + slip_points;
                     if total != 0.0 {
                         close_px = apply_markup(close_side, px, total, digits);
                     }
@@ -576,6 +667,10 @@ impl Engine {
 
     pub async fn close_all(&self, tenant_id: &str, account_id: &str) -> BtResult<i64> {
         let aid = account_id.to_string();
+        // One delay for the whole action (not per position), waited outside the lock.
+        let t0 = Instant::now();
+        let waited = self.pre_wait(tenant_id, account_id, "closeAll").await?;
+        tracing::info!(target: "exec_audit", "[EXEC] kind=closeAll account={} waited={} wait_ms={}", account_id, waited, t0.elapsed().as_millis());
         let tenant = tenant_id.to_string();
         self.with_account(&aid, || self.close_all_exclusive(tenant.clone(), aid.clone())).await
     }
@@ -590,7 +685,7 @@ impl Engine {
         for r in rows {
             let id: String = r.try_get("id").unwrap_or_default();
             if self
-                .close_exclusive(tenant_id.clone(), id, None, None, None, None, true, None, true, false)
+                .close_exclusive(tenant_id.clone(), id, None, None, None, None, true, None, true, false, true)
                 .await
                 .is_ok()
             {
@@ -707,8 +802,7 @@ impl Engine {
             return Err(BtError::new(ORDER_NOT_FOUND, "order not found"));
         }
         self.pendings.remove(order_id);
-        self.emit(tenant_id, json!({"kind":"ORDER_UPDATE","tenantId":tenant_id,"order":{"id":order_id,"status":"CANCELLED"}}))
-            .await;
+        self.emit_order(tenant_id, order_id).await;
         Ok(())
     }
 
@@ -720,9 +814,10 @@ impl Engine {
         stop_price: Option<Option<f64>>,
         sl: Option<Option<f64>>,
         tp: Option<Option<f64>>,
+        volume: Option<f64>,
     ) -> BtResult<()> {
         let row = sqlx::query(
-            r#"SELECT o.id, o.side::text AS side, o.type::text AS type,
+            r#"SELECT o.id, o."accountId" AS "accountId", o.volume::float8 AS volume, o.side::text AS side, o.type::text AS type,
                       o.price::float8 AS price, o."stopPrice"::float8 AS "stopPrice",
                       o."slPrice"::float8 AS "slPrice", o."tpPrice"::float8 AS "tpPrice",
                       s.symbol, s.digits, s."stopsLevel", s.id AS sid, s.class::text AS class
@@ -774,27 +869,60 @@ impl Engine {
         let side: String = row.try_get("side").unwrap_or_default();
         let ot: String = row.try_get("type").unwrap_or_default();
         self.assert_pending_trigger(tenant_id, &dummy.symbol, &ot, &side, trigger, &dummy)?;
+
+        // SL / TP: absent = keep, null = CLEAR, number = set. (The old COALESCE turned
+        // "clear" into "keep the previous value".)
+        let mut next_sl: Option<f64> = row.try_get("slPrice").ok();
+        let mut next_tp: Option<f64> = row.try_get("tpPrice").ok();
+        if let Some(v) = sl {
+            next_sl = v;
+        }
+        if let Some(v) = tp {
+            next_tp = v;
+        }
+        Self::assert_pending_protective(&ot, &side, trigger, next_sl, next_tp)?;
+
+        // Volume: same min / max / lot-step rules as placing an order.
+        let cur_volume: f64 = row.try_get("volume").unwrap_or(0.0);
+        let mut next_volume = cur_volume;
+        if let Some(v) = volume {
+            let account_id: String = row.try_get("accountId").unwrap_or_default();
+            let spec = self
+                .load_symbol(tenant_id, &dummy.symbol)
+                .await?
+                .ok_or_else(|| BtError::new(ORDER_NOT_FOUND, "symbol not found"))?;
+            let Some(snapped) = snap_volume(v, spec.min_lot, spec.max_lot, spec.lot_step).filter(|x| *x > 0.0) else {
+                return Err(BtError::new(
+                    INVALID_VOLUME,
+                    format!("invalid volume {} (min {}, max {}, step {})", v, spec.min_lot, spec.max_lot, spec.lot_step),
+                ));
+            };
+            if (snapped - cur_volume).abs() > 1e-12 {
+                self.enforce_risk(tenant_id, &account_id, snapped).await?;
+            }
+            next_volume = snapped;
+        }
+
         sqlx::query(
-            r#"UPDATE orders SET price=$1, "stopPrice"=$2, "requestedPrice"=$3, "slPrice"=COALESCE($4,"slPrice"), "tpPrice"=COALESCE($5,"tpPrice") WHERE id=$6"#,
+            r#"UPDATE orders SET price=$1, "stopPrice"=$2, "requestedPrice"=$3, "slPrice"=$4, "tpPrice"=$5, volume=$6 WHERE id=$7"#,
         )
         .bind(next_price)
         .bind(next_stop)
         .bind(trigger)
-        .bind(sl.flatten())
-        .bind(tp.flatten())
+        .bind(next_sl)
+        .bind(next_tp)
+        .bind(next_volume)
         .bind(order_id)
         .execute(&self.pool)
         .await?;
         self.pendings.map(order_id, |r| {
             r.price = next_price;
             r.stop_price = next_stop;
-            if let Some(v) = sl {
-                r.sl_price = v;
-            }
-            if let Some(v) = tp {
-                r.tp_price = v;
-            }
+            r.sl_price = next_sl;
+            r.tp_price = next_tp;
+            r.volume = next_volume;
         });
+        self.emit_order(tenant_id, order_id).await;
         Ok(())
     }
 
@@ -841,4 +969,45 @@ impl Engine {
 
 fn round_lots_local(v: f64, step: f64) -> f64 {
     crate::calc::round_lots(v, step)
+}
+
+#[cfg(test)]
+mod pending_protective_tests {
+    use super::*;
+
+    fn ok(t: &str, s: &str, entry: f64, sl: Option<f64>, tp: Option<f64>) -> bool {
+        Engine::assert_pending_protective(t, s, entry, sl, tp).is_ok()
+    }
+
+    #[test]
+    fn buy_orders_need_sl_below_and_tp_above_entry() {
+        for t in ["BUY_LIMIT", "BUY_STOP"] {
+            assert!(ok(t, "BUY", 100.0, Some(90.0), Some(110.0)));
+            assert!(ok(t, "BUY", 100.0, None, None));
+            assert!(!ok(t, "BUY", 100.0, Some(101.0), None));
+            assert!(!ok(t, "BUY", 100.0, Some(100.0), None));
+            assert!(!ok(t, "BUY", 100.0, None, Some(99.0)));
+        }
+    }
+
+    #[test]
+    fn sell_orders_need_sl_above_and_tp_below_entry() {
+        for t in ["SELL_LIMIT", "SELL_STOP"] {
+            assert!(ok(t, "SELL", 100.0, Some(110.0), Some(90.0)));
+            assert!(!ok(t, "SELL", 100.0, Some(99.0), None));
+            assert!(!ok(t, "SELL", 100.0, None, Some(101.0)));
+        }
+    }
+
+    #[test]
+    fn generic_limit_and_stop_use_the_side() {
+        assert!(ok("LIMIT", "BUY", 100.0, Some(95.0), Some(105.0)));
+        assert!(!ok("STOP", "SELL", 100.0, Some(95.0), None));
+    }
+
+    #[test]
+    fn non_positive_levels_are_rejected() {
+        assert!(!ok("BUY_LIMIT", "BUY", 100.0, Some(0.0), None));
+        assert!(!ok("BUY_LIMIT", "BUY", 100.0, None, Some(-1.0)));
+    }
 }

@@ -27,7 +27,7 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 pub(crate) const SYMBOL_CACHE_MS: u128 = 30_000;
-pub(crate) const CONFIG_CACHE_MS: u128 = 2_000;
+pub(crate) const CONFIG_CACHE_MS: u128 = 500;
 
 pub struct Engine {
     pub pool: PgPool,
@@ -39,6 +39,8 @@ pub struct Engine {
     pub(crate) symbol_cache: DashMap<String, (SymbolRow, Instant)>,
     pub(crate) group_cache: DashMap<String, (GroupBundle, Instant)>,
     pub(crate) acct_group: DashMap<String, Option<String>>,
+    /// Pending orders whose delayed fill is already scheduled/running (idempotency guard).
+    pub(crate) pending_inflight: dashmap::DashSet<String>,
     pub(crate) routing_cache: DashMap<String, (Vec<RoutingRuleLike>, Instant)>,
     rate_hits: DashMap<String, Vec<i64>>,
     account_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
@@ -163,6 +165,7 @@ impl Engine {
             symbol_cache: DashMap::new(),
             group_cache: DashMap::new(),
             acct_group: DashMap::new(),
+            pending_inflight: dashmap::DashSet::new(),
             routing_cache: DashMap::new(),
             rate_hits: DashMap::new(),
             account_locks: Mutex::new(HashMap::new()),
@@ -240,12 +243,46 @@ impl Engine {
         .await;
     }
 
-    pub async fn place_order(&self, tenant_id: &str, req: PlaceReq) -> BtResult<ExecResult> {
+    pub async fn place_order(self: &Arc<Self>, tenant_id: &str, req: PlaceReq) -> BtResult<ExecResult> {
         let aid = req.account_id.clone();
-        self.with_account(&aid, || self.place_order_exclusive(tenant_id, req)).await
+        // Market orders wait their group delay BEFORE the account lock is taken, so a
+        // 500 ms delay never serialises the account's other actions.
+        let t0 = Instant::now();
+        let mut prewaited = false;
+        let mut exec_kind = "";
+        if req.order_type.eq_ignore_ascii_case("MARKET") {
+            exec_kind = if req.side.eq_ignore_ascii_case("BUY") { "marketBuy" } else { "marketSell" };
+            prewaited = self.pre_wait(tenant_id, &aid, exec_kind).await?;
+        }
+        let res = self.with_account(&aid, || self.place_order_exclusive(tenant_id, req, prewaited)).await;
+        if let (Ok(r), false) = (&res, exec_kind.is_empty()) {
+            tracing::info!(
+                target: "exec_audit",
+                "[EXEC] kind={} account={} measured_ms={} fill={:?}",
+                exec_kind, aid, t0.elapsed().as_millis(), r.fill_price
+            );
+        }
+        res
     }
 
-    async fn place_order_exclusive(&self, tenant_id: &str, mut req: PlaceReq) -> BtResult<ExecResult> {
+    /// Resolve the account's CURRENT group rule for `kind` and wait its delay (no lock held).
+    /// Returns true when the wait was done here (callers then skip their own wait).
+    pub(crate) async fn pre_wait(&self, tenant_id: &str, account_id: &str, kind: &str) -> BtResult<bool> {
+        let Some(acct) = self.load_account(tenant_id, account_id).await? else {
+            return Ok(false);
+        };
+        let rule = self.group_exec_rule(acct.group_id.as_deref()).await?;
+        let plan = create_plan(&rule, kind, Instant::now(), now_ms());
+        wait_for_deadline(Some(&plan)).await;
+        tracing::info!(
+            target: "exec_audit",
+            "[WAIT] kind={} mode={} cfg_ms={} waited_ms={:.1}",
+            kind, plan.mode, plan.delay_ms, plan.trigger_mono.elapsed().as_secs_f64() * 1000.0
+        );
+        Ok(true)
+    }
+
+    async fn place_order_exclusive(self: &Arc<Self>, tenant_id: &str, mut req: PlaceReq, prewaited: bool) -> BtResult<ExecResult> {
         req.side = req.side.to_ascii_uppercase();
         req.order_type = req.order_type.to_ascii_uppercase();
         if !self.allow_rate(&req.account_id) {
@@ -294,7 +331,7 @@ impl Engine {
         }
         if req.order_type.eq_ignore_ascii_case("MARKET") {
             return self
-                .execute_market(tenant_id, &account, &sym, &req, volume, None, None, false)
+                .execute_market(tenant_id, &account, &sym, &req, volume, None, None, prewaited)
                 .await;
         }
         self.place_pending(tenant_id, &account, &sym, req, volume).await

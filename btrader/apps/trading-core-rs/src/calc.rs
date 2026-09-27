@@ -109,24 +109,25 @@ pub fn pending_type_to_apply_kind(order_type: &str, side: &str) -> &'static str 
     }
 }
 
+/// Hard ceiling on a group's execution delay. The gateway rejects larger values; the
+/// engine clamps too so a bad row can never park an order for minutes.
+pub const MAX_EXECUTION_DELAY_MS: i32 = 30_000;
+
 pub fn market_execution_delay_ms(pricing: &GroupPricing, kind: &str) -> i32 {
     if pricing.execution_mode.to_ascii_uppercase() != "MARKET" {
         return 0;
     }
-    // Protective + pending triggers never wait. MARKET delay only left the chart
-    // printing through the level while the order stayed working — fatal in news.
-    // Delay still applies to discretionary market open / manual close / close-all.
-    let k = kind.to_ascii_lowercase();
-    if matches!(
-        k.as_str(),
-        "sl" | "tp" | "buystop" | "sellstop" | "buylimit" | "selllimit"
-    ) {
-        return 0;
-    }
+    // Per client requirement: SL / TP / pending triggers / manual close / close-all all
+    // take the group's *current* delay when their kind is checked in executionApplyTo.
     if !execution_applies(&pricing.execution_apply_to, kind) {
         return 0;
     }
-    pricing.execution_delay_ms.max(0)
+    pricing.execution_delay_ms.clamp(0, MAX_EXECUTION_DELAY_MS)
+}
+
+/// Instant execution on a checked kind: exact click/level price, so no group slippage.
+pub fn instant_honours(pricing: &GroupPricing, kind: &str) -> bool {
+    pricing.execution_mode.eq_ignore_ascii_case("INSTANT") && execution_applies(&pricing.execution_apply_to, kind)
 }
 
 pub fn spread_markup_from_band(
@@ -429,14 +430,14 @@ mod tests {
             execution_apply_to: serde_json::json!({}),
             ..Default::default()
         };
-        assert_eq!(market_execution_delay_ms(&p, "sl"), 0);
-        assert_eq!(market_execution_delay_ms(&p, "tp"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "sl"), 80);
+        assert_eq!(market_execution_delay_ms(&p, "tp"), 80);
         assert_eq!(market_execution_delay_ms(&p, "marketBuy"), 80);
-        assert_eq!(market_execution_delay_ms(&p, "buyStop"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "buyStop"), 80);
     }
 
     #[test]
-    fn protective_and_pending_never_take_market_delay() {
+    fn protective_and_pending_take_market_delay_when_checked() {
         let p = GroupPricing {
             execution_mode: "MARKET".into(),
             execution_delay_ms: 100,
@@ -446,11 +447,39 @@ mod tests {
             }),
             ..Default::default()
         };
-        assert_eq!(market_execution_delay_ms(&p, "sl"), 0);
-        assert_eq!(market_execution_delay_ms(&p, "tp"), 0);
-        assert_eq!(market_execution_delay_ms(&p, "buyStop"), 0);
-        assert_eq!(market_execution_delay_ms(&p, "sellLimit"), 0);
+        assert_eq!(market_execution_delay_ms(&p, "sl"), 100);
+        assert_eq!(market_execution_delay_ms(&p, "tp"), 100);
+        assert_eq!(market_execution_delay_ms(&p, "buyStop"), 100);
+        assert_eq!(market_execution_delay_ms(&p, "sellLimit"), 100);
+        assert_eq!(market_execution_delay_ms(&p, "sellStop"), 0);
         assert_eq!(market_execution_delay_ms(&p, "marketBuy"), 100);
         assert_eq!(market_execution_delay_ms(&p, "manualClose"), 100);
+    }
+
+    #[test]
+    fn delay_is_clamped_to_ceiling() {
+        let p = GroupPricing {
+            execution_mode: "MARKET".into(),
+            execution_delay_ms: 9_999_999,
+            execution_apply_to: serde_json::json!({}),
+            ..Default::default()
+        };
+        assert_eq!(market_execution_delay_ms(&p, "marketBuy"), MAX_EXECUTION_DELAY_MS);
+        let neg = GroupPricing { execution_delay_ms: -5, ..p };
+        assert_eq!(market_execution_delay_ms(&neg, "marketBuy"), 0);
+    }
+
+    #[test]
+    fn instant_honours_only_checked_kinds() {
+        let p = GroupPricing {
+            execution_mode: "INSTANT".into(),
+            execution_apply_to: serde_json::json!({"marketBuy": true, "manualClose": false}),
+            ..Default::default()
+        };
+        assert!(instant_honours(&p, "marketBuy"));
+        assert!(!instant_honours(&p, "manualClose"));
+        assert!(!instant_honours(&p, "sl"));
+        let m = GroupPricing { execution_mode: "MARKET".into(), ..p };
+        assert!(!instant_honours(&m, "marketBuy"));
     }
 }

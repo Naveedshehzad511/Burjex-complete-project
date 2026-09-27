@@ -133,7 +133,7 @@ impl Engine {
         self.emit_live(tenant_id, symbol).await;
     }
 
-    async fn trigger_pending(&self, tenant_id: &str, symbol: &str) -> BtResult<()> {
+    async fn trigger_pending(self: &Arc<Self>, tenant_id: &str, symbol: &str) -> BtResult<()> {
         let Some(sym) = self.load_symbol(tenant_id, symbol).await? else {
             return Ok(());
         };
@@ -155,10 +155,12 @@ impl Engine {
                     .execute(&self.pool)
                     .await;
                 self.pendings.remove(&o.id);
+                self.emit_order(tenant_id, &o.id).await;
                 continue;
             }
             if o.status == "PARTIAL" {
-                let _ = self.fill_pending(tenant_id, &o.id).await;
+                // Already triggered: (re)start its fill; a no-op while one is in flight.
+                self.start_pending_fill(tenant_id, &o.id);
                 continue;
             }
             let Some(trigger) = o.stop_price.or(o.price) else {
@@ -218,12 +220,31 @@ impl Engine {
                 continue;
             }
             self.pendings.patch(&o.id, Some("PARTIAL"), None);
-            let _ = self.fill_pending(tenant_id, &o.id).await;
+            self.start_pending_fill(tenant_id, &o.id);
         }
         Ok(())
     }
 
-    pub(crate) async fn fill_pending(&self, tenant_id: &str, order_id: &str) -> BtResult<()> {
+    /// Schedule the fill of a triggered pending order on its own task. The group delay is
+    /// timed from THIS instant on a monotonic clock, independent of later ticks, and the
+    /// in-flight set guarantees one fill per order.
+    pub(crate) fn start_pending_fill(self: &Arc<Self>, tenant_id: &str, order_id: &str) {
+        if !self.pending_inflight.insert(order_id.to_string()) {
+            return;
+        }
+        let trigger_mono = Instant::now();
+        let eng = Arc::clone(self);
+        let tenant = tenant_id.to_string();
+        let id = order_id.to_string();
+        tokio::spawn(async move {
+            if let Err(e) = eng.fill_pending(&tenant, &id, trigger_mono).await {
+                tracing::error!(error=%e.message, order=%id, "pending fill failed");
+            }
+            eng.pending_inflight.remove(&id);
+        });
+    }
+
+    pub(crate) async fn fill_pending(&self, tenant_id: &str, order_id: &str, trigger_mono: Instant) -> BtResult<()> {
         let row = sqlx::query(
             r#"SELECT o.id, o."accountId", o.status::text AS status, o.type::text AS type, o.side::text AS side,
                       o.volume::float8 AS volume, o.price::float8 AS price, o."stopPrice"::float8 AS "stopPrice",
@@ -258,31 +279,29 @@ impl Engine {
         let ot: String = o.try_get("type").unwrap_or_default();
         let side: String = o.try_get("side").unwrap_or_default();
         let apply_kind = pending_type_to_apply_kind(&ot, &side);
-        let pricing = self.group_pricing(acct.group_id.as_deref(), &sym, tenant_id).await?;
-        let delay_ms = crate::calc::market_execution_delay_ms(&pricing, apply_kind);
-        // Non-blocking: PARTIAL stamp (updated_at) is the trigger. Do not sleep on the
-        // tick loop — retry until group delay has elapsed, then fill once.
-        if delay_ms > 0 {
-            let trigger_at = self
-                .pendings
-                .for_symbol(tenant_id, &sym.id)
-                .into_iter()
-                .find(|r| r.id == order_id)
-                .map(|r| r.updated_at)
-                .unwrap_or_else(Utc::now);
-            let elapsed = (Utc::now() - trigger_at).num_milliseconds();
-            if elapsed < i64::from(delay_ms) {
-                return Ok(());
+        // Wait out the group's CURRENT delay, measured from the trigger instant. The rule is
+        // re-read after every wait, so an admin change made while waiting is honoured.
+        let mut pricing;
+        loop {
+            pricing = self.group_pricing(acct.group_id.as_deref(), &sym, tenant_id).await?;
+            let d = crate::calc::market_execution_delay_ms(&pricing, apply_kind);
+            let deadline = trigger_mono + std::time::Duration::from_millis(d.max(0) as u64);
+            if d <= 0 || Instant::now() >= deadline {
+                break;
             }
+            crate::policy::wait_until_instant(deadline, d).await;
         }
-        let plan = create_plan(
-            &pricing,
-            apply_kind,
-            Instant::now()
-                .checked_sub(std::time::Duration::from_millis(delay_ms.max(0) as u64))
-                .unwrap_or_else(Instant::now),
-            now_ms(),
-        );
+        // The order may have been cancelled/filled while it waited.
+        let still: Option<String> = sqlx::query_scalar(r#"SELECT status::text FROM orders WHERE id=$1"#)
+            .bind(order_id)
+            .fetch_optional(&self.pool)
+            .await?;
+        if !matches!(still.as_deref(), Some("PARTIAL") | Some("PENDING")) {
+            self.pendings.remove(order_id);
+            return Ok(());
+        }
+        let delay_ms = crate::calc::market_execution_delay_ms(&pricing, apply_kind);
+        let plan = create_plan(&pricing, apply_kind, trigger_mono, now_ms());
         let honour = if apply_kind == "buyStop" || apply_kind == "sellStop" {
             o.try_get::<Option<f64>, _>("stopPrice").ok().flatten().or_else(|| o.try_get("price").ok())
         } else {
@@ -311,7 +330,7 @@ impl Engine {
             source: Some("api".into()),
         };
         match self
-            .execute_market(tenant_id, &acct, &sym, &req, req.volume, clamp, Some(plan), true)
+            .execute_market(tenant_id, &acct, &sym, &req, req.volume, clamp, Some(plan.clone()), true)
             .await
         {
             Ok(fill) => {
@@ -325,14 +344,13 @@ impl Engine {
                 .execute(&self.pool)
                 .await;
                 self.pendings.remove(order_id);
-                self.emit(
-                    tenant_id,
-                    json!({
-                        "kind":"ORDER_UPDATE","tenantId":tenant_id,
-                        "order":{"id":order_id,"status":"FILLED","positionId":fill.position_id,"avgFillPrice":fill.fill_price}
-                    }),
-                )
-                .await;
+                tracing::info!(
+                    target: "exec_audit",
+                    "[EXEC] kind={} mode={} cfg_ms={} measured_ms={} order={} fill={:?}",
+                    apply_kind, plan.mode, delay_ms, trigger_mono.elapsed().as_millis(), order_id, fill.fill_price
+                );
+                // FILLED + positionId + avgFillPrice, with the account id the gateway routes by.
+                self.emit_order(tenant_id, order_id).await;
             }
             Err(e) if matches!(e.code, crate::error::INSUFFICIENT_MARGIN | crate::error::TRADING_DISABLED | crate::error::INVALID_VOLUME) => {
                 let _ = sqlx::query(r#"UPDATE orders SET status='REJECTED'::"OrderStatus", "rejectReason"=$1 WHERE id=$2"#)
@@ -341,8 +359,9 @@ impl Engine {
                     .execute(&self.pool)
                     .await;
                 self.pendings.remove(order_id);
+                self.emit_order(tenant_id, order_id).await;
             }
-            Err(e) => tracing::error!(error=%e.message, "pending fill failed"),
+            Err(e) => return Err(e),
         }
         Ok(())
     }

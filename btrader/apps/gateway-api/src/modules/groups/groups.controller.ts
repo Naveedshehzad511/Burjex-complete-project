@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import Redis from 'ioredis';
 import { prisma } from '@btrader/db';
@@ -20,6 +20,18 @@ const EXECUTION_APPLY_KEYS = [
   'manualClose',
   'closeAll',
 ] as const;
+
+/** Longest execution delay a group may configure (ms). The Rust engine clamps to the same ceiling. */
+const MAX_EXECUTION_DELAY_MS = 30_000;
+
+/** Validate the admin-supplied execution delay: a whole number of ms, 0..30 000. */
+function parseExecutionDelayMs(raw: unknown): number {
+  const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : (raw as number);
+  if (typeof n !== 'number' || !Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > MAX_EXECUTION_DELAY_MS) {
+    throw new BadRequestException(`executionDelayMs must be a whole number between 0 and ${MAX_EXECUTION_DELAY_MS}`);
+  }
+  return n;
+}
 
 /** Normalize admin body → Prisma JSON for TradingGroup.executionApplyTo. */
 function normalizeExecutionApplyTo(raw: unknown): Record<string, boolean> {
@@ -123,8 +135,7 @@ export class GroupsController {
         executionMode: body.executionMode === 'INSTANT' ? 'INSTANT' : 'MARKET',
         instantDeviationPoints:
           body.instantDeviationPoints != null ? Math.max(0, Number(body.instantDeviationPoints) | 0) : 0,
-        executionDelayMs:
-          body.executionDelayMs != null ? Math.max(0, Number(body.executionDelayMs) | 0) : 0,
+        executionDelayMs: body.executionDelayMs != null ? parseExecutionDelayMs(body.executionDelayMs) : 0,
         executionApplyTo: normalizeExecutionApplyTo(body.executionApplyTo),
         clientSymbolSuffix: body.clientSymbolSuffix?.trim() ? body.clientSymbolSuffix.trim() : null,
         clientSymbolGroupId: (packId as string | null) ?? null,
@@ -164,7 +175,7 @@ export class GroupsController {
       data.instantDeviationPoints = Math.max(0, Number(body.instantDeviationPoints) | 0);
     }
     if (body.executionDelayMs !== undefined) {
-      data.executionDelayMs = Math.max(0, Number(body.executionDelayMs) | 0);
+      data.executionDelayMs = parseExecutionDelayMs(body.executionDelayMs);
     }
     if (body.executionApplyTo !== undefined) {
       data.executionApplyTo = normalizeExecutionApplyTo(body.executionApplyTo);

@@ -187,7 +187,8 @@ async fn modify_order(
     let stop = opt_num(&b, "stopPrice");
     let sl = opt_num(&b, "slPrice");
     let tp = opt_num(&b, "tpPrice");
-    st.engine.modify_order(tenant, &id, price, stop, sl, tp).await?;
+    let volume = b.get("volume").and_then(|v| v.as_f64());
+    st.engine.modify_order(tenant, &id, price, stop, sl, tp, volume).await?;
     Ok(Json(json!({"ok": true})))
 }
 

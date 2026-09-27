@@ -75,10 +75,25 @@ class MarketSocket {
   bool _closedByUser = false;
   Timer? _heartbeat;
 
+  /// Last time ANY frame (tick, pong, event) arrived. A socket can die silently
+  /// (phone sleep, Wi-Fi/cell handover, NAT timeout) without ever firing onDone,
+  /// which left the feed frozen until the user reopened a chart. This is what the
+  /// watchdog and the app-resume check compare against.
+  DateTime _lastRx = DateTime.now();
+
+  /// Bumped on every connect so a reconnect timer scheduled for an older
+  /// connection can never open a second, parallel socket.
+  int _gen = 0;
+
+  static const _pingEvery = Duration(seconds: 12);
+  static const _staleAfter = Duration(seconds: 30);
+
   Stream<WsFrame> get frames => _controller.stream;
 
   void connect() {
     _closedByUser = false;
+    _gen++;
+    _lastRx = DateTime.now();
     // Symbol ids are assigned per connection, so ids from the previous session
     // mean nothing here. Carrying them over would silently decode ticks to the
     // WRONG symbol — gold's price shown under a currency pair — which is far
@@ -116,6 +131,7 @@ class MarketSocket {
   }
 
   void _onMessage(dynamic raw) {
+    _lastRx = DateTime.now();
     final Map<String, dynamic> f;
     try {
       f = jsonDecode(raw as String) as Map<String, dynamic>;
@@ -231,7 +247,34 @@ class MarketSocket {
 
   void _startHeartbeat() {
     _heartbeat?.cancel();
-    _heartbeat = Timer.periodic(const Duration(seconds: 25), (_) => _send({'op': 'ping'}));
+    _heartbeat = Timer.periodic(_pingEvery, (_) {
+      // The server answers every ping, so silence this long means the link is dead.
+      if (DateTime.now().difference(_lastRx) > _staleAfter) {
+        reconnectNow();
+        return;
+      }
+      _send({'op': 'ping'});
+    });
+  }
+
+  /// Drop the current connection and open a fresh one immediately (no backoff).
+  void reconnectNow() {
+    if (_closedByUser) return;
+    _heartbeat?.cancel();
+    _sub?.cancel();
+    try {
+      _ch?.sink.close();
+    } catch (_) {/* already gone */}
+    _backoff = const Duration(milliseconds: 500);
+    connect();
+  }
+
+  /// Call when the app returns to the foreground: the OS may have frozen or
+  /// killed the socket while backgrounded. A healthy one has spoken within the
+  /// last few seconds and is left alone.
+  void onAppResumed() {
+    if (_closedByUser) return;
+    if (DateTime.now().difference(_lastRx) > const Duration(seconds: 4)) reconnectNow();
   }
 
   /// On close, if the gateway rejected our token (4401), renew it first so the
@@ -249,8 +292,9 @@ class MarketSocket {
     _heartbeat?.cancel();
     if (_closedByUser) return;
     _backoff = Duration(milliseconds: (_backoff.inMilliseconds * 2).clamp(500, 10000));
+    final gen = _gen;
     Future.delayed(_backoff, () {
-      if (!_closedByUser) connect();
+      if (!_closedByUser && gen == _gen) connect();
     });
   }
 

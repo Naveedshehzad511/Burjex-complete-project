@@ -2,12 +2,17 @@
 .env.prod
 .env.prod.ip
 .env.github
+.env.live
 .env
 *.env
 !.env.prod.example
 !.env.prod.ip.example
 !.env.github.example
+!.env.live.example
 
 # Local TLS/state if you ever run Caddy outside Docker.
 caddy_data/
 caddy_config/
+
+# CRM integration key material (never commit)
+BT_CRM_KEY.txt

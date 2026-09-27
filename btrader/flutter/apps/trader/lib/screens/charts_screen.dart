@@ -398,7 +398,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                 (ind.isOverlay ? overlays : oscillators).add(ind);
               }
               return Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 10, 8, 6),
+                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.surface,
@@ -406,7 +406,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       clipBehavior: Clip.antiAlias,
-                      padding: const EdgeInsets.fromLTRB(6, 8, 4, 6),
+                      padding: const EdgeInsets.fromLTRB(6, 2, 4, 6),
                       child: Stack(children: [
                         CandleChart(
                           candles: candles,
@@ -578,8 +578,8 @@ class _BarCountdownState extends State<_BarCountdown> {
   }
 }
 
-/// SELL/BUY deal button showing the side and the live price.
-class _DealButton extends StatelessWidget {
+/// SELL/BUY deal button showing the side and the live price with dynamic MT5-style tick color flashing.
+class _DealButton extends StatefulWidget {
   const _DealButton({required this.label, required this.price, required this.digits, required this.color, required this.onTap});
   final String label;
   final double? price;
@@ -588,14 +588,62 @@ class _DealButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_DealButton> createState() => _DealButtonState();
+}
+
+class _DealButtonState extends State<_DealButton> {
+  Color? _flashColor;
+  Timer? _revertTimer;
+
+  // MT5 Dynamic Tick Colors:
+  // Bullish/Up -> Blue (0xFF38BDF8)
+  // Bearish/Down -> Red (0xFFFF5252)
+  static const _blueColor = Color(0xFF38BDF8);
+  static const _redColor = Color(0xFFFF5252);
+
+  @override
+  void didUpdateWidget(covariant _DealButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.price != null && oldWidget.price != null && widget.price != oldWidget.price) {
+      final oldP = oldWidget.price!;
+      final newP = widget.price!;
+      // Guard against symbol change / extreme jumps (> 5%)
+      if (oldP > 0 && (newP - oldP).abs() / oldP < 0.05) {
+        if (newP > oldP) {
+          _flashColor = _blueColor; // Bullish / Up -> Blue
+        } else if (newP < oldP) {
+          _flashColor = _redColor; // Bearish / Down -> Red
+        }
+        _revertTimer?.cancel();
+        _revertTimer = Timer(const Duration(milliseconds: 650), () {
+          if (mounted) setState(() => _flashColor = null);
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _revertTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FilledButton(
-      onPressed: price == null ? null : onTap,
-      style: FilledButton.styleFrom(backgroundColor: color, padding: const EdgeInsets.symmetric(vertical: 10)),
+      onPressed: widget.price == null ? null : widget.onTap,
+      style: FilledButton.styleFrom(backgroundColor: widget.color, padding: const EdgeInsets.symmetric(vertical: 10)),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-        Text(price == null ? '—' : price!.toStringAsFixed(digits),
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()])),
+        Text(widget.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+        Text(
+          widget.price == null ? '—' : widget.price!.toStringAsFixed(widget.digits),
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: _flashColor,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
       ]),
     );
   }

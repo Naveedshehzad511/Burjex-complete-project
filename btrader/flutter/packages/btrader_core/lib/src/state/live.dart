@@ -12,10 +12,30 @@ import '../models/tick.dart';
 import '../ws/market_socket.dart';
 import 'providers.dart';
 
+/// The latest order event pushed by the server (created / modified / triggered /
+/// filled / cancelled / rejected / expired). `seq` makes two identical payloads
+/// distinguishable so listeners always fire. The order carries its own `accountId`.
+class OrderEvent {
+  const OrderEvent(this.seq, this.order);
+  final int seq;
+  final Map<String, dynamic> order;
+}
+
+final lastOrderEventProvider = StateProvider<OrderEvent?>((_) => null);
+
+/// Bumped when something that changes trade history happened (an order filled, a
+/// position closed) so history views refetch without a manual refresh.
+final tradeEventEpochProvider = StateProvider<int>((_) => 0);
+
+/// Bumped every time the trading socket (re)connects, so views holding server
+/// state can reconcile anything they missed while it was down.
+final socketEpochProvider = StateProvider<int>((_) => 0);
+
 /// Owns the WebSocket for the session and routes frames into the live stores.
 /// Auto-connects when authenticated; disposes on logout.
 final marketSocketProvider = Provider<MarketSocket?>((ref) {
   final auth = ref.watch(authControllerProvider);
+  ref.watch(sessionEpochProvider);
   if (!auth.authenticated) return null;
   final store = ref.watch(authStoreProvider);
   final api = ref.watch(apiClientProvider);
@@ -26,6 +46,7 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
     onReconnected: () {
       ref.invalidate(openPositionsProvider);
       ref.invalidate(accountsProvider);
+      Future.microtask(() => ref.read(socketEpochProvider.notifier).state++);
     },
   );
   sock.connect();
@@ -50,6 +71,7 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
           Future.microtask(() {
             ref.invalidate(openPositionsProvider);
             ref.invalidate(accountsProvider);
+            ref.read(tradeEventEpochProvider.notifier).state++;
           });
           break;
         }
@@ -62,11 +84,28 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
         }
         final sym = '${data['symbol'] ?? ''}';
         final q = sym.isEmpty ? null : ref.read(quotesProvider)[sym];
+        // A position this session has not seen yet is a NEW trade: refetch the
+        // list right away so Chart / Trade / PnL show it without a manual refresh.
+        final isNew = id.isNotEmpty && !ref.read(livePositionNotifierProvider).pl.containsKey(id);
         ref.read(livePositionNotifierProvider.notifier).set(data, fallbackQuote: q);
-      case OrderFrame():
+        if (isNew) {
+          Future.microtask(() {
+            ref.invalidate(openPositionsProvider);
+            ref.invalidate(accountsProvider);
+          });
+        }
+      case OrderFrame(:final data):
         Future.microtask(() {
+          final status = '${data['status'] ?? ''}'.toUpperCase();
+          final prev = ref.read(lastOrderEventProvider);
+          ref.read(lastOrderEventProvider.notifier).state = OrderEvent((prev?.seq ?? 0) + 1, data);
           ref.invalidate(openPositionsProvider);
           ref.invalidate(accountsProvider);
+          // A fill opens a position and adds history; other terminal states end a
+          // working order. Either way history views should refetch.
+          if (status == 'FILLED' || status == 'CANCELLED' || status == 'REJECTED' || status == 'EXPIRED') {
+            ref.read(tradeEventEpochProvider.notifier).state++;
+          }
         });
         break;
     }
@@ -204,6 +243,7 @@ final quotesProvider = StateNotifierProvider<QuotesNotifier, Map<String, Tick>>(
 /// (MT5-style), instead of a blank. Live WS ticks then take over.
 final quotesSeedProvider = FutureProvider<void>((ref) async {
   final auth = ref.watch(authControllerProvider);
+  ref.watch(sessionEpochProvider);
   if (!auth.authenticated) return;
   final api = ref.watch(apiClientProvider);
   try {

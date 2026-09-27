@@ -1,0 +1,10 @@
+{
+  "_comment": "Production build pointing at the Hetzner deployment over HTTPS/WSS. No cleartext exceptions needed. Replace with your real domain once deployed (see infra/DEPLOY-HETZNER.md).",
+  "API_BASE": "https://api.example.com",
+  "WS_URL": "wss://ws.example.com",
+  "TENANT": "demo",
+  "BRAND_NAME": "Example",
+  "BRAND_LOGO": "https://admin.example.io/btrader-logo.png",
+  "BRAND_PRIMARY": "#C9A24C",
+  "BRAND_ACCENT": "#0E4D35"
+}

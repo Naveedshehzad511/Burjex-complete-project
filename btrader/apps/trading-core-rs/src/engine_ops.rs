@@ -143,6 +143,26 @@ impl Engine {
         Ok(())
     }
 
+    /// The group's execution rule only (mode / delay / apply-to), cached like `group_pricing`.
+    /// Needs no symbol, so it can run before the account lock is taken.
+    pub(crate) async fn group_exec_rule(&self, group_id: Option<&str>) -> BtResult<GroupPricing> {
+        let none = GroupPricing {
+            execution_mode: "MARKET".into(),
+            execution_apply_to: json!({}),
+            ..Default::default()
+        };
+        let Some(gid) = group_id else { return Ok(none) };
+        match self.group_bundle(gid).await? {
+            Some(g) if g.enabled => Ok(GroupPricing {
+                execution_mode: g.execution_mode.clone(),
+                execution_delay_ms: g.execution_delay_ms,
+                execution_apply_to: g.execution_apply_to.clone(),
+                ..Default::default()
+            }),
+            _ => Ok(none),
+        }
+    }
+
     pub(crate) async fn group_pricing(&self, group_id: Option<&str>, sym: &SymbolRow, tenant_id: &str) -> BtResult<GroupPricing> {
         let none = GroupPricing {
             execution_mode: "MARKET".into(),
@@ -152,9 +172,16 @@ impl Engine {
         let Some(gid) = group_id else {
             return Ok(none);
         };
+        match self.group_bundle(gid).await? {
+            Some(bundle) => Ok(self.pricing_from_bundle(&bundle, sym, tenant_id)),
+            None => Ok(none),
+        }
+    }
+
+    async fn group_bundle(&self, gid: &str) -> BtResult<Option<GroupBundle>> {
         if let Some(hit) = self.group_cache.get(gid) {
             if hit.1.elapsed().as_millis() < CONFIG_CACHE_MS {
-                return Ok(self.pricing_from_bundle(&hit.0, sym, tenant_id));
+                return Ok(Some(hit.0.clone()));
             }
         }
         let Some(g) = sqlx::query(
@@ -167,7 +194,7 @@ impl Engine {
         .fetch_optional(&self.pool)
         .await?
         else {
-            return Ok(none);
+            return Ok(None);
         };
         let enabled: bool = g.try_get("enabled").unwrap_or(false);
         let rules = sqlx::query(
@@ -222,9 +249,8 @@ impl Engine {
                 })
                 .collect(),
         };
-        let out = self.pricing_from_bundle(&bundle, sym, tenant_id);
-        self.group_cache.insert(gid.to_string(), (bundle, Instant::now()));
-        Ok(out)
+        self.group_cache.insert(gid.to_string(), (bundle.clone(), Instant::now()));
+        Ok(Some(bundle))
     }
 
     fn pricing_from_bundle(&self, group: &GroupBundle, sym: &SymbolRow, tenant_id: &str) -> GroupPricing {

@@ -1,0 +1,6 @@
+{
+  "_comment": "Device/LAN testing against the backend running on your Mac. Replace the IP with your Mac's LAN IP: run `ipconfig getifaddr en0` (Wi-Fi) or `en1`. Your phone must be on the same Wi-Fi. NOTE: this is plain HTTP, so the cleartext settings in BUILD-MOBILE.md are required.",
+  "API_BASE": "http://192.168.8.105:4100",
+  "WS_URL": "ws://192.168.8.105:4101",
+  "TENANT": "demo"
+}

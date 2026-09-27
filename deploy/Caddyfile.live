@@ -1,0 +1,218 @@
+# ============================================================================
+#  Burjex Prime — standalone production edge for burjexprime.net.
+#
+#  Pairs with docker-compose.live.yml. This Caddy owns the real :80/:443
+#  itself — auto_https stays ON (default), so every hostname site below gets
+#  a real Let's Encrypt certificate automatically on first request. There is
+#  no other Caddy in front of this one; DNS for every hostname used here must
+#  already point at this server (it does — see the A records you set).
+#
+#  WebSockets: Caddy detects the Upgrade handshake itself — nothing to set
+#  for that. What must be set explicitly is the read/write timeout, or an
+#  idle price socket gets torn down (see ws_proxy below).
+# ============================================================================
+
+{
+	email {$ACME_EMAIL}
+	admin off
+	# Uncomment for a dry run against Let's Encrypt's staging CA while testing
+	# this file for the first time — real LE allows only 5 failures per
+	# hostname per hour, and there are 6 hostnames here on a first attempt.
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+# ── Reusable snippets ────────────────────────────────────────────────────────
+
+(api_proxy) {
+	reverse_proxy {args[0]} {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		transport http {
+			dial_timeout 10s
+			read_timeout 120s
+		}
+	}
+}
+
+(ws_proxy) {
+	reverse_proxy {args[0]} {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		flush_interval -1
+		transport http {
+			dial_timeout 10s
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}
+
+(tls_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# Cache policy for a Flutter web build. Only /canvaskit/* carries a version in
+# its path, so only that is safe to pin as immutable — everything else keeps a
+# stable filename across builds (main.dart.js, flutter_service_worker.js, …),
+# and pinning THOSE would strand returning visitors on whatever build they
+# first loaded. "no-cache" still lets the browser cache the file — it only
+# forces a revalidation, which Caddy answers with a cheap 304 off the ETag.
+(flutter_cache) {
+	@immutable path /canvaskit/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	@revalidate {
+		not path /canvaskit/*
+	}
+	header @revalidate Cache-Control "no-cache"
+}
+
+(spa_site) {
+	import tls_headers
+	root * {args[0]}
+	encode zstd gzip
+	try_files {path} {path}/ /index.html
+	file_server
+	import flutter_cache
+}
+
+# Portal SPA + same-origin B-Trader API/WS, so the HTTPS page is never mixed
+# content (the Flutter build's config points API_BASE/WS_URL at this same
+# host — see btrader/flutter/apps/portal/config/burjexprime.json).
+(portal_spa) {
+	import tls_headers
+	root * /srv/burjex-portal
+	encode zstd gzip
+	@portal_ws {
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	handle @portal_ws {
+		import ws_proxy bxnet_bt_ws:4101
+	}
+	handle /v1/* {
+		import api_proxy bxnet_bt_gateway:4100
+		request_body {
+			max_size 10MB
+		}
+	}
+	handle {
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	import flutter_cache
+}
+
+# Admin SPA + same-origin API/WS, same reasoning as the portal above.
+(admin_spa) {
+	import tls_headers
+	root * /srv/btrader-admin
+	encode zstd gzip
+	@admin_ws {
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	handle @admin_ws {
+		import ws_proxy bxnet_bt_ws:4101
+	}
+	handle /v1/* {
+		import api_proxy bxnet_bt_gateway:4100
+		request_body {
+			max_size 10MB
+		}
+	}
+	handle {
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+	import flutter_cache
+}
+
+(crm_site) {
+	import tls_headers
+	handle_path /static/* {
+		root * /srv/crm/static
+		file_server
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+	handle_path /media/* {
+		root * /srv/crm/media
+		file_server
+	}
+	@crm_ws path /ws/*
+	handle @crm_ws {
+		import ws_proxy bxnet_crm_web:8000
+	}
+	handle {
+		import api_proxy bxnet_crm_web:8000
+	}
+	request_body {
+		max_size 25MB
+	}
+	encode zstd gzip
+}
+
+# ── Sites ─────────────────────────────────────────────────────────────────
+
+{$CRM_HOST} {
+	import crm_site
+}
+
+# Search engines / bare domain: send people to the trading portal.
+{$BASE_DOMAIN} {
+	import tls_headers
+	redir https://{$PORTAL_HOST}{uri} 302
+}
+
+{$PORTAL_HOST} {
+	import portal_spa
+}
+
+{$ADMIN_HOST} {
+	import admin_spa
+}
+
+# Direct REST/WS access on their own subdomains — optional (the portal and
+# admin apps already reach the API/WS same-origin above), but the DNS exists
+# so wire it in case anything else needs it directly.
+{$API_HOST} {
+	import tls_headers
+	import api_proxy bxnet_bt_gateway:4100
+	request_body {
+		max_size 10MB
+	}
+	encode zstd gzip
+}
+
+{$WS_HOST} {
+	import tls_headers
+	import ws_proxy bxnet_bt_ws:4101
+}
+
+# MT5 tick ingest. The Windows bridge POSTs here with the X-Feed-Token
+# header. Lock FEED_ALLOWED_IPS to the bridge's IP before pointing a real
+# bridge at this — the token crosses in the clear over HTTP from bridge to
+# THIS Caddy only if the bridge itself is not also behind HTTPS; prefer
+# running the bridge with an HTTPS FeedUrl once this is live.
+{$FEED_HOST} {
+	import tls_headers
+	@blocked not remote_ip {$FEED_ALLOWED_IPS:0.0.0.0/0 ::/0}
+	respond @blocked "forbidden" 403
+	import api_proxy bxnet_bt_market_data:4200
+}
+
+# No separate trader web build in this stack yet — send it to the portal
+# rather than leave it a dead TLS handshake. Point this at a real build later
+# if/when one exists.
+{$APP_HOST} {
+	import tls_headers
+	redir https://{$PORTAL_HOST}{uri} 302
+}

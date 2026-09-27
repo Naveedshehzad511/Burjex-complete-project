@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Candle, CandleQuery, ChartFeedAdapter, Timeframe, TF_SECONDS } from './feed.types';
 import { TwelveDataAdapter, BinanceAdapter, PolygonAdapter, NativeMockAdapter, InternalAdapter } from './feed.adapters';
+import { QuotesService } from './quotes.service';
 
 /**
  * Resolves and caches the configured chart-data provider and serves candles.
@@ -14,7 +15,7 @@ export class CandlesService {
   private readonly adapter: ChartFeedAdapter;
   private readonly cache = new Map<string, { at: number; data: Candle[] }>();
 
-  constructor() {
+  constructor(private readonly quotes: QuotesService) {
     this.adapter = this.build();
     this.logger.log(`chart feed provider: ${this.adapter.name}`);
   }
@@ -42,18 +43,28 @@ export class CandlesService {
     }
   }
 
-  async candles(q: CandleQuery): Promise<Candle[]> {
+  async candles(q: CandleQuery, tenantId?: string): Promise<Candle[]> {
     const key = `${this.adapter.name}:${q.symbol}:${q.tf}:${q.limit}`;
-    // M1 must stay near ChartRequest tip (bridge refresh ~5–20s). A 30s TTL made
-    // the app lag a full minute behind Manager ("incomplete to now").
     const ttl =
-      q.tf === '1m'
-        ? 2_000
-        : Math.min(TF_SECONDS[q.tf], 15) * 1000;
+      this.adapter.name === 'native'
+        ? 3_000
+        : (q.tf === '1m'
+            ? 2_000
+            : Math.min(TF_SECONDS[q.tf], 15) * 1000);
     const hit = this.cache.get(key);
     if (hit && Date.now() - hit.at < ttl) return hit.data;
     try {
-      const data = await this.adapter.fetchCandles(q);
+      let targetPrice: number | undefined;
+      if (this.adapter.name === 'native') {
+        try {
+          const tid = tenantId || (await this.quotes.getDefaultTenantId());
+          const ticks = await this.quotes.snapshot(tid, q.symbol);
+          if (ticks.length > 0 && (ticks[0].bid || ticks[0].ask)) {
+            targetPrice = ticks[0].bid || ticks[0].ask;
+          }
+        } catch {}
+      }
+      const data = await this.adapter.fetchCandles(q, targetPrice);
       this.cache.set(key, { at: Date.now(), data });
       return data;
     } catch (e) {

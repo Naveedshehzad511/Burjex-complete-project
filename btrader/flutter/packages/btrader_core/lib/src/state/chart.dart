@@ -16,7 +16,7 @@ final openPositionsProvider = FutureProvider.autoDispose<List<Position>>((ref) a
   final id = ref.watch(activeAccountIdProvider);
   if (id == null) return const <Position>[];
   final api = ref.watch(apiClientProvider);
-  final data = await api.get('/positions', query: {'accountId': id, 'status': 'OPEN'}) as List;
+  final data = await api.get('/positions', query: {'accountId': id, 'status': 'OPEN', 'fresh': '1'}) as List;
   return data
       .map((e) => Position.fromJson(e as Map<String, dynamic>))
       .where((p) => !closed.contains(p.id))
@@ -221,9 +221,11 @@ class FormingCandleNotifier extends StateNotifier<FormingCandle?> {
       // to the current price.
       state = _seed(b, mid);
     } else if (b > cur.bucket) {
-      // New bar: open at the previous close for continuity.
-      final open = cur.c;
-      state = FormingCandle(b, open, mid > open ? mid : open, mid < open ? mid : open, mid);
+      // New bar: open at the FIRST tick of the new bucket — the same rule the
+      // server's candle engine uses (open is written once, from the first tick).
+      // Any difference from the previous close is the real tick-to-tick move in
+      // the feed, never something this app manufactures or hides.
+      state = FormingCandle(b, mid, mid, mid, mid);
     } else if (b == cur.bucket) {
       // Same bar: close follows price; wicks extend to new extremes.
       state = FormingCandle(cur.bucket, cur.o, mid > cur.h ? mid : cur.h, mid < cur.l ? mid : cur.l, mid);
@@ -271,21 +273,47 @@ final formingCandleProvider =
   (ref, req) => FormingCandleNotifier(ref, req),
 );
 
-/// Live series: completed history from the server + the client-owned forming
-/// bar at the right edge. The forming bar is never overwritten by the history
-/// refetch, so wicks grow smoothly and bars complete on schedule.
+/// Live series = REST history, overlaid with the server's pushed bars (the
+/// canonical candle engine's OHLC), with this device's tick stream extending only
+/// the tip's close and extremes.
+///
+/// Why: the server owns OHLC. Rebuilding the forming bar purely from the ticks this
+/// device happened to receive meant a reconnect, a backgrounded tab or a dropped
+/// frame produced a bar whose open/high/low differed from the server's — a
+/// platform-made discontinuity. Now the open always comes from the server bar when
+/// it has one; ticks can only widen high/low (both are real feed prices) and move
+/// the close to the latest price.
 final liveCandlesProvider = Provider.autoDispose.family<AsyncValue<List<Candle>>, ChartReq>((ref, req) {
   final base = ref.watch(candlesProvider(req));
-  final candles = base.valueOrNull;
-  if (candles == null) return base; // first load / error
-  if (candles.isEmpty) return const AsyncValue.data(<Candle>[]);
+  final history = base.valueOrNull;
+  if (history == null) return base; // first load / error
+  if (history.isEmpty) return const AsyncValue.data(<Candle>[]);
 
+  final pushed = ref.watch(serverCandlesProvider.select((m) => m[ServerCandlesNotifier.seriesKey(req.symbol, req.tf.api)]));
   final forming = ref.watch(formingCandleProvider(req));
-  if (forming == null) return AsyncValue.data(candles);
 
-  // Keep completed bars strictly before the forming bucket, then append the live
-  // bar. Drops the server's copy of the current bucket in favour of the
-  // tick-accurate client one.
-  final hist = candles.where((c) => c.t < forming.bucket).toList();
-  return AsyncValue.data([...hist, forming.toCandle()]);
+  // Identity is the bucket time: a bar present in both sources collapses into one.
+  final byT = <int, Candle>{for (final c in history) c.t: c};
+  if (pushed != null) byT.addAll(pushed);
+
+  if (forming != null) {
+    final newestPushed = pushed == null || pushed.isEmpty ? 0 : pushed.keys.reduce((a, b) => a > b ? a : b);
+    // A device that is behind the server must not overwrite a newer server bar.
+    if (forming.bucket >= newestPushed) {
+      final s = byT[forming.bucket];
+      byT[forming.bucket] = s == null
+          ? forming.toCandle()
+          : Candle(
+              t: s.t,
+              o: s.o,
+              h: forming.h > s.h ? forming.h : s.h,
+              l: forming.l < s.l ? forming.l : s.l,
+              c: forming.c,
+              v: s.v,
+            );
+    }
+  }
+
+  final times = byT.keys.toList()..sort();
+  return AsyncValue.data([for (final t in times) byT[t]!]);
 });

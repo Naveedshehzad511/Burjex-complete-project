@@ -45,7 +45,7 @@ from api.views.internal_transfer import InternalTransferAPIView
 from api.views.kyc import KYCStatusAPIView, KYCUploadAPIView
 from api.views.account_deletion import AccountDeletionAPIView
 from api.views.me import MeAPIView, MeRestrictionsAPIView, SecurityTotpSetupAPIView
-from api.views.notifications import ClientNotificationMarkReadAPIView, ClientNotificationsAPIView
+from api.views.notifications import ClientNotificationMarkReadAPIView, ClientNotificationsAPIView, PushDeviceRegisterAPIView
 from api.views.app_version import AppVersionAPIView
 from api.views.branding import BrandingAPIView
 from api.views.content import LegalAgreementsAPIView, TradingPlatformsAPIView
@@ -163,6 +163,7 @@ urlpatterns = [
     # Notifications
     path("notifications/", ClientNotificationsAPIView.as_view(), name="notifications"),
     path("notifications/<int:pk>/read/", ClientNotificationMarkReadAPIView.as_view(), name="notification-read"),
+    path("notifications/device/", PushDeviceRegisterAPIView.as_view(), name="push-device"),
     # Support
     path("support/tickets/", SupportTicketsAPIView.as_view(), name="support-tickets"),
     path("support/tickets/<str:ticket_number>/", SupportTicketDetailAPIView.as_view(), name="support-ticket-detail"),
