@@ -629,6 +629,8 @@ class ClientNotification(models.Model):
         BONUS = "bonus", "Bonus"
         OFFER = "offer", "Offer"
         ANNOUNCEMENT = "announcement", "Announcement"
+        DEPOSIT = "deposit", "Deposit"
+        WITHDRAWAL = "withdrawal", "Withdrawal"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
