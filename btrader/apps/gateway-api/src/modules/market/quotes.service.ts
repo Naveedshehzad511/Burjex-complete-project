@@ -14,8 +14,15 @@ import { PORTAL_READ_CACHE_MS, ttlWrap } from '../../common/ttl-cache';
 export class QuotesService {
   private readonly redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6380');
 
-  async snapshot(tenantId: string, symbol?: string): Promise<Tick[]> {
-    const all = await ttlWrap(`quotes:${tenantId}`, PORTAL_READ_CACHE_MS, () => this.loadSnapshot(tenantId));
+  async getDefaultTenantId(): Promise<string> {
+    const t = await prisma.tenant.findFirst({ where: { status: 'ACTIVE' }, select: { id: true } });
+    return t?.id ?? '';
+  }
+
+  async snapshot(tenantId?: string, symbol?: string): Promise<Tick[]> {
+    const tid = tenantId || (await this.getDefaultTenantId());
+    if (!tid) return [];
+    const all = await ttlWrap(`quotes:${tid}`, PORTAL_READ_CACHE_MS, () => this.loadSnapshot(tid));
     if (!symbol) return all;
     const u = symbol.toUpperCase();
     return all.filter((t) => String(t.symbol).toUpperCase() === u);

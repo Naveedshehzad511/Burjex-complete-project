@@ -65,15 +65,9 @@ rsync -avz --delete build/web/ root@YOUR_SERVER_IP:/root/btrader-admin/
 
 Hard-refresh `https://admin.example.com` (Cmd/Ctrl+Shift+R). The new **CRM / Integrations** item appears under Administration.
 
-## 4. Rebuild the trader APK (from your Mac)
+## 4. Client portal
 
-Required this round — account-number login, the UI overhaul, JPY/session fixes are all client-side.
-
-```bash
-cd ~/B-Trader/B-Trader/flutter/apps/trader
-flutter build apk --release --dart-define-from-file=config/prod.json
-# Output: build/app/outputs/flutter-apk/app-release.apk  → distribute
-```
+Do not rebuild a Markets/Portfolio/Settings trader APK. The live client UI is `web/portal` (Home, Quotes, Chart, Trade, History).
 
 ## 5. First-time tenant wiring (in the admin dashboard)
 
