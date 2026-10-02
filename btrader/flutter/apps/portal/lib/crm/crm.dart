@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:btrader_core/btrader_core.dart';
 import 'package:dio/dio.dart';
@@ -94,6 +95,8 @@ class CrmSession extends StateNotifier<CrmAuthState> {
     state = const CrmAuthState(loading: false);
     final p = await SharedPreferences.getInstance();
     await p.remove(kCrmTokenKey);
+    await p.remove(_kDashCacheKey);
+    _dashSeeded = false;
     if (token != null) {
       unawaited(PushService.instance.unregister(token));
       // Best effort — the local session is already gone.
@@ -182,11 +185,14 @@ class CrmAccount {
 }
 
 class CrmMetrics {
-  const CrmMetrics({this.balance = 0, this.equity = 0, this.openPnl = 0, this.withdrawable = 0});
+  const CrmMetrics({this.balance = 0, this.equity = 0, this.openPnl = 0, this.withdrawable = 0, this.margin = 0});
   final double balance;
   final double equity;
   final double openPnl;
   final double withdrawable;
+
+  /// Margin in use. Not part of the CRM payload — filled from the live trading accounts.
+  final double margin;
   factory CrmMetrics.fromJson(Map<String, dynamic>? j) => j == null
       ? const CrmMetrics()
       : CrmMetrics(
@@ -215,10 +221,15 @@ class CrmDashboard {
   final double walletBalance;
 }
 
-final crmDashboardProvider = FutureProvider.autoDispose<CrmDashboard>((ref) async {
-  ref.watch(crmSessionProvider.select((s) => s.token));
-  final res = await ref.watch(crmDioProvider).get('/dashboard/');
-  final data = (res.data as Map)['data'] as Map;
+const _kDashCacheKey = 'crm_dashboard_cache';
+
+/// True while the dashboard on screen is the saved copy (offline / slow network).
+final crmDashboardOfflineProvider = StateProvider<bool>((_) => false);
+
+/// First load of an app session shows the saved copy instantly, then refreshes.
+bool _dashSeeded = false;
+
+CrmDashboard _parseDashboard(Map data) {
   final tm = (data['tab_metrics'] as Map?)?.cast<String, dynamic>() ?? const {};
   final accs = [
     for (final a in (data['accounts'] as List? ?? const [])) CrmAccount.fromJson((a as Map).cast<String, dynamic>()),
@@ -232,6 +243,49 @@ final crmDashboardProvider = FutureProvider.autoDispose<CrmDashboard>((ref) asyn
     userName: (user['display_name'] ?? user['first_name'] ?? user['email'] ?? '').toString(),
     walletBalance: crmNum(wallet['wallet_balance']),
   );
+}
+
+/// Stale-while-revalidate: the last good dashboard is kept on disk, shown at once
+/// on open, and used again if the network is slow or down - so Home never turns
+/// into an error screen just because the connection is bad.
+final crmDashboardProvider = FutureProvider.autoDispose<CrmDashboard>((ref) async {
+  ref.watch(crmSessionProvider.select((s) => s.token));
+  ref.keepAlive();
+  final prefs = await SharedPreferences.getInstance();
+  Map? cached;
+  try {
+    final raw = prefs.getString(_kDashCacheKey);
+    if (raw != null) cached = jsonDecode(raw) as Map;
+  } catch (_) {}
+  void setOffline(bool v) => Future.microtask(() {
+        try {
+          ref.read(crmDashboardOfflineProvider.notifier).state = v;
+        } catch (_) {}
+      });
+
+  if (cached != null && !_dashSeeded) {
+    _dashSeeded = true;
+    Future.microtask(() {
+      try {
+        ref.invalidateSelf();
+      } catch (_) {}
+    });
+    return _parseDashboard(cached);
+  }
+  try {
+    final res = await ref.watch(crmDioProvider).get('/dashboard/', options: Options(receiveTimeout: const Duration(seconds: 15)));
+    final data = (res.data as Map)['data'] as Map;
+    unawaited(prefs.setString(_kDashCacheKey, jsonEncode(data)));
+    setOffline(false);
+    return _parseDashboard(data);
+  } catch (e) {
+    final authEnded = e is DioException && e.response?.statusCode == 401;
+    if (cached != null && !authEnded) {
+      setOffline(true);
+      return _parseDashboard(cached);
+    }
+    rethrow;
+  }
 });
 
 class CrmProfile {

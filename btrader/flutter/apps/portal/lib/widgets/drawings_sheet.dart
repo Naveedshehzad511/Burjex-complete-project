@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:btrader_core/btrader_core.dart';
 
-/// Drawing-tools sheet: pick a tool to place (horizontal line / trendline /
-/// Fibonacci) and manage the drawings already on the current symbol.
+/// Drawing-tools sheet: pick a tool to place (lines, ray, arrow, rectangle,
+/// ellipse, Fibonacci) and manage the drawings already on the current symbol.
 void showDrawingsSheet(
   BuildContext context, {
   required String symbol,
@@ -93,6 +93,11 @@ class _DrawingsSheet extends ConsumerWidget {
           ),
           toolTile(DrawingType.horizontalLine, Icons.horizontal_rule),
           toolTile(DrawingType.trendline, Icons.trending_up),
+          toolTile(DrawingType.verticalLine, Icons.more_vert),
+          toolTile(DrawingType.ray, Icons.call_made),
+          toolTile(DrawingType.arrow, Icons.north_east),
+          toolTile(DrawingType.rectangle, Icons.crop_square),
+          toolTile(DrawingType.ellipse, Icons.panorama_fish_eye),
           toolTile(DrawingType.fibRetracement, Icons.stacked_line_chart),
           const Divider(height: 1),
           Padding(

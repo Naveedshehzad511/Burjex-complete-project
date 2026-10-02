@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { prisma } from '@btrader/db';
+import { isSymbolTradableNow } from './sessions.util';
 
 /** Symbol management — full contract spec, admin-driven (no hardcoded instruments). */
 @Injectable()
@@ -95,7 +96,13 @@ export class SymbolsService {
       orderBy: [{ sortOrder: 'asc' }, { symbol: 'asc' }],
     });
 
-    if (!tradingGroup) return rows;
+    // Evaluated once per request, from a single `now` — never per-symbol
+    // hardcoded — so every row in one response reflects the same instant.
+    const now = new Date();
+    const withTradable = (rows2: typeof rows) =>
+      rows2.map((r) => ({ ...r, tradable: isSymbolTradableNow(r.tradingSessions, r.class, now) }));
+
+    if (!tradingGroup) return withTradable(rows);
 
     const sfx = tradingGroup.clientSymbolSuffix?.trim() || '';
     const groupMarkup = Number(tradingGroup.markupPoints ?? 0);
@@ -140,6 +147,7 @@ export class SymbolsService {
       return {
         ...s,
         displaySymbol,
+        tradable: isSymbolTradableNow(s.tradingSessions, s.class, now),
         markupPoints,
         pricingMethod,
         minSpreadPoints,

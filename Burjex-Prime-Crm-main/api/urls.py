@@ -47,7 +47,7 @@ from api.views.account_deletion import AccountDeletionAPIView
 from api.views.me import MeAPIView, MeRestrictionsAPIView, SecurityTotpSetupAPIView
 from api.views.notifications import ClientNotificationMarkReadAPIView, ClientNotificationsAPIView, PushDeviceRegisterAPIView
 from api.views.app_version import AppVersionAPIView
-from api.views.branding import BrandingAPIView
+from api.views.branding import BrandingAPIView, OnboardingSlidesAPIView
 from api.views.content import LegalAgreementsAPIView, TradingPlatformsAPIView
 from api.views.portal_extra import (
     AccountCredentialAPIView,
@@ -169,6 +169,7 @@ urlpatterns = [
     path("support/tickets/<str:ticket_number>/", SupportTicketDetailAPIView.as_view(), name="support-ticket-detail"),
     # Content (admin-managed, client-visible)
     path("branding/", BrandingAPIView.as_view(), name="branding"),
+    path("branding/slides/", OnboardingSlidesAPIView.as_view(), name="branding-slides"),
     path("legal/", LegalAgreementsAPIView.as_view(), name="legal-agreements"),
     path("trading-platforms/", TradingPlatformsAPIView.as_view(), name="trading-platforms"),
     # Sideloaded-APK update signal (no store to announce releases for us).

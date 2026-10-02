@@ -28,6 +28,9 @@ export interface CandleQuery {
   symbol: string; // B-Trader symbol, e.g. EURUSD
   tf: Timeframe;
   limit: number;
+  /** Epoch seconds, exclusive: return bars strictly before this open time
+   *  (history pagination — chart "scroll back" lazy-loads older pages). */
+  before?: number;
 }
 
 /**

@@ -44,9 +44,12 @@ export class CandlesService {
   }
 
   async candles(q: CandleQuery, tenantId?: string): Promise<Candle[]> {
-    const key = `${this.adapter.name}:${q.symbol}:${q.tf}:${q.limit}`;
-    const ttl =
-      this.adapter.name === 'native'
+    const key = `${this.adapter.name}:${q.symbol}:${q.tf}:${q.limit}:${q.before ?? 'latest'}`;
+    // A `before` page is a slice of immutable past history — it never changes
+    // once served, so it can sit in cache far longer than the live tail.
+    const ttl = q.before != null
+      ? 5 * 60_000
+      : this.adapter.name === 'native'
         ? 3_000
         : (q.tf === '1m'
             ? 2_000

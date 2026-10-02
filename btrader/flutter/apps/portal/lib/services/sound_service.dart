@@ -15,14 +15,17 @@ import 'package:flutter/services.dart';
 /// can both call it without vibrating twice.
 class SoundService {
   SoundService._() {
-    _open = _player('bt_open', 'sounds/trade_open.wav');
-    _close = _player('bt_close', 'sounds/trade_close.wav');
+    _event = _player('bt_event', eventAsset);
     _err = _player('bt_err', 'sounds/error.wav');
   }
   static final SoundService instance = SoundService._();
 
-  late final AudioPlayer _open;
-  late final AudioPlayer _close;
+  /// The short click played for every confirmed order event: a trade opened or closed, a pending
+  /// order placed, an order / SL / TP modified. About 200 ms, trimmed to start right at the click
+  /// (assets/sounds/order_event.wav), so it is heard within milliseconds of the confirmation.
+  static const eventAsset = 'sounds/order_event.wav';
+
+  late final AudioPlayer _event;
   late final AudioPlayer _err;
   bool enabled = true;
   final _seen = ListQueue<String>();
@@ -53,7 +56,7 @@ class SoundService {
       if (_seen.length > 64) _seen.removeFirst();
     }
     HapticFeedback.mediumImpact(); // very short tick
-    _fire(_open);
+    _fire(_event);
   }
 
   /// Trade opened successfully (kept for callers without an order id).
@@ -62,7 +65,13 @@ class SoundService {
   /// Trade / position closed.
   Future<void> tradeClose() async {
     HapticFeedback.mediumImpact();
-    _fire(_close);
+    _fire(_event);
+  }
+
+  /// An existing order or position was modified (price, SL or TP) and the server accepted it.
+  Future<void> orderModified() async {
+    HapticFeedback.mediumImpact();
+    _fire(_event);
   }
 
   /// Any error (order rejected, market closed, network, etc.).

@@ -1,11 +1,16 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import 'radial_chart_menu.dart';
+
 enum ChartType { candles, line }
 
 /// What a chart level represents. Drives colour, dragging and what a tap does.
-enum LevelKind { entry, sl, tp, pending, draft }
+/// [LevelKind.limit] is a Stop Limit order's limit (fill) price; its stop trigger
+/// uses [LevelKind.pending] / [LevelKind.draft] like any other pending entry.
+enum LevelKind { entry, sl, tp, pending, draft, limit }
 
 /// A horizontal price level to draw on the chart (entry / SL / TP / pending).
 ///
@@ -24,6 +29,19 @@ class ChartLevel {
 
   /// Tap opens the SL/TP editor for this level's position / pending order.
   final bool tappable;
+
+  /// false = MT5's plain inline label (coloured text on the line, no box) — used by
+  /// open-position lines. true = a filled tag. Every on-chart level now uses the
+  /// plain MT5 style (false); the filled variant is kept only for opt-in callers.
+  final bool boxed;
+
+  /// Re-labels the level for a price it is being dragged to (so "SL, -12.30 USD,
+  /// -41 points" follows the finger). Null = the static [label].
+  final String Function(double price)? labelFor;
+
+  /// Colour for the P&L part of the label (the text after the last ", "), e.g. blue profit /
+  /// red loss on an open position's `BUY 0.10, -2.90 USD`. Null = the whole label is [color].
+  final Color? plColor;
   const ChartLevel(
     this.price,
     this.color,
@@ -33,6 +51,9 @@ class ChartLevel {
     this.kind = LevelKind.entry,
     this.draggable = false,
     this.tappable = false,
+    this.boxed = false,
+    this.labelFor,
+    this.plColor,
   });
 }
 
@@ -41,7 +62,7 @@ const double kHitSlop = 22;
 
 /// Visible stroke of order lines (entry / SL / TP / pending) — slightly thinner
 /// than before; the hit area above is unchanged.
-const double kLevelStroke = 0.7;
+const double kLevelStroke = 0.8;
 
 /// Visible stroke of candle wicks — thinner and cleaner; bodies are untouched.
 const double kWickStroke = 0.7;
@@ -92,8 +113,15 @@ double xForTimeInWindow(List<Candle> w, int t, double slot) {
 /// Padded visible price range (high/low) for a window of candles + overlay
 /// levels + indicator overlay values. Shared by the painter and the tap→price
 /// mapping so they never drift.
+///
+/// [priceZoom] is the independent vertical/price-axis zoom (1 = auto-fitted
+/// to the data, <1 = compressed/zoomed in, >1 = expanded/zoomed out) — driven
+/// by dragging the right-hand price ladder, and kept deliberately separate
+/// from [vShift] (a pure pan of that same range, from dragging the chart
+/// body) so "zoom the price scale" and "shift the price scale" never fight
+/// over the same state.
 ({double hi, double lo}) chartRange(List<Candle> cs, List<ChartLevel> levels,
-    {List<double> extra = const [], double vShift = 0}) {
+    {List<double> extra = const [], double vShift = 0, double priceZoom = 1}) {
   var hi = cs.first.h, lo = cs.first.l;
   for (final k in cs) {
     if (k.h > hi) hi = k.h;
@@ -113,7 +141,13 @@ double xForTimeInWindow(List<Candle> w, int t, double slot) {
     if (v < lo) lo = v;
   }
   final pad = (hi - lo) * 0.08;
-  final top = hi + pad, bottom = lo - pad;
+  var top = hi + pad, bottom = lo - pad;
+  if (priceZoom != 1) {
+    final mid = (top + bottom) / 2;
+    final half = (top - bottom) / 2 * priceZoom;
+    top = mid + half;
+    bottom = mid - half;
+  }
   // Vertical pan: slide the whole price window by a fraction of its height.
   final shift = vShift * (top - bottom);
   return (hi: top + shift, lo: bottom + shift);
@@ -131,6 +165,7 @@ class CandleChart extends StatefulWidget {
     required this.digits,
     required this.tf,
     this.livePrice,
+    this.askPrice,
     this.type = ChartType.candles,
     this.levels = const [],
     this.overlays = const [],
@@ -145,14 +180,28 @@ class CandleChart extends StatefulWidget {
     this.onLevelDragEnd,
     this.onLevelTap,
     this.onAutoFit,
+    this.onNeedOlder,
+    this.loadingOlder = false,
+    this.crosshairMode = false,
+    this.viewKey,
+    this.onSelectTool,
+    this.onOpenIndicators,
+    this.onOpenObjects,
+    this.onDuplicate,
   });
   final List<Candle> candles;
   final int digits;
   final Timeframe tf;
 
-  /// The current dealable price — the dashed price line locks to this and stays
+  /// The current dealable Bid — the dashed Bid line locks to this and stays
   /// put while you scroll back, instead of following the last visible candle.
   final double? livePrice;
+
+  /// The current dealable Ask (group-markup applied, same as the BUY panel).
+  /// Drawn as a second dashed line above Bid, color-coded like the SELL/BUY
+  /// panels so the two are distinguishable at a glance. Null (no line drawn)
+  /// until a live quote exists for the symbol.
+  final double? askPrice;
   final ChartType type;
   final List<ChartLevel> levels;
 
@@ -193,6 +242,39 @@ class CandleChart extends StatefulWidget {
   /// "Auto fit" pressed (the chart has already reset its own view).
   final VoidCallback? onAutoFit;
 
+  /// The user panned near the start of the currently loaded history — fetch
+  /// and prepend an older page. Safe to call repeatedly; the caller
+  /// (`loadOlderCandles`) de-duplicates in-flight requests itself.
+  final VoidCallback? onNeedOlder;
+
+  /// An older-history page is currently loading, for the left-edge spinner.
+  final bool loadingOlder;
+
+  /// MT5's crosshair tool: while on, a tap places the crosshair and a one-finger
+  /// drag moves it (instead of panning). Pinch still zooms; order lines still drag.
+  final bool crosshairMode;
+
+  /// Identity of the series shown (e.g. the symbol). When it or [tf] changes the
+  /// zoom is kept, but the view snaps back to the newest bars with the price range
+  /// re-fitted — an offset in bars / a price shift means nothing on another series.
+  final Object? viewKey;
+
+  /// MT5-style round chart menu: tapping empty chart space opens it (see
+  /// [_CandleChartState.handleSelectOrTrade]); picking a timeframe here fires
+  /// this and closes the menu.
+  /// A drawing tool was picked on the round menu — the caller arms it for placement.
+  final void Function(DrawingType)? onSelectTool;
+
+  /// Round menu's "Indicators" wedge — opens the app's real indicators sheet.
+  final VoidCallback? onOpenIndicators;
+
+  /// Round menu's "Objects" wedge — opens the app's real drawing-tools sheet.
+  final VoidCallback? onOpenObjects;
+
+  /// Round menu's "Duplicate" wedge — opens MT5-style chart-window management
+  /// (new window / tile / remove).
+  final VoidCallback? onDuplicate;
+
   @override
   State<CandleChart> createState() => _CandleChartState();
 }
@@ -203,6 +285,9 @@ class CandleChart extends StatefulWidget {
 /// only scroll headroom, not a resting offset — so the live forming bar never
 /// looks detached from the edge.
 const double _kRightPad = 5;
+
+/// Which axis a single-finger drag that started on an axis strip is zooming.
+enum _AxisDrag { price, time }
 
 class _CandleChartState extends State<CandleChart> {
   double _perScreen = 80; // visible candle count (zoom)
@@ -224,10 +309,41 @@ class _CandleChartState extends State<CandleChart> {
 
   Offset? _cross; // crosshair local position (null = off)
 
+  // MT5-style round chart menu: tap empty chart space to open, tap anywhere
+  // (a wedge, or empty space) to act/close — see [RadialChartMenu].
+  bool _radialOpen = false;
+
+  /// True for a moment after the round menu closes. A tap landing in that window is the tail of the
+  /// menu interaction itself (the tap that picked a tool / dismissed it), not a new chart tap, so it
+  /// must neither place a drawing point nor reopen the menu.
+  bool _justClosedRadial = false;
+  Timer? _radialGuard;
+  static const Duration _kMenuTapGuard = Duration(milliseconds: 300);
+
+  void _closeRadial() {
+    _justClosedRadial = true;
+    _radialGuard?.cancel();
+    _radialGuard = Timer(_kMenuTapGuard, () => _justClosedRadial = false);
+    setState(() => _radialOpen = false);
+  }
+
   // Vertical pan as a fraction of the visible price range (0 = auto-fitted).
   // Together with the horizontal offset this lets the chart be dragged freely in
   // every direction; "Auto fit" / double-tap puts it back.
   double _vShift = 0;
+
+  // Independent vertical/price-axis zoom (1 = auto-fitted). Set only by
+  // dragging the right-hand price ladder — see `_AxisDrag.price` below —
+  // deliberately never touched by the body pan/pinch gesture, so "zoom the
+  // price scale" and "pan the price scale" (`_vShift`) can never fight.
+  double _priceZoom = 1;
+
+  // Which axis (if any) the CURRENT single-finger drag is zooming, decided
+  // once in onScaleStart from where the finger went down. Kept separate from
+  // `_dragLevelKey`/`_dragAnchorIndex`, which are always checked first, so a
+  // drag that starts on a draggable SL/TP/pending line is never reinterpreted
+  // as an axis-zoom just because it happens to be near an axis.
+  _AxisDrag? _axisDrag;
 
   // A level being dragged: held locally so only the chart repaints per frame; the
   // owner is told once on release.
@@ -237,12 +353,90 @@ class _CandleChartState extends State<CandleChart> {
 
   String _levelKey(ChartLevel l) => '${l.kind.name}:${l.id ?? l.label}';
 
+  double _chartH = 1;
+
+  // Zoom survives the chart being rebuilt from scratch (e.g. a spinner while a
+  // not-yet-cached timeframe loads) via the page's storage bucket.
+  static const _kZoomKey = 'candle_chart_zoom';
+
+  @override
+  void initState() {
+    super.initState();
+    final saved = PageStorage.maybeOf(context)?.readState(context, identifier: _kZoomKey);
+    if (saved is double && saved > 0) _perScreen = saved;
+  }
+
+  // deactivate, not dispose: ancestors (the storage bucket) can still be looked up here.
+  @override
+  void deactivate() {
+    PageStorage.maybeOf(context)?.writeState(context, _perScreen, identifier: _kZoomKey);
+    super.deactivate();
+  }
+
+  @override
+  void dispose() {
+    _radialGuard?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant CandleChart old) {
+    super.didUpdateWidget(old);
+    if (old.tf != widget.tf || old.viewKey != widget.viewKey) {
+      _rightOffset = 0;
+      _vShift = 0;
+      _priceZoom = 1;
+      _cross = widget.crosshairMode ? _cross : null;
+      _selectedDrawingId = null;
+      _dragLevelKey = null;
+      _dragLevel = null;
+      _dragLevelPrice = null;
+      _dragAnchorIndex = null;
+      _dragAnchor = null;
+      _radialOpen = false;
+    }
+    if (old.crosshairMode != widget.crosshairMode) {
+      // On: start in the middle of the price pane (MT5); off: remove it.
+      _cross = widget.crosshairMode ? Offset(_chartW / 2, _chartH / 2) : null;
+    }
+  }
+
   void _resetView() => setState(() {
         _perScreen = 60;
         _rightOffset = 0;
         _vShift = 0;
-        _cross = null;
+        _priceZoom = 1;
+        if (!widget.crosshairMode) _cross = null;
       });
+
+  static final TextPainter _axisMeasure = TextPainter(textDirection: TextDirection.ltr);
+
+  /// Right price-ladder width, sized to what it will actually display: the
+  /// widest ladder tick (hi/lo of the visible range) and the widest live
+  /// Bid/Ask tag, both at this symbol's real digit count — never a fixed
+  /// constant, so a 2-digit symbol (e.g. gold) doesn't carry the same margin
+  /// as a 5-digit one (e.g. a forex pair), and the axis never clips either way.
+  double _computeAxisWidth(double hi, double lo, int digits, double? bid, double? ask) {
+    double widthFor(String text, double fontSize, FontWeight weight) {
+      _axisMeasure.text = TextSpan(text: text, style: TextStyle(fontSize: fontSize, fontWeight: weight));
+      _axisMeasure.layout();
+      return _axisMeasure.width;
+    }
+
+    var ladder = 0.0;
+    for (final p in [hi, lo]) {
+      ladder = math.max(ladder, widthFor(p.toStringAsFixed(digits), 9, FontWeight.normal));
+    }
+    var tag = 0.0;
+    for (final p in [bid, ask]) {
+      if (p == null) continue;
+      tag = math.max(tag, widthFor(p.toStringAsFixed(digits), 9.5, FontWeight.w800));
+    }
+    // Ladder labels sit past an 8px gap from the axis line; tags sit in a
+    // rounded pill with ~5px of padding each side — see the painter's `_tag`
+    // and the ladder-label loop below.
+    return math.max(ladder + 12, tag + 10).clamp(40.0, 90.0);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -253,7 +447,7 @@ class _CandleChartState extends State<CandleChart> {
     final oscs = _oscCollapsed ? const <ComputedIndicator>[] : widget.oscillators;
 
     return LayoutBuilder(builder: (_, c) {
-      _chartW = (c.maxWidth - _CandlePainter.axisW).clamp(1, double.infinity);
+      _chartH = c.maxHeight.isFinite ? c.maxHeight : 1;
       // Guard the zoom bounds when there are very few candles (e.g. history is
       // still rebuilding): the lower bound must never exceed the upper bound.
       final minPer = math.min(12.0, total.toDouble());
@@ -268,10 +462,30 @@ class _CandleChartState extends State<CandleChart> {
       final dataEnd = (total - back).clamp(1, total);
       final start = (dataEnd - (perI - trailingGap)).clamp(0, total);
       final window = widget.candles.sublist(start, dataEnd);
+
+      // Historical lazy-loading: the visible window has scrolled to within a
+      // page of the oldest bar currently loaded. Ask for an older page once
+      // per such build — deferred to post-frame since this is a side effect,
+      // and safe to call on every qualifying frame because the loader itself
+      // (`loadOlderCandles`) drops the call while a fetch is already in
+      // flight or the feed is confirmed exhausted.
+      // Prefetch a full screen ahead of the edge so a quick drag never hits the wall.
+      if (widget.onNeedOlder != null && start <= math.max(60, perI)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => widget.onNeedOlder?.call());
+      }
       final overlayExtra = overlayValuesInWindow(widget.overlays, start, dataEnd);
       // Ichimoku projects its cloud into the future — reserve that many empty
       // slots on the right so the projection is visible (0 when no Ichimoku).
       final futureSlots = widget.overlays.fold<int>(0, (m, o) => math.max(m, o.futureShift));
+
+      // Right price-ladder width, measured from the labels it will actually
+      // show (not a fixed constant) — a symbol/timeframe with fewer price
+      // digits gets a narrower axis and hands the freed width to the candles,
+      // instead of every chart reserving the same generous margin regardless
+      // of screen size or content (MT5 keeps this strip tight).
+      final axisRange = chartRange(window, widget.levels, extra: overlayExtra, vShift: _vShift, priceZoom: _priceZoom);
+      final axisW = _computeAxisWidth(axisRange.hi, axisRange.lo, widget.digits, widget.livePrice, widget.askPrice);
+      _chartW = (c.maxWidth - axisW).clamp(1, double.infinity);
 
       // Vertical geometry: reserve the osc region from the bottom (above the
       // time axis). Kept in sync with the painter so the resize handle lands on
@@ -283,7 +497,7 @@ class _CandleChartState extends State<CandleChart> {
         // Only the price pane's axis trades; taps on an oscillator pane's axis
         // don't map to a tradeable price.
         if (pos.dy > metrics.priceTop + metrics.priceH) return;
-        final r = chartRange(window, widget.levels, extra: overlayExtra, vShift: _vShift);
+        final r = chartRange(window, widget.levels, extra: overlayExtra, vShift: _vShift, priceZoom: _priceZoom);
         final price = r.hi - (pos.dy - metrics.priceTop) / metrics.priceH * (r.hi - r.lo);
         if (price > 0) widget.onPriceTap!(price);
       }
@@ -296,7 +510,7 @@ class _CandleChartState extends State<CandleChart> {
         if (pos.dy < metrics.priceTop || pos.dy > metrics.priceTop + metrics.priceH) return;
         final slotB = _chartW / (window.length + trailingGap + futureSlots);
         final idx = (pos.dx / slotB).floor().clamp(0, window.length - 1);
-        final r = chartRange(window, widget.levels, extra: overlayExtra, vShift: _vShift);
+        final r = chartRange(window, widget.levels, extra: overlayExtra, vShift: _vShift, priceZoom: _priceZoom);
         final price = r.hi - (pos.dy - metrics.priceTop) / metrics.priceH * (r.hi - r.lo);
         widget.onAnchor!(DrawingAnchor(window[idx].t, price));
       }
@@ -308,7 +522,7 @@ class _CandleChartState extends State<CandleChart> {
 
       // ── Chart-space ↔ pixel mapping for drawing hit-testing / dragging. ──
       final slotB = _chartW / (window.length + trailingGap + futureSlots);
-      final r = chartRange(window, widget.levels, extra: overlayExtra, vShift: _vShift);
+      final r = chartRange(window, widget.levels, extra: overlayExtra, vShift: _vShift, priceZoom: _priceZoom);
       final priceSpan = (r.hi - r.lo) == 0 ? 1.0 : (r.hi - r.lo);
       double pyForPrice(double p) => metrics.priceTop + (r.hi - p) / priceSpan * metrics.priceH;
       double priceAtY(double dy) =>
@@ -338,10 +552,24 @@ class _CandleChartState extends State<CandleChart> {
         switch (d.type) {
           case DrawingType.horizontalLine:
             return (p.dy - pyForPrice(d.anchors.first.price)).abs() < 8;
+          case DrawingType.verticalLine:
+            return (p.dx - pxForTime(d.anchors.first.t)).abs() < 8;
           case DrawingType.trendline:
+          case DrawingType.arrow:
             return distToSeg(p, Offset(pxForTime(d.anchors[0].t), pyForPrice(d.anchors[0].price)),
                     Offset(pxForTime(d.anchors[1].t), pyForPrice(d.anchors[1].price))) <
                 9;
+          case DrawingType.ray:
+            final ra = Offset(pxForTime(d.anchors[0].t), pyForPrice(d.anchors[0].price));
+            final rb = Offset(pxForTime(d.anchors[1].t), pyForPrice(d.anchors[1].price));
+            final dir = rb - ra;
+            final far = dir.distance == 0 ? rb : ra + dir / dir.distance * 4000;
+            return distToSeg(p, ra, far) < 9;
+          case DrawingType.rectangle:
+          case DrawingType.ellipse:
+            final a0 = Offset(pxForTime(d.anchors[0].t), pyForPrice(d.anchors[0].price));
+            final b0 = Offset(pxForTime(d.anchors[1].t), pyForPrice(d.anchors[1].price));
+            return Rect.fromPoints(a0, b0).inflate(8).contains(p);
           case DrawingType.fibRetracement:
             final a = d.anchors[0], b = d.anchors[1];
             if (p.dx < math.min(pxForTime(a.t), pxForTime(b.t)) - 4) return false;
@@ -356,6 +584,9 @@ class _CandleChartState extends State<CandleChart> {
       int? grabAnchor(DrawingObject d, Offset p) {
         if (d.type == DrawingType.horizontalLine) {
           return (p.dy - pyForPrice(d.anchors.first.price)).abs() < 16 ? 0 : null;
+        }
+        if (d.type == DrawingType.verticalLine) {
+          return (p.dx - pxForTime(d.anchors.first.t)).abs() < 16 ? 0 : null;
         }
         for (var i = 0; i < d.anchors.length; i++) {
           if ((p.dx - pxForTime(d.anchors[i].t)).abs() < 22 && (p.dy - pyForPrice(d.anchors[i].price)).abs() < 22) {
@@ -401,20 +632,45 @@ class _CandleChartState extends State<CandleChart> {
             break;
           }
         }
-        if (hit != _selectedDrawingId) setState(() => _selectedDrawingId = hit);
+        if (hit != null) {
+          if (hit != _selectedDrawingId) setState(() => _selectedDrawingId = hit);
+          return;
+        }
+        if (_selectedDrawingId != null) {
+          // First tap off a selected drawing just deselects it (MT5-style);
+          // the round menu opens on the next, now-empty tap.
+          setState(() => _selectedDrawingId = null);
+          return;
+        }
+        setState(() => _radialOpen = true);
       }
 
       return Stack(children: [
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTapUp: (d) => widget.activeTool != null
-              ? handlePlacementTap(d.localPosition)
-              : handleSelectOrTrade(d.localPosition),
+          onTapUp: (d) {
+            if (_justClosedRadial) return; // tail of the menu tap, not a chart tap
+            if (widget.activeTool != null) return handlePlacementTap(d.localPosition);
+            if (widget.crosshairMode) {
+              final lv = levelAt(d.localPosition, drag: false);
+              if (lv != null && lv.tappable) {
+                widget.onLevelTap?.call(lv);
+              } else {
+                setState(() => _cross = d.localPosition);
+              }
+              return;
+            }
+            handleSelectOrTrade(d.localPosition);
+          },
           onScaleStart: (d) {
             _lastScale = 1.0;
             _dragAnchorIndex = null;
             _dragAnchor = null;
+            _axisDrag = null;
             // Grab a draggable order level (SL / TP / pending) instead of panning.
+            // This is checked FIRST and unconditionally, exactly as before — the new
+            // axis-zoom strips below only ever apply when this found nothing to grab,
+            // so a line sitting near an axis is still always grabbed, never zoomed.
             if (widget.activeTool == null && d.pointerCount == 1) {
               final lv = levelAt(d.localFocalPoint, drag: true);
               if (lv != null) {
@@ -436,8 +692,28 @@ class _CandleChartState extends State<CandleChart> {
                     _dragAnchorIndex = gi;
                     _dragAnchor = sel.anchors[gi];
                   });
+                  return;
                 }
               }
+            }
+            // A single finger starting ON the right-hand price ladder zooms the
+            // price axis vertically (MT5-style "drag the axis to rescale"),
+            // distinct from a body drag (which shifts, see onScaleUpdate).
+            if (widget.activeTool == null &&
+                d.pointerCount == 1 &&
+                d.localFocalPoint.dx >= _chartW &&
+                d.localFocalPoint.dy >= metrics.priceTop &&
+                d.localFocalPoint.dy <= metrics.priceTop + metrics.priceH) {
+              setState(() => _axisDrag = _AxisDrag.price);
+              return;
+            }
+            // A single finger starting on the bottom time axis zooms time
+            // horizontally, same idea, the other axis.
+            if (widget.activeTool == null &&
+                d.pointerCount == 1 &&
+                d.localFocalPoint.dy >= c.maxHeight - _CandlePainter.timeAxisH) {
+              setState(() => _axisDrag = _AxisDrag.time);
+              return;
             }
           },
           onScaleUpdate: (d) {
@@ -452,8 +728,32 @@ class _CandleChartState extends State<CandleChart> {
               final sel = selected();
               if (sel == null) return;
               final p = d.localFocalPoint;
+              // A horizontal line slides only in price, a vertical line only in time.
               final t = sel.type == DrawingType.horizontalLine ? sel.anchors.first.t : timeAtX(p.dx);
-              setState(() => _dragAnchor = DrawingAnchor(t, priceAtY(p.dy)));
+              final pr = sel.type == DrawingType.verticalLine ? sel.anchors.first.price : priceAtY(p.dy);
+              setState(() => _dragAnchor = DrawingAnchor(t, pr));
+              return;
+            }
+            if (_axisDrag == _AxisDrag.price) {
+              // Drag up = zoom in (compress the range); drag down = zoom out.
+              setState(() {
+                final factor = 1 + d.focalPointDelta.dy * 0.0045;
+                _priceZoom = (_priceZoom * factor).clamp(0.3, 4.0);
+              });
+              return;
+            }
+            if (_axisDrag == _AxisDrag.time) {
+              // Drag left = more candles visible (zoom out); drag right = zoom in.
+              setState(() {
+                final factor = 1 - d.focalPointDelta.dx * 0.006;
+                _perScreen = (_perScreen * factor).clamp(minPer, total.toDouble());
+                _rightOffset = _rightOffset.clamp(-_kRightPad, math.max(0, total - _perScreen));
+              });
+              return;
+            }
+            // Crosshair tool: one finger moves the crosshair rather than the chart.
+            if (widget.crosshairMode && d.pointerCount == 1) {
+              setState(() => _cross = d.localFocalPoint);
               return;
             }
             setState(() {
@@ -474,6 +774,10 @@ class _CandleChartState extends State<CandleChart> {
             });
           },
           onScaleEnd: (_) {
+            if (_axisDrag != null) {
+              setState(() => _axisDrag = null);
+              return;
+            }
             if (_dragLevelKey != null) {
               final lv = _dragLevel, pr = _dragLevelPrice;
               setState(() {
@@ -496,7 +800,9 @@ class _CandleChartState extends State<CandleChart> {
           },
           onLongPressStart: (d) => setState(() => _cross = d.localPosition),
           onLongPressMoveUpdate: (d) => setState(() => _cross = d.localPosition),
-          onLongPressEnd: (_) => setState(() => _cross = null),
+          onLongPressEnd: (_) {
+            if (!widget.crosshairMode) setState(() => _cross = null);
+          },
           onDoubleTap: _resetView,
           child: CustomPaint(
             size: Size.infinite,
@@ -508,6 +814,7 @@ class _CandleChartState extends State<CandleChart> {
               digits: widget.digits,
               tf: widget.tf,
               livePrice: widget.livePrice,
+              askPrice: widget.askPrice,
               type: widget.type,
               levels: widget.levels,
               overlays: widget.overlays,
@@ -520,18 +827,57 @@ class _CandleChartState extends State<CandleChart> {
               dragAnchor: _dragAnchor,
               cross: _cross,
               vShift: _vShift,
+              priceZoom: _priceZoom,
               dragLevelKey: _dragLevelKey,
               dragLevelPrice: _dragLevelPrice,
               up: tc.up,
               down: tc.down,
+              bid: tc.sell,
+              ask: tc.buy,
               grid: Theme.of(context).dividerColor,
               text: Theme.of(context).hintColor,
               line: Theme.of(context).colorScheme.primary,
               surface: Theme.of(context).colorScheme.surface,
               onSurface: Theme.of(context).colorScheme.onSurface,
+              axisW: axisW,
             ),
           ),
         ),
+        // MT5-style round chart menu: tap anywhere on the chart to open it (see
+        // handleSelectOrTrade above), tap any wedge — or empty space — to close.
+        // Centred on the price pane so it never clips against the axes.
+        if (_radialOpen)
+          Positioned.fill(
+            child: Builder(builder: (_) {
+              final menuCenter = Offset(_chartW / 2, metrics.priceTop + metrics.priceH / 2);
+              final maxR = math.min(_chartW, metrics.priceH) / 2 * 0.85;
+              final outerR = maxR.clamp(64.0, 165.0);
+              final innerR = outerR * 0.42;
+              return RadialChartMenu(
+                center: menuCenter,
+                outerRadius: outerR,
+                innerRadius: innerR,
+                activeTool: widget.activeTool,
+                onSelectTool: (t) {
+                  _closeRadial();
+                  widget.onSelectTool?.call(t);
+                },
+                onDuplicate: () {
+                  _closeRadial();
+                  widget.onDuplicate?.call();
+                },
+                onObjects: () {
+                  _closeRadial();
+                  widget.onOpenObjects?.call();
+                },
+                onIndicators: () {
+                  _closeRadial();
+                  widget.onOpenIndicators?.call();
+                },
+                onDismiss: _closeRadial,
+              );
+            }),
+          ),
         // Selected-drawing toolbar: drag a handle to move, or delete/deselect.
         if (widget.activeTool == null && selected() != null)
           Positioned(
@@ -576,7 +922,7 @@ class _CandleChartState extends State<CandleChart> {
         if (widget.oscillators.isNotEmpty)
           Positioned(
             left: 0,
-            right: _CandlePainter.axisW,
+            right: axisW,
             top: metrics.priceTop + metrics.priceH - 8,
             height: 16,
             child: GestureDetector(
@@ -601,47 +947,28 @@ class _CandleChartState extends State<CandleChart> {
           ),
         if (widget.oscillators.isNotEmpty)
           Positioned(
-            right: _CandlePainter.axisW + 2,
+            right: axisW + 2,
             top: metrics.priceTop + metrics.priceH - 11,
             child: _MiniIconButton(
               icon: _oscCollapsed ? Icons.unfold_more : Icons.unfold_less,
               onTap: () => setState(() => _oscCollapsed = !_oscCollapsed),
             ),
           ),
-        // Auto fit: back to the newest bars, price range fitted to what's visible.
-        Positioned(
-          top: 6,
-          left: 6,
-          child: Material(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
-            shape: StadiumBorder(side: BorderSide(color: Theme.of(context).dividerColor)),
-            child: InkWell(
-              customBorder: const StadiumBorder(),
-              onTap: () {
-                _resetView();
-                widget.onAutoFit?.call();
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.center_focus_strong_outlined, size: 14, color: Theme.of(context).colorScheme.onSurface),
-                  const SizedBox(width: 4),
-                  Text('Auto fit', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
-                ]),
+        // Older-history page loading (left edge, small — this is a background
+        // fetch, not a blocking spinner over the chart).
+        if (widget.loadingOlder)
+          Positioned(
+            left: 6,
+            top: metrics.priceTop + metrics.priceH / 2 - 12,
+            child: Material(
+              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+              shape: const CircleBorder(),
+              child: const Padding(
+                padding: EdgeInsets.all(6),
+                child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.8)),
               ),
             ),
           ),
-        ),
-        // Zoom controls (pinch still works too).
-        Positioned(
-          left: 8,
-          bottom: _CandlePainter.timeAxisH + 8,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _ZoomButton(icon: Icons.add, onTap: () => zoom(0.7)),
-            const SizedBox(height: 8),
-            _ZoomButton(icon: Icons.remove, onTap: () => zoom(1.45)),
-          ]),
-        ),
       ]);
     });
   }
@@ -686,6 +1013,7 @@ class _CandlePainter extends CustomPainter {
     required this.digits,
     required this.tf,
     required this.livePrice,
+    required this.askPrice,
     required this.type,
     required this.levels,
     required this.overlays,
@@ -698,15 +1026,19 @@ class _CandlePainter extends CustomPainter {
     required this.dragAnchor,
     required this.cross,
     required this.vShift,
+    required this.priceZoom,
     required this.dragLevelKey,
     required this.dragLevelPrice,
     required this.up,
     required this.down,
+    required this.bid,
+    required this.ask,
     required this.grid,
     required this.text,
     required this.line,
     required this.surface,
     required this.onSurface,
+    required this.axisW,
   });
 
   final List<Candle> candles;
@@ -716,6 +1048,7 @@ class _CandlePainter extends CustomPainter {
   final int digits;
   final Timeframe tf;
   final double? livePrice;
+  final double? askPrice;
   final ChartType type;
   final List<ChartLevel> levels;
   final List<ComputedIndicator> overlays;
@@ -728,11 +1061,16 @@ class _CandlePainter extends CustomPainter {
   final DrawingAnchor? dragAnchor;
   final Offset? cross;
   final double vShift;
+  final double priceZoom;
   final String? dragLevelKey;
   final double? dragLevelPrice;
   final Color up, down, grid, text, line, surface, onSurface;
+  final Color bid, ask;
 
-  static const double axisW = 62; // right price-ladder width
+  /// Right price-ladder width — measured from the actual label text each
+  /// build (see [_CandleChartState._computeAxisWidth]) so a symbol with fewer
+  /// price digits doesn't carry the same fixed margin as one with more.
+  final double axisW;
   static const double padV = 2; // top padding (reduced empty space above candles)
   static const double timeAxisH = 18; // bottom time-axis height
   static const int priceRows = 8; // price-ladder rows
@@ -744,7 +1082,7 @@ class _CandlePainter extends CustomPainter {
     final m = _computePaneMetrics(size.height, oscillators.length, oscFraction, padV, timeAxisH);
     final priceTop = m.priceTop, chartH = m.priceH;
 
-    final r = chartRange(candles, levels, extra: overlayValuesInWindow(overlays, winStart, winStart + candles.length), vShift: vShift);
+    final r = chartRange(candles, levels, extra: overlayValuesInWindow(overlays, winStart, winStart + candles.length), vShift: vShift, priceZoom: priceZoom);
     final hi = r.hi, lo = r.lo;
     final range = (hi - lo) == 0 ? 1 : (hi - lo);
     double y(double p) => priceTop + (hi - p) / range * chartH;
@@ -754,10 +1092,16 @@ class _CandlePainter extends CustomPainter {
     final slot = chartW / (candles.length + trailingGap + futureSlots);
 
     // ── Price scale: separator line + tick marks + price labels (MT5 look). ──
-    final axisPaint = Paint()
-      ..color = grid
+    // MT5 frames the plot: a line along the top, one down the price scale and one
+    // above the time scale, clearly stronger than the grid.
+    final framePaint = Paint()
+      ..color = text.withValues(alpha: 0.55)
       ..strokeWidth = 1;
-    canvas.drawLine(Offset(chartW, 0), Offset(chartW, size.height - timeAxisH), axisPaint);
+    final plotBottom = size.height - timeAxisH;
+    canvas.drawLine(const Offset(0, 0.5), Offset(size.width, 0.5), framePaint);
+    canvas.drawLine(Offset(chartW, 0), Offset(chartW, plotBottom), framePaint);
+    // Ends at the price-axis line (┘), it does not run on under the price numbers.
+    canvas.drawLine(Offset(0, plotBottom), Offset(chartW, plotBottom), framePaint);
     final tickPaint = Paint()
       ..color = text
       ..strokeWidth = 0.8;
@@ -765,10 +1109,14 @@ class _CandlePainter extends CustomPainter {
     for (var i = 0; i <= priceRows; i++) {
       final p = hi - range * i / priceRows;
       final yy = y(p);
-      canvas.drawLine(Offset(chartW, yy), Offset(chartW + 4, yy), tickPaint);
+      // No tick where the price lands on the frame's top / bottom edge — it would poke out
+      // past the corner (the frame line itself already marks that position).
+      if (yy > 2 && yy < plotBottom - 2) canvas.drawLine(Offset(chartW, yy), Offset(chartW + 4, yy), tickPaint);
       tp.text = TextSpan(text: p.toStringAsFixed(digits), style: TextStyle(color: text, fontSize: 9));
       tp.layout();
-      tp.paint(canvas, Offset(chartW + 8, yy - 5));
+      // Keep the first / last ladder price fully inside the frame instead of letting the
+      // top / bottom rule strike through it.
+      tp.paint(canvas, Offset(chartW + 8, (yy - 5).clamp(3.0, plotBottom - 13.0)));
     }
 
     // ── Time scale: labels along the bottom (no vertical gridlines). ──
@@ -836,16 +1184,27 @@ class _CandlePainter extends CustomPainter {
     }
     canvas.restore();
 
-    // ── Candle price line ──
-    // Pinned to the last candle price at its TRUE position on the price scale, so
-    // it travels with the candles when the chart is panned (it leaves the view when
-    // its price does) instead of being clamped to the edge. It is neutral on
-    // purpose: Bid and Ask live only in the SELL / BUY panels, never on the chart.
-    final lp = livePrice ?? candles.last.c;
-    final lpY = y(lp);
-    if (lpY >= priceTop && lpY <= priceTop + chartH) {
-      _hline(canvas, lpY, chartW, line, dashed: true);
-      _tag(canvas, chartW, lpY, lp.toStringAsFixed(digits), line, bold: true);
+    // ── Live Bid / Ask price lines (MT5-style) ──
+    // Pinned to their TRUE position on the price scale, so they travel with the
+    // candles when panned (leaving the view when their price does) instead of
+    // being clamped to the edge. Bid keeps the candle-price line's historical
+    // role (server bars are bid-based, so it stays continuous with the
+    // candles); Ask is the same live quote's ask leg. Colour-coded like the
+    // SELL / BUY panels so the two read apart at a glance, with the gap
+    // between them tracking the real spread live.
+    final bidPx = livePrice ?? candles.last.c;
+    final bidY = y(bidPx);
+    if (bidY >= priceTop && bidY <= priceTop + chartH) {
+      _hline(canvas, bidY, chartW, bid, dashed: true);
+      _tag(canvas, chartW, bidY, bidPx.toStringAsFixed(digits), bid, bold: true);
+    }
+    final askPx = askPrice;
+    if (askPx != null) {
+      final askY = y(askPx);
+      if (askY >= priceTop && askY <= priceTop + chartH) {
+        _hline(canvas, askY, chartW, ask, dashed: true);
+        _tag(canvas, chartW, askY, askPx.toStringAsFixed(digits), ask, bold: true);
+      }
     }
 
     // Order lines (entry / SL / TP / pending / draft). Thin on screen; the touch
@@ -856,15 +1215,35 @@ class _CandlePainter extends CustomPainter {
       final price = dragging ? dragLevelPrice! : lv.price;
       final yy = y(price);
       if (yy < priceTop - 1 || yy > priceTop + chartH + 1) continue;
-      _hline(canvas, yy, chartW, lv.color, dashed: lv.dashed, width: dragging ? 1.1 : kLevelStroke);
+      // MT5 order lines are light and subtle: a thin, slightly translucent dashed stroke with
+      // short dashes, so they never dominate the candles. (The axis tag keeps the full colour.)
+      _hline(canvas, yy, chartW, lv.color.withValues(alpha: dragging ? 0.95 : 0.7), dashed: true, width: dragging ? 1.0 : kLevelStroke, dash: 3, gap: 4);
       _tag(canvas, chartW, yy, price.toStringAsFixed(digits), lv.color);
+      final labelText = lv.labelFor?.call(price) ?? lv.label;
       final lt = TextPainter(
         textDirection: TextDirection.ltr,
-        text: TextSpan(text: ' ${lv.label} ', style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w700)),
+        text: TextSpan(text: ' $labelText ', style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w700)),
       )..layout();
-      final rr = Rect.fromLTWH(2, yy - 8, lt.width, 16);
-      canvas.drawRRect(RRect.fromRectAndRadius(rr, const Radius.circular(3)), Paint()..color = lv.color);
-      lt.paint(canvas, Offset(2, yy - 6));
+      if (lv.boxed) {
+        final rr = Rect.fromLTWH(2, yy - 8, lt.width, 16);
+        canvas.drawRRect(RRect.fromRectAndRadius(rr, const Radius.circular(3)), Paint()..color = lv.color);
+        lt.paint(canvas, Offset(2, yy - 6));
+      } else {
+        // Inline MT5 label: coloured text sitting just above its own line, no box.
+        // A soft halo in the chart background keeps the text readable over candles.
+        final labelStyle = TextStyle(color: lv.color, fontSize: 11, fontWeight: FontWeight.w600, shadows: [Shadow(color: surface, blurRadius: 3), Shadow(color: surface, blurRadius: 3)]);
+        final split = lv.plColor == null ? -1 : labelText.lastIndexOf(', ');
+        final it = TextPainter(
+          textDirection: TextDirection.ltr,
+          text: split < 0
+              ? TextSpan(text: labelText, style: labelStyle)
+              : TextSpan(style: labelStyle, children: [
+                  TextSpan(text: labelText.substring(0, split + 2)),
+                  TextSpan(text: labelText.substring(split + 2), style: labelStyle.copyWith(color: lv.plColor)),
+                ]),
+        )..layout(maxWidth: math.max(10, chartW - 8));
+        it.paint(canvas, Offset(3, yy - it.height - 1));
+      }
       if (lv.draggable) {
         // Grab handle at the right end — shows the line can be moved.
         final hc = Offset(chartW - 16, yy);
@@ -906,14 +1285,15 @@ class _CandlePainter extends CustomPainter {
         textDirection: TextDirection.ltr,
         text: TextSpan(text: info, style: TextStyle(color: onSurface, fontSize: 10, height: 1.3)),
       )..layout();
-      final box = Rect.fromLTWH(6, 6, ip.width + 12, ip.height + 8);
+      // Below the symbol caption (top-left), so the two never overlap.
+      final box = Rect.fromLTWH(6, 66, ip.width + 12, ip.height + 8);
       canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(4)), Paint()..color = surface.withValues(alpha: 0.92));
       canvas.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(4)),
           Paint()
             ..color = grid
             ..style = PaintingStyle.stroke
             ..strokeWidth = 0.5);
-      ip.paint(canvas, const Offset(12, 10));
+      ip.paint(canvas, const Offset(12, 70));
     }
   }
 
@@ -1030,6 +1410,10 @@ class _CandlePainter extends CustomPainter {
         canvas.drawLine(Offset(0, yy), Offset(chartW, yy), stroke);
         _drawTag(canvas, chartW, yy, anchors.first.price.toStringAsFixed(digits), color);
         break;
+      case DrawingType.verticalLine:
+        final xv = _xForTime(anchors.first.t, slot);
+        canvas.drawLine(Offset(xv, 0), Offset(xv, 4000), stroke);
+        break;
       case DrawingType.trendline:
         if (anchors.length < 2) break;
         canvas.drawLine(
@@ -1037,6 +1421,47 @@ class _CandlePainter extends CustomPainter {
           Offset(_xForTime(anchors[1].t, slot), y(anchors[1].price)),
           stroke,
         );
+        break;
+      case DrawingType.ray:
+        if (anchors.length < 2) break;
+        final ra = Offset(_xForTime(anchors[0].t, slot), y(anchors[0].price));
+        final rb = Offset(_xForTime(anchors[1].t, slot), y(anchors[1].price));
+        final rd = rb - ra;
+        // Runs from the first point through the second, off the edge of the plot.
+        canvas.drawLine(ra, rd.distance == 0 ? rb : ra + rd / rd.distance * 4000, stroke);
+        break;
+      case DrawingType.arrow:
+        if (anchors.length < 2) break;
+        final aa = Offset(_xForTime(anchors[0].t, slot), y(anchors[0].price));
+        final ab = Offset(_xForTime(anchors[1].t, slot), y(anchors[1].price));
+        canvas.drawLine(aa, ab, stroke);
+        final ad = ab - aa;
+        if (ad.distance > 0) {
+          final u = ad / ad.distance;
+          final n = Offset(-u.dy, u.dx);
+          final head = Path()
+            ..moveTo(ab.dx, ab.dy)
+            ..lineTo((ab - u * 11 + n * 5).dx, (ab - u * 11 + n * 5).dy)
+            ..lineTo((ab - u * 11 - n * 5).dx, (ab - u * 11 - n * 5).dy)
+            ..close();
+          canvas.drawPath(head, Paint()..color = color);
+        }
+        break;
+      case DrawingType.rectangle:
+      case DrawingType.ellipse:
+        if (anchors.length < 2) break;
+        final box = Rect.fromPoints(
+          Offset(_xForTime(anchors[0].t, slot), y(anchors[0].price)),
+          Offset(_xForTime(anchors[1].t, slot), y(anchors[1].price)),
+        );
+        final fill = Paint()..color = color.withValues(alpha: 0.14);
+        if (type == DrawingType.rectangle) {
+          canvas.drawRect(box, fill);
+          canvas.drawRect(box, stroke);
+        } else {
+          canvas.drawOval(box, fill);
+          canvas.drawOval(box, stroke);
+        }
         break;
       case DrawingType.fibRetracement:
         if (anchors.length < 2) break;
@@ -1206,13 +1631,16 @@ class _CandlePainter extends CustomPainter {
     return '$hh:$mm';
   }
 
-  void _hline(Canvas c, double yy, double w, Color color, {bool dashed = false, double width = 1}) {
+  void _hline(Canvas c, double yy, double w, Color color, {bool dashed = false, double width = 1, double dash = 4, double gap = 3}) {
     final p = Paint()
       ..color = color
       ..strokeWidth = width;
     if (dashed) {
-      for (double x = 0; x < w; x += 8) {
-        c.drawLine(Offset(x, yy), Offset(x + 4, yy), p);
+      // MT5 dash: short dashes with small gaps, stopping a few px short of the price
+      // axis so the line never runs into the axis rule or the price tag.
+      final end = w - 3;
+      for (double x = 0; x < end; x += dash + gap) {
+        c.drawLine(Offset(x, yy), Offset(math.min(x + dash, end), yy), p);
       }
     } else {
       c.drawLine(Offset(0, yy), Offset(w, yy), p);
@@ -1265,7 +1693,9 @@ class _CandlePainter extends CustomPainter {
       old.dragIndex != dragIndex ||
       old.dragAnchor != dragAnchor ||
       old.livePrice != livePrice ||
+      old.askPrice != askPrice ||
       old.vShift != vShift ||
+      old.priceZoom != priceZoom ||
       old.dragLevelKey != dragLevelKey ||
       old.dragLevelPrice != dragLevelPrice;
 }

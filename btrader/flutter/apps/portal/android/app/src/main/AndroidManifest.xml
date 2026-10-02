@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Release builds need this explicitly (debug/profile manifests add it on their own). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Burjex Prime"
         android:name="${applicationName}"

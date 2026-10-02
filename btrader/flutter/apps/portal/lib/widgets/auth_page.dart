@@ -55,7 +55,18 @@ class AuthPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // These pages are always white, so pin a light theme under them: in the app's
+    // dark mode the typed text / labels / links would otherwise be light-on-white.
+    final light = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      colorScheme: ColorScheme.fromSeed(seedColor: authNavy, brightness: Brightness.light).copyWith(primary: authNavy),
+      textSelectionTheme: const TextSelectionThemeData(cursorColor: authNavy),
+      fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+    );
+    return Theme(
+      data: light,
+      child: Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -77,6 +88,7 @@ class AuthPage extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

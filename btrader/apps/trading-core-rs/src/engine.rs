@@ -12,7 +12,7 @@ use crate::models::{
 };
 use crate::policy::{audit_comment, create_plan, wait_for_deadline, ExecutionPlan};
 use crate::prices::PriceSource;
-use crate::routing::{resolve_routing, RoutingContext, RoutingRuleLike};
+use crate::routing::{resolve_routing, RoutingContext, RoutingResolution, RoutingRuleLike};
 use crate::sessions::{is_symbol_tradable, parse_sessions};
 use chrono::Utc;
 use dashmap::DashMap;
@@ -153,6 +153,19 @@ fn env_i64(key: &str, default: i64) -> i64 {
     std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
 }
 
+/// How long an order waits for the per-account mutation lock before "account busy".
+pub(crate) const DEFAULT_ACCOUNT_QUEUE_WAIT_MS: i64 = 8000;
+
+/// `ACCOUNT_QUEUE_WAIT_MS` of 0 (or negative) must not mean "never wait": a zero timeout
+/// fails every order that arrives while another one on the same account holds the lock, so
+/// a rapid burst would be rejected as "account busy" instead of queued. It carries no
+/// execution delay either way (the group's configured delay is waited before the lock), so
+/// a non-positive value is treated as unset.
+pub(crate) fn account_queue_wait_from(raw_ms: i64) -> Duration {
+    let ms = if raw_ms > 0 { raw_ms } else { DEFAULT_ACCOUNT_QUEUE_WAIT_MS };
+    Duration::from_millis(ms as u64)
+}
+
 impl Engine {
     pub fn new(pool: PgPool, redis: redis::aio::MultiplexedConnection, prices: Arc<PriceSource>) -> Self {
         Self {
@@ -178,7 +191,7 @@ impl Engine {
             max_feed_still_ms: env_i64("MAX_FEED_STILL_MS", 120_000),
             order_rate_max: env_i64("ORDER_RATE_MAX", 40) as usize,
             order_rate_window_ms: env_i64("ORDER_RATE_WINDOW_MS", 1000),
-            account_queue_wait: Duration::from_millis(env_i64("ACCOUNT_QUEUE_WAIT_MS", 8000) as u64),
+            account_queue_wait: account_queue_wait_from(env_i64("ACCOUNT_QUEUE_WAIT_MS", DEFAULT_ACCOUNT_QUEUE_WAIT_MS)),
         }
     }
 
@@ -250,11 +263,16 @@ impl Engine {
         let t0 = Instant::now();
         let mut prewaited = false;
         let mut exec_kind = "";
-        if req.order_type.eq_ignore_ascii_case("MARKET") {
+        let is_market = req.order_type.eq_ignore_ascii_case("MARKET");
+        if is_market {
             exec_kind = if req.side.eq_ignore_ascii_case("BUY") { "marketBuy" } else { "marketSell" };
             prewaited = self.pre_wait(tenant_id, &aid, exec_kind).await?;
         }
-        let res = self.with_account(&aid, || self.place_order_exclusive(tenant_id, req, prewaited)).await;
+        let res = if is_market {
+            self.place_market(tenant_id, req, prewaited).await
+        } else {
+            self.with_account(&aid, || self.place_order_exclusive(tenant_id, req, prewaited)).await
+        };
         if let (Ok(r), false) = (&res, exec_kind.is_empty()) {
             tracing::info!(
                 target: "exec_audit",
@@ -282,7 +300,51 @@ impl Engine {
         Ok(true)
     }
 
-    async fn place_order_exclusive(self: &Arc<Self>, tenant_id: &str, mut req: PlaceReq, prewaited: bool) -> BtResult<ExecResult> {
+    /// Market open. Everything that only READS (validation, group rule, price, markup,
+    /// routing) runs BEFORE the per-account lock, so concurrent orders on one account overlap
+    /// that work instead of queueing behind each other. The lock then covers only what must
+    /// be exclusive: the risk-limit count, the idempotency re-check and the DB transaction.
+    /// The price is taken once the group's configured delay has elapsed (not after the queue),
+    /// so the effective delay stays the configured one however many orders are in flight.
+    async fn place_market(self: &Arc<Self>, tenant_id: &str, mut req: PlaceReq, prewaited: bool) -> BtResult<ExecResult> {
+        let (account, sym, volume) = self.validate_place(tenant_id, &mut req).await?;
+        if let Some(cid) = req.client_order_id.as_ref() {
+            if let Some(dup) = self.find_client_order(tenant_id, &account.id, cid).await? {
+                return Ok(dup);
+            }
+        }
+        let prep = self
+            .market_prepare(tenant_id, &account, &sym, &req, volume, None, None, prewaited)
+            .await?;
+        let aid = account.id.clone();
+        let (res, post) = {
+            let tenant = tenant_id.to_string();
+            let aid_in = aid.clone();
+            let cid = req.client_order_id.clone();
+            self.with_account(&aid, move || async move {
+                self.enforce_risk(&tenant, &aid_in, volume).await?;
+                if let Some(cid) = cid.as_ref() {
+                    if let Some(dup) = self.find_client_order(&tenant, &aid_in, cid).await? {
+                        return Ok((dup, None));
+                    }
+                }
+                let (res, post) = self.market_commit(prep).await?;
+                Ok((res, Some(post)))
+            })
+            .await?
+        };
+        if let Some(post) = post {
+            // The A-book hedge does not affect the client's confirmation: run it after the
+            // lock is released and the response is on its way.
+            let eng = Arc::clone(self);
+            tokio::spawn(async move { eng.market_cover(post).await });
+        }
+        Ok(res)
+    }
+
+    /// Normalise + validate an incoming order up to (not including) the risk / idempotency
+    /// checks. Read-only, so it never needs the account lock.
+    async fn validate_place(&self, tenant_id: &str, req: &mut PlaceReq) -> BtResult<(AccountRow, SymbolRow, f64)> {
         req.side = req.side.to_ascii_uppercase();
         req.order_type = req.order_type.to_ascii_uppercase();
         if !self.allow_rate(&req.account_id) {
@@ -323,6 +385,11 @@ impl Engine {
                 ),
             ));
         };
+        Ok((account, sym, volume))
+    }
+
+    async fn place_order_exclusive(self: &Arc<Self>, tenant_id: &str, mut req: PlaceReq, prewaited: bool) -> BtResult<ExecResult> {
+        let (account, sym, volume) = self.validate_place(tenant_id, &mut req).await?;
         self.enforce_risk(tenant_id, &account.id, volume).await?;
         if let Some(cid) = req.client_order_id.as_ref() {
             if let Some(dup) = self.find_client_order(tenant_id, &account.id, cid).await? {
@@ -337,6 +404,8 @@ impl Engine {
         self.place_pending(tenant_id, &account, &sym, req, volume).await
     }
 
+
+    /// Fill a market order (also used for triggered pending orders): prepare, commit, hedge.
     pub(crate) async fn execute_market(
         &self,
         tenant_id: &str,
@@ -348,6 +417,29 @@ impl Engine {
         plan_in: Option<ExecutionPlan>,
         skip_delay: bool,
     ) -> BtResult<ExecResult> {
+        let prep = self
+            .market_prepare(tenant_id, account, sym, req, volume, clamp_worst, plan_in, skip_delay)
+            .await?;
+        let (res, post) = self.market_commit(prep).await?;
+        self.market_cover(post).await;
+        Ok(res)
+    }
+
+    /// Read-only half of a market fill: wait the group's delay (unless already waited),
+    /// read the live price, apply markup / slippage, work out commission, margin and book.
+    /// Needs no account lock — the margin is re-checked against the locked row in
+    /// [`Self::market_commit`].
+    pub(crate) async fn market_prepare(
+        &self,
+        tenant_id: &str,
+        account: &AccountRow,
+        sym: &SymbolRow,
+        req: &PlaceReq,
+        volume: f64,
+        clamp_worst: Option<f64>,
+        plan_in: Option<ExecutionPlan>,
+        skip_delay: bool,
+    ) -> BtResult<MarketPrep> {
         let spec = spec_of(sym);
         let pricing = self.group_pricing(account.group_id.as_deref(), sym, tenant_id).await?;
         let apply_kind = if req.order_type.eq_ignore_ascii_case("MARKET") {
@@ -483,13 +575,53 @@ impl Engine {
         } else {
             0.0
         };
+        let comment = audit_comment(Some(&plan), json!({"fillPrice": fill_price, "result": "filled"}));
+        let requested = req.price.unwrap_or(px);
+
+        Ok(MarketPrep {
+            tenant_id: tenant_id.to_string(),
+            account: account.clone(),
+            sym: sym.clone(),
+            req: req.clone(),
+            volume,
+            px,
+            fill_price,
+            commission,
+            margin,
+            book,
+            covered_volume,
+            routing,
+            comment,
+            requested,
+        })
+    }
+
+    /// Exclusive half of a market fill: the margin check against the LOCKED account row, the
+    /// position / order / deal inserts, the in-memory book and the client events. Returns the
+    /// result plus what the A-book hedge needs (run separately, outside the account lock).
+    pub(crate) async fn market_commit(&self, prep: MarketPrep) -> BtResult<(ExecResult, MarketPostFill)> {
+        let MarketPrep {
+            tenant_id,
+            account,
+            sym,
+            req,
+            volume,
+            px,
+            fill_price,
+            commission,
+            margin,
+            book,
+            covered_volume,
+            routing,
+            comment,
+            requested,
+        } = prep;
+        let tenant_id = tenant_id.as_str();
 
         let position_id = Uuid::new_v4().to_string();
         let order_id = Uuid::new_v4().to_string();
         let deal_id = Uuid::new_v4().to_string();
         let source = req.source.clone().unwrap_or_else(|| "api".into());
-        let comment = audit_comment(Some(&plan), json!({"fillPrice": fill_price, "result": "filled"}));
-        let requested = req.price.unwrap_or(px);
 
         let mut tx = self.pool.begin().await?;
         sqlx::query("SELECT id FROM accounts WHERE id = $1 FOR UPDATE")
@@ -603,20 +735,6 @@ impl Engine {
         .await?;
         tx.commit().await?;
 
-        if book == "A" && covered_volume > 0.0 {
-            self.cover_open(
-                tenant_id,
-                &position_id,
-                &account.id,
-                sym,
-                &req.side,
-                covered_volume,
-                px,
-                &routing,
-            )
-            .await;
-        }
-
         let snap = Snapshot {
             account_id: locked.id.clone(),
             login: locked.login.clone(),
@@ -631,6 +749,7 @@ impl Engine {
             floating_pl: after.floating_pl,
             ts: now_ms(),
         };
+        let opened_at = Utc::now();
         self.book.upsert(BookRow {
             id: position_id.clone(),
             tenant_id: tenant_id.to_string(),
@@ -645,23 +764,119 @@ impl Engine {
             swap: 0.0,
             commission,
             covered_volume,
-            opened_at: Utc::now(),
+            opened_at,
             account_currency: account.currency.clone(),
             group_id: account.group_id.clone(),
             exec_claim_kind: None,
         });
-        self.publish_after_fill(tenant_id, &account.id, &position_id, "opened", &snap, None)
+        // The confirmed position rides on the event itself, so clients can show the trade the
+        // moment the engine confirms it instead of refetching the whole list.
+        let position_json = json!({
+            "opened": true,
+            "id": position_id,
+            "accountId": account.id,
+            "symbol": sym.symbol,
+            "digits": sym.digits,
+            "side": req.side,
+            "volume": volume,
+            "openPrice": fill_price,
+            "slPrice": req.sl_price,
+            "tpPrice": req.tp_price,
+            "marginUsed": margin,
+            "commission": commission,
+            "swap": 0.0,
+            "openedAt": opened_at.to_rfc3339(),
+        });
+        self.publish_after_fill_with(tenant_id, &account.id, &position_id, "opened", &snap, None, Some(position_json))
             .await;
 
-        Ok(ExecResult {
+        let result = ExecResult {
             accepted: true,
             order_id: Some(order_id),
-            position_id: Some(position_id),
+            position_id: Some(position_id.clone()),
             status: "FILLED".into(),
             fill_price: Some(fill_price),
             filled_volume: Some(volume),
             reason: None,
             account: Some(snap.json()),
-        })
+        };
+        let post = MarketPostFill {
+            tenant_id: tenant_id.to_string(),
+            account_id: account.id.clone(),
+            position_id,
+            sym,
+            side: req.side.clone(),
+            book,
+            covered_volume,
+            px,
+            routing,
+        };
+        Ok((result, post))
+    }
+
+    /// A-book hedge for a freshly opened position (no-op for B-book / demo).
+    pub(crate) async fn market_cover(&self, post: MarketPostFill) {
+        if post.book == "A" && post.covered_volume > 0.0 {
+            self.cover_open(
+                &post.tenant_id,
+                &post.position_id,
+                &post.account_id,
+                &post.sym,
+                &post.side,
+                post.covered_volume,
+                post.px,
+                &post.routing,
+            )
+            .await;
+        }
+    }
+}
+
+/// Everything [`Engine::market_prepare`] worked out, handed to [`Engine::market_commit`].
+pub(crate) struct MarketPrep {
+    tenant_id: String,
+    account: AccountRow,
+    sym: SymbolRow,
+    req: PlaceReq,
+    volume: f64,
+    px: f64,
+    fill_price: f64,
+    commission: f64,
+    margin: f64,
+    book: String,
+    covered_volume: f64,
+    routing: RoutingResolution,
+    comment: String,
+    requested: f64,
+}
+
+/// What the A-book hedge needs once the position is committed.
+pub(crate) struct MarketPostFill {
+    tenant_id: String,
+    account_id: String,
+    position_id: String,
+    sym: SymbolRow,
+    side: String,
+    book: String,
+    covered_volume: f64,
+    px: f64,
+    routing: RoutingResolution,
+}
+
+#[cfg(test)]
+mod queue_wait_tests {
+    use super::*;
+
+    #[test]
+    fn zero_or_negative_queue_wait_falls_back_to_the_default() {
+        // ACCOUNT_QUEUE_WAIT_MS=0 (as in .env.github) must not reject orders that merely
+        // queue behind another one on the same account.
+        assert_eq!(account_queue_wait_from(0), Duration::from_millis(DEFAULT_ACCOUNT_QUEUE_WAIT_MS as u64));
+        assert_eq!(account_queue_wait_from(-5), Duration::from_millis(DEFAULT_ACCOUNT_QUEUE_WAIT_MS as u64));
+    }
+
+    #[test]
+    fn positive_queue_wait_is_used_as_configured() {
+        assert_eq!(account_queue_wait_from(1500), Duration::from_millis(1500));
     }
 }

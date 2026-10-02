@@ -1,29 +1,44 @@
-/// User-drawn chart objects (horizontal line, trendline, Fibonacci retracement).
+/// User-drawn chart objects (lines, ray, arrow, rectangle, ellipse, Fibonacci).
 /// Anchors are stored in chart space — (time, price) — not pixels, so a drawing
 /// stays pinned to the same bars/levels through pan, zoom and timeframe changes.
 
-enum DrawingType { horizontalLine, trendline, fibRetracement }
+enum DrawingType { horizontalLine, trendline, fibRetracement, verticalLine, ray, arrow, rectangle, ellipse }
 
 extension DrawingTypeMeta on DrawingType {
   String get label => switch (this) {
         DrawingType.horizontalLine => 'Horizontal line',
         DrawingType.trendline => 'Trend line',
         DrawingType.fibRetracement => 'Fib retracement',
+        DrawingType.verticalLine => 'Vertical line',
+        DrawingType.ray => 'Ray',
+        DrawingType.arrow => 'Arrow',
+        DrawingType.rectangle => 'Rectangle',
+        DrawingType.ellipse => 'Ellipse',
       };
 
   String get shortLabel => switch (this) {
         DrawingType.horizontalLine => 'H-Line',
         DrawingType.trendline => 'Trend',
         DrawingType.fibRetracement => 'Fib',
+        DrawingType.verticalLine => 'V-Line',
+        DrawingType.ray => 'Ray',
+        DrawingType.arrow => 'Arrow',
+        DrawingType.rectangle => 'Rect',
+        DrawingType.ellipse => 'Ellipse',
       };
 
   /// Number of taps needed to define the object.
-  int get anchorCount => this == DrawingType.horizontalLine ? 1 : 2;
+  int get anchorCount => (this == DrawingType.horizontalLine || this == DrawingType.verticalLine) ? 1 : 2;
 
   int get defaultColor => switch (this) {
         DrawingType.horizontalLine => 0xFFFFB74D,
         DrawingType.trendline => 0xFF42A5F5,
         DrawingType.fibRetracement => 0xFF26A69A,
+        DrawingType.verticalLine => 0xFFFFB74D,
+        DrawingType.ray => 0xFF42A5F5,
+        DrawingType.arrow => 0xFFEF5350,
+        DrawingType.rectangle => 0xFFAB47BC,
+        DrawingType.ellipse => 0xFF26C6DA,
       };
 }
 
@@ -81,6 +96,13 @@ class DrawingObject {
         return 'Trend ${anchors.first.price.toStringAsFixed(digits)} → ${anchors.last.price.toStringAsFixed(digits)}';
       case DrawingType.fibRetracement:
         return 'Fib ${anchors.first.price.toStringAsFixed(digits)} → ${anchors.last.price.toStringAsFixed(digits)}';
+      case DrawingType.verticalLine:
+        return 'Vertical line';
+      case DrawingType.ray:
+      case DrawingType.arrow:
+      case DrawingType.rectangle:
+      case DrawingType.ellipse:
+        return '${type.label} ${anchors.first.price.toStringAsFixed(digits)} → ${anchors.last.price.toStringAsFixed(digits)}';
     }
   }
 

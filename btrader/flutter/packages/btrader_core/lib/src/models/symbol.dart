@@ -22,6 +22,14 @@ class TradeSymbol {
   final int maxSpreadPoints;
   final bool enabled;
 
+  /// Admin-configured trading-session windows (day/open/close, UTC). Empty
+  /// means "no explicit schedule" — [isSymbolTradableNow] then falls back to
+  /// always-open for crypto and the standard forex week for everything else,
+  /// mirroring the trading engine's own `is_symbol_tradable` exactly so the
+  /// portal's BUY/SELL enablement never disagrees with what the engine will
+  /// actually accept or reject.
+  final List<TradingSessionWindow> tradingSessions;
+
   const TradeSymbol({
     required this.id,
     required this.symbol,
@@ -38,6 +46,7 @@ class TradeSymbol {
     this.minSpreadPoints = 0,
     this.maxSpreadPoints = 0,
     required this.enabled,
+    this.tradingSessions = const [],
   });
 
   static double _d(dynamic v) => v == null ? 0 : double.tryParse(v.toString()) ?? 0;
@@ -68,6 +77,7 @@ class TradeSymbol {
           ? (j['maxSpreadPoints'] as num).round()
           : int.tryParse('${j['maxSpreadPoints'] ?? 0}') ?? 0,
       enabled: j['enabled'] ?? true,
+      tradingSessions: TradingSessionWindow.listFromJson(j['tradingSessions']),
     );
   }
 
@@ -122,4 +132,79 @@ class TradeSymbol {
     }
     return p;
   }
+}
+
+/// One admin-configured trading-session window: [day] is 0=Sunday..6=Saturday
+/// (UTC), [open]/[close] are "HH:MM" (UTC). Mirrors the engine's
+/// `SessionWindow` (trading-core-rs/src/sessions.rs) field-for-field.
+class TradingSessionWindow {
+  const TradingSessionWindow({required this.day, required this.open, required this.close});
+  final int day;
+  final String open;
+  final String close;
+
+  static List<TradingSessionWindow> listFromJson(dynamic raw) {
+    if (raw is! List) return const [];
+    final out = <TradingSessionWindow>[];
+    for (final e in raw) {
+      if (e is! Map) continue;
+      final day = e['day'];
+      final open = e['open'];
+      final close = e['close'];
+      if (day is! num || open == null || close == null) continue;
+      out.add(TradingSessionWindow(day: day.toInt(), open: '$open', close: '$close'));
+    }
+    return out;
+  }
+}
+
+int _minutesOfDay(String hhmm) {
+  final parts = hhmm.split(':');
+  final h = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
+  final m = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
+  return h * 60 + m;
+}
+
+bool _isMarketOpen(List<TradingSessionWindow> sessions, DateTime utcNow) {
+  if (sessions.isEmpty) return true;
+  final day = utcNow.weekday % 7; // DateTime: Mon=1..Sun=7 → Sun=0..Sat=6
+  final mins = utcNow.hour * 60 + utcNow.minute;
+  for (final s in sessions) {
+    if (s.day != day) continue;
+    final open = _minutesOfDay(s.open);
+    final close = _minutesOfDay(s.close);
+    if (open <= close) {
+      if (mins >= open && mins < close) return true;
+    } else if (mins >= open || mins < close) {
+      return true; // overnight window (e.g. 22:00 → 06:00)
+    }
+  }
+  return false;
+}
+
+bool _isForexWeekOpen(DateTime utcNow) {
+  final day = utcNow.weekday % 7;
+  final mins = utcNow.hour * 60 + utcNow.minute;
+  const roll = 21 * 60; // 21:00 UTC, the standard FX week open/close roll
+  if (day == 6) return false; // Saturday: always closed
+  if (day == 0 && mins < roll) return false; // Sunday before the week opens
+  if (day == 5 && mins >= roll) return false; // Friday after the week closes
+  return true;
+}
+
+/// Whether [symbol] is tradable right now, evaluated against [utcNow] (pass
+/// the actual current UTC time — never a cached/stale value, so this reflects
+/// the live session boundary the moment it is crossed, no refetch needed).
+///
+/// Precedence — identical to the trading engine's `is_symbol_tradable`:
+///  1. Explicit session windows, if the admin configured any.
+///  2. Otherwise: CRYPTO trades round the clock.
+///  3. Otherwise: the standard forex week (closed all Saturday, plus the
+///     Friday/Sunday 21:00 UTC roll).
+bool isSymbolTradableNow(TradeSymbol symbol, DateTime utcNow) {
+  if (symbol.tradingSessions.isNotEmpty) {
+    return _isMarketOpen(symbol.tradingSessions, utcNow);
+  }
+  if (symbol.klass.toUpperCase() == 'CRYPTO') return true;
+  return _isForexWeekOpen(utcNow);
 }

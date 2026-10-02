@@ -1,3 +1,4 @@
+import '../widgets/auth_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -129,14 +130,26 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
   }
 
-  InputDecoration _dec(String label) => InputDecoration(labelText: label);
+  // Same light, filled field style as the Login page.
+  InputDecoration _dec(String label) => authField(label);
 
   @override
   Widget build(BuildContext context) {
     final countryLabel = _country == null
         ? 'Select country'
         : '${_country!.flag}  ${_country!.name}';
-    return Scaffold(
+    // Always-white page: pin a light theme so typed text / labels / links stay
+    // readable when the app itself is in dark mode.
+    final light = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      colorScheme: ColorScheme.fromSeed(seedColor: _navy, brightness: Brightness.light).copyWith(primary: _navy),
+      textSelectionTheme: const TextSelectionThemeData(cursorColor: _navy),
+      fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+    );
+    return Theme(
+      data: light,
+      child: Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -160,7 +173,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 InkWell(
                   onTap: _pickCountry,
                   child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'Country *'),
+                    decoration: authField('Country *'),
                     child: Text(
                       countryLabel,
                       style: TextStyle(color: _country == null ? Theme.of(context).hintColor : null),
@@ -172,7 +185,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   SizedBox(
                     width: 78,
                     child: InputDecorator(
-                      decoration: const InputDecoration(labelText: ' '),
+                      decoration: authField(' '),
                       child: Text(_country == null ? '+—' : '+${_country!.dial}', textAlign: TextAlign.center),
                     ),
                   ),
@@ -220,6 +233,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

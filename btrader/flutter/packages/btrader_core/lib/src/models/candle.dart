@@ -45,6 +45,18 @@ extension TimeframeApi on Timeframe {
         Timeframe.w1 => '1W',
         Timeframe.mn1 => 'MN',
       };
+  /// MT5 naming, for the chart's timeframe strip (M1 … MN). [label] is unchanged.
+  String get mt5Label => switch (this) {
+        Timeframe.m1 => 'M1',
+        Timeframe.m5 => 'M5',
+        Timeframe.m15 => 'M15',
+        Timeframe.m30 => 'M30',
+        Timeframe.h1 => 'H1',
+        Timeframe.h4 => 'H4',
+        Timeframe.d1 => 'D1',
+        Timeframe.w1 => 'W1',
+        Timeframe.mn1 => 'MN',
+      };
   /// Nominal bar length. W1/MN1 use approximate values (their real boundaries
   /// are calendar-based — see [bucketStart]/[nextBucketStart]).
   int get seconds => switch (this) {
@@ -59,10 +71,14 @@ extension TimeframeApi on Timeframe {
         Timeframe.mn1 => 2629800,
       };
 
-  /// Open time (epoch seconds) of the bar containing [t]. Intraday/daily bars
-  /// align to a fixed grid; W1 aligns to Monday 00:00 UTC and MN1 to the 1st of
-  /// the month 00:00 UTC, matching the gateway's server-side aggregation.
-  int bucketStart(int t) {
+  /// Open time (epoch seconds) of the bar containing [t]. Intraday bars align to a fixed UTC grid;
+  /// W1 aligns to Monday 00:00 UTC and MN1 to the 1st of the month 00:00 UTC, matching the
+  /// gateway's server-side aggregation.
+  ///
+  /// H4 and D1 follow the BROKER's clock ([brokerOffsetSec], from `/market/clock`): the history
+  /// rollup, the MT5 bridge and the live candle engine all put their H4 / D1 boundaries on the
+  /// broker's grid, so the forming bar here must too, or it would overlap the bar beside it.
+  int bucketStart(int t, {int brokerOffsetSec = 0}) {
     switch (this) {
       case Timeframe.w1:
         final d = DateTime.fromMillisecondsSinceEpoch(t * 1000, isUtc: true);
@@ -71,13 +87,17 @@ extension TimeframeApi on Timeframe {
       case Timeframe.mn1:
         final d = DateTime.fromMillisecondsSinceEpoch(t * 1000, isUtc: true);
         return DateTime.utc(d.year, d.month).millisecondsSinceEpoch ~/ 1000;
+      case Timeframe.h4:
+      case Timeframe.d1:
+        if (brokerOffsetSec != 0) return ((t + brokerOffsetSec) ~/ seconds) * seconds - brokerOffsetSec;
+        return (t ~/ seconds) * seconds;
       default:
         return (t ~/ seconds) * seconds;
     }
   }
 
   /// Open time of the bar immediately after the one containing [t].
-  int nextBucketStart(int t) {
+  int nextBucketStart(int t, {int brokerOffsetSec = 0}) {
     switch (this) {
       case Timeframe.w1:
         return bucketStart(t) + 604800;
@@ -86,7 +106,7 @@ extension TimeframeApi on Timeframe {
         final next = d.month == 12 ? DateTime.utc(d.year + 1) : DateTime.utc(d.year, d.month + 1);
         return next.millisecondsSinceEpoch ~/ 1000;
       default:
-        return bucketStart(t) + seconds;
+        return bucketStart(t, brokerOffsetSec: brokerOffsetSec) + seconds;
     }
   }
 }

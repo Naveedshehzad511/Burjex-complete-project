@@ -488,6 +488,33 @@ impl Engine {
         snap: &Snapshot,
         profit: Option<f64>,
     ) {
+        self.publish_after_fill_with(tenant_id, account_id, position_id, kind, snap, profit, None)
+            .await;
+    }
+
+    /// Same as [`Self::publish_after_fill`], with extra fields merged into the position payload
+    /// (an opened position carries its full row so clients need no refetch to show it).
+    pub(crate) async fn publish_after_fill_with(
+        &self,
+        tenant_id: &str,
+        account_id: &str,
+        position_id: &str,
+        kind: &str,
+        snap: &Snapshot,
+        profit: Option<f64>,
+        position_extra: Option<serde_json::Value>,
+    ) {
+        let mut position = json!({
+            "id": position_id,
+            "accountId": account_id,
+            "status": if kind == "closed" { "CLOSED" } else { "OPEN" },
+            "profit": profit,
+        });
+        if let (Some(obj), Some(extra)) = (position.as_object_mut(), position_extra.as_ref().and_then(|v| v.as_object())) {
+            for (k, v) in extra {
+                obj.insert(k.clone(), v.clone());
+            }
+        }
         self.emit(
             tenant_id,
             json!({
@@ -496,12 +523,7 @@ impl Engine {
                 "positionId": position_id,
                 "accountId": account_id,
                 "book": kind,
-                "position": {
-                    "id": position_id,
-                    "accountId": account_id,
-                    "status": if kind == "closed" { "CLOSED" } else { "OPEN" },
-                    "profit": profit,
-                }
+                "position": position,
             }),
         )
         .await;

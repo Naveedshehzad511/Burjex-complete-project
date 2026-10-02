@@ -25,6 +25,7 @@ import { GenericWsAdapter } from './adapters/generic-ws-adapter';
 import { Mt5IngestAdapter, FeedSource } from './adapters/mt5-ingest-adapter';
 import { NullAdapter } from './adapters/null-adapter';
 import { CandleEngine, CandleUpdate, DEFAULT_CHART_PRICE, bucketStart } from './candles/engine';
+import { selectFlushRows } from './candles/flush';
 import { TransformEpochs, groupTenants, transformCandle } from './candles/pricing';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6380';
@@ -168,9 +169,19 @@ function tickBucketSeconds(tsMs: number): number {
  * ever sees `CanonicalTick`, so MT5, FIX, an LP or a custom bridge all yield
  * identical bars from identical normalized input.
  */
+/**
+ * Broker UTC offset (seconds). Same variable the gateway's history rollup and the MT5 bridge use, so
+ * the live H4 / D1 bars sit on the same grid as the history behind them.
+ */
+const BROKER_UTC_OFFSET_SEC = (() => {
+  const n = parseInt(process.env.BROKER_UTC_OFFSET_SEC ?? '', 10);
+  return Number.isFinite(n) ? n : 0;
+})();
+
 const candleEngine = new CandleEngine({
   timeframes: CANDLE_TFS,
   chartPrice: DEFAULT_CHART_PRICE, // BID — the B-Trader product specification
+  brokerOffsetSec: BROKER_UTC_OFFSET_SEC,
 });
 
 /**
@@ -204,7 +215,7 @@ async function resumeCandleEngine(): Promise<void> {
   const nowSec = Math.floor(Date.now() / 1000);
   // Only the CURRENT bucket per timeframe is still forming; anything older is
   // finished history and belongs in the store, not the active set.
-  const wanted = CANDLE_TFS.map((tf) => ({ tf, t: bucketStart(nowSec, tf) }));
+  const wanted = CANDLE_TFS.map((tf) => ({ tf, t: bucketStart(nowSec, tf, BROKER_UTC_OFFSET_SEC) }));
   let restored = 0;
   try {
     for (const { tf, t } of wanted) {
@@ -496,9 +507,14 @@ async function flushCandlesOnce(): Promise<void> {
   const tipSnapshots = new Map<string, PersistRow>();
 
   try {
-    // Priority: MT5 bridge history (source of truth) → tick-closed → forming tips.
-    // Deduplicate by symbol|tf|t so a later tick-closed bar cannot clobber MT5.
-    const seen = new Set<string>();
+    // Priority: MT5 bridge history for buckets before the engine's era → engine-closed bars →
+    // gap-fill bridge rows → forming tips. See candles/flush.ts for why a closed bar must never
+    // lose its slot to a gap-fill row.
+    const sel = selectFlushRows(pendingHistory, pendingClosed, CANDLE_MAX_PER_FLUSH);
+    batch.push(...sel.batch);
+    historyInBatch.push(...sel.history);
+    closedInBatch.push(...sel.closed);
+    const seen = sel.seen;
     const pushUnique = (row: PersistRow, into: PersistRow[]) => {
       const k = `${row.symbol}|${row.tf}|${row.t}`;
       if (seen.has(k)) return false;
@@ -507,22 +523,6 @@ async function flushCandlesOnce(): Promise<void> {
       batch.push(row);
       return true;
     };
-
-    while (pendingHistory.length > 0 && batch.length < CANDLE_MAX_PER_FLUSH) {
-      const row = pendingHistory.shift()!;
-      if (pushUnique(row, historyInBatch) && mt5ChartSymbols.has(row.symbol)) {
-        // Drop any queued tick-closed duplicate for the same bar.
-      }
-    }
-    while (pendingClosed.length > 0 && batch.length < CANDLE_MAX_PER_FLUSH) {
-      const row = pendingClosed.shift()!;
-      // Canonical bars are authoritative for every provider. This used to skip
-      // MT5 symbols so ChartRequest owned their OHLC; under the canonical
-      // architecture the engine owns live bars and bridge history is confined
-      // to buckets before `canonicalSince` (see persistBridgeCandles), so the
-      // two can no longer collide and the skip would only drop real bars.
-      pushUnique(row, closedInBatch);
-    }
 
     if (batch.length < CANDLE_MAX_PER_FLUSH) {
       for (const key of [...dirty]) {

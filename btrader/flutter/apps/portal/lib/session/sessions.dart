@@ -113,8 +113,11 @@ class _SecureBox {
 
 class ManagedAccountsController extends StateNotifier<List<ManagedAccount>> {
   ManagedAccountsController() : super(const []) {
-    _load();
+    loaded = _load();
   }
+
+  /// Completes once the saved list has been read from storage.
+  late final Future<void> loaded;
 
   Future<void> _load() async {
     try {
@@ -157,9 +160,71 @@ class ManagedAccountsController extends StateNotifier<List<ManagedAccount>> {
 final managedAccountsProvider =
     StateNotifierProvider<ManagedAccountsController, List<ManagedAccount>>((_) => ManagedAccountsController());
 
+/// The account Quotes / Chart / Trade / History were last working on, kept across a
+/// page refresh / app restart. Only the account number and kind — never a password or
+/// token (a managed account reopens through its own saved refresh token).
+class LastTrading {
+  const LastTrading({required this.login, required this.managed, required this.owners});
+  final String login;
+  final bool managed;
+
+  /// The signed-in user's own account numbers when this was saved. It is only
+  /// restored for a user who owns at least one of them, so it can never carry
+  /// over to someone else who signs in on the same device.
+  final List<String> owners;
+
+  static const _key = 'bx_last_trading_v1';
+
+  static Future<LastTrading?> read() async {
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(_key);
+      if (raw == null || raw.isEmpty) return null;
+      final j = (jsonDecode(raw) as Map).cast<String, dynamic>();
+      return LastTrading(
+        login: '${j['login']}',
+        managed: j['managed'] == true,
+        owners: [for (final o in (j['owners'] as List? ?? const [])) '$o'],
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> write(String login, {required bool managed, required List<String> owners}) async {
+    try {
+      await (await SharedPreferences.getInstance())
+          .setString(_key, jsonEncode({'login': login, 'managed': managed, 'owners': owners}));
+    } catch (_) {/* not remembered; the session itself is fine */}
+  }
+
+  static Future<void> clear() async {
+    try {
+      await (await SharedPreferences.getInstance()).remove(_key);
+    } catch (_) {}
+  }
+
+  bool belongsTo(Iterable<String> ownLogins) => owners.any(ownLogins.contains);
+}
+
 class TradingSessionController extends StateNotifier<ActiveTrading> {
-  TradingSessionController(this._ref) : super(const ActiveTrading());
+  TradingSessionController(this._ref) : super(const ActiveTrading()) {
+    // Keep the signed-in user's own account numbers at hand (the dashboard provider
+    // is auto-dispose; this also keeps it alive while a session exists).
+    _ref.listen<AsyncValue<CrmDashboard>>(crmDashboardProvider, (_, next) {
+      final accts = next.valueOrNull?.accounts;
+      if (accts != null) _owners = [for (final a in accts) a.login];
+    }, fireImmediately: true);
+  }
   final Ref _ref;
+
+  /// Own CRM account numbers of the signed-in user (tags what is remembered).
+  List<String> _owners = const [];
+
+  void _remember(String login, {required bool managed}) {
+    final owners = _owners;
+    if (owners.isEmpty) return;
+    unawaited(LastTrading.write(login, managed: managed, owners: owners));
+  }
 
   ApiClient get _api => _ref.read(apiClientProvider);
 
@@ -188,7 +253,13 @@ class TradingSessionController extends StateNotifier<ActiveTrading> {
 
   /// Open one of the user's OWN accounts (from the CRM list) for trading.
   /// The trading credentials come from the CRM — the user never types them.
-  Future<void> openOwn(String login) => _run(() async {
+  Future<void> openOwn(String login) {
+    // Show "switching" at once, so a screen opened right after this call never
+    // shows the previous (e.g. read-only) account while the login is in flight.
+    if (!(state.login == login && state.ready && !state.managed)) {
+      state = ActiveTrading(login: login, loading: true, holderName: state.holderName);
+    }
+    return _run(() async {
         if (state.login == login && state.ready && !state.managed) return;
         state = ActiveTrading(login: login, loading: true, holderName: state.holderName);
         try {
@@ -206,10 +277,12 @@ class TradingSessionController extends StateNotifier<ActiveTrading> {
             readonly: tokens['readonly'] == true,
             holderName: '${tokens['holderName'] ?? ''}',
           );
+          _remember(login, managed: false);
         } catch (e) {
           state = ActiveTrading(login: login, error: e is DioException ? _gwMessage(e, crmMessage(e)) : 'Could not open the account.');
         }
       });
+  }
 
   /// "+" flow: sign into any trading account with its trading OR investor password.
   /// Returns null on success, otherwise the message to show in the dialog.
@@ -241,6 +314,7 @@ class TradingSessionController extends StateNotifier<ActiveTrading> {
           managed: true,
           holderName: entry.holderName,
         );
+        _remember(entry.login, managed: true);
       } catch (e) {
         state = prev;
         result = _gwMessage(e, 'Login failed. Please try again.');
@@ -268,6 +342,7 @@ class TradingSessionController extends StateNotifier<ActiveTrading> {
           managed: true,
           holderName: a.holderName,
         );
+        _remember(a.login, managed: true);
       } catch (e) {
         state = prev;
         final expired = e is DioException && e.response?.statusCode == 401;
@@ -280,7 +355,11 @@ class TradingSessionController extends StateNotifier<ActiveTrading> {
     return result;
   }
 
-  void reset() => state = const ActiveTrading();
+  /// Sign-out: forget the session and what was remembered for the next start.
+  void reset() {
+    state = const ActiveTrading();
+    unawaited(LastTrading.clear());
+  }
 }
 
 final tradingSessionProvider =

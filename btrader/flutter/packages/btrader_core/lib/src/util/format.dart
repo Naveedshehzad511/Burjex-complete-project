@@ -5,6 +5,9 @@ final _dt = DateFormat('MMM d, HH:mm');
 final _hms = DateFormat('HH:mm:ss');
 
 String money(num v) => _money.format(v);
+
+/// MT5 groups thousands with a space ("2 918.89"), not a comma.
+String mt5Money(num v) => money(v).replaceAll(',', ' ');
 String price(num v, int digits) => v.toStringAsFixed(digits);
 String pct(num v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(2)}%';
 String dateTime(DateTime d) => _dt.format(d.toLocal());

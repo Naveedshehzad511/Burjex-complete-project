@@ -98,6 +98,13 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
     final accent = side == 'BUY' ? tc.buy : tc.sell;
     final vol = _volume;
     final sym = _symbol;
+    TradeSymbol? spec;
+    for (final s in ref.read(symbolsProvider).valueOrNull ?? const <TradeSymbol>[]) {
+      if (s.symbol == sym) {
+        spec = s;
+        break;
+      }
+    }
     final req = PlaceOrderRequest(
       accountId: accountId,
       symbol: _symbol,
@@ -119,9 +126,22 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
       final res = await ref.read(apiClientProvider).post('/orders', req.toJson());
       if (res['accepted'] == true) {
         SoundService.instance.orderPlaced('${res['orderId'] ?? ''}');
-        ref.invalidate(accountsProvider);
-        ref.invalidate(openPositionsProvider);
-        ref.read(pendingOrdersProvider.notifier).reload();
+        // Show the trade the backend just confirmed, then reconcile once (coalesced across a
+        // burst of one-click orders) instead of restarting a refetch per order.
+        final shown = ref.read(openPositionsProvider.notifier).addConfirmedFill(
+              res,
+              accountId: accountId,
+              symbol: sym,
+              digits: spec?.digits ?? 5,
+              side: side,
+              volume: vol,
+              slPrice: req.slPrice,
+              tpPrice: req.tpPrice,
+            );
+        ref.read(accountsRefreshProvider).request();
+        ref.read(positionsRefreshProvider).request();
+        // A working order lands in the pending book; a market fill does not touch it.
+        if (!shown) ref.read(pendingOrdersProvider.notifier).reload();
         ToastHost.show('$side $sym  ${vol.toStringAsFixed(2)}', 'Filled @ ${res['fillPrice'] ?? '—'}', accent: accent);
       } else {
         SoundService.instance.error();

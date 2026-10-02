@@ -37,6 +37,16 @@ class PlaceOrderRequest {
   final double? slPrice;
   final double? tpPrice;
   final bool oneClick;
+
+  /// GTC | IOC | FOK | DAY | GTD — the gateway's `PlaceOrderDto.timeInForce`.
+  final String? timeInForce;
+
+  /// Required when [timeInForce] is `GTD`; ISO-8601, sent as `expiresAt`.
+  final DateTime? expiresAt;
+
+  /// Free-text note stored with the order (`PlaceOrderDto.comment`).
+  final String? comment;
+
   /// Idempotency key. Generated if omitted so a double-tap cannot open two trades.
   final String? clientOrderId;
 
@@ -51,6 +61,9 @@ class PlaceOrderRequest {
     this.slPrice,
     this.tpPrice,
     this.oneClick = false,
+    this.timeInForce,
+    this.expiresAt,
+    this.comment,
     this.clientOrderId,
   });
 
@@ -65,6 +78,9 @@ class PlaceOrderRequest {
         if (slPrice != null) 'slPrice': slPrice,
         if (tpPrice != null) 'tpPrice': tpPrice,
         'oneClick': oneClick,
+        if (timeInForce != null) 'timeInForce': timeInForce,
+        if (expiresAt != null) 'expiresAt': expiresAt!.toUtc().toIso8601String(),
+        if (comment != null && comment!.trim().isNotEmpty) 'comment': comment!.trim(),
         'clientOrderId': clientOrderId ?? _clientOrderId(),
       };
 }

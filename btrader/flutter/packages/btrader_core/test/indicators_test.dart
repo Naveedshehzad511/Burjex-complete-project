@@ -251,6 +251,23 @@ void main() {
       expect(DrawingType.horizontalLine.anchorCount, 1);
       expect(DrawingType.trendline.anchorCount, 2);
       expect(DrawingType.fibRetracement.anchorCount, 2);
+      expect(DrawingType.verticalLine.anchorCount, 1);
+      for (final t in [DrawingType.ray, DrawingType.arrow, DrawingType.rectangle, DrawingType.ellipse]) {
+        expect(t.anchorCount, 2);
+      }
+    });
+
+    test('new tool types survive a JSON round-trip', () {
+      for (final t in [DrawingType.verticalLine, DrawingType.ray, DrawingType.arrow, DrawingType.rectangle, DrawingType.ellipse]) {
+        final d = DrawingObject(
+          id: 'x',
+          symbol: 'EURUSD',
+          type: t,
+          anchors: [const DrawingAnchor(100, 1.1), const DrawingAnchor(200, 1.2)].take(t.anchorCount).toList(),
+          colorArgb: t.defaultColor,
+        );
+        expect(DrawingObject.fromJson(d.toJson()).type, t);
+      }
     });
   });
 

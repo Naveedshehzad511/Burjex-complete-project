@@ -44,8 +44,8 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
     getToken: () => store.accessToken,
     onAuthExpired: () => api.refreshAccessToken(),
     onReconnected: () {
-      ref.invalidate(openPositionsProvider);
-      ref.invalidate(accountsProvider);
+      ref.read(positionsRefreshProvider).request();
+      ref.read(accountsRefreshProvider).request();
       Future.microtask(() => ref.read(socketEpochProvider.notifier).state++);
     },
   );
@@ -69,29 +69,38 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
           ref.read(livePositionNotifierProvider.notifier).forget(id);
           ref.read(closedPositionIdsProvider.notifier).add(id);
           Future.microtask(() {
-            ref.invalidate(openPositionsProvider);
-            ref.invalidate(accountsProvider);
+            ref.read(positionsRefreshProvider).request();
+            ref.read(accountsRefreshProvider).request();
             ref.read(tradeEventEpochProvider.notifier).state++;
           });
           break;
         }
         if (data['stale'] == true) {
           Future.microtask(() {
-            ref.invalidate(openPositionsProvider);
-            ref.invalidate(accountsProvider);
+            ref.read(positionsRefreshProvider).request();
+            ref.read(accountsRefreshProvider).request();
           });
           break;
         }
         final sym = '${data['symbol'] ?? ''}';
         final q = sym.isEmpty ? null : ref.read(quotesProvider)[sym];
-        // A position this session has not seen yet is a NEW trade: refetch the
-        // list right away so Chart / Trade / PnL show it without a manual refresh.
+        // A position this session has not seen yet is a NEW trade. When the engine's `opened`
+        // push carries the confirmed row, show it right away (no refetch needed to see it);
+        // either way reconcile the list against the server, coalesced across a burst.
         final isNew = id.isNotEmpty && !ref.read(livePositionNotifierProvider).pl.containsKey(id);
-        ref.read(livePositionNotifierProvider.notifier).set(data, fallbackQuote: q);
+        final opened = Position.tryFromOpenedEvent(data);
+        if (opened != null) {
+          ref.read(openPositionsProvider.notifier).addConfirmed(opened);
+        }
+        // An `opened` push has no P/L yet: leave the figure to the live quote estimate until the
+        // first live snapshot arrives, instead of pinning it at 0.00.
+        if (data['opened'] != true || data['profit'] != null) {
+          ref.read(livePositionNotifierProvider.notifier).set(data, fallbackQuote: q);
+        }
         if (isNew) {
           Future.microtask(() {
-            ref.invalidate(openPositionsProvider);
-            ref.invalidate(accountsProvider);
+            ref.read(positionsRefreshProvider).request();
+            ref.read(accountsRefreshProvider).request();
           });
         }
       case OrderFrame(:final data):
@@ -99,8 +108,8 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
           final status = '${data['status'] ?? ''}'.toUpperCase();
           final prev = ref.read(lastOrderEventProvider);
           ref.read(lastOrderEventProvider.notifier).state = OrderEvent((prev?.seq ?? 0) + 1, data);
-          ref.invalidate(openPositionsProvider);
-          ref.invalidate(accountsProvider);
+          ref.read(positionsRefreshProvider).request();
+          ref.read(accountsRefreshProvider).request();
           // A fill opens a position and adds history; other terminal states end a
           // working order. Either way history views should refetch.
           if (status == 'FILLED' || status == 'CANCELLED' || status == 'REJECTED' || status == 'EXPIRED') {

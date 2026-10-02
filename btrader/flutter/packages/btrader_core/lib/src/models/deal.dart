@@ -15,6 +15,13 @@ class Deal {
   final int digits;
   final double? openPrice; // entry price of the related position
   final double amount; // signed balance change (deposits +, withdrawals -)
+  // Enriched (trade rows only) — the related position's protective levels and
+  // when it was opened, plus its id shown as the MT5-style ticket.
+  final double? slPrice;
+  final double? tpPrice;
+  final DateTime? openedAt;
+  final String? positionId;
+  final String? ticket;
 
   const Deal({
     required this.id,
@@ -32,6 +39,11 @@ class Deal {
     this.digits = 5,
     this.openPrice,
     this.amount = 0,
+    this.slPrice,
+    this.tpPrice,
+    this.openedAt,
+    this.positionId,
+    this.ticket,
   });
 
   static double _d(dynamic v) => v == null ? 0 : double.tryParse(v.toString()) ?? 0;
@@ -59,6 +71,11 @@ class Deal {
       digits: (j['digits'] is num) ? (j['digits'] as num).toInt() : 5,
       openPrice: _dn(j['openPrice']),
       amount: _d(j['amount']),
+      slPrice: _dn(j['slPrice']),
+      tpPrice: _dn(j['tpPrice']),
+      openedAt: j['openedAt'] == null ? null : DateTime.tryParse('${j['openedAt']}'),
+      positionId: j['positionId'] as String?,
+      ticket: j['ticket'] as String?,
     );
   }
 }

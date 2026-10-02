@@ -201,7 +201,14 @@ void main() {
   });
 
   group('PendingPanel', () {
-    Future<void> pump(WidgetTester t, ChartEdit e, {List<String>? log, VoidCallback? onApply}) async {
+    Future<void> pump(
+      WidgetTester t,
+      ChartEdit e, {
+      List<String>? log,
+      VoidCallback? onApply,
+      bool expanded = true,
+      ValueChanged<bool>? onExpandedChanged,
+    }) async {
       final theme = AppTheme.light(Branding.fallback);
       await t.pumpWidget(MaterialApp(
         theme: theme,
@@ -217,10 +224,14 @@ void main() {
               lotStep: 0.01,
               busy: false,
               serverError: null,
+              expanded: expanded,
+              onExpandedChanged: onExpandedChanged,
               onChanged: () {},
               onPickType: (ty) => log?.add('type:${ty.api}'),
               onAddSl: () => log?.add('addsl'),
               onAddTp: () => log?.add('addtp'),
+              onRemoveSl: () => log?.add('removesl'),
+              onRemoveTp: () => log?.add('removetp'),
               onApply: onApply ?? () {},
               onClose: () {},
               onCancelOrder: () => log?.add('cancel'),
@@ -230,9 +241,9 @@ void main() {
       ));
     }
 
-    testWidgets('shows type, entry, SL, TP, volume and the Place button', (t) async {
+    testWidgets('shows symbol, entry, SL, TP, volume and the Place button', (t) async {
       await pump(t, ChartEdit.draft(type: OrderType.buyLimit, volume: 0.1, entry: 99));
-      expect(find.text('New pending order · BTCUSD'), findsOneWidget);
+      expect(find.text('BTCUSD'), findsOneWidget);
       for (final l in ['Buy Limit', 'Sell Limit', 'Buy Stop', 'Sell Stop']) {
         expect(find.text(l), findsOneWidget);
       }
@@ -245,13 +256,16 @@ void main() {
       final log = <String>[];
       final e = ChartEdit.draft(type: OrderType.buyLimit, volume: 0.10, entry: 99);
       await pump(t, e, log: log);
+      await t.ensureVisible(find.text('Sell Stop')); // the order-type grid
       await t.tap(find.text('Sell Stop'));
       expect(log, ['type:SELL_STOP']);
-      await t.tap(find.byIcon(Icons.add).first);
+      await t.ensureVisible(find.byKey(const ValueKey('volume-plus')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('volume-plus')));
       await t.pump();
       expect(e.volume, closeTo(0.11, 1e-9));
-      await t.tap(find.byIcon(Icons.remove).first);
-      await t.tap(find.byIcon(Icons.remove).first);
+      await t.tap(find.byKey(const ValueKey('volume-minus')));
+      await t.tap(find.byKey(const ValueKey('volume-minus')));
       expect(e.volume, closeTo(0.09, 1e-9));
     });
 
@@ -260,7 +274,7 @@ void main() {
       final e = ChartEdit.draft(type: OrderType.buyLimit, volume: 0.10, entry: 105); // above Ask
       await pump(t, e, onApply: () => applied++);
       expect(find.text('Must be below the Ask'), findsOneWidget);
-      final btn = t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Place Buy Limit 0.10'));
+      final btn = t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Place Buy Limit 0.10').first);
       expect(btn.onPressed, isNull, reason: 'Place must be disabled while the entry is invalid');
       expect(applied, 0);
     });
@@ -268,7 +282,8 @@ void main() {
     testWidgets('valid values enable Place', (t) async {
       var applied = 0;
       await pump(t, ChartEdit.draft(type: OrderType.buyLimit, volume: 0.10, entry: 99), onApply: () => applied++);
-      await t.tap(find.text('Place Buy Limit 0.10'));
+      await t.ensureVisible(find.text('Place Buy Limit 0.10').first);
+      await t.tap(find.text('Place Buy Limit 0.10').first);
       expect(applied, 1);
     });
 
@@ -284,13 +299,86 @@ void main() {
       expect(find.text('110.00'), findsOneWidget);
     });
 
-    testWidgets('clearing SL removes it from the edit', (t) async {
+    testWidgets('the × on an SL field asks the owner to remove it (the panel does not mutate the edit)', (t) async {
+      final log = <String>[];
       final e = ChartEdit.order(id: 'o1', orderType: 'BUY_LIMIT', side: 'BUY', entry: 99, sl: 95, tp: 110, volume: 0.2);
-      await pump(t, e);
+      await pump(t, e, log: log);
       await t.tap(find.byTooltip('Clear Stop loss'));
       await t.pump();
-      expect(e.sl, isNull);
+      expect(log, ['removesl']);
+      expect(e.sl, 95, reason: 'the owner removes it (and rolls back if the backend refuses)');
       expect(e.tp, 110);
+    });
+
+    testWidgets('collapsed by default: MT5\'s minimised bar — symbol, SL/TP, type row and Place', (t) async {
+      final e = ChartEdit.draft(type: OrderType.buyLimit, volume: 0.10, entry: 99);
+      await pump(t, e, expanded: false);
+      expect(find.byKey(const ValueKey('panel-handle')), findsOneWidget);
+      expect(find.text('BTCUSD'), findsOneWidget);
+      expect(find.byKey(const ValueKey('circle-SL')), findsOneWidget);
+      expect(find.byKey(const ValueKey('circle-TP')), findsOneWidget);
+      expect(find.byKey(const ValueKey('panel-toggle')), findsOneWidget);
+      expect(find.text('Buy Limit'), findsOneWidget); // the horizontal type row
+      expect(find.text('Place Buy Limit 0.10'), findsOneWidget);
+      // The full ticket's fields stay out of the way until expanded — the chart
+      // keeps as much room as possible while collapsed.
+      expect(find.widgetWithText(TextField, 'Entry price'), findsNothing);
+      expect(find.text('Volume'), findsNothing);
+      expect(find.byKey(const ValueKey('add-stop-levels')), findsNothing);
+      expect(find.text('Expiration'), findsNothing);
+      expect(find.text('Comment'), findsNothing);
+    });
+
+    testWidgets('tapping SL / TP in the collapsed bar while unset adds the chart line and stays compact', (t) async {
+      final expandedLog = <bool>[];
+      final log = <String>[];
+      final e = ChartEdit.draft(type: OrderType.buyLimit, volume: 0.10, entry: 99);
+      await pump(t, e, log: log, expanded: false, onExpandedChanged: expandedLog.add);
+      await t.tap(find.byKey(const ValueKey('circle-SL')));
+      await t.tap(find.byKey(const ValueKey('circle-TP')));
+      expect(log, ['addsl', 'addtp']);
+      expect(expandedLog, isEmpty, reason: 'the panel stays collapsed so the line can be dragged on the chart');
+    });
+
+    testWidgets('once SL / TP are set, tapping them in the collapsed bar removes them (toggle)', (t) async {
+      final expandedLog = <bool>[];
+      final log = <String>[];
+      final e = ChartEdit.draft(type: OrderType.buyLimit, volume: 0.10, entry: 99)
+        ..sl = 98
+        ..tp = 101;
+      await pump(t, e, log: log, expanded: false, onExpandedChanged: expandedLog.add);
+      await t.tap(find.byKey(const ValueKey('circle-SL')));
+      await t.tap(find.byKey(const ValueKey('circle-TP')));
+      expect(log, ['removesl', 'removetp'], reason: 'no duplicate line is added; a set level is removed');
+      expect(expandedLog, isEmpty);
+    });
+
+    testWidgets('tapping the toggle expands; the same edit is shown, not a copy', (t) async {
+      final expandedLog = <bool>[];
+      final e = ChartEdit.draft(type: OrderType.buyLimit, volume: 0.10, entry: 99);
+      await pump(t, e, expanded: false, onExpandedChanged: expandedLog.add);
+      await t.tap(find.byKey(const ValueKey('panel-toggle')));
+      expect(expandedLog, [true]);
+    });
+
+    testWidgets('Add Stop Levels reveals the SL/TP fields in place (expanded ticket)', (t) async {
+      final e = ChartEdit.draft(type: OrderType.buyLimit, volume: 0.10, entry: 99);
+      await pump(t, e); // expanded: true (default)
+      expect(find.byTooltip('Add Stop loss line'), findsNothing);
+      await t.ensureVisible(find.byKey(const ValueKey('add-stop-levels')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('add-stop-levels')));
+      await t.pump();
+      expect(find.byTooltip('Add Stop loss line'), findsOneWidget);
+      expect(find.byTooltip('Add Take profit line'), findsOneWidget);
+      expect(find.byKey(const ValueKey('add-stop-levels')), findsNothing);
+    });
+
+    testWidgets('dragging an SL line onto the chart reveals the field even without tapping Add Stop Levels', (t) async {
+      final e = ChartEdit.draft(type: OrderType.buyLimit, volume: 0.10, entry: 99)..sl = 95;
+      await pump(t, e); // expanded: true (default)
+      expect(find.byKey(const ValueKey('add-stop-levels')), findsNothing);
+      expect(find.text('95.00'), findsOneWidget);
     });
   });
 }

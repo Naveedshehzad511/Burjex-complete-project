@@ -67,6 +67,24 @@ class _ManageAccountDialogState extends ConsumerState<_ManageAccountDialog> {
     }
   }
 
+  Future<void> _openOwn(String login) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    await ref.read(tradingSessionProvider.notifier).openOwn(login);
+    if (!mounted) return;
+    final s = ref.read(tradingSessionProvider);
+    if (s.error == null) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() {
+        _busy = false;
+        _error = s.error;
+      });
+    }
+  }
+
   Future<void> _openSaved(ManagedAccount a) async {
     setState(() {
       _busy = true;
@@ -88,6 +106,7 @@ class _ManageAccountDialogState extends ConsumerState<_ManageAccountDialog> {
   Widget build(BuildContext context) {
     final saved = ref.watch(managedAccountsProvider);
     final active = ref.watch(tradingSessionProvider);
+    final own = (ref.watch(crmDashboardProvider).valueOrNull?.accounts ?? const <CrmAccount>[]).where((a) => a.tradingEnabled).toList();
     return Dialog(
       backgroundColor: Theme.of(context).brightness == Brightness.dark ? null : const Color(0xFFEFF1F6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
@@ -118,6 +137,32 @@ class _ManageAccountDialogState extends ConsumerState<_ManageAccountDialog> {
             if (_error != null) ...[const SizedBox(height: 12), ErrorBox(_error!)],
             const SizedBox(height: 16),
             FilledButton(onPressed: _busy ? null : _login, style: navyButton(), child: Text(_busy ? 'Signing in…' : 'Login')),
+            // The user's own accounts: one tap back to full trading access.
+            if (own.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              const Text('My accounts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              for (final a in own)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: active.login == a.login && !active.managed ? kNavy : Theme.of(context).dividerColor, width: active.login == a.login && !active.managed ? 1.6 : 1),
+                  ),
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: ListTile(
+                      key: ValueKey('own-${a.login}'),
+                      dense: true,
+                      onTap: _busy ? null : () => _openOwn(a.login),
+                      title: Text('My account #${a.login}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                      subtitle: Text('${a.isDemo ? 'Demo' : 'Real'}  ·  Full access'),
+                      trailing: active.login == a.login && !active.managed ? const Icon(Icons.check, color: kNavy) : null,
+                    ),
+                  ),
+                ),
+            ],
             if (saved.isNotEmpty) ...[
               const SizedBox(height: 22),
               const Text('Saved accounts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
@@ -130,18 +175,21 @@ class _ManageAccountDialogState extends ConsumerState<_ManageAccountDialog> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: active.login == a.login && active.managed ? kNavy : Theme.of(context).dividerColor, width: active.login == a.login && active.managed ? 1.6 : 1),
                   ),
-                  child: ListTile(
-                    dense: true,
-                    onTap: _busy ? null : () => _openSaved(a),
-                    title: Row(children: [
-                      Flexible(child: Text(a.holderName.isEmpty ? 'Account' : a.holderName, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15))),
-                      if (a.readonly) const InvestorChip(),
-                    ]),
-                    subtitle: Text('Account: ${a.login}  ·  Balance: ${a.balance.toStringAsFixed(2)}${a.isDemo ? '  ·  Demo' : ''}'),
-                    trailing: IconButton(
-                      tooltip: 'Remove',
-                      icon: const Icon(Icons.close, size: 18),
-                      onPressed: _busy ? null : () => ref.read(managedAccountsProvider.notifier).remove(a.login),
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: ListTile(
+                      dense: true,
+                      onTap: _busy ? null : () => _openSaved(a),
+                      title: Row(children: [
+                        Flexible(child: Text(a.holderName.isEmpty ? 'Account' : a.holderName, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15))),
+                        if (a.readonly) const InvestorChip(),
+                      ]),
+                      subtitle: Text('Account: ${a.login}  ·  Balance: ${a.balance.toStringAsFixed(2)}${a.isDemo ? '  ·  Demo' : ''}'),
+                      trailing: IconButton(
+                        tooltip: 'Remove',
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: _busy ? null : () => ref.read(managedAccountsProvider.notifier).remove(a.login),
+                      ),
                     ),
                   ),
                 ),
@@ -171,7 +219,10 @@ class ActiveAccountBar extends ConsumerWidget {
     final s = ref.watch(tradingSessionProvider);
     final own = ref.watch(crmDashboardProvider).valueOrNull?.accounts ?? const <CrmAccount>[];
     if (s.login == null && !s.loading && s.error == null) return const SizedBox.shrink();
-    if (onlyWhenSpecial && !(s.managed || s.readonly || s.loading || s.error != null)) return const SizedBox.shrink();
+    // The "Opening account…" loading state is deliberately not shown in the compact bar (chart /
+    // dashboard): after a refresh it flashed over the chart while the session restored. Errors,
+    // read-only and managed sessions still show.
+    if (onlyWhenSpecial && !(s.managed || s.readonly || s.error != null)) return const SizedBox.shrink();
     return Container(
       margin: EdgeInsets.fromLTRB(16, compact ? 4 : 8, 16, 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -222,6 +273,33 @@ class ActiveAccountBar extends ConsumerWidget {
               const PopupMenuItem(value: '__manage', child: Text('Managed accounts…')),
             ],
           ),
+      ]),
+    );
+  }
+}
+
+/// Home: while Quotes / Chart / Trade / History are on another client's account,
+/// say which one — Home itself always stays the signed-in user's own dashboard.
+class ViewingOtherAccountNotice extends ConsumerWidget {
+  const ViewingOtherAccountNotice({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(tradingSessionProvider);
+    if (!s.managed || s.login == null) return const SizedBox.shrink();
+    final who = '#${s.login}${s.holderName.isNotEmpty ? ' · ${s.holderName}' : ''}';
+    final text = s.readonly
+        ? 'Quotes, Chart, Trade and History are showing $who (Investor, read-only). Tap Trade on your account below to trade.'
+        : 'Quotes, Chart, Trade and History are showing $who. Tap Trade on your account below to switch back.';
+    return Container(
+      key: const ValueKey('viewing-other-account'),
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(color: s.readonly ? _kInvestorBg : const Color(0x141652F0), borderRadius: BorderRadius.circular(12)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(s.readonly ? Icons.visibility_outlined : Icons.swap_horiz, size: 18, color: s.readonly ? _kInvestorFg : kNavy),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: TextStyle(fontSize: 13, height: 1.35, color: s.readonly ? _kInvestorFg : kNavy))),
       ]),
     );
   }

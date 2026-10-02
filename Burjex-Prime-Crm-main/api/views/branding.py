@@ -9,7 +9,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from admin_panel.branding_assets import resolve_branding_context
-from admin_panel.models import OrganizationProfileSettings
+from admin_panel.models import OnboardingSlide, OrganizationProfileSettings
 from api.responses import success_response
 
 
@@ -117,4 +117,45 @@ class BrandingAPIView(APIView):
                 "primary_color": ctx.get("crm_primary_color") or "#002D58",
             },
             message="Branding retrieved successfully.",
+        )
+
+
+class OnboardingSlidesAPIView(APIView):
+    """Public landing-carousel slides for the client app (System Management → Onboarding slides).
+
+    Returns only active slides with an image, ordered by `sort_order`. Image URLs carry a
+    `?v=<updated_at>` suffix so a replaced image is never served from a stale cache. When the
+    table is empty (or the migration has not run yet) the list is empty and the app falls
+    back to its bundled artwork.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    #: Seconds the app waits before auto-advancing; kept server-side so it can change without a release.
+    INTERVAL_SECONDS = 3
+
+    def get(self, request):
+        slides = []
+        try:
+            for s in OnboardingSlide.objects.filter(is_active=True).exclude(image="").order_by("sort_order", "id"):
+                url = _field_url(s.image)
+                if not url:
+                    continue
+                version = int(s.updated_at.timestamp()) if s.updated_at else 1
+                url = _abs(request, url)
+                slides.append(
+                    {
+                        "id": s.pk,
+                        "title": s.title,
+                        "description": s.description,
+                        "image_url": f"{url}{'&' if '?' in url else '?'}v={version}",
+                        "sort_order": s.sort_order,
+                    }
+                )
+        except Exception:
+            slides = []
+        return success_response(
+            {"slides": slides, "interval_seconds": self.INTERVAL_SECONDS},
+            message="Onboarding slides retrieved successfully.",
         )

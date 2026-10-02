@@ -3265,3 +3265,30 @@ class StabilityProfile(models.Model):
     def get_solo(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class OnboardingSlide(models.Model):
+    """One slide of the client app's landing carousel (shown before sign-in).
+
+    Managed in the CRM; the app reads the active slides in `sort_order` from
+    `GET /api/v1/branding/slides/` and falls back to its bundled artwork when none exist.
+    """
+
+    title = models.CharField(max_length=120, blank=True, default="")
+    description = models.CharField(max_length=300, blank=True, default="")
+    image = models.ImageField(
+        upload_to="branding/onboarding",
+        help_text="Portrait artwork, ideally 1080x1440 or smaller (keep it under ~300 KB).",
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0, help_text="Lower numbers show first.")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        verbose_name = "Onboarding slide"
+        verbose_name_plural = "Onboarding slides"
+
+    def __str__(self) -> str:
+        return self.title or f"Slide {self.pk}"

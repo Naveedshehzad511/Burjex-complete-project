@@ -101,7 +101,11 @@ impl Engine {
             return Err(BtError::new(INVALID_PRICE, "pending order needs price"));
         };
         self.assert_pending_trigger(tenant_id, &req.symbol, &req.order_type, &req.side, trigger_price, sym)?;
-        Self::assert_pending_protective(&req.order_type, &req.side, trigger_price, req.sl_price, req.tp_price)?;
+        // STOP_LIMIT: limit on the correct side of the stop; SL / TP judged from the limit (the fill price).
+        let protective_ref = crate::trigger::pending_reference_price(&req.order_type, &req.side, req.stop_price, req.price)
+            .map_err(|m| BtError::new(INVALID_PRICE, m))?
+            .unwrap_or(trigger_price);
+        Self::assert_pending_protective(&req.order_type, &req.side, protective_ref, req.sl_price, req.tp_price)?;
         let tif = req.time_in_force.clone().unwrap_or_else(|| "GTC".into()).to_ascii_uppercase();
         let mut expires_at = req
             .expires_at
@@ -880,7 +884,10 @@ impl Engine {
         if let Some(v) = tp {
             next_tp = v;
         }
-        Self::assert_pending_protective(&ot, &side, trigger, next_sl, next_tp)?;
+        let protective_ref = crate::trigger::pending_reference_price(&ot, &side, next_stop, next_price)
+            .map_err(|m| BtError::new(INVALID_PRICE, m))?
+            .unwrap_or(trigger);
+        Self::assert_pending_protective(&ot, &side, protective_ref, next_sl, next_tp)?;
 
         // Volume: same min / max / lot-step rules as placing an order.
         let cur_volume: f64 = row.try_get("volume").unwrap_or(0.0);

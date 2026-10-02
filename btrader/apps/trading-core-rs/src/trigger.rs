@@ -103,6 +103,32 @@ pub fn pending_fires(
     }
 }
 
+/// STOP_LIMIT price relationship (MT5 rule): the stop is the trigger and the limit is
+/// the fill price. Buy Stop Limit needs limit < stop; Sell Stop Limit needs limit > stop.
+/// Returns the price SL / TP must be validated against — the limit (where it fills) for
+/// STOP_LIMIT, otherwise the order's trigger. Non-STOP_LIMIT types are passed through.
+pub fn pending_reference_price(
+    order_type: &str,
+    side: &str,
+    stop_price: Option<f64>,
+    limit_price: Option<f64>,
+) -> Result<Option<f64>, String> {
+    if !order_type.eq_ignore_ascii_case("STOP_LIMIT") {
+        return Ok(stop_price.or(limit_price));
+    }
+    let (Some(stop), Some(limit)) = (stop_price.filter(|v| *v > 0.0), limit_price.filter(|v| *v > 0.0)) else {
+        return Err("Stop Limit needs both a stop price and a limit price".into());
+    };
+    if side.eq_ignore_ascii_case("BUY") {
+        if !(limit < stop) {
+            return Err(format!("Buy Stop Limit: limit price must be below the stop price ({stop})"));
+        }
+    } else if !(limit > stop) {
+        return Err(format!("Sell Stop Limit: limit price must be above the stop price ({stop})"));
+    }
+    Ok(Some(limit))
+}
+
 pub fn is_limit_fill_type(order_type: &str) -> bool {
     matches!(
         order_type.to_ascii_uppercase().as_str(),
@@ -188,6 +214,50 @@ mod tests {
             pending_fires("BUY_STOP", "BUY", 1.1004, 1.1005, 1.1, None, None, false),
             PendingAction::Fill
         );
+    }
+
+    #[test]
+    fn buy_stop_limit_arms_then_fills_at_limit() {
+        // stop 1.1010 (trigger), limit 1.1005 (fill).
+        let s = Some(1.1010);
+        let l = Some(1.1005);
+        assert_eq!(pending_fires("STOP_LIMIT", "BUY", 1.0999, 1.1000, 1.1010, s, l, false), PendingAction::None);
+        assert_eq!(pending_fires("STOP_LIMIT", "BUY", 1.1009, 1.1010, 1.1010, s, l, false), PendingAction::ArmStopLimit);
+        assert_eq!(pending_fires("STOP_LIMIT", "BUY", 1.1007, 1.1008, 1.1010, s, l, true), PendingAction::None);
+        assert_eq!(pending_fires("STOP_LIMIT", "BUY", 1.1003, 1.1005, 1.1010, s, l, true), PendingAction::Fill);
+    }
+
+    #[test]
+    fn sell_stop_limit_arms_then_fills_at_limit() {
+        // stop 1.0990 (trigger), limit 1.0995 (fill).
+        let s = Some(1.0990);
+        let l = Some(1.0995);
+        assert_eq!(pending_fires("STOP_LIMIT", "SELL", 1.1000, 1.1001, 1.0990, s, l, false), PendingAction::None);
+        assert_eq!(pending_fires("STOP_LIMIT", "SELL", 1.0990, 1.0991, 1.0990, s, l, false), PendingAction::ArmStopLimit);
+        assert_eq!(pending_fires("STOP_LIMIT", "SELL", 1.0992, 1.0993, 1.0990, s, l, true), PendingAction::None);
+        assert_eq!(pending_fires("STOP_LIMIT", "SELL", 1.0995, 1.0996, 1.0990, s, l, true), PendingAction::Fill);
+    }
+
+    #[test]
+    fn buy_stop_limit_price_relationship() {
+        assert_eq!(pending_reference_price("STOP_LIMIT", "BUY", Some(1.1010), Some(1.1005)), Ok(Some(1.1005)));
+        assert!(pending_reference_price("STOP_LIMIT", "BUY", Some(1.1010), Some(1.1010)).is_err());
+        assert!(pending_reference_price("STOP_LIMIT", "BUY", Some(1.1010), Some(1.1015)).is_err());
+        assert!(pending_reference_price("STOP_LIMIT", "BUY", Some(1.1010), None).is_err());
+    }
+
+    #[test]
+    fn sell_stop_limit_price_relationship() {
+        assert_eq!(pending_reference_price("STOP_LIMIT", "SELL", Some(1.0990), Some(1.0995)), Ok(Some(1.0995)));
+        assert!(pending_reference_price("STOP_LIMIT", "SELL", Some(1.0990), Some(1.0990)).is_err());
+        assert!(pending_reference_price("STOP_LIMIT", "SELL", Some(1.0990), Some(1.0985)).is_err());
+        assert!(pending_reference_price("STOP_LIMIT", "SELL", None, Some(1.0995)).is_err());
+    }
+
+    #[test]
+    fn other_types_reference_is_trigger() {
+        assert_eq!(pending_reference_price("BUY_STOP", "BUY", Some(1.2), None), Ok(Some(1.2)));
+        assert_eq!(pending_reference_price("BUY_LIMIT", "BUY", None, Some(1.1)), Ok(Some(1.1)));
     }
 
     #[test]

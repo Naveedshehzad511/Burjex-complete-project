@@ -119,7 +119,7 @@ export function getCanonicalChartPrice(
  * Flutter client's `bucketStart()` exactly; the two must agree or the client's
  * bars will not line up with the server's.
  */
-export function bucketStart(tsSec: number, tf: string): number {
+export function bucketStart(tsSec: number, tf: string, brokerOffsetSec = 0): number {
   if (tf === '1w') {
     const d = new Date(tsSec * 1000);
     const dow = d.getUTCDay(); // 0=Sun
@@ -132,6 +132,14 @@ export function bucketStart(tsSec: number, tf: string): number {
   }
   const sec = TF_SECONDS[tf];
   if (!sec) throw new Error(`unknown timeframe: ${tf}`);
+  // H4 and D1 follow the BROKER's clock (its session day / 4-hour grid), exactly like the
+  // history rollup (gateway `tfBucketStart`) and the MT5 bridge's `aggregate()`. A live bar on
+  // the plain UTC grid would sit on different boundaries from the history behind it whenever the
+  // broker offset is not a multiple of the timeframe (e.g. +3h and H4), so the two would overlap
+  // and the forming bar's high/low would never line up with the bar it becomes.
+  if (sec >= 14400 && brokerOffsetSec !== 0) {
+    return Math.floor((tsSec + brokerOffsetSec) / sec) * sec - brokerOffsetSec;
+  }
   return Math.floor(tsSec / sec) * sec;
 }
 
@@ -182,6 +190,8 @@ export interface EngineOptions {
   /** Timeframes to maintain. Must include the base '1m'. */
   timeframes?: string[];
   chartPrice?: ChartPriceMode;
+  /** Broker UTC offset in seconds (BROKER_UTC_OFFSET_SEC); aligns the H4 / D1 grid. Default 0. */
+  brokerOffsetSec?: number;
   /**
    * Milliseconds a price may stay unchanged before the feed is treated as
    * stale and stops producing bars. See [DEFAULT_STALE_MS].
@@ -200,6 +210,7 @@ export class CandleEngine {
   private readonly tfs: string[];
   private readonly higherTfs: string[];
   private readonly chartPrice: ChartPriceMode;
+  private readonly brokerOffsetSec: number;
   private readonly state = new Map<string, SymbolState>();
   private readonly staleMs: number;
 
@@ -214,6 +225,7 @@ export class CandleEngine {
     this.tfs = tfs;
     this.higherTfs = tfs.filter((t) => t !== BASE_TF);
     this.chartPrice = opts.chartPrice ?? DEFAULT_CHART_PRICE;
+    this.brokerOffsetSec = Number.isFinite(opts.brokerOffsetSec) ? Math.trunc(opts.brokerOffsetSec as number) : 0;
     this.staleMs = opts.staleMs ?? DEFAULT_STALE_MS;
   }
 
@@ -289,7 +301,7 @@ export class CandleEngine {
     const out: CandleUpdate[] = [];
 
     // ── Base M1 ──────────────────────────────────────────────────────────────
-    const m1Bucket = bucketStart(tsSec, BASE_TF);
+    const m1Bucket = bucketStart(tsSec, BASE_TF, this.brokerOffsetSec);
     const prevM1 = st.active.get(BASE_TF);
     let m1: CanonicalCandle;
 
@@ -326,7 +338,7 @@ export class CandleEngine {
 
     // ── Higher timeframes, folded from M1 state ──────────────────────────────
     for (const tf of this.higherTfs) {
-      const bucket = bucketStart(tsSec, tf);
+      const bucket = bucketStart(tsSec, tf, this.brokerOffsetSec);
       const prev = st.active.get(tf);
       const foldKey = tf;
 

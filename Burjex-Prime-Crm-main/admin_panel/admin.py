@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import EmailInboxMessage, EmailLog, EmailTemplateSettings, WhiteLabelProfile
+from .models import EmailInboxMessage, EmailLog, EmailTemplateSettings, OnboardingSlide, WhiteLabelProfile
 
 
 @admin.register(WhiteLabelProfile)
@@ -26,3 +26,14 @@ class EmailInboxMessageAdmin(admin.ModelAdmin):
 @admin.register(EmailTemplateSettings)
 class EmailTemplateSettingsAdmin(admin.ModelAdmin):
     list_display = ("id", "header_color", "text_color", "logo_position", "logo_size", "updated_at")
+
+
+@admin.register(OnboardingSlide)
+class OnboardingSlideAdmin(admin.ModelAdmin):
+    """Client-app landing carousel: add / reorder / switch off slides here."""
+
+    list_display = ("id", "title", "sort_order", "is_active", "updated_at")
+    list_editable = ("sort_order", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("title", "description")
+    ordering = ("sort_order", "id")

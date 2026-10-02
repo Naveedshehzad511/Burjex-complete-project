@@ -52,14 +52,40 @@ class _PortalShellState extends ConsumerState<PortalShell> with WidgetsBindingOb
     if (state == AppLifecycleState.resumed) ref.read(marketSocketProvider)?.onAppResumed();
   }
 
-  /// Open the user's own primary account once the CRM tells us which they have.
-  void _bootstrapPrimary(CrmDashboard? dash) {
-    if (dash == null || dash.accounts.isEmpty) return;
+  bool _booting = false;
+
+  /// Once the CRM tells us which accounts the user has, reopen the account Quotes /
+  /// Chart / Trade / History were last on — including another client's account
+  /// opened read-only through Trade → "+" — so a refresh never silently swaps it
+  /// for the main account. Falls back to the user's own primary account when
+  /// nothing (usable) was remembered for this user.
+  Future<void> _bootstrapPrimary(CrmDashboard? dash) async {
+    if (dash == null || dash.accounts.isEmpty || _booting) return;
     final s = ref.read(tradingSessionProvider);
     if (s.login != null || s.loading) return; // already opened / opening / failed once
-    final usable = dash.accounts.where((a) => a.tradingEnabled && a.status.toUpperCase() == 'ACTIVE').toList();
-    final pick = usable.firstWhere((a) => !a.isDemo, orElse: () => usable.isNotEmpty ? usable.first : dash.accounts.first);
-    unawaited(ref.read(tradingSessionProvider.notifier).openOwn(pick.login));
+    _booting = true;
+    try {
+      final session = ref.read(tradingSessionProvider.notifier);
+      final own = [for (final a in dash.accounts) a.login];
+      final last = await LastTrading.read();
+      if (!mounted || ref.read(tradingSessionProvider).login != null) return;
+      if (last != null && last.belongsTo(own)) {
+        if (last.managed) {
+          final saved = ref.read(managedAccountsProvider.notifier);
+          await saved.loaded;
+          final hit = ref.read(managedAccountsProvider).where((a) => a.login == last.login);
+          if (hit.isNotEmpty && await session.openManaged(hit.first) == null) return;
+        } else if (dash.accounts.any((a) => a.login == last.login && a.tradingEnabled)) {
+          unawaited(session.openOwn(last.login));
+          return;
+        }
+      }
+      final usable = dash.accounts.where((a) => a.tradingEnabled && a.status.toUpperCase() == 'ACTIVE').toList();
+      final pick = usable.firstWhere((a) => !a.isDemo, orElse: () => usable.isNotEmpty ? usable.first : dash.accounts.first);
+      unawaited(session.openOwn(pick.login));
+    } finally {
+      _booting = false;
+    }
   }
 
   @override
@@ -81,19 +107,12 @@ class _PortalShellState extends ConsumerState<PortalShell> with WidgetsBindingOb
       }
     }
 
-    // A read-only Investor session (via Trade → "+") is scoped to Quotes /
-    // Chart / Trade / History only — Home stays the signed-in user's own
-    // dashboard, so it must not be reachable while browsing someone else's
-    // account read-only. A full-access managed account (trading password)
-    // behaves like the user's own account and keeps Home.
-    final investorManaged = ref.watch(tradingSessionProvider.select((s) => s.managed && s.readonly));
-    final dest = investorManaged ? PortalShell._dest.where((d) => d.path != '/home').toList() : PortalShell._dest;
+    // Home is always the signed-in user's own dashboard (built from the CRM, never
+    // from the trading session), so it stays available even while Quotes / Chart /
+    // Trade / History show another client's account read-only — its Trade button
+    // switches back to the user's own account.
+    const dest = PortalShell._dest;
     final loc = widget.state.matchedLocation;
-    if (investorManaged && loc.startsWith('/home')) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) context.go('/quotes');
-      });
-    }
     final index = loc.startsWith('/new-order')
         ? dest.indexWhere((d) => d.path == '/trade')
         : dest.indexWhere((d) => loc.startsWith(d.path)).clamp(0, dest.length - 1);

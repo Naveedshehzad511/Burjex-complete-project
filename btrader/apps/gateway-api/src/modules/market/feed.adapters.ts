@@ -14,27 +14,38 @@ export class InternalAdapter implements ChartFeedAdapter {
   async fetchCandles(q: CandleQuery): Promise<Candle[]> {
     const symbol = q.symbol.toUpperCase();
     const brokerOff = brokerUtcOffsetSec();
+    const before = q.before;
 
     if (q.tf === '1m') {
-      return loadSeries(symbol, '1m', q.limit);
+      return loadSeries(symbol, '1m', q.limit, before);
     }
 
     // Prefer deep M1 → rollup (authoritative). Fall back to stored TF only if
-    // M1 is empty (legacy / mid-seed).
-    const m1Need = m1BarsNeeded(q.tf, q.limit);
-    const m1 = await loadSeries(symbol, '1m', m1Need);
+    // M1 is empty (legacy / mid-seed). `before` pages back through the SAME M1
+    // window so a paged rollup lines up with what a fresh (unpaged) load would
+    // have produced for that span.
+    // History pages may read a deeper M1 window than the live tail: a page of
+    // 500 H1 bars is 30 000 M1 rows, so the 5 000-row live cap would otherwise
+    // shrink every older page to ~80 bars and make scroll-back crawl.
+    const paged = before != null;
+    const m1Need = m1BarsNeeded(q.tf, q.limit, paged);
+    const m1 = await loadSeries(symbol, '1m', m1Need, before, paged ? PAGED_M1_CAP : undefined);
     if (m1.length > 0) {
-      const rolled = aggregateFromM1(m1, q.tf, brokerOff);
+      let rolled = aggregateFromM1(m1, q.tf, brokerOff);
+      // A full M1 window can cut its oldest bucket in half. Drop that bar so the
+      // next (older) page — which starts strictly before the oldest bar we hand
+      // out — never leaves a permanently truncated candle at the seam.
+      if (m1.length >= m1Need && rolled.length > 1) rolled = rolled.slice(1);
       return rolled.slice(-q.limit);
     }
 
     // Legacy fallback: stored series / D1→W1/MN.
     if (q.tf === '1w' || q.tf === '1mn') {
-      const d1 = await loadSeries(symbol, '1d', 5000);
+      const d1 = await loadSeries(symbol, '1d', 5000, before);
       const bucket = q.tf === '1w' ? weekBucketUtc : monthBucketUtc;
       return aggregateCandles(d1, bucket).slice(-q.limit);
     }
-    return loadSeries(symbol, q.tf, q.limit);
+    return loadSeries(symbol, q.tf, q.limit, before);
   }
 }
 
@@ -45,10 +56,12 @@ function brokerUtcOffsetSec(): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-async function loadSeries(symbol: string, tf: string, limit: number): Promise<Candle[]> {
-  const take = Math.min(Math.max(limit, 1), 5000);
+const PAGED_M1_CAP = 60_000;
+
+async function loadSeries(symbol: string, tf: string, limit: number, before?: number, cap = 5000): Promise<Candle[]> {
+  const take = Math.min(Math.max(limit, 1), cap);
   const rows = await prisma.marketCandle.findMany({
-    where: { symbol, tf },
+    where: before != null ? { symbol, tf, t: { lt: before } } : { symbol, tf },
     orderBy: { t: 'desc' },
     take,
     select: { t: true, o: true, h: true, l: true, c: true, v: true },
@@ -56,12 +69,13 @@ async function loadSeries(symbol: string, tf: string, limit: number): Promise<Ca
   return rows.reverse().map((r) => ({ t: r.t, o: +r.o, h: +r.h, l: +r.l, c: +r.c, v: +r.v }));
 }
 
-function m1BarsNeeded(tf: Timeframe, tfBars: number): number {
+function m1BarsNeeded(tf: Timeframe, tfBars: number, paged = false): number {
+  const cap = paged ? PAGED_M1_CAP : 5000;
   if (tf === '1m') return tfBars;
-  if (tf === '1w') return Math.min(5000, tfBars * 5 * 1440);
-  if (tf === '1mn') return Math.min(5000, tfBars * 22 * 1440);
+  if (tf === '1w') return Math.min(cap, tfBars * 5 * 1440);
+  if (tf === '1mn') return Math.min(cap, tfBars * 22 * 1440);
   const sec = TF_SECONDS[tf];
-  return Math.min(5000, Math.max(tfBars, tfBars * Math.floor(sec / 60)));
+  return Math.min(cap, Math.max(tfBars, tfBars * Math.floor(sec / 60)));
 }
 
 /** MT5-style rollup from ascending M1 bars (matches mt5_bridge.aggregate). */

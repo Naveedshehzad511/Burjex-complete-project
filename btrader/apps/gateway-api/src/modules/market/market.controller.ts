@@ -51,17 +51,30 @@ export class MarketController {
   @ApiQuery({ name: 'symbol', example: 'EURUSD' })
   @ApiQuery({ name: 'tf', example: '1m', enum: ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1mn'] })
   @ApiQuery({ name: 'limit', required: false, example: 300 })
+  @ApiQuery({
+    name: 'before',
+    required: false,
+    example: 1735689600,
+    description: 'Epoch seconds, exclusive — page further back for chart history lazy-loading.',
+  })
   async getCandles(
     @CurrentTenant() t: any,
     @Query('symbol') symbol: string,
     @Query('tf') tf: string,
     @Query('limit') limit?: string,
+    @Query('before') before?: string,
   ) {
     if (!symbol) throw new BadRequestException('symbol required');
     const normalizedTf = this.normalizeTimeframe(tf);
     if (!this.candles.validTimeframe(normalizedTf)) throw new BadRequestException('invalid timeframe');
     const n = Math.min(Math.max(parseInt(limit ?? '300', 10) || 300, 10), 5000);
-    return this.candles.candles({ symbol, tf: normalizedTf as Timeframe, limit: n }, t?.id);
+    let beforeSec: number | undefined;
+    if (before != null && before !== '') {
+      const parsed = parseInt(before, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) throw new BadRequestException('invalid before');
+      beforeSec = parsed;
+    }
+    return this.candles.candles({ symbol, tf: normalizedTf as Timeframe, limit: n, before: beforeSec }, t?.id);
   }
 
   private normalizeTimeframe(tf: string): string {

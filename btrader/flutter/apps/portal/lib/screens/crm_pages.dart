@@ -20,15 +20,8 @@ class CrmPageDef {
 /// Every CRM-backed page reachable from the side menu, keyed by route segment.
 const Map<String, CrmPageDef> kCrmPages = {
   'transactions': CrmPageDef('Transactions', '/transactions/'),
-  'ib-dashboard': CrmPageDef('IB Dashboard', '/ib/dashboard/'),
-  'ib-progress': CrmPageDef('IB Progress', '/ib/progress/'),
-  'ib-request': CrmPageDef('IB Request', '/ib/apply/', action: (label: 'Apply to become an IB', path: '/ib/apply/')),
-  'ib-clients': CrmPageDef('My Clients', '/ib/clients/'),
-  'ib-commission': CrmPageDef('My Commission', '/ib/commission/'),
-  'ib-tree': CrmPageDef('IB Tree Chart', '/ib/tree/'),
-  'ib-withdraw': CrmPageDef('IB Withdraw', '/ib/withdraw/'),
-  'team-deposits': CrmPageDef('Team Deposits', '/ib/team-report/deposits/'),
-  'team-withdrawals': CrmPageDef('Team Withdrawals', '/ib/team-report/withdrawals/'),
+  // IB Programme pages have dedicated screens (see ib_screens.dart / router.dart
+  // '/ib/*') instead of this generic renderer.
   'report-deposits': CrmPageDef('Deposit Report', '/reports/deposits/'),
   'report-withdrawals': CrmPageDef('Withdraw Report', '/reports/withdrawals/'),
   'report-transfers': CrmPageDef('Internal Transfers', '/reports/transfers/'),
@@ -37,8 +30,7 @@ const Map<String, CrmPageDef> kCrmPages = {
   'security': CrmPageDef('Security / 2FA', '/me/security/totp/'),
   'account-history': CrmPageDef('Account History', '/accounts/history/'),
   'notifications': CrmPageDef('Notifications', '/notifications/'),
-  'platform': CrmPageDef('Trading Platform', '/trading-platforms/'),
-  'legal': CrmPageDef('Legal Agreements', '/legal/'),
+  // Trading Platform and Legal Agreements have dedicated screens (content_screens.dart).
   'support': CrmPageDef('Need Help?', '/support/tickets/'),
 };
 

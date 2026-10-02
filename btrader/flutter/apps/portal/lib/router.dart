@@ -6,10 +6,12 @@ import 'crm/crm.dart';
 import 'screens/account_pages.dart';
 import 'screens/crm_pages.dart';
 import 'screens/charts_screen.dart';
+import 'screens/content_screens.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/funding_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/ib_screens.dart';
 import 'screens/login_screen.dart';
 import 'screens/markets_screen.dart';
 import 'screens/new_order_screen.dart';
@@ -79,6 +81,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/kyc', builder: (_, __) => const KycScreen()),
       GoRoute(path: '/wallet', builder: (_, __) => const WalletScreen()),
       GoRoute(path: '/transfer', builder: (_, __) => const InternalTransferScreen()),
+      // IB Programme: purpose-built pages (dashboard cards, level progress, tree,
+      // clients table, commission ledger, withdraw form) — NOT the generic
+      // label/value dump `/p/:key` falls back to for every other CRM page.
+      GoRoute(path: '/ib/dashboard', builder: (_, __) => const IbDashboardScreen()),
+      GoRoute(path: '/ib/progress', builder: (_, __) => const IbProgressScreen()),
+      GoRoute(path: '/ib/apply', builder: (_, __) => const IbApplyScreen()),
+      GoRoute(path: '/ib/clients', builder: (_, __) => const IbClientsScreen()),
+      GoRoute(path: '/ib/commission', builder: (_, __) => const IbCommissionScreen()),
+      GoRoute(path: '/ib/tree', builder: (_, __) => const IbTreeScreen()),
+      GoRoute(path: '/ib/withdraw', builder: (_, __) => const IbWithdrawScreen()),
+      GoRoute(path: '/ib/team-deposits', builder: (_, __) => const IbTeamReportScreen(kind: 'deposits')),
+      GoRoute(path: '/ib/team-withdrawals', builder: (_, __) => const IbTeamReportScreen(kind: 'withdrawals')),
+      GoRoute(path: '/legal', builder: (_, __) => const LegalAgreementsScreen()),
+      GoRoute(path: '/trading-platform', builder: (_, __) => const TradingPlatformScreen()),
       GoRoute(path: '/p/:key', builder: (_, state) => CrmDataScreen(pageKey: state.pathParameters['key'] ?? '')),
       GoRoute(path: '/soon/:title', builder: (_, state) => ComingSoonScreen(title: state.pathParameters['title'] ?? '')),
       ShellRoute(

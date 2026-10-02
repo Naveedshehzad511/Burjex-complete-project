@@ -74,6 +74,14 @@
 		file_server
 		header Cache-Control "public, max-age=31536000, immutable"
 	}
+	# Public branding art (landing-carousel slides etc.): the portal runs on another origin, and
+	# Flutter web fetches images with CORS, so allow reads here ONLY — not for the rest of /media
+	# (KYC documents and other uploads stay same-origin).
+	handle_path /media/branding/* {
+		root * /srv/crm/media/branding
+		header Access-Control-Allow-Origin "*"
+		file_server
+	}
 	handle_path /media/* {
 		root * /srv/crm/media
 		file_server

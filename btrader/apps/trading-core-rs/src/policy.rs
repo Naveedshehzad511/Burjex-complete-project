@@ -114,3 +114,51 @@ pub fn audit_comment(plan: Option<&ExecutionPlan>, extra: serde_json::Value) -> 
 pub fn execution_applies_kind(pricing: &GroupPricing, kind: &str) -> bool {
     execution_applies(&pricing.execution_apply_to, kind)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn group(mode: &str, delay_ms: i32) -> GroupPricing {
+        GroupPricing {
+            execution_mode: mode.into(),
+            execution_delay_ms: delay_ms,
+            execution_apply_to: json!({}),
+            ..Default::default()
+        }
+    }
+
+    async fn timed_wait(p: GroupPricing, kind: &'static str) -> u128 {
+        let t0 = Instant::now();
+        let plan = create_plan(&p, kind, Instant::now(), 0);
+        wait_for_deadline(Some(&plan)).await;
+        t0.elapsed().as_millis()
+    }
+
+    /// The group's delay is waited per order, in parallel: 12 rapid orders configured for
+    /// 200 ms all finish their wait after ~200 ms, not after 12 x 200 ms.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn twelve_concurrent_delays_overlap_and_match_the_configured_ms() {
+        let p = group("MARKET", 200);
+        let t0 = Instant::now();
+        let handles: Vec<_> = (0..12).map(|_| tokio::spawn(timed_wait(p.clone(), "marketBuy"))).collect();
+        for h in handles {
+            let waited = h.await.unwrap();
+            assert!(waited >= 199, "waited {waited}ms, less than the configured 200ms");
+            assert!(waited < 260, "waited {waited}ms, well over the configured 200ms");
+        }
+        assert!(t0.elapsed().as_millis() < 400, "orders waited one after another");
+    }
+
+    #[tokio::test]
+    async fn instant_mode_never_waits() {
+        assert!(timed_wait(group("INSTANT", 200), "marketBuy").await < 20);
+    }
+
+    #[tokio::test]
+    async fn the_delay_is_the_configured_value_not_a_constant() {
+        let w = timed_wait(group("MARKET", 50), "marketSell").await;
+        assert!((49..110).contains(&(w as i64)), "waited {w}ms for a 50ms rule");
+    }
+}

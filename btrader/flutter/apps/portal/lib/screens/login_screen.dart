@@ -96,12 +96,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           style: authPrimaryButton(),
           child: Text(_busy ? 'Signing in…' : 'LOGIN', style: const TextStyle(fontWeight: FontWeight.w700)),
         ),
-        const SizedBox(height: 12),
-        OutlinedButton(
-          onPressed: _busy ? null : () => context.push('/register'),
-          style: authOutlineButton(),
-          child: const Text('Create Account', style: TextStyle(fontWeight: FontWeight.w600)),
-        ),
+        // "Create Account" is hidden for now (registration starts from the landing page's Register):
+        // const SizedBox(height: 12),
+        // OutlinedButton(
+        //   onPressed: _busy ? null : () => context.push('/register'),
+        //   style: authOutlineButton(),
+        //   child: const Text('Create Account', style: TextStyle(fontWeight: FontWeight.w600)),
+        // ),
       ],
     );
   }

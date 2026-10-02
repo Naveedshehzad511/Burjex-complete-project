@@ -6,12 +6,12 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
 from admin_panel.models import (
-    LegalAgreementsSettings,
-    LegalCustomDocument,
+    LegalAgreementSettings,
     LegalDocument,
     TradingPlatform,
     TradingPlatformSettings,
 )
+from admin_panel.settings.legal_agreements.views import DOCUMENT_DEFINITIONS
 from api.responses import success_response
 
 
@@ -30,54 +30,55 @@ def _abs(request, url_or_file) -> str:
 
 
 class LegalAgreementsAPIView(APIView):
-    """Mirrors `/user/legal-agreements/` using admin LegalDocument + settings."""
+    """Mirrors `/user/legal-agreements/`.
+
+    Reads the SAME rows the admin edits under Settings → Legal Agreements
+    (`LegalAgreementSettings` + `LegalDocument`, see
+    admin_panel/settings/legal_agreements/views.py) and the web portal renders.
+    This used to read `LegalAgreementsSettings` / `LegalCustomDocument` for the
+    name, tagline, quick links and custom documents — a second pair of tables
+    no wired admin page writes to — so the app always got those back empty.
+    The response keys are unchanged.
+    """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        settings = LegalAgreementsSettings.get_solo()
+        settings = LegalAgreementSettings.get_solo()
         docs = LegalDocument.objects.filter(is_active=True).order_by("category", "order", "id")
-        custom = LegalCustomDocument.objects.filter(settings=settings, is_active=True).order_by(
-            "sort_order", "id"
-        )
         by_category: dict[str, list] = {}
+        custom: list[dict] = []
+        url_by_key: dict[tuple[str, str], str] = {}
         for d in docs:
+            url = d.link or _abs(request, d.file)
+            if not url:
+                continue  # active but nothing to open — the web page would render a dead link
+            url_by_key[(d.category, d.title)] = url
             by_category.setdefault(d.category, []).append(
                 {
                     "id": d.id,
                     "category": d.category,
                     "category_label": d.get_category_display(),
                     "title": d.title,
-                    "link": d.link or _abs(request, d.file),
+                    "link": url,
                     "order": d.order,
                 }
             )
+            if d.category == LegalDocument.Category.CUSTOM:
+                custom.append({"id": d.id, "name": d.title, "url": url, "description": ""})
+
+        # Quick links keyed by the admin form's own field names (single source of truth).
+        quick_links = {field: url_by_key.get((cat, title), "") for field, cat, title, _order in DOCUMENT_DEFINITIONS}
+        quick_links["bonus_credit_policy_url"] = quick_links.get("bonus_policy_url", "")  # legacy key
+
         return success_response(
             {
                 "name": settings.name or "Legal Agreements",
                 "tagline": settings.tagline or "",
-                "quick_links": {
-                    "terms_conditions_url": settings.terms_conditions_url,
-                    "privacy_policy_url": settings.privacy_policy_url,
-                    "client_agreement_url": settings.client_agreement_url,
-                    "risk_disclosure_url": settings.risk_disclosure_url,
-                    "aml_policy_url": settings.aml_policy_url,
-                    "cookie_policy_url": settings.cookie_policy_url,
-                    "disclaimer_url": settings.disclaimer_url,
-                    "bonus_credit_policy_url": settings.bonus_credit_policy_url,
-                    "withdrawal_policy_url": settings.withdrawal_policy_url,
-                    "deposit_policy_url": settings.deposit_policy_url,
-                },
+                "icon": _abs(request, settings.icon) if settings.icon else "",
+                "quick_links": quick_links,
                 "documents_by_category": by_category,
-                "custom_documents": [
-                    {
-                        "id": c.id,
-                        "name": c.name,
-                        "url": c.url,
-                        "description": c.description or "",
-                    }
-                    for c in custom
-                ],
+                "custom_documents": custom,
             },
             message="Legal agreements retrieved successfully.",
         )
