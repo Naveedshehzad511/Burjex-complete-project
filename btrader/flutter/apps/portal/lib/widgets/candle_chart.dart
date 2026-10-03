@@ -175,6 +175,8 @@ class CandleChart extends StatefulWidget {
     this.pendingAnchors = const [],
     this.onAnchor,
     this.onMoveAnchor,
+    this.onCreateDrawing,
+    this.onMoveDrawing,
     this.onDeleteDrawing,
     this.onPriceTap,
     this.onLevelDragEnd,
@@ -225,6 +227,13 @@ class CandleChart extends StatefulWidget {
 
   /// Fired once when a drag of an existing drawing's anchor is released.
   final void Function(String id, int anchorIndex, DrawingAnchor anchor)? onMoveAnchor;
+
+  /// Fired once when a touch-drag-release made with a multi-point tool ends: the tool and its
+  /// anchors (start, end). The caller adds the drawing and resets the tool.
+  final void Function(DrawingType tool, List<DrawingAnchor> anchors)? onCreateDrawing;
+
+  /// Fired once when a whole drawing has been dragged to a new place and released.
+  final void Function(String id, List<DrawingAnchor> anchors)? onMoveDrawing;
 
   /// Fired when the on-chart delete button is tapped for the selected drawing.
   final void Function(String id)? onDeleteDrawing;
@@ -306,6 +315,21 @@ class _CandleChartState extends State<CandleChart> {
   String? _selectedDrawingId;
   int? _dragAnchorIndex;
   DrawingAnchor? _dragAnchor;
+
+  /// The true touch-down point. A scale gesture only reports its start after the finger has moved past
+  /// the touch slop, so drag-to-create / drag-to-move begin from THIS, not from the first scale update.
+  Offset? _downPos;
+
+  /// Live anchors while a multi-point tool is being drag-created (null otherwise).
+  List<DrawingAnchor>? _createAnchors;
+  Offset? _createFromPx;
+  Offset? _createToPx;
+
+  /// Live anchors while an existing drawing is being dragged as a whole (null otherwise).
+  String? _moveId;
+  List<DrawingAnchor>? _moveAnchors;
+  Offset? _moveStartPx;
+  List<Offset>? _moveOrigPx;
 
   Offset? _cross; // crosshair local position (null = off)
 
@@ -393,6 +417,9 @@ class _CandleChartState extends State<CandleChart> {
       _dragLevelPrice = null;
       _dragAnchorIndex = null;
       _dragAnchor = null;
+      _createAnchors = null;
+      _moveAnchors = null;
+      _moveId = null;
       _radialOpen = false;
     }
     if (old.crosshairMode != widget.crosshairMode) {
@@ -529,6 +556,28 @@ class _CandleChartState extends State<CandleChart> {
           r.hi - (dy.clamp(metrics.priceTop, metrics.priceTop + metrics.priceH) - metrics.priceTop) / metrics.priceH * priceSpan;
       double pxForTime(int t) => xForTimeInWindow(window, t, slotB);
       int timeAtX(double dx) => window[(dx / slotB).floor().clamp(0, window.length - 1)].t;
+
+      // Inverse of [xForTimeInWindow] WITHOUT clamping to the visible bars: interpolates between
+      // bars and extrapolates past the edges, so a drawing dragged partly off-screen keeps its shape.
+      int timeAtXFree(double dx) {
+        final n = window.length;
+        if (n < 2) return window.isEmpty ? 0 : window.first.t;
+        final f = dx / slotB - 0.5; // fractional bar index
+        if (f <= 0) return (window.first.t + f * (window[1].t - window[0].t)).round();
+        if (f >= n - 1) return (window.last.t + (f - (n - 1)) * (window[n - 1].t - window[n - 2].t)).round();
+        final i = f.floor();
+        return (window[i].t + (f - i) * (window[i + 1].t - window[i].t)).round();
+      }
+
+      double priceAtYFree(double dy) => r.hi - (dy - metrics.priceTop) / metrics.priceH * priceSpan;
+
+      // A touch point as a drawing anchor: time snapped to the nearest visible bar, price exact —
+      // the same rule as a placement tap — clamped into the price pane so a drag may leave it.
+      DrawingAnchor? anchorAtPx(Offset pos) {
+        if (window.isEmpty) return null;
+        final dx = pos.dx.clamp(0.0, _chartW - 0.01).toDouble();
+        return DrawingAnchor(timeAtX(dx), priceAtY(pos.dy));
+      }
 
       DrawingObject? selected() {
         for (final d in widget.drawings) {
@@ -667,6 +716,25 @@ class _CandleChartState extends State<CandleChart> {
             _dragAnchorIndex = null;
             _dragAnchor = null;
             _axisDrag = null;
+            _createAnchors = null;
+            _moveAnchors = null;
+            _moveId = null;
+            // MT5-style creation: with a multi-point tool armed, ONE touch-drag-release draws it. The
+            // gesture starts where the finger first touched; the drag is never a pan. One-point tools
+            // (H-Line / V-Line) keep their tap, and a two-finger gesture still pinches / zooms.
+            final armed = widget.activeTool;
+            if (armed != null && d.pointerCount == 1 && armed.anchorCount >= 2 && widget.onCreateDrawing != null) {
+              final from = _downPos ?? d.localFocalPoint;
+              final a = _justClosedRadial ? null : anchorAtPx(from);
+              if (a != null) {
+                setState(() {
+                  _createAnchors = [a, a];
+                  _createFromPx = from;
+                  _createToPx = from;
+                });
+              }
+              return;
+            }
             // Grab a draggable order level (SL / TP / pending) instead of panning.
             // This is checked FIRST and unconditionally, exactly as before — the new
             // axis-zoom strips below only ever apply when this found nothing to grab,
@@ -686,7 +754,8 @@ class _CandleChartState extends State<CandleChart> {
             if (widget.activeTool == null) {
               final sel = selected();
               if (sel != null) {
-                final gi = grabAnchor(sel, d.localFocalPoint);
+                // From the true touch-down point (the focal point reported here is already past the slop).
+                final gi = grabAnchor(sel, _downPos ?? d.localFocalPoint);
                 if (gi != null) {
                   setState(() {
                     _dragAnchorIndex = gi;
@@ -694,6 +763,35 @@ class _CandleChartState extends State<CandleChart> {
                   });
                   return;
                 }
+              }
+            }
+            // Grab an existing drawing by its body: select it and drag it as a whole (MT5: touch the
+            // object, then drag). Order / SL / TP lines were checked above and win; a selected
+            // drawing's own handles were checked just before this.
+            if (widget.activeTool == null && d.pointerCount == 1) {
+              final from = _downPos ?? d.localFocalPoint;
+              DrawingObject? hit;
+              final sel0 = selected();
+              if (sel0 != null && hitDrawing(sel0, from)) {
+                hit = sel0;
+              } else {
+                for (final dr in widget.drawings.reversed) {
+                  if (hitDrawing(dr, from)) {
+                    hit = dr;
+                    break;
+                  }
+                }
+              }
+              if (hit != null && !_justClosedRadial) {
+                final g = hit;
+                setState(() {
+                  _selectedDrawingId = g.id;
+                  _moveId = g.id;
+                  _moveAnchors = g.anchors;
+                  _moveStartPx = from;
+                  _moveOrigPx = [for (final a in g.anchors) Offset(pxForTime(a.t), pyForPrice(a.price))];
+                });
+                return;
               }
             }
             // A single finger starting ON the right-hand price ladder zooms the
@@ -717,6 +815,33 @@ class _CandleChartState extends State<CandleChart> {
             }
           },
           onScaleUpdate: (d) {
+            if (_createAnchors != null) {
+              final a = anchorAtPx(d.localFocalPoint);
+              if (a != null) {
+                setState(() {
+                  _createAnchors = [_createAnchors!.first, a];
+                  _createToPx = d.localFocalPoint;
+                });
+              }
+              return;
+            }
+            if (_moveAnchors != null && _moveId != null) {
+              final sel = selected();
+              final start = _moveStartPx, orig = _moveOrigPx;
+              if (sel == null || start == null || orig == null) return;
+              final delta = d.localFocalPoint - start;
+              setState(() {
+                _moveAnchors = [
+                  for (var i = 0; i < orig.length; i++)
+                    DrawingAnchor(
+                      // A horizontal line slides only in price, a vertical line only in time.
+                      sel.type == DrawingType.horizontalLine ? sel.anchors[i].t : timeAtXFree(orig[i].dx + delta.dx),
+                      sel.type == DrawingType.verticalLine ? sel.anchors[i].price : priceAtYFree(orig[i].dy + delta.dy),
+                    ),
+                ];
+              });
+              return;
+            }
             if (_dragLevelKey != null) {
               final py = priceAtY(d.localFocalPoint.dy);
               setState(() => _dragLevelPrice = py > 0 ? py : _dragLevelPrice);
@@ -774,6 +899,33 @@ class _CandleChartState extends State<CandleChart> {
             });
           },
           onScaleEnd: (_) {
+            if (_createAnchors != null) {
+              final pts = _createAnchors!;
+              final tool = widget.activeTool;
+              final from = _createFromPx, to = _createToPx;
+              setState(() {
+                _createAnchors = null;
+                _createFromPx = null;
+                _createToPx = null;
+              });
+              // A drag that went (almost) nowhere is not a drawing: keep the tool armed.
+              final dragged = from != null && to != null && (to - from).distance >= 6;
+              if (tool != null && dragged && (pts.first.t != pts.last.t || pts.first.price != pts.last.price)) {
+                widget.onCreateDrawing?.call(tool, pts);
+              }
+              return;
+            }
+            if (_moveAnchors != null && _moveId != null) {
+              final id = _moveId!, pts = _moveAnchors!;
+              setState(() {
+                _moveId = null;
+                _moveAnchors = null;
+                _moveStartPx = null;
+                _moveOrigPx = null;
+              });
+              widget.onMoveDrawing?.call(id, pts);
+              return;
+            }
             if (_axisDrag != null) {
               setState(() => _axisDrag = null);
               return;
@@ -804,7 +956,10 @@ class _CandleChartState extends State<CandleChart> {
             if (!widget.crosshairMode) setState(() => _cross = null);
           },
           onDoubleTap: _resetView,
-          child: CustomPaint(
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (e) => _downPos = e.localPosition,
+            child: CustomPaint(
             size: Size.infinite,
             painter: _CandlePainter(
               candles: window,
@@ -821,7 +976,9 @@ class _CandleChartState extends State<CandleChart> {
               oscillators: oscs,
               oscFraction: _oscFraction,
               drawings: widget.drawings,
-              pendingAnchors: widget.pendingAnchors,
+              pendingAnchors: _createAnchors ?? widget.pendingAnchors,
+              previewType: widget.activeTool,
+              moveAnchors: _moveAnchors,
               selectedId: _selectedDrawingId,
               dragIndex: _dragAnchorIndex,
               dragAnchor: _dragAnchor,
@@ -841,7 +998,7 @@ class _CandleChartState extends State<CandleChart> {
               onSurface: Theme.of(context).colorScheme.onSurface,
               axisW: axisW,
             ),
-          ),
+          )),
         ),
         // MT5-style round chart menu: tap anywhere on the chart to open it (see
         // handleSelectOrTrade above), tap any wedge — or empty space — to close.
@@ -1021,6 +1178,8 @@ class _CandlePainter extends CustomPainter {
     required this.oscFraction,
     required this.drawings,
     required this.pendingAnchors,
+    required this.previewType,
+    required this.moveAnchors,
     required this.selectedId,
     required this.dragIndex,
     required this.dragAnchor,
@@ -1056,6 +1215,11 @@ class _CandlePainter extends CustomPainter {
   final double oscFraction;
   final List<DrawingObject> drawings;
   final List<DrawingAnchor> pendingAnchors;
+
+  /// The tool being placed (draws the live preview in its own shape) and, while a whole drawing is
+  /// being dragged, its live anchors.
+  final DrawingType? previewType;
+  final List<DrawingAnchor>? moveAnchors;
   final String? selectedId;
   final int? dragIndex;
   final DrawingAnchor? dragAnchor;
@@ -1371,6 +1535,7 @@ class _CandlePainter extends CustomPainter {
       if (d.id == selectedId && dragIndex != null && dragAnchor != null) {
         anchors = d.withAnchor(dragIndex!, dragAnchor!).anchors;
       }
+      if (d.id == selectedId && moveAnchors != null) anchors = moveAnchors!;
       _paintOneDrawing(canvas, d.type, anchors, Color(d.colorArgb), chartW, slot, y);
       // Selection handles.
       if (d.id == selectedId) {
@@ -1388,8 +1553,8 @@ class _CandlePainter extends CustomPainter {
     }
     // Placement preview: the anchors tapped so far as small rings.
     if (pendingAnchors.isNotEmpty) {
-      final c = Color(pendingAnchors.length < 2 ? 0xFFFFB74D : 0xFF42A5F5);
-      _paintOneDrawing(canvas, DrawingType.trendline, pendingAnchors, c, chartW, slot, y);
+      final c = Color(previewType?.defaultColor ?? (pendingAnchors.length < 2 ? 0xFFFFB74D : 0xFF42A5F5));
+      _paintOneDrawing(canvas, previewType ?? DrawingType.trendline, pendingAnchors, c, chartW, slot, y);
       for (final a in pendingAnchors) {
         canvas.drawCircle(Offset(_xForTime(a.t, slot), y(a.price)), 4,
             Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = 1.5);
@@ -1689,6 +1854,8 @@ class _CandlePainter extends CustomPainter {
       old.oscFraction != oscFraction ||
       old.drawings != drawings ||
       old.pendingAnchors != pendingAnchors ||
+      old.previewType != previewType ||
+      old.moveAnchors != moveAnchors ||
       old.selectedId != selectedId ||
       old.dragIndex != dragIndex ||
       old.dragAnchor != dragAnchor ||

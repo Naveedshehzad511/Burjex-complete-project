@@ -892,6 +892,22 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     }
   }
 
+  /// A multi-point tool finished its touch-drag-release on the chart: add the drawing (start, end
+  /// anchors) and disarm the tool, so the next plain tap opens the round menu again.
+  void _onCreateDrawing(DrawingType tool, List<DrawingAnchor> anchors) {
+    ref.read(chartDrawingsProvider.notifier).add(DrawingObject(
+          id: '${tool.name}-${DateTime.now().microsecondsSinceEpoch}',
+          symbol: _symbol,
+          type: tool,
+          anchors: anchors,
+          colorArgb: tool.defaultColor,
+        ));
+    setState(() {
+      _activeTool = null;
+      _pendingAnchors = [];
+    });
+  }
+
   void _cancelDrawing() => setState(() {
         _activeTool = null;
         _pendingAnchors = [];
@@ -919,6 +935,22 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     } else {
       setState(() => _pendingAnchors2 = next);
     }
+  }
+
+  void _onCreateDrawing2(DrawingType tool, List<DrawingAnchor> anchors) {
+    final win = _extraWindows.isEmpty ? null : _extraWindows.first;
+    if (win == null) return;
+    ref.read(chartDrawingsProvider.notifier).add(DrawingObject(
+          id: '${tool.name}-${DateTime.now().microsecondsSinceEpoch}',
+          symbol: win.symbol,
+          type: tool,
+          anchors: anchors,
+          colorArgb: tool.defaultColor,
+        ));
+    setState(() {
+      _activeTool2 = null;
+      _pendingAnchors2 = [];
+    });
   }
 
   void _cancelDrawing2() => setState(() {
@@ -1354,6 +1386,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                     activeTool: _activeTool,
                     pendingAnchors: _pendingAnchors,
                     onAnchor: _onAnchor,
+                    onCreateDrawing: _onCreateDrawing,
+                    onMoveDrawing: (id, a) => ref.read(chartDrawingsProvider.notifier).updateAnchors(id, a),
                     onMoveAnchor: (id, i, a) => ref
                         .read(chartDrawingsProvider.notifier)
                         .updateAnchor(id, i, a),
@@ -1406,7 +1440,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                           padding: const EdgeInsets.fromLTRB(10, 5, 4, 5),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
                             Text(
-                                '${_activeTool!.shortLabel}: Tap point ${_pendingAnchors.length + 1} of ${_activeTool!.anchorCount}',
+                                '${_activeTool!.shortLabel}: ${_activeTool!.anchorCount >= 2 ? 'drag on the chart' : 'tap the chart'}',
                                 style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 11,
@@ -1497,6 +1531,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                   activeTool: _activeTool2,
                   pendingAnchors: _pendingAnchors2,
                   onAnchor: _onAnchor2,
+                  onCreateDrawing: _onCreateDrawing2,
+                  onMoveDrawing: (id, a) => ref.read(chartDrawingsProvider.notifier).updateAnchors(id, a),
                   onMoveAnchor: (id, i, a) => ref
                       .read(chartDrawingsProvider.notifier)
                       .updateAnchor(id, i, a),
@@ -1546,7 +1582,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                         padding: const EdgeInsets.fromLTRB(10, 5, 4, 5),
                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                           Text(
-                              '${_activeTool2!.shortLabel}: Tap point ${_pendingAnchors2.length + 1} of ${_activeTool2!.anchorCount}',
+                              '${_activeTool2!.shortLabel}: ${_activeTool2!.anchorCount >= 2 ? 'drag on the chart' : 'tap the chart'}',
                               style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 11,

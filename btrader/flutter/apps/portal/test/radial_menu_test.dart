@@ -127,7 +127,7 @@ void main() {
 
     expect(find.byType(RadialChartMenu), findsNothing, reason: 'the menu closes once a tool is picked');
     expect(t.widget<CandleChart>(find.byType(CandleChart)).activeTool, DrawingType.rectangle);
-    expect(find.text('Rect: Tap point 1 of 2'), findsOneWidget);
+    expect(find.text('Rect: drag on the chart'), findsOneWidget);
     await _unmount(t);
   });
 
@@ -176,7 +176,7 @@ void main() {
   }
 
   for (final tool in kRadialTools) {
-    testWidgets('${tool.label}: pick on the menu → exactly ${tool.anchorCount} chart tap(s) → tool resets → next tap reopens the menu', (t) async {
+    testWidgets('${tool.label}: pick on the menu → ${tool.anchorCount >= 2 ? 'touch-drag-release' : 'one tap'} creates it → tool resets → next tap reopens the menu', (t) async {
       final c = await _pumpChart(t);
       final chart = find.byType(CandleChart);
       CandleChart widget() => t.widget<CandleChart>(chart);
@@ -191,12 +191,22 @@ void main() {
       expect(widget().activeTool, tool);
       expect(widget().pendingAnchors, isEmpty);
 
-      for (var k = 0; k < tool.anchorCount; k++) {
-        expect(find.text('${tool.shortLabel}: Tap point ${k + 1} of ${tool.anchorCount}'), findsOneWidget);
-        await t.tapAt(centre + Offset(-60.0 + 50 * k, -30.0 + 40 * k));
+      if (tool.anchorCount >= 2) {
+        // MT5-style: ONE touch -> drag -> release draws it. No per-point taps, and the drag must not pan.
+        expect(find.text('${tool.shortLabel}: drag on the chart'), findsOneWidget);
+        final g = await t.startGesture(centre + const Offset(-60, -30));
+        await g.moveBy(const Offset(40, 25));
+        await t.pump();
+        await g.moveBy(const Offset(70, 45));
+        await t.pump();
+        await g.up();
         await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 100));
-        expect(find.byType(RadialChartMenu), findsNothing, reason: 'a placement tap never opens the menu');
+      } else {
+        expect(find.text('${tool.shortLabel}: tap the chart'), findsOneWidget);
+        await t.tapAt(centre + const Offset(-60, -30));
+        await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 100));
       }
+      expect(find.byType(RadialChartMenu), findsNothing, reason: 'creating a drawing never opens the menu');
 
       // Complete: one drawing of this type with its own number of points, tool inactive, hint gone.
       final drawn = c.read(chartDrawingsProvider);
@@ -204,7 +214,7 @@ void main() {
       expect(drawn.single.type, tool);
       expect(drawn.single.anchors, hasLength(tool.anchorCount));
       expect(widget().activeTool, isNull);
-      expect(find.textContaining('Tap point'), findsNothing);
+      expect(find.textContaining('chart'), findsNothing, reason: 'the hint is gone once the tool is done');
 
       // Only now does a plain chart tap open the round menu again. Tap away from the drawing.
       await t.tapAt(centre + const Offset(110, -170));
@@ -213,4 +223,90 @@ void main() {
       await _unmount(t);
     });
   }
+
+  group('existing drawings', () {
+    // Draws a Trend by touch-drag-release and returns the container, leaving the chart in normal mode.
+    Future<ProviderContainer> drawTrend(WidgetTester t) async {
+      final c = await _pumpChart(t);
+      final chart = find.byType(CandleChart);
+      final centre = t.getCenter(chart);
+      await _tapChart(t, chart);
+      await tapMenuTool(t, DrawingType.trendline);
+      final g = await t.startGesture(centre + const Offset(-80, 0));
+      await g.moveBy(const Offset(60, 20));
+      await g.moveBy(const Offset(100, 40));
+      await g.up();
+      await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 100));
+      expect(c.read(chartDrawingsProvider), hasLength(1));
+      return c;
+    }
+
+    testWidgets('dragging a drawing by its body moves the whole thing and persists; it does not pan or open the menu', (t) async {
+      final c = await drawTrend(t);
+      final before = c.read(chartDrawingsProvider).single;
+      final chart = find.byType(CandleChart);
+      final centre = t.getCenter(chart);
+      // The middle of the line: (-80,0) .. (+80,+60) relative to the chart centre.
+      final g = await t.startGesture(centre + const Offset(0, 30));
+      await g.moveBy(const Offset(0, -60));
+      await g.moveBy(const Offset(0, -60));
+      await g.up();
+      await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 100));
+
+      final after = c.read(chartDrawingsProvider).single;
+      expect(after.id, before.id);
+      expect(after.anchors, hasLength(2));
+      final d0 = after.anchors[0].price - before.anchors[0].price;
+      final d1 = after.anchors[1].price - before.anchors[1].price;
+      expect(d0, greaterThan(0), reason: 'dragged up -> higher price');
+      expect(d1, closeTo(d0, d0.abs() * 0.01 + 1e-9), reason: 'both ends move by the same amount (the shape is kept)');
+      expect(find.byType(RadialChartMenu), findsNothing);
+      await _unmount(t);
+    });
+
+    testWidgets('dragging a handle of the selected drawing changes only that end', (t) async {
+      final c = await drawTrend(t);
+      final chart = find.byType(CandleChart);
+      final centre = t.getCenter(chart);
+      // Select it by tapping its body, then drag the END handle (right end of the line).
+      await t.tapAt(centre + const Offset(0, 30));
+      await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 100));
+      final before = c.read(chartDrawingsProvider).single;
+      final g = await t.startGesture(centre + const Offset(80, 60));
+      await g.moveBy(const Offset(0, -50));
+      await g.moveBy(const Offset(0, -50));
+      await g.up();
+      await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 100));
+      final after = c.read(chartDrawingsProvider).single;
+      expect(after.anchors[0].t, before.anchors[0].t, reason: 'the start did not move');
+      expect(after.anchors[0].price, before.anchors[0].price, reason: 'the start did not move');
+      expect(after.anchors[1].price, isNot(before.anchors[1].price), reason: 'the end changed');
+      await _unmount(t);
+    });
+
+    testWidgets('a tap outside every drawing opens the round menu and moves nothing', (t) async {
+      final c = await drawTrend(t);
+      final before = c.read(chartDrawingsProvider).single;
+      await t.tapAt(t.getCenter(find.byType(CandleChart)) + const Offset(110, -170));
+      await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 100));
+      expect(find.byType(RadialChartMenu), findsOneWidget);
+      final now = c.read(chartDrawingsProvider).single.anchors;
+      for (var i = 0; i < now.length; i++) {
+        expect(now[i].t, before.anchors[i].t);
+        expect(now[i].price, before.anchors[i].price);
+      }
+      await _unmount(t);
+    });
+
+    testWidgets('with no tool armed and no drawing under the finger, a drag still pans (no drawing, no menu)', (t) async {
+      final c = await _pumpChart(t);
+      final chart = find.byType(CandleChart);
+      final centre = t.getCenter(chart);
+      await t.dragFrom(centre + const Offset(-50, -100), const Offset(120, 0));
+      await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 100));
+      expect(c.read(chartDrawingsProvider), isEmpty);
+      expect(find.byType(RadialChartMenu), findsNothing);
+      await _unmount(t);
+    });
+  });
 }

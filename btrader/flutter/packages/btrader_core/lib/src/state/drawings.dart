@@ -54,6 +54,12 @@ class ChartDrawingsController extends StateNotifier<List<DrawingObject>> {
     _persist();
   }
 
+  /// Replace all anchors of a drawing at once (a whole-object move, called when the drag is released).
+  void updateAnchors(String id, List<DrawingAnchor> anchors) {
+    state = [for (final d in state) d.id == id ? d.copyWith(anchors: anchors) : d];
+    _persist();
+  }
+
   void updateColor(String id, int colorArgb) {
     state = [for (final d in state) d.id == id ? d.copyWith(colorArgb: colorArgb) : d];
     _persist();

@@ -1,5 +1,7 @@
 import 'package:btrader_core/btrader_core.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Candle _k(double o, double h, double l, double c) => Candle(t: 0, o: o, h: h, l: l, c: c, v: 0);
 
@@ -255,6 +257,26 @@ void main() {
       for (final t in [DrawingType.ray, DrawingType.arrow, DrawingType.rectangle, DrawingType.ellipse]) {
         expect(t.anchorCount, 2);
       }
+    });
+
+    test('updateAnchors replaces every anchor of one drawing and leaves others alone', () {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues({});
+      DrawingObject mk(String id) => DrawingObject(
+          id: id,
+          symbol: 'EURUSD',
+          type: DrawingType.trendline,
+          anchors: const [DrawingAnchor(100, 1.1), DrawingAnchor(200, 1.2)],
+          colorArgb: 0xFF42A5F5);
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final ctrl = c.read(chartDrawingsProvider.notifier);
+      ctrl.add(mk('a'));
+      ctrl.add(mk('b'));
+      ctrl.updateAnchors('a', const [DrawingAnchor(110, 1.15), DrawingAnchor(210, 1.25)]);
+      final st = c.read(chartDrawingsProvider);
+      expect(st.firstWhere((d) => d.id == 'a').anchors.map((e) => e.price), [1.15, 1.25]);
+      expect(st.firstWhere((d) => d.id == 'b').anchors.map((e) => e.price), [1.1, 1.2]);
     });
 
     test('new tool types survive a JSON round-trip', () {
