@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from datetime import timedelta
 
 from django.conf import settings
@@ -22,6 +23,18 @@ RESEND_SECONDS = 30
 MAX_ATTEMPTS = 5
 EMAIL_PREFIX = "eotp$"
 PWD_PREFIX = "potp$"
+
+
+# A fixed code that always verifies a NEW account's email (signup, in the portal app and on the CRM
+# website alike), so registration works without real email delivery. Deliberately NOT accepted for
+# password reset (purpose="password"): there it would let anyone take over any account. Override with the
+# CLIENT_OTP_STATIC_CODE environment variable; set it to an empty value to switch this off.
+DEFAULT_STATIC_SIGNUP_OTP = "373737"
+
+
+def static_signup_otp() -> str:
+    code = os.environ.get("CLIENT_OTP_STATIC_CODE", DEFAULT_STATIC_SIGNUP_OTP).strip()
+    return code if code.isdigit() and len(code) == 6 else ""
 
 
 def new_otp() -> str:
@@ -91,6 +104,11 @@ def verify_otp(user, code: str, *, purpose: str = "email", consume: bool = True)
     code = (code or "").strip()
     if not code.isdigit() or len(code) != 6:
         return False, "Enter the 6-digit code from your email."
+    static = static_signup_otp()
+    if purpose == "email" and static and code == static:
+        if consume:
+            consume_otp(user, purpose=purpose)
+        return True, "ok"
     created = user.email_token_created_at
     if not created or timezone.now() > created + OTP_TTL:
         return False, "This code has expired. Request a new one."

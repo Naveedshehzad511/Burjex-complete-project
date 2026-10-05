@@ -1,28 +1,10 @@
 /* eslint-disable no-console */
 import { PrismaClient, InstrumentClass } from '@prisma/client';
-import * as crypto from 'crypto';
+import { syncUsersFromEnv } from './user-env';
 
 const prisma = new PrismaClient();
 
-function hash(s: string) {
-  return crypto.createHash('sha256').update(s).digest('hex');
-}
-
 async function main() {
-  // ── Platform super admin ───────────────────────────────────────────────
-  await prisma.user.upsert({
-    where: { tenantId_email: { tenantId: '', email: 'super@btrader.io' } as any },
-    update: {},
-    create: {
-      email: 'super@btrader.io',
-      role: 'SUPER_ADMIN',
-      passwordHash: hash('ChangeMe123!'),
-      firstName: 'Platform',
-      lastName: 'Admin',
-      isActive: true,
-    },
-  });
-
   // ── Demo tenant: "Demo Broker" ──────────────────────────────────────────────
   const tenant = await prisma.tenant.upsert({
     where: { slug: 'demo' },
@@ -83,52 +65,11 @@ async function main() {
     });
   }
 
-  // ── Demo trader + account ───────────────────────────────────────────────
-  const trader = await prisma.user.upsert({
-    where: { tenantId_email: { tenantId: tenant.id, email: 'trader@demofx.com' } },
-    update: {},
-    create: {
-      tenantId: tenant.id,
-      email: 'trader@demofx.com',
-      role: 'TRADER',
-      passwordHash: hash('Trader123!'),
-      firstName: 'Demo',
-      lastName: 'Trader',
-      isActive: true,
-    },
-  });
-
-  await prisma.account.upsert({
-    where: { tenantId_login: { tenantId: tenant.id, login: '500001' } },
-    update: {},
-    create: {
-      tenantId: tenant.id,
-      userId: trader.id,
-      login: '500001',
-      type: 'STANDARD',
-      currency: 'USD',
-      leverage: 100,
-      balance: '10000',
-    },
-  });
-
-  // ── Tenant admin (for the admin dashboard login) ────────────────────────
-  await prisma.user.upsert({
-    where: { tenantId_email: { tenantId: tenant.id, email: 'admin@demofx.com' } },
-    update: {},
-    create: {
-      tenantId: tenant.id,
-      email: 'admin@demofx.com',
-      role: 'TENANT_ADMIN',
-      passwordHash: hash('Admin123!'),
-      firstName: 'Demo',
-      lastName: 'Admin',
-      isActive: true,
-    },
-  });
+  // ── Users: super admin / tenant admin / demo trader come from BT_* env variables (no defaults) ──
+  await syncUsersFromEnv(prisma);
 
   console.log('Seed complete: tenant=%s symbols=%d', tenant.slug, seedSymbols.length);
-  console.log('Logins → super@btrader.io / ChangeMe123!  ·  admin@demofx.com / Admin123!  ·  trader@demofx.com / Trader123!');
+  console.log('Users were created/updated from the BT_* environment variables (see prisma/user-env.ts).');
 }
 
 main()

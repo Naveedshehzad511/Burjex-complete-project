@@ -12,6 +12,12 @@
 #   docker compose -f deploy/docker-compose.live.yml --env-file deploy/.env.live up -d --build
 #
 # Host ports: 80, 443 (Caddy only — every other service is internal-only).
+#
+# Admin accounts come from .env.live and are re-synced on every start (change the value, restart):
+#   CRM admin           CRM_ADMIN_EMAIL / CRM_ADMIN_PASSWORD                 -> accounts bootstrap_admin
+#   B-Trader admins     BT_SUPER_ADMIN_* / BT_TENANT_ADMIN_* / BT_DEMO_TRADER_*  -> packages/db prisma/sync-users.ts
+# The B-Trader tenant admin / demo trader need the "demo" tenant, which the one-time seed creates:
+#   docker compose -f deploy/docker-compose.live.yml --env-file deploy/.env.live exec btrader-gateway #     sh -lc 'cd /app/packages/db && ./node_modules/.bin/ts-node --transpile-only prisma/seed.ts'
 
 name: burjex_live
 
@@ -82,7 +88,7 @@ services:
     <<: *restart
     env_file: .env.live
     command: >-
-      sh -lc "python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${CRM_WEB_WORKERS:-2} --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile -"
+      sh -lc "python manage.py migrate --noinput && (python manage.py bootstrap_admin || echo 'bootstrap_admin failed, continuing') && python manage.py collectstatic --noinput && exec gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${CRM_WEB_WORKERS:-2} --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile -"
     volumes:
       - bxnet_crm_static:/app/staticfiles
       - bxnet_crm_media:/app/media
@@ -192,6 +198,7 @@ services:
       NODE_OPTIONS: "--max-http-header-size=131072"
     command: >-
       sh -lc "cd /app && pnpm --filter @btrader/db exec prisma db push --skip-generate &&
+      (cd /app/packages/db && ./node_modules/.bin/ts-node --transpile-only prisma/sync-users.ts || echo 'sync-users failed, continuing') &&
       cd /app/apps/gateway-api && exec node dist/main.js"
     depends_on:
       btrader-postgres: { condition: service_healthy }
