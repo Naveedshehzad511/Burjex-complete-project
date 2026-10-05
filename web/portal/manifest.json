@@ -1,6 +1,6 @@
 {
-  "name": "Example",
-  "short_name": "Example",
+  "name": "Burjex Prime",
+  "short_name": "Burjex",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#070b14",
