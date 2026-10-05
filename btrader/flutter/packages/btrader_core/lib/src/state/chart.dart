@@ -292,9 +292,23 @@ class ChartHistoryState {
 final chartHistoryStateProvider =
     StateProvider.family<ChartHistoryState, ChartReq>((_, __) => const ChartHistoryState());
 
-/// One "page" of older history per lazy-load step (matches the gateway's
-/// `before` pagination — see market.controller.ts).
-const int kOlderPageSize = 500;
+/// Smallest / largest batch fetched per background request (the gateway caps `limit` at 5000).
+/// The batch is sized from the visible range (see [olderBatchFor]) and is never shown to the
+/// user as a page - it is just how the one continuous series is filled in.
+const int kOlderMinBatch = 500;
+const int kOlderMaxBatch = 5000;
+
+/// Bars kept in memory per series (MT5's "max bars in chart" idea). Older history beyond this
+/// is simply not requested.
+const int kMaxLoadedBars = 100000;
+
+/// How many bars to ask for when [visibleBars] are on screen: about four screens' worth, so a
+/// zoomed-out chart gets a deep batch and a zoomed-in one stays light.
+int olderBatchFor(int visibleBars, {bool urgent = false}) => urgent
+    // Less than a screen of history left to the left of the viewport: a small batch comes back fast
+    // (little JSON over a slow link); the next, larger batch is chained straight after it.
+    ? (visibleBars * 2).clamp(300, kOlderMaxBatch)
+    : (visibleBars * 4).clamp(kOlderMinBatch, kOlderMaxBatch);
 
 /// The broker's UTC offset in seconds (the gateway's `BROKER_UTC_OFFSET_SEC`), which decides where
 /// H4 and D1 bars begin. Fetched once per session from `/market/clock`; 0 when unavailable, which
@@ -342,13 +356,13 @@ final candlesProvider = FutureProvider.autoDispose.family<List<Candle>, ChartReq
   return candles;
 });
 
-Future<List<Candle>> _fetchCandles(Ref ref, ChartReq req, {int? before}) async {
+Future<List<Candle>> _fetchCandles(Ref ref, ChartReq req, {int? before, int? limit}) async {
   final api = ref.read(apiClientProvider);
   final data = await api.get('/market/candles', query: {
     'symbol': req.symbol,
     'tf': req.tf.api,
     // Deep history on first load; gateway caps apply server-side.
-    'limit': before == null ? '5000' : '$kOlderPageSize',
+    'limit': '${limit ?? (before == null ? 5000 : kOlderMinBatch)}',
     if (before != null) 'before': '$before',
   }) as List;
   return data.map((e) => Candle.fromJson(e)).toList();
@@ -371,9 +385,18 @@ List<Candle> _mergeKeepingOlder(List<Candle>? existing, List<Candle> fresh) {
   return [for (final t in times) byT[t]!];
 }
 
+/// Latest-tail size for the 30s soft refresh. The full 5000-bar fetch is only needed when the
+/// tail does not overlap what is cached (e.g. the app was asleep for hours) - otherwise it
+/// just re-downloaded and re-merged the whole history every 30 seconds.
+const int _kRefreshTail = 600;
+
 Future<void> _refreshCandles(Ref ref, ChartReq req) async {
   try {
-    final fresh = await _fetchCandles(ref, req);
+    final have = ref.read(_candleCacheProvider)[req];
+    var fresh = await _fetchCandles(ref, req, limit: have == null || have.isEmpty ? null : _kRefreshTail);
+    if (have != null && have.isNotEmpty && fresh.isNotEmpty && fresh.first.t > have.last.t) {
+      fresh = await _fetchCandles(ref, req); // gap: refill from a full tail
+    }
     final cache = ref.read(_candleCacheProvider);
     ref.read(_candleCacheProvider.notifier).state = {
       ...cache,
@@ -406,20 +429,28 @@ class ChartHistoryLoader {
   final Ref _ref;
   final ChartReq _req;
 
-  /// Called by [CandleChart] when the user pans near the beginning of the
-  /// loaded window.
-  Future<void> loadOlder() async {
+  /// Called by [CandleChart] as the viewport nears the oldest loaded bar. Runs silently in the
+  /// background: the bars already on screen are never replaced or moved (the chart's scroll offset
+  /// is measured from the newest bar, so older bars appended on the left do not shift it).
+  /// [visibleBars] is what is currently on screen and sizes the batch (see [olderBatchFor]).
+  Future<void> loadOlder({int visibleBars = 0, bool urgent = false}) async {
     final ref = _ref;
     final req = _req;
     final st = ref.read(chartHistoryStateProvider(req));
     if (st.loadingOlder || st.exhausted || DateTime.now().millisecondsSinceEpoch < st.retryAtMs) return;
     final have = ref.read(_candleCacheProvider)[req];
     if (have == null || have.isEmpty) return;
+    if (have.length >= kMaxLoadedBars) return;
     ref.read(chartHistoryStateProvider(req).notifier).state = st.copyWith(loadingOlder: true);
     try {
+      // Timestamp cursor: ask for bars strictly older than the oldest one we hold.
       final oldestT = have.first.t;
-      final older = await _fetchCandles(ref, req, before: oldestT);
-      final distinct = older.where((c) => c.t < oldestT).toList();
+      final older = await _fetchCandles(ref, req, before: oldestT, limit: olderBatchFor(visibleBars, urgent: urgent));
+      // Re-read the cache AFTER the await: a soft refresh may have merged newer bars meanwhile,
+      // and writing back the pre-request snapshot would silently undo it.
+      final current = ref.read(_candleCacheProvider)[req] ?? have;
+      final cursor = current.first.t;
+      final distinct = older.where((c) => c.t < cursor).toList()..sort((a, b) => a.t.compareTo(b.t));
       if (distinct.isEmpty) {
         ref.read(chartHistoryStateProvider(req).notifier).state =
             const ChartHistoryState(loadingOlder: false, exhausted: true);
@@ -428,15 +459,13 @@ class ChartHistoryLoader {
       final cache = ref.read(_candleCacheProvider);
       ref.read(_candleCacheProvider.notifier).state = {
         ...cache,
-        req: [...distinct, ...have],
+        req: [...distinct, ...current],
       };
-      ref.read(chartHistoryStateProvider(req).notifier).state = ChartHistoryState(
-        loadingOlder: false,
-        // Only an empty page proves the start of history: a rolled-up page can
-        // legitimately hold fewer than kOlderPageSize bars and still have more
-        // behind it.
-        exhausted: false,
-      );
+      // Only an empty batch proves the start of history: a rolled-up batch can legitimately
+      // hold fewer bars than asked for and still have more behind it.
+      ref.read(chartHistoryStateProvider(req).notifier).state = const ChartHistoryState();
+      // The value is already in the cache; this just re-publishes it (the old list stays on
+      // screen meanwhile - see liveCandlesProvider - so there is no loading state).
       ref.invalidate(candlesProvider(req));
     } catch (_) {
       ref.read(chartHistoryStateProvider(req).notifier).state =
@@ -611,16 +640,17 @@ final liveCandlesProvider = Provider.autoDispose.family<AsyncValue<List<Candle>>
   final pushed = ref.watch(serverCandlesProvider.select((m) => m[ServerCandlesNotifier.seriesKey(req.symbol, req.tf.api)]));
   final forming = ref.watch(formingCandleProvider(req));
 
-  // Identity is the bucket time: a bar present in both sources collapses into one.
-  final byT = <int, Candle>{for (final c in history) c.t: c};
-  if (pushed != null) byT.addAll(pushed);
+  // Identity is the bucket time: a bar present in both sources collapses into one. Only the
+  // newest bars can differ from [history], so overlay them instead of re-keying and re-sorting
+  // the whole (possibly 10^5-bar) series on every tick.
+  final over = <int, Candle>{...?pushed};
 
   if (forming != null) {
     final newestPushed = pushed == null || pushed.isEmpty ? 0 : pushed.keys.reduce((a, b) => a > b ? a : b);
     // A device that is behind the server must not overwrite a newer server bar.
     if (forming.bucket >= newestPushed) {
-      final s = byT[forming.bucket];
-      byT[forming.bucket] = s == null
+      final s = over[forming.bucket] ?? _candleAt(history, forming.bucket);
+      over[forming.bucket] = s == null
           ? forming.toCandle()
           : Candle(
               t: s.t,
@@ -633,6 +663,51 @@ final liveCandlesProvider = Provider.autoDispose.family<AsyncValue<List<Candle>>
     }
   }
 
-  final times = byT.keys.toList()..sort();
-  return AsyncValue.data([for (final t in times) byT[t]!]);
+  return AsyncValue.data(overlayCandles(history, over));
 });
+
+Candle? _candleAt(List<Candle> sorted, int t) {
+  final i = _indexOfTime(sorted, t);
+  return i < 0 ? null : sorted[i];
+}
+
+/// Index of the bar opened at [t] in an oldest-first list, or -1.
+int _indexOfTime(List<Candle> sorted, int t) {
+  var lo = 0, hi = sorted.length - 1;
+  while (lo <= hi) {
+    final mid = (lo + hi) >> 1;
+    final v = sorted[mid].t;
+    if (v == t) return mid;
+    if (v < t) {
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return -1;
+}
+
+/// [base] (oldest -> newest, unique times) with [over] laid on top by bar time: a bar in both
+/// takes the overlay's values, an overlay-only bar is inserted in order. Same result as keying
+/// everything by time and sorting, but O(n) copy + O(k log n) for the k overlay bars.
+List<Candle> overlayCandles(List<Candle> base, Map<int, Candle> over) {
+  if (over.isEmpty) return base;
+  final keys = over.keys.toList()..sort();
+  final out = List<Candle>.of(base);
+  final appended = <Candle>[];
+  var needsSort = false;
+  for (final t in keys) {
+    final i = _indexOfTime(out, t);
+    if (i >= 0) {
+      out[i] = over[t]!;
+    } else if (out.isEmpty || t > out.last.t) {
+      appended.add(over[t]!);
+    } else {
+      out.add(over[t]!); // a bar inside the range that history lacks: rare, sort afterwards
+      needsSort = true;
+    }
+  }
+  out.addAll(appended);
+  if (needsSort) out.sort((a, b) => a.t.compareTo(b.t));
+  return out;
+}

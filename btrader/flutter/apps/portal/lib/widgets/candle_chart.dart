@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:flutter/gestures.dart' show DeviceGestureSettings;
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:btrader_core/btrader_core.dart';
 
 import 'radial_chart_menu.dart';
@@ -183,6 +185,9 @@ class CandleChart extends StatefulWidget {
     this.onLevelTap,
     this.onAutoFit,
     this.onNeedOlder,
+    this.olderPending,
+    this.olderExhausted,
+    this.debugViewport,
     this.loadingOlder = false,
     this.crosshairMode = false,
     this.viewKey,
@@ -254,7 +259,19 @@ class CandleChart extends StatefulWidget {
   /// The user panned near the start of the currently loaded history — fetch
   /// and prepend an older page. Safe to call repeatedly; the caller
   /// (`loadOlderCandles`) de-duplicates in-flight requests itself.
-  final VoidCallback? onNeedOlder;
+  ///
+  /// [visibleBars] is what is on screen (plus whatever a fling is about to cover) and sizes the
+  /// batch; [urgent] means less than one screen is buffered, so ask for a small, fast batch first.
+  final void Function(int visibleBars, bool urgent)? onNeedOlder;
+
+  /// Non-reactive reads of the history loader's state. While older bars may still arrive the
+  /// chart lets the finger / a fling run on into a blank margin instead of hitting a wall, then
+  /// eases back if nothing came. (Reading, not watching: no rebuild when they flip.)
+  final bool Function()? olderPending;
+  final bool Function()? olderExhausted;
+
+  /// Test hook: receives the scroll offset (bars back from the newest) and the candle slot width.
+  final ValueNotifier<({double offset, double slot})>? debugViewport;
 
   /// An older-history page is currently loading, for the left-edge spinner.
   final bool loadingOlder;
@@ -295,16 +312,128 @@ class CandleChart extends StatefulWidget {
 /// looks detached from the edge.
 const double _kRightPad = 5;
 
+/// Laid-out text, reused across frames. The price ladder, time labels and Bid/Ask tags are the same
+/// few strings frame after frame while panning (a label stays glued to its bar; the ladder only
+/// changes when the visible high/low does), yet each was laid out from scratch on every frame -
+/// the largest single cost of a frame at normal zoom. Painters are only ever painted, never
+/// mutated, so sharing them is safe.
+class _TextCache {
+  static final Map<String, TextPainter> _m = {};
+
+  static TextPainter get(String text, double size, Color color, [FontWeight weight = FontWeight.normal]) {
+    final key = '$size|${weight.index}|${color.toARGB32()}|$text';
+    final hit = _m[key];
+    if (hit != null) return hit;
+    // A pan over a long history produces many distinct labels; keep the cache bounded.
+    if (_m.length > 400) _m.clear();
+    return _m[key] = TextPainter(
+      textDirection: TextDirection.ltr,
+      text: TextSpan(text: text, style: TextStyle(color: color, fontSize: size, fontWeight: weight)),
+    )..layout();
+  }
+
+  /// Width only (the axis-width probe): colour does not affect it.
+  static double width(String text, double size, FontWeight weight) => get(text, size, const Color(0xFF000000), weight).width;
+}
+
 /// Which axis a single-finger drag that started on an axis strip is zooming.
 enum _AxisDrag { price, time }
 
-class _CandleChartState extends State<CandleChart> {
+class _CandleChartState extends State<CandleChart> with SingleTickerProviderStateMixin {
   double _perScreen = 80; // visible candle count (zoom)
   // Candles scrolled back from the latest. 0 = newest bar flush at the axis
   // (default); negative = dragged forward into the right-margin headroom.
   double _rightOffset = 0;
   double _lastScale = 1.0;
   double _chartW = 1;
+
+  // ── Continuous pan / fling ──────────────────────────────────────────────────────────────
+  // One controller drives both the fling after a swipe and the ease-back from the blank margin.
+  late final AnimationController _motion = AnimationController.unbounded(vsync: this)
+    ..addListener(_onMotionTick)
+    ..addStatusListener((s) {
+      if (s == AnimationStatus.completed || s == AnimationStatus.dismissed) {
+        _flinging = false;
+        _settleSoon();
+      }
+    });
+  Timer? _settleTimer;
+  double _slotPx = 1; // candle slot width, refreshed every build; converts finger px <-> bars
+  int _total = 0; // candle count at the last build, for clamps outside build()
+  double _panCarryX = 0, _panCarryY = 0; // finger travel the gesture slop swallowed, to catch up on
+  bool _panning = false, _gestureZoomed = false, _tapStoppedFling = false, _flinging = false;
+  bool _prefetchQueued = false;
+  bool _panCarryPending = false;
+  int _lastPointerCount = 0;
+  double _flingTarget = 0;
+
+  // Finger travel before a scale gesture is recognised is not reported (Flutter hands over only the
+  // per-event delta once it starts), so a stock detector makes the chart lag the finger by the slop.
+  // A smaller slop (8 px -> pan starts after 16) plus the catch-up above keeps it 1:1.
+  static const DeviceGestureSettings _chartGesture = DeviceGestureSettings(touchSlop: 8);
+
+  /// Furthest the view may scroll back: the oldest loaded bar at the left edge...
+  double get _hardMax => math.max(0.0, _total - _perScreen);
+
+  /// ...or, while older history may still arrive, up to ~one screen of blank margin past it so the
+  /// movement never hits a wall.
+  double get _softMax {
+    final more = widget.onNeedOlder != null && !(widget.olderExhausted?.call() ?? false);
+    return _hardMax + (more ? _perScreen * 0.85 : 0);
+  }
+
+  double _clampOffset(double v) => v.clamp(-_kRightPad, _softMax).toDouble();
+
+  void _onMotionTick() {
+    final v = _motion.value;
+    final c = _clampOffset(v);
+    setState(() => _rightOffset = c);
+    if (c != v) {
+      // Ran into the live edge or the end of the margin.
+      _motion.stop();
+      _flinging = false;
+      _settleSoon();
+    }
+  }
+
+  void _stopMotion() {
+    if (_motion.isAnimating) _motion.stop();
+    _flinging = false;
+    _settleTimer?.cancel();
+  }
+
+  void _startFling(double vxPx) {
+    final slot = _slotPx;
+    if (slot <= 0) return;
+    final vPx = vxPx.clamp(-9000.0, 9000.0);
+    if (vPx.abs() < 120) return;
+    final sim = FrictionSimulation(0.135, _rightOffset, vPx / slot, tolerance: const Tolerance(velocity: 0.02, distance: 0.001));
+    _flingTarget = sim.finalX;
+    _flinging = true;
+    _motion.animateWith(sim);
+  }
+
+  /// If the view is parked in the blank margin, wait for the older bars that are on their way
+  /// (they fill it in place) and ease back to the real edge only if none arrive.
+  void _settleSoon() {
+    _settleTimer?.cancel();
+    if (!mounted || _rightOffset <= _hardMax + 0.001) return;
+    var waited = 0;
+    _settleTimer = Timer.periodic(const Duration(milliseconds: 100), (t) {
+      waited += 100;
+      if (!mounted || _rightOffset <= _hardMax + 0.001) {
+        t.cancel();
+        return;
+      }
+      final pending = widget.olderPending?.call() ?? false;
+      final exhausted = widget.olderExhausted?.call() ?? false;
+      if (exhausted || (!pending && waited >= 600) || waited >= 5000) {
+        t.cancel();
+        _motion.value = _rightOffset;
+        _motion.animateTo(_hardMax, duration: const Duration(milliseconds: 240), curve: Curves.easeOutCubic);
+      }
+    });
+  }
 
   double _oscFraction = 0.32; // share of chart height taken by the osc region
   bool _oscCollapsed = false;
@@ -399,6 +528,8 @@ class _CandleChartState extends State<CandleChart> {
 
   @override
   void dispose() {
+    _settleTimer?.cancel();
+    _motion.dispose();
     _radialGuard?.cancel();
     super.dispose();
   }
@@ -422,6 +553,20 @@ class _CandleChartState extends State<CandleChart> {
       _moveId = null;
       _radialOpen = false;
     }
+    if (old.tf == widget.tf &&
+        old.viewKey == widget.viewKey &&
+        _rightOffset > 0 &&
+        old.candles.isNotEmpty &&
+        widget.candles.isNotEmpty) {
+      // MT5: when scrolled back, a newly formed bar must not drag the view along - the bars you are
+      // looking at stay where they are. (At the live edge the view keeps following the newest bar.)
+      final oldLast = old.candles.last.t;
+      var added = 0;
+      for (var i = widget.candles.length - 1; i >= 0 && widget.candles[i].t > oldLast; i--) {
+        added++;
+      }
+      if (added > 0) _rightOffset += added;
+    }
     if (old.crosshairMode != widget.crosshairMode) {
       // On: start in the middle of the price pane (MT5); off: remove it.
       _cross = widget.crosshairMode ? Offset(_chartW / 2, _chartH / 2) : null;
@@ -429,6 +574,7 @@ class _CandleChartState extends State<CandleChart> {
   }
 
   void _resetView() => setState(() {
+        _stopMotion();
         _perScreen = 60;
         _rightOffset = 0;
         _vShift = 0;
@@ -436,7 +582,6 @@ class _CandleChartState extends State<CandleChart> {
         if (!widget.crosshairMode) _cross = null;
       });
 
-  static final TextPainter _axisMeasure = TextPainter(textDirection: TextDirection.ltr);
 
   /// Right price-ladder width, sized to what it will actually display: the
   /// widest ladder tick (hi/lo of the visible range) and the widest live
@@ -444,11 +589,7 @@ class _CandleChartState extends State<CandleChart> {
   /// constant, so a 2-digit symbol (e.g. gold) doesn't carry the same margin
   /// as a 5-digit one (e.g. a forex pair), and the axis never clips either way.
   double _computeAxisWidth(double hi, double lo, int digits, double? bid, double? ask) {
-    double widthFor(String text, double fontSize, FontWeight weight) {
-      _axisMeasure.text = TextSpan(text: text, style: TextStyle(fontSize: fontSize, fontWeight: weight));
-      _axisMeasure.layout();
-      return _axisMeasure.width;
-    }
+    double widthFor(String text, double fontSize, FontWeight weight) => _TextCache.width(text, fontSize, weight);
 
     var ladder = 0.0;
     for (final p in [hi, lo]) {
@@ -480,30 +621,36 @@ class _CandleChartState extends State<CandleChart> {
       final minPer = math.min(12.0, total.toDouble());
       final per = _perScreen.clamp(minPer, total.toDouble());
       final perI = per.round();
-      // Split the offset into a right-edge gap (empty slots after the newest
-      // bar) and a history scroll-back. The gap only exists at the right edge;
-      // once you pan past it, `back` scrolls into completed history. Clamp the
-      // gap so at least one candle always shows on very short series.
-      final back = _rightOffset > 0 ? _rightOffset.round() : 0;
-      final trailingGap = math.min((-_rightOffset).round().clamp(0, _kRightPad.round()), perI - 1);
-      final dataEnd = (total - back).clamp(1, total);
-      final start = (dataEnd - (perI - trailingGap)).clamp(0, total);
-      final window = widget.candles.sublist(start, dataEnd);
+      _total = total;
+      // Ichimoku projects its cloud into the future - reserve that many empty slots on the right so
+      // the projection is visible (0 when no Ichimoku).
+      final futureSlots = widget.overlays.fold<int>(0, (m, o) => math.max(m, o.futureShift));
 
-      // Historical lazy-loading: the visible window has scrolled to within a
-      // page of the oldest bar currently loaded. Ask for an older page once
-      // per such build — deferred to post-frame since this is a side effect,
-      // and safe to call on every qualifying frame because the loader itself
-      // (`loadOlderCandles`) drops the call while a fetch is already in
-      // flight or the feed is confirmed exhausted.
-      // Prefetch a full screen ahead of the edge so a quick drag never hits the wall.
-      if (widget.onNeedOlder != null && start <= math.max(60, perI)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => widget.onNeedOlder?.call());
+      // Pixel-continuous layout. `_rightOffset` (bars scrolled back from the newest, fractional) is
+      // never rounded: the bars overlapping the viewport are drawn at a fractional pixel shift, so the
+      // chart moves exactly as far as the finger did. The window needs no pixel sizes, so it can be
+      // chosen before the price axis (which depends on the window) is measured.
+      final off = _rightOffset;
+      final start = (total - per - off).floor().clamp(0, total - 1);
+      final dataEnd = (total - off + futureSlots).ceil().clamp(start + 1, total);
+      final window = widget.candles.sublist(start, dataEnd);
+      final trailingGap = 0;
+
+      // Keep ~3 screens of history buffered to the left of the viewport (scaled by the zoom, not a
+      // fixed count) and look ahead by whatever a fling is about to cover, so the oldest loaded bar
+      // is never reached: the user just keeps dragging. The loader runs silently in the background.
+      final bufferBars = total - per - off;
+      final ahead = _flinging ? math.max(0.0, _flingTarget - _rightOffset) : 0.0;
+      if (widget.onNeedOlder != null && !_prefetchQueued && bufferBars - ahead < math.max(150, perI * 3)) {
+        _prefetchQueued = true;
+        final urgent = bufferBars - ahead < perI;
+        final want = perI + ahead.round();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _prefetchQueued = false;
+          if (mounted) widget.onNeedOlder?.call(want, urgent);
+        });
       }
       final overlayExtra = overlayValuesInWindow(widget.overlays, start, dataEnd);
-      // Ichimoku projects its cloud into the future — reserve that many empty
-      // slots on the right so the projection is visible (0 when no Ichimoku).
-      final futureSlots = widget.overlays.fold<int>(0, (m, o) => math.max(m, o.futureShift));
 
       // Right price-ladder width, measured from the labels it will actually
       // show (not a fixed constant) — a symbol/timeframe with fewer price
@@ -513,6 +660,11 @@ class _CandleChartState extends State<CandleChart> {
       final axisRange = chartRange(window, widget.levels, extra: overlayExtra, vShift: _vShift, priceZoom: _priceZoom);
       final axisW = _computeAxisWidth(axisRange.hi, axisRange.lo, widget.digits, widget.livePrice, widget.askPrice);
       _chartW = (c.maxWidth - axisW).clamp(1, double.infinity);
+      final slotPx = _chartW / (per + futureSlots);
+      _slotPx = slotPx;
+      // Where window[0] starts, in px (-slot..0 normally; positive while the blank margin is showing).
+      final xShift = (per + off - (total - start)) * slotPx;
+      widget.debugViewport?.value = (offset: off, slot: slotPx);
 
       // Vertical geometry: reserve the osc region from the bottom (above the
       // time axis). Kept in sync with the painter so the resize handle lands on
@@ -535,8 +687,7 @@ class _CandleChartState extends State<CandleChart> {
         if (widget.onAnchor == null || window.isEmpty) return;
         if (pos.dx < 0 || pos.dx >= _chartW) return;
         if (pos.dy < metrics.priceTop || pos.dy > metrics.priceTop + metrics.priceH) return;
-        final slotB = _chartW / (window.length + trailingGap + futureSlots);
-        final idx = (pos.dx / slotB).floor().clamp(0, window.length - 1);
+        final idx = ((pos.dx - xShift) / slotPx).floor().clamp(0, window.length - 1);
         final r = chartRange(window, widget.levels, extra: overlayExtra, vShift: _vShift, priceZoom: _priceZoom);
         final price = r.hi - (pos.dy - metrics.priceTop) / metrics.priceH * (r.hi - r.lo);
         widget.onAnchor!(DrawingAnchor(window[idx].t, price));
@@ -544,25 +695,25 @@ class _CandleChartState extends State<CandleChart> {
 
       void zoom(double factor) => setState(() {
             _perScreen = (_perScreen * factor).clamp(minPer, total.toDouble());
-            _rightOffset = _rightOffset.clamp(-_kRightPad, math.max(0, total - _perScreen));
+            _rightOffset = _clampOffset(_rightOffset);
           });
 
       // ── Chart-space ↔ pixel mapping for drawing hit-testing / dragging. ──
-      final slotB = _chartW / (window.length + trailingGap + futureSlots);
+      final slotB = slotPx;
       final r = chartRange(window, widget.levels, extra: overlayExtra, vShift: _vShift, priceZoom: _priceZoom);
       final priceSpan = (r.hi - r.lo) == 0 ? 1.0 : (r.hi - r.lo);
       double pyForPrice(double p) => metrics.priceTop + (r.hi - p) / priceSpan * metrics.priceH;
       double priceAtY(double dy) =>
           r.hi - (dy.clamp(metrics.priceTop, metrics.priceTop + metrics.priceH) - metrics.priceTop) / metrics.priceH * priceSpan;
-      double pxForTime(int t) => xForTimeInWindow(window, t, slotB);
-      int timeAtX(double dx) => window[(dx / slotB).floor().clamp(0, window.length - 1)].t;
+      double pxForTime(int t) => xForTimeInWindow(window, t, slotB) + xShift;
+      int timeAtX(double dx) => window[((dx - xShift) / slotB).floor().clamp(0, window.length - 1)].t;
 
       // Inverse of [xForTimeInWindow] WITHOUT clamping to the visible bars: interpolates between
       // bars and extrapolates past the edges, so a drawing dragged partly off-screen keeps its shape.
       int timeAtXFree(double dx) {
         final n = window.length;
         if (n < 2) return window.isEmpty ? 0 : window.first.t;
-        final f = dx / slotB - 0.5; // fractional bar index
+        final f = (dx - xShift) / slotB - 0.5; // fractional bar index
         if (f <= 0) return (window.first.t + f * (window[1].t - window[0].t)).round();
         if (f >= n - 1) return (window.last.t + (f - (n - 1)) * (window[n - 1].t - window[n - 2].t)).round();
         final i = f.floor();
@@ -695,9 +846,16 @@ class _CandleChartState extends State<CandleChart> {
       }
 
       return Stack(children: [
-        GestureDetector(
+        MediaQuery(
+          data: MediaQuery.of(context).copyWith(gestureSettings: _chartGesture),
+          child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapUp: (d) {
+            if (_tapStoppedFling) {
+              // This touch only stopped a coasting chart (MT5): it is not a chart tap.
+              _tapStoppedFling = false;
+              return;
+            }
             if (_justClosedRadial) return; // tail of the menu tap, not a chart tap
             if (widget.activeTool != null) return handlePlacementTap(d.localPosition);
             if (widget.crosshairMode) {
@@ -713,6 +871,15 @@ class _CandleChartState extends State<CandleChart> {
           },
           onScaleStart: (d) {
             _lastScale = 1.0;
+            _stopMotion();
+            _tapStoppedFling = false;
+            _panning = false;
+            _gestureZoomed = false;
+            // The slop distance the finger covered before this callback fired - caught up in the first
+            // few pan frames (see _chartGesture).
+            _panCarryX = 0;
+            _panCarryY = 0;
+            _panCarryPending = _downPos != null && d.pointerCount == 1;
             _dragAnchorIndex = null;
             _dragAnchor = null;
             _axisDrag = null;
@@ -872,7 +1039,7 @@ class _CandleChartState extends State<CandleChart> {
               setState(() {
                 final factor = 1 - d.focalPointDelta.dx * 0.006;
                 _perScreen = (_perScreen * factor).clamp(minPer, total.toDouble());
-                _rightOffset = _rightOffset.clamp(-_kRightPad, math.max(0, total - _perScreen));
+                _rightOffset = _clampOffset(_rightOffset);
               });
               return;
             }
@@ -886,19 +1053,54 @@ class _CandleChartState extends State<CandleChart> {
               _lastScale = d.scale;
               if ((s - 1).abs() > 0.001) {
                 _perScreen = (_perScreen / s).clamp(minPer, total.toDouble());
+                _gestureZoomed = true;
               }
-              final slot = _chartW / _perScreen;
-              _rightOffset = (_rightOffset + d.focalPointDelta.dx / slot)
-                  .clamp(-_kRightPad, math.max(0, total - _perScreen));
+              _panning = true;
+              _lastPointerCount = d.pointerCount;
+              var dx = d.focalPointDelta.dx, dy = d.focalPointDelta.dy;
+              if (_panCarryPending) {
+                // Flutter reports only the recognising event's own delta; everything the finger covered
+                // since touch-down before that event is the distance to catch up on.
+                _panCarryPending = false;
+                final down = _downPos;
+                if (down != null && d.pointerCount == 1) {
+                  _panCarryX = (d.localFocalPoint.dx - down.dx) - dx;
+                  _panCarryY = (d.localFocalPoint.dy - down.dy) - dy;
+                }
+              }
+              if (_panCarryX.abs() > 0.5) {
+                final step = _panCarryX * 0.4;
+                dx += step;
+                _panCarryX -= step;
+              } else {
+                dx += _panCarryX;
+                _panCarryX = 0;
+              }
+              if (_panCarryY.abs() > 0.5) {
+                final step = _panCarryY * 0.4;
+                dy += step;
+                _panCarryY -= step;
+              } else {
+                dy += _panCarryY;
+                _panCarryY = 0;
+              }
+              // 1:1 with the finger, in whole pixels (fractional bars); no rounding anywhere.
+              _rightOffset = _clampOffset(_rightOffset + dx / _slotPx);
               // Free vertical movement too (single-finger drag), bounded so the
               // candles can never be pushed completely out of view.
               if (d.pointerCount == 1 && metrics.priceH > 0) {
-                _vShift = (_vShift + d.focalPointDelta.dy / metrics.priceH).clamp(-1.5, 1.5);
+                _vShift = (_vShift + dy / metrics.priceH).clamp(-1.5, 1.5);
               }
               if (_cross != null) _cross = _cross!.translate(d.focalPointDelta.dx, d.focalPointDelta.dy);
             });
           },
-          onScaleEnd: (_) {
+          onScaleEnd: (e) {
+            final wasPan = _panning;
+            final zoomed = _gestureZoomed;
+            _panning = false;
+            _gestureZoomed = false;
+            if (wasPan && !zoomed && _lastPointerCount == 1) _startFling(e.velocity.pixelsPerSecond.dx);
+            _settleSoon();
             if (_createAnchors != null) {
               final pts = _createAnchors!;
               final tool = widget.activeTool;
@@ -958,13 +1160,22 @@ class _CandleChartState extends State<CandleChart> {
           onDoubleTap: _resetView,
           child: Listener(
             behavior: HitTestBehavior.translucent,
-            onPointerDown: (e) => _downPos = e.localPosition,
+            onPointerDown: (e) {
+              _downPos = e.localPosition;
+              // A touch while the chart is coasting stops it (and is not a tap).
+              _tapStoppedFling = _motion.isAnimating && _flinging;
+              _stopMotion();
+            },
+            onPointerUp: (_) => _settleSoon(),
             child: CustomPaint(
             size: Size.infinite,
             painter: _CandlePainter(
               candles: window,
               winStart: start,
               trailingGap: trailingGap,
+              slotW: slotPx,
+              xShift: xShift,
+              totalBars: total,
               futureSlots: futureSlots,
               digits: widget.digits,
               tf: widget.tf,
@@ -999,7 +1210,7 @@ class _CandleChartState extends State<CandleChart> {
               axisW: axisW,
             ),
           )),
-        ),
+        )),
         // MT5-style round chart menu: tap anywhere on the chart to open it (see
         // handleSelectOrTrade above), tap any wedge — or empty space — to close.
         // Centred on the price pane so it never clips against the axes.
@@ -1111,21 +1322,7 @@ class _CandleChartState extends State<CandleChart> {
               onTap: () => setState(() => _oscCollapsed = !_oscCollapsed),
             ),
           ),
-        // Older-history page loading (left edge, small — this is a background
-        // fetch, not a blocking spinner over the chart).
-        if (widget.loadingOlder)
-          Positioned(
-            left: 6,
-            top: metrics.priceTop + metrics.priceH / 2 - 12,
-            child: Material(
-              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
-              shape: const CircleBorder(),
-              child: const Padding(
-                padding: EdgeInsets.all(6),
-                child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.8)),
-              ),
-            ),
-          ),
+        // Older history loads silently in the background (like MT5): no indicator on the chart.
       ]);
     });
   }
@@ -1166,6 +1363,9 @@ class _CandlePainter extends CustomPainter {
     required this.candles,
     required this.winStart,
     required this.trailingGap,
+    required this.slotW,
+    required this.xShift,
+    required this.totalBars,
     required this.futureSlots,
     required this.digits,
     required this.tf,
@@ -1202,6 +1402,9 @@ class _CandlePainter extends CustomPainter {
 
   final List<Candle> candles;
   final int winStart; // index in the full series of candles[0]
+  final double slotW; // candle slot width in px (fractional; same for every bar)
+  final double xShift; // px offset of candles[0]'s slot from the left edge
+  final int totalBars; // length of the full series (labels are anchored to the global bar index)
   final int trailingGap; // empty candle-slots reserved on the right edge
   final int futureSlots; // extra right-side slots for Ichimoku's forward cloud
   final int digits;
@@ -1253,7 +1456,7 @@ class _CandlePainter extends CustomPainter {
     // Divide the width across the visible candles PLUS the reserved right-margin
     // slots and any Ichimoku future-projection slots, so the newest bar sits
     // `trailingGap` slots left of the price axis and the cloud has room ahead.
-    final slot = chartW / (candles.length + trailingGap + futureSlots);
+    final slot = slotW;
 
     // ── Price scale: separator line + tick marks + price labels (MT5 look). ──
     // MT5 frames the plot: a line along the top, one down the price scale and one
@@ -1269,34 +1472,35 @@ class _CandlePainter extends CustomPainter {
     final tickPaint = Paint()
       ..color = text
       ..strokeWidth = 0.8;
-    final tp = TextPainter(textDirection: TextDirection.ltr);
     for (var i = 0; i <= priceRows; i++) {
       final p = hi - range * i / priceRows;
       final yy = y(p);
       // No tick where the price lands on the frame's top / bottom edge — it would poke out
       // past the corner (the frame line itself already marks that position).
       if (yy > 2 && yy < plotBottom - 2) canvas.drawLine(Offset(chartW, yy), Offset(chartW + 4, yy), tickPaint);
-      tp.text = TextSpan(text: p.toStringAsFixed(digits), style: TextStyle(color: text, fontSize: 9));
-      tp.layout();
       // Keep the first / last ladder price fully inside the frame instead of letting the
       // top / bottom rule strike through it.
-      tp.paint(canvas, Offset(chartW + 8, (yy - 5).clamp(3.0, plotBottom - 13.0)));
+      _TextCache.get(p.toStringAsFixed(digits), 9, text).paint(canvas, Offset(chartW + 8, (yy - 5).clamp(3.0, plotBottom - 13.0)));
     }
 
     // ── Time scale: labels along the bottom (no vertical gridlines). ──
     final labelEvery = math.max(1, (70 / slot).ceil()); // ~70px between labels
     final axisY = size.height - timeAxisH + 3;
-    for (var i = candles.length - 1; i >= 0; i -= labelEvery) {
-      final cx = slot * i + slot / 2;
+    for (var i = candles.length - 1; i >= 0; i--) {
+      // Anchored to the global bar index (counted from the newest), so a label stays glued to its bar
+      // while the chart pans instead of hopping to a neighbour.
+      if ((totalBars - 1 - (winStart + i)) % labelEvery != 0) continue;
+      final cx = xShift + slot * i + slot / 2;
       if (cx < 14) break;
-      tp.text = TextSpan(text: _timeLabel(candles[i], tf), style: TextStyle(color: text, fontSize: 9));
-      tp.layout();
-      tp.paint(canvas, Offset(cx - tp.width / 2, axisY));
+      if (cx > chartW - 14) continue;
+      final lbl = _TextCache.get(_timeLabel(candles[i], tf), 9, text);
+      lbl.paint(canvas, Offset(cx - lbl.width / 2, axisY));
     }
 
     // ── Price series (candles / line). Clipped to the price pane. ──
     canvas.save();
     canvas.clipRect(Rect.fromLTRB(0, 0, chartW, priceTop + chartH));
+    canvas.translate(xShift, 0);
     if (type == ChartType.line) {
       final path = Path();
       for (var i = 0; i < candles.length; i++) {
@@ -1312,26 +1516,20 @@ class _CandlePainter extends CustomPainter {
             ..style = PaintingStyle.stroke);
     } else {
       final bodyW = (slot * 0.7).clamp(1.0, 11.0);
+      final wickPaint = Paint()..strokeWidth = kWickStroke;
+      final bodyPaint = Paint()..style = PaintingStyle.fill;
       for (var i = 0; i < candles.length; i++) {
         final k = candles[i];
         final cx = slot * i + slot / 2;
         final isUp = k.c >= k.o;
         final color = isUp ? up : down;
         // Wick (high–low shadow): thinner and cleaner. Bodies are untouched.
-        canvas.drawLine(
-          Offset(cx, y(k.h)),
-          Offset(cx, y(k.l)),
-          Paint()
-            ..color = color
-            ..strokeWidth = kWickStroke,
-        );
+        canvas.drawLine(Offset(cx, y(k.h)), Offset(cx, y(k.l)), wickPaint..color = color);
         // Body.
         final top = y(isUp ? k.c : k.o);
         final bot = y(isUp ? k.o : k.c);
         final rect = Rect.fromLTRB(cx - bodyW / 2, top, cx + bodyW / 2, bot == top ? top + 1 : bot);
-        canvas.drawRect(rect, Paint()
-          ..color = color
-          ..style = PaintingStyle.fill);
+        canvas.drawRect(rect, bodyPaint..color = color);
       }
     }
 
@@ -1438,7 +1636,7 @@ class _CandlePainter extends CustomPainter {
       _dash(canvas, Offset(cx, padV), Offset(cx, size.height - timeAxisH), ch);
       final cy = cross!.dy.clamp(priceTop, priceTop + chartH).toDouble();
       _dash(canvas, Offset(0, cy), Offset(chartW, cy), ch);
-      final idx = (cx / slot).floor().clamp(0, candles.length - 1);
+      final idx = ((cx - xShift) / slot).floor().clamp(0, candles.length - 1);
       final k = candles[idx];
       final priceAt = hi - (cy - priceTop) / chartH * range;
       _tag(canvas, chartW, cy, priceAt.toStringAsFixed(digits), onSurface);
@@ -1523,7 +1721,7 @@ class _CandlePainter extends CustomPainter {
     }
   }
 
-  double _xForTime(int t, double slot) => xForTimeInWindow(candles, t, slot);
+  double _xForTime(int t, double slot) => xForTimeInWindow(candles, t, slot) + xShift;
 
   void _paintDrawings(Canvas canvas, double chartW, double priceTop, double chartH, double slot, double Function(double) y) {
     if (drawings.isEmpty && pendingAnchors.isEmpty) return;
@@ -1724,6 +1922,7 @@ class _CandlePainter extends CustomPainter {
         ..strokeWidth = 0.8);
     }
 
+    canvas.translate(xShift, 0); // bars / lines below move with the chart; guides above span the pane
     // Histogram bars (MACD), sign-colored with the theme up/down.
     final hist = ind.histogram;
     if (hist != null) {
@@ -1831,10 +2030,7 @@ class _CandlePainter extends CustomPainter {
   }
 
   void _tag(Canvas c, double chartW, double yy, String txt, Color color, {bool bold = false}) {
-    final t = TextPainter(
-      textDirection: TextDirection.ltr,
-      text: TextSpan(text: txt, style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: bold ? FontWeight.w800 : FontWeight.w700)),
-    )..layout();
+    final t = _TextCache.get(txt, 9.5, Colors.white, bold ? FontWeight.w800 : FontWeight.w700);
     final rect = Rect.fromLTWH(chartW + 1, yy - 8, axisW - 2, 16);
     c.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), Paint()..color = color);
     t.paint(c, Offset(chartW + 5, yy - 6));
@@ -1844,6 +2040,9 @@ class _CandlePainter extends CustomPainter {
   bool shouldRepaint(covariant _CandlePainter old) =>
       old.candles != candles ||
       old.winStart != winStart ||
+      old.slotW != slotW ||
+      old.xShift != xShift ||
+      old.totalBars != totalBars ||
       old.trailingGap != trailingGap ||
       old.futureSlots != futureSlots ||
       old.cross != cross ||

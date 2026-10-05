@@ -1085,6 +1085,16 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     );
   }
 
+  /// Builds [build] with [symbol]'s live quote. Only this subtree rebuilds on a tick - not the whole
+  /// screen (a tick used to rebuild ~350 widgets: toolbar buttons, panels, text fields...). Only THIS
+  /// symbol's tick matters: the app streams every subscribed symbol.
+  Widget _tickQuote(String symbol, TradeSymbol? spec, Widget Function(Tick? raw, Tick? quote) build) =>
+      Consumer(builder: (context, ref, _) {
+        final raw = ref.watch(quotesProvider.select((m) => m[symbol]));
+        final q = raw == null ? null : (spec == null ? raw : spec.applyGroupMarkup(raw));
+        return build(raw, q);
+      });
+
   @override
   Widget build(BuildContext context) {
     ref.watch(marketSocketProvider);
@@ -1130,31 +1140,17 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     final digits = spec.isEmpty ? 5 : spec.first.digits;
     final lotStep = spec.isEmpty ? 0.01 : spec.first.lotStep;
     final req = ChartReq(_symbol, selectedTf);
-    final series = ref.watch(liveCandlesProvider(req));
     final indicatorCfgs = ref.watch(chartIndicatorsProvider);
     final activeIndicators = indicatorCfgs.where((c) => c.enabled).length;
     final drawings = ref
         .watch(chartDrawingsProvider)
         .where((d) => d.symbol == _symbol)
         .toList();
-    final rawQuote = ref.watch(quotesProvider)[_symbol];
-    final quote = rawQuote == null
-        ? null
-        : (spec.isEmpty ? rawQuote : spec.first.applyGroupMarkup(rawQuote));
-    final forming = ref.watch(formingCandleProvider(req));
-    final livePrice = forming?.c ?? rawQuote?.bid;
     final positions =
         ref.watch(openPositionsProvider).valueOrNull ?? const <Position>[];
     final pendings =
         ref.watch(pendingOrdersProvider).valueOrNull ?? const <PendingOrder>[];
     final tc = Theme.of(context).extension<TradeColors>()!;
-    final levels = _levels(positions, pendings, tc, readonly,
-        // read, not watch: the label refreshes with every quote tick this screen already
-          // rebuilds on; subscribing to the P/L push too would double the rebuilds (and
-          // janks panning while a position is open).
-          livePl: ref.read(livePositionProvider),
-        quotes: ref.watch(quotesProvider),
-        symbols: ref.watch(symbolsProvider).valueOrNull ?? const <TradeSymbol>[]);
     void stepLot(double by) =>
         _setVolume(_volume + by, spec.isEmpty ? null : spec.first);
     final trade = ref.watch(chartTradeProvider);
@@ -1267,17 +1263,21 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Expanded(
           flex: 5,
-          child: _DealCard(
-            label: 'SELL',
-            price: quote?.bid,
-            digits: digits,
-            base: tc.sell,
-            up: tc.up,
-            down: tc.down,
-            enabled: quote != null,
-            locked: readonly,
-            tradable: tradable,
-            onTap: () => _placeMarket('SELL'),
+          child: _tickQuote(
+            _symbol,
+            spec.isEmpty ? null : spec.first,
+            (rawQuote, quote) => _DealCard(
+              label: 'SELL',
+              price: quote?.bid,
+              digits: digits,
+              base: tc.sell,
+              up: tc.up,
+              down: tc.down,
+              enabled: quote != null,
+              locked: readonly,
+              tradable: tradable,
+              onTap: () => _placeMarket('SELL'),
+            ),
           ),
         ),
         Expanded(
@@ -1331,17 +1331,21 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
         ),
         Expanded(
           flex: 5,
-          child: _DealCard(
-            label: 'BUY',
-            price: quote?.ask,
-            digits: digits,
-            base: tc.buy,
-            up: tc.up,
-            down: tc.down,
-            enabled: quote != null,
-            locked: readonly,
-            tradable: tradable,
-            onTap: () => _placeMarket('BUY'),
+          child: _tickQuote(
+            _symbol,
+            spec.isEmpty ? null : spec.first,
+            (rawQuote, quote) => _DealCard(
+              label: 'BUY',
+              price: quote?.ask,
+              digits: digits,
+              base: tc.buy,
+              up: tc.up,
+              down: tc.down,
+              enabled: quote != null,
+              locked: readonly,
+              tradable: tradable,
+              onTap: () => _placeMarket('BUY'),
+            ),
           ),
         ),
       ]),
@@ -1350,7 +1354,23 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     // Primary chart (MT5's tradable window): unchanged from before, just
     // extracted into a closure so it can sit either alone or tiled beside a
     // second, view-only window (see `_showChartsMenu` / `_extraWindows`).
-    Widget primaryChartPane() => series.when(
+    Widget primaryChartPane() => Consumer(builder: (context, ref, _) {
+      final series = ref.watch(liveCandlesProvider(req));
+      final rawQuote = ref.watch(quotesProvider.select((m) => m[_symbol]));
+      final quote = rawQuote == null
+          ? null
+          : (spec.isEmpty ? rawQuote : spec.first.applyGroupMarkup(rawQuote));
+      final forming = ref.watch(formingCandleProvider(req));
+      final livePrice = forming?.c ?? rawQuote?.bid;
+      final levels = _levels(positions, pendings, tc, readonly,
+          // read, not watch: the label refreshes with every quote tick this pane already
+          // rebuilds on; subscribing to the P/L push too would double the rebuilds (and
+          // janks panning while a position is open).
+          livePl: ref.read(livePositionProvider),
+          // _levels only prices this symbol's positions, so this symbol's quote is all it can read.
+          quotes: {if (rawQuote != null) _symbol: rawQuote},
+          symbols: ref.watch(symbolsProvider).valueOrNull ?? const <TradeSymbol>[]);
+      return series.when(
           loading: () =>
               const Center(child: CircularProgressIndicator(strokeWidth: 2)),
           error: (e, _) => Center(
@@ -1395,10 +1415,11 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                         ref.read(chartDrawingsProvider.notifier).remove(id),
                     onLevelDragEnd: _onLevelDragEnd,
                     onLevelTap: _onLevelTap,
-                    onNeedOlder: () =>
-                        ref.read(chartHistoryLoaderProvider(req)).loadOlder(),
-                    loadingOlder:
-                        ref.watch(chartHistoryStateProvider(req)).loadingOlder,
+                    onNeedOlder: (n, urgent) => ref
+                        .read(chartHistoryLoaderProvider(req))
+                        .loadOlder(visibleBars: n, urgent: urgent),
+                    olderPending: () => ref.read(chartHistoryStateProvider(req)).loadingOlder,
+                    olderExhausted: () => ref.read(chartHistoryStateProvider(req)).exhausted,
                     onSelectTool: (t) => setState(() {
                       _activeTool = t;
                       _pendingAnchors = [];
@@ -1460,12 +1481,13 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
             );
           },
         );
+    });
 
     // Second, view-only chart window (MT5's Duplicate / Tile): its own symbol,
     // timeframe, candles, zoom/pan/crosshair (own CandleChart instance) and
     // drawings — it does not place trades (see the class doc on
     // [_ExtraChartWindow] for the scope of what "independent" means here).
-    Widget secondaryChartPane(_ExtraChartWindow win) {
+    Widget secondaryChartPane(_ExtraChartWindow win) => Consumer(builder: (context, ref, _) {
       final spec2 = symbols.where((s) => s.symbol == win.symbol);
       final digits2 = spec2.isEmpty ? 5 : spec2.first.digits;
       final req2 = ChartReq(win.symbol, win.tf);
@@ -1474,7 +1496,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           .watch(chartDrawingsProvider)
           .where((d) => d.symbol == win.symbol)
           .toList();
-      final rawQuote2 = ref.watch(quotesProvider)[win.symbol];
+      final rawQuote2 = ref.watch(quotesProvider.select((m) => m[win.symbol]));
       final quote2 = rawQuote2 == null
           ? null
           : (spec2.isEmpty
@@ -1493,7 +1515,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           // rebuilds on; subscribing to the P/L push too would double the rebuilds (and
           // janks panning while a position is open).
           livePl: ref.read(livePositionProvider),
-          quotes: ref.watch(quotesProvider),
+          quotes: {if (rawQuote2 != null) win.symbol: rawQuote2},
           symbols: ref.watch(symbolsProvider).valueOrNull ?? const <TradeSymbol>[]);
       final tradable2 = _tradableNow(spec2.isEmpty ? null : spec2.first);
 
@@ -1538,10 +1560,11 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                       .updateAnchor(id, i, a),
                   onDeleteDrawing: (id) =>
                       ref.read(chartDrawingsProvider.notifier).remove(id),
-                  onNeedOlder: () =>
-                      ref.read(chartHistoryLoaderProvider(req2)).loadOlder(),
-                  loadingOlder:
-                      ref.watch(chartHistoryStateProvider(req2)).loadingOlder,
+                  onNeedOlder: (n, urgent) => ref
+                      .read(chartHistoryLoaderProvider(req2))
+                      .loadOlder(visibleBars: n, urgent: urgent),
+                  olderPending: () => ref.read(chartHistoryStateProvider(req2)).loadingOlder,
+                  olderExhausted: () => ref.read(chartHistoryStateProvider(req2)).exhausted,
                   onSelectTool: (t) => setState(() {
                     _activeTool2 = t;
                     _pendingAnchors2 = [];
@@ -1602,7 +1625,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           );
         },
       );
-    }
+    });
 
     return Scaffold(
       key: _scaffoldKey,
@@ -1641,7 +1664,10 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           if (_edit != null)
             SafeArea(
               top: false,
-              child: PendingPanel(
+              child: _tickQuote(
+                _symbol,
+                spec.isEmpty ? null : spec.first,
+                (rawQuote, quote) => PendingPanel(
                 edit: _edit!,
                 symbolLabel: spec.isEmpty ? _symbol : spec.first.displaySymbol,
                 symbolDescription: spec.isEmpty ? null : spec.first.description,
@@ -1676,7 +1702,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                   _serverError = null;
                 }),
                 onCancelOrder: _cancelPendingOrder,
-              ),
+              )),
             ),
           ]),
           Positioned(
