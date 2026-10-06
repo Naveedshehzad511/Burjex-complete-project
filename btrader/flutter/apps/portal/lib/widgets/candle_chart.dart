@@ -129,10 +129,17 @@ double xForTimeInWindow(List<Candle> w, int t, double slot) {
     if (k.h > hi) hi = k.h;
     if (k.l < lo) lo = k.l;
   }
-  // Always fold open-position / SL / TP levels into the range so they're never
-  // hidden (the chart auto-scales to keep your trade in view, MT5-style).
+  // Fold open-position / SL / TP levels into the range so a trade near the price is never hidden -
+  // but only those within reach of the candles. A line far from the visible bars (several open
+  // trades spread over a wide price band, an entry from long ago, an SL / TP far away) used to
+  // stretch the scale until the candles were a thin sliver and the chart looked dead; MT5 scales
+  // to the candles and simply lets such a line sit off-screen. A line being edited / dragged is
+  // always kept in view so it can be placed.
+  final candleHi = hi, candleLo = lo;
+  final reach = math.max(candleHi - candleLo, candleHi.abs() * 0.0002) * 0.4;
   for (final lv in levels) {
     if (lv.price <= 0) continue;
+    if (!lv.draggable && (lv.price > candleHi + reach || lv.price < candleLo - reach)) continue;
     if (lv.price > hi) hi = lv.price;
     if (lv.price < lo) lo = lv.price;
   }
@@ -330,6 +337,15 @@ class _TextCache {
       textDirection: TextDirection.ltr,
       text: TextSpan(text: text, style: TextStyle(color: color, fontSize: size, fontWeight: weight)),
     )..layout();
+  }
+
+  /// A laid-out rich-text label, kept while its inputs are unchanged (the key must name every input).
+  static TextPainter rich(String key, InlineSpan Function() span, {double? maxWidth}) {
+    final k = 'r|${maxWidth?.round()}|$key';
+    final hit = _m[k];
+    if (hit != null) return hit;
+    if (_m.length > 400) _m.clear();
+    return _m[k] = TextPainter(textDirection: TextDirection.ltr, text: span())..layout(maxWidth: maxWidth ?? double.infinity);
   }
 
   /// Width only (the axis-width probe): colour does not affect it.
@@ -806,7 +822,9 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
         var bestD = kHitSlop + 1.0;
         for (final l in widget.levels) {
           if (l.price <= 0 || !(drag ? l.draggable : (l.tappable || l.draggable))) continue;
-          final d = (p.dy - pyForPrice(l.price)).abs();
+          final ly = pyForPrice(l.price);
+          if (ly < metrics.priceTop || ly > metrics.priceTop + metrics.priceH) continue; // off-screen line
+          final d = (p.dy - ly).abs();
           if (d < bestD) {
             bestD = d;
             best = l;
@@ -1582,11 +1600,8 @@ class _CandlePainter extends CustomPainter {
       _hline(canvas, yy, chartW, lv.color.withValues(alpha: dragging ? 0.95 : 0.7), dashed: true, width: dragging ? 1.0 : kLevelStroke, dash: 3, gap: 4);
       _tag(canvas, chartW, yy, price.toStringAsFixed(digits), lv.color);
       final labelText = lv.labelFor?.call(price) ?? lv.label;
-      final lt = TextPainter(
-        textDirection: TextDirection.ltr,
-        text: TextSpan(text: ' $labelText ', style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w700)),
-      )..layout();
       if (lv.boxed) {
+        final lt = _TextCache.rich('b|$labelText', () => TextSpan(text: ' $labelText ', style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w700)));
         final rr = Rect.fromLTWH(2, yy - 8, lt.width, 16);
         canvas.drawRRect(RRect.fromRectAndRadius(rr, const Radius.circular(3)), Paint()..color = lv.color);
         lt.paint(canvas, Offset(2, yy - 6));
@@ -1595,15 +1610,16 @@ class _CandlePainter extends CustomPainter {
         // A soft halo in the chart background keeps the text readable over candles.
         final labelStyle = TextStyle(color: lv.color, fontSize: 11, fontWeight: FontWeight.w600, shadows: [Shadow(color: surface, blurRadius: 3), Shadow(color: surface, blurRadius: 3)]);
         final split = lv.plColor == null ? -1 : labelText.lastIndexOf(', ');
-        final it = TextPainter(
-          textDirection: TextDirection.ltr,
-          text: split < 0
+        final it = _TextCache.rich(
+          'i|${lv.color.toARGB32()}|${surface.toARGB32()}|${lv.plColor?.toARGB32()}|$split|$labelText',
+          () => split < 0
               ? TextSpan(text: labelText, style: labelStyle)
               : TextSpan(style: labelStyle, children: [
                   TextSpan(text: labelText.substring(0, split + 2)),
                   TextSpan(text: labelText.substring(split + 2), style: labelStyle.copyWith(color: lv.plColor)),
                 ]),
-        )..layout(maxWidth: math.max(10, chartW - 8));
+          maxWidth: math.max(10, chartW - 8),
+        );
         it.paint(canvas, Offset(3, yy - it.height - 1));
       }
       if (lv.draggable) {

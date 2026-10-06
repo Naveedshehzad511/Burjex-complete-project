@@ -19,6 +19,9 @@ final openPositionsTickProvider = StreamProvider.autoDispose<int>(
 final openPositionsProvider =
     AsyncNotifierProvider.autoDispose<OpenPositionsNotifier, List<Position>>(OpenPositionsNotifier.new);
 
+/// How long a backend-confirmed trade is kept while the server's positions list has not listed it yet.
+const Duration _kConfirmedGrace = Duration(seconds: 10);
+
 /// A position the engine confirmed as opened, and when this client learned of it.
 class _ConfirmedOpen {
   _ConfirmedOpen(this.position) : at = DateTime.now();
@@ -76,7 +79,12 @@ class OpenPositionsNotifier extends AutoDisposeAsyncNotifier<List<Position>> {
     confirmed.removeWhere((pid, c) {
       if (closed.contains(pid) || c.position.accountId != accountId) return true;
       if (have.contains(pid)) return true; // the list caught up
-      if (c.at.isBefore(startedAt)) return true; // the server had its chance and omitted it
+      // A fetch that began after the confirmation can still miss the trade: the position row is
+      // committed a moment after the order response, so a refetch in that window returns the OLD
+      // list. Dropping the trade then made it blink out and back (a "refresh") - more often the
+      // more trades are open, as each fill triggers its own refetch. Keep it for a short grace; only
+      // a trade the server still omits after that is gone.
+      if (c.at.isBefore(startedAt) && DateTime.now().difference(c.at) > _kConfirmedGrace) return true;
       extra.add(c.position);
       return false;
     });
