@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'router.dart';
+import 'services/sound_service.dart';
 import 'widgets/trade_toast.dart';
 
-void main() => runApp(const ProviderScope(child: PortalApp()));
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SoundService.instance.warmUp(); // load the trade sounds now, not on the first trade
+  runApp(const ProviderScope(child: PortalApp()));
+}
 
 /// Burjex Prime navy — the one brand colour used across every screen.
 const kNavy = Color(0xFF002D58);

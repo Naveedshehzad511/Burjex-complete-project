@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Release builds need this explicitly (debug/profile manifests add it on their own). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Real vibration for trade feedback (HapticFeedback alone is only a touch tick that many phones mute). -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
     <application
         android:label="Burjex Prime"
         android:name="${applicationName}"

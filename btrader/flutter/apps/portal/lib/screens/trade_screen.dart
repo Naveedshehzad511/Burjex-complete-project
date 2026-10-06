@@ -500,7 +500,9 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                 title: Text('Delete order', style: TextStyle(color: tc.loss, fontWeight: FontWeight.w600)),
                 onTap: () {
                   Navigator.pop(ctx);
-                  ref.read(pendingOrdersProvider.notifier).cancelWhere((x) => x.id == o.id);
+                  ref.read(pendingOrdersProvider.notifier).cancelWhere((x) => x.id == o.id).then((n) {
+                    if (n > 0) SoundService.instance.orderCancelled();
+                  });
                 },
               ),
           ]),

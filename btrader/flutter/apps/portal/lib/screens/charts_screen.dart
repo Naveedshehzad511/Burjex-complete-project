@@ -704,6 +704,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     });
     try {
       await ref.read(apiClientProvider).delete('/orders/${e.id}');
+      SoundService.instance.orderCancelled();
       ref.read(pendingOrdersProvider.notifier).removeLocal(e.id!);
       ToastHost.show('Order cancelled', e.typeLabel, accent: tc.profit);
       if (mounted) setState(() => _edit = null);
