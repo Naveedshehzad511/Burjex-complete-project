@@ -17,6 +17,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import Redis from 'ioredis';
 import jwt from 'jsonwebtoken';
 import { Channels, Tick, WsFrame, CandleEvent } from '@btrader/shared';
+import { LatestCandleCache } from './candle-cache';
 
 const PORT = Number(process.env.WS_PORT ?? 4101);
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6380';
@@ -126,6 +127,10 @@ function dropClient(c: ClientState) {
 }
 const sub = new Redis(REDIS_URL);
 const redis = new Redis(REDIS_URL);
+
+/// Newest server candle per tenant + symbol + timeframe (see candle-cache.ts). In memory only: no
+/// Redis writes, and a gateway restart just refills it from the next tick.
+const latestCandles = new LatestCandleCache(Number(process.env.WS_CANDLE_CACHE_MAX ?? 50_000));
 
 /// Buffer one engine event for a client, coalescing where it is safe to.
 ///
@@ -272,6 +277,9 @@ sub.on('pmessage', (_pattern, channel, message) => {
       console.error('[ws-gateway] Invalid candle JSON:', message);
       return;
     }
+    // Remembered BEFORE fan-out, so a subscribe that lands right after sees at least what every
+    // live subscriber has already been sent.
+    latestCandles.record(tenantId, candle);
     for (const c of byTenantSymbol.get(tkey(tenantId, candle.symbol)) ?? EMPTY) {
       send(c.ws, { t: 'candle', d: candle });
     }
@@ -437,11 +445,23 @@ function attachClient(
         // not know what to do with a batched engine-event frame.
         if (msg.evts === true) state.wantsEvtBatch = true;
         const subs: string[] = msg.symbols ?? [];
+        const added: string[] = [];
         subs.forEach((sym: string) => {
+          if (!state.symbols.has(sym)) added.push(sym);
           state.symbols.add(sym);
           indexAdd(byTenantSymbol, tkey(state.tenantId, sym), state);
         });
         if (state.wantsCompact) announceSymbolIds(state, subs);
+        // Hand over the current server bars of the newly subscribed symbols (first open or
+        // reconnect), so the chart does not wait for the next tick to have a current candle. This
+        // runs in the same turn as the index add above, so every live candle frame for the symbol
+        // is sent after these and the client ends on the newest bar. Re-subscribing a symbol the
+        // client already holds sends nothing.
+        for (const sym of added) {
+          for (const ev of latestCandles.snapshot(state.tenantId, sym)) {
+            send(ws, { t: 'candle', d: ev });
+          }
+        }
       }
         break;
       case 'unsubscribe':
