@@ -319,6 +319,12 @@ class CandleChart extends StatefulWidget {
 /// looks detached from the edge.
 const double _kRightPad = 5;
 
+/// How far the user may drag the newest bar in from the right edge, as a share of the visible bars
+/// (never a pixel count, so it follows the width and the zoom). The view still OPENS flush at the
+/// edge; this only widens how much empty chart a horizontal drag can reveal, so the live bar can be
+/// brought to the middle and a little beyond. [_kRightPad] stays the floor for very small views.
+const double _kMaxHeadroomFraction = 0.6;
+
 /// Laid-out text, reused across frames. The price ladder, time labels and Bid/Ask tags are the same
 /// few strings frame after frame while panning (a label stays glued to its bar; the ladder only
 /// changes when the visible high/low does), yet each was laid out from scratch on every frame -
@@ -360,6 +366,9 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
   // Candles scrolled back from the latest. 0 = newest bar flush at the axis
   // (default); negative = dragged forward into the right-margin headroom.
   double _rightOffset = 0;
+
+  /// Empty slots the newest bar may be dragged in from the right edge at the current zoom.
+  double _headroomSlots = _kRightPad;
   double _lastScale = 1.0;
   double _chartW = 1;
 
@@ -398,7 +407,7 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
     return _hardMax + (more ? _perScreen * 0.85 : 0);
   }
 
-  double _clampOffset(double v) => v.clamp(-_kRightPad, _softMax).toDouble();
+  double _clampOffset(double v) => v.clamp(-_headroomSlots, _softMax).toDouble();
 
   void _onMotionTick() {
     final v = _motion.value;
@@ -646,6 +655,7 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
       // never rounded: the bars overlapping the viewport are drawn at a fractional pixel shift, so the
       // chart moves exactly as far as the finger did. The window needs no pixel sizes, so it can be
       // chosen before the price axis (which depends on the window) is measured.
+      _headroomSlots = math.max(_kRightPad, per * _kMaxHeadroomFraction);
       final off = _rightOffset;
       final start = (total - per - off).floor().clamp(0, total - 1);
       final dataEnd = (total - off + futureSlots).ceil().clamp(start + 1, total);

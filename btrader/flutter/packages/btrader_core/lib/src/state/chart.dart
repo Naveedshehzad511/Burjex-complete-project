@@ -356,6 +356,11 @@ final candlesProvider = FutureProvider.autoDispose.family<List<Candle>, ChartReq
     ref.listen(_chartTicker, (_, __) {
       _refreshCandles(ref, req);
     });
+    // Bars that closed while the socket was down were never pushed; the stored (final) ones are
+    // what the chart shows for them, so fetch them as soon as the socket is back.
+    ref.listen(socketEpochProvider, (_, __) {
+      _refreshCandles(ref, req);
+    });
     return cached;
   }
 
@@ -496,10 +501,11 @@ Future<void> prefetchChartHistory(
   }
 }
 
-/// The current, still-forming candle — built entirely client-side from the live
-/// tick stream so it behaves like MT5: the close tracks the price tick-by-tick,
-/// the high/low wicks extend as price moves within the bar, and a fresh bar
-/// rolls when the timeframe bucket advances (on the clock, even with no ticks).
+/// The latest accepted price of the current bucket, tracked from this device's tick stream.
+///
+/// It drives the live price line only. It is NOT drawn as a candle and never feeds one: the bar
+/// that is forming is the server's (see [serverAuthoritativeSeries]), so a tick this device saw
+/// but the server did not can never become a high or low.
 class FormingCandle {
   final int bucket; // bar open time, epoch seconds, aligned to tf
   final double o, h, l, c;
@@ -588,19 +594,19 @@ class FormingCandleNotifier extends StateNotifier<FormingCandle?> {
     }
   }
 
-  /// Build the initial forming bar continuous with history: prefer the server's
-  /// bar for the current bucket (real open + high/low so far), else open at the
-  /// last completed bar's close, else the first live price.
+  /// Build the initial forming bar: the server's bar for the current bucket when history has one
+  /// (real open + high/low so far), else open at the first live price - the same rule the server
+  /// engine and [_onPrice] use for a new bar. It must NOT open at the last history bar's close:
+  /// that bar is only the previous bucket's when history is current, and the cached series of a
+  /// timeframe visited earlier can end hours back, which made the "open" (and with it the low or
+  /// high) a stale price and drew a long false wick up to the live price.
   FormingCandle _seed(int b, double mid) {
     final hist = _ref.read(candlesProvider(_req)).valueOrNull;
     if (hist != null && hist.isNotEmpty) {
-      for (final c in hist) {
-        if (c.t == b) {
-          return FormingCandle(b, c.o, mid > c.h ? mid : c.h, mid < c.l ? mid : c.l, mid);
-        }
+      final c = _candleAt(hist, b);
+      if (c != null) {
+        return FormingCandle(b, c.o, mid > c.h ? mid : c.h, mid < c.l ? mid : c.l, mid);
       }
-      final open = hist.last.c; // history is oldest→newest; last = latest close
-      return FormingCandle(b, open, mid > open ? mid : open, mid < open ? mid : open, mid);
     }
     return FormingCandle(b, mid, mid, mid, mid);
   }
@@ -629,16 +635,57 @@ final formingCandleProvider =
   (ref, req) => FormingCandleNotifier(ref, req),
 );
 
-/// Live series = REST history, overlaid with the server's pushed bars (the
-/// canonical candle engine's OHLC), with this device's tick stream extending only
-/// the tip's close and extremes.
+/// Market ticks older than this are not a live feed (market closed, dead feed).
+const int _kFreshQuoteSec = 120;
+
+/// Open time of the bucket that is forming NOW for [tf], or null when nothing is.
 ///
-/// Why: the server owns OHLC. Rebuilding the forming bar purely from the ticks this
-/// device happened to receive meant a reconnect, a backgrounded tab or a dropped
-/// frame produced a bar whose open/high/low differed from the server's — a
-/// platform-made discontinuity. Now the open always comes from the server bar when
-/// it has one; ticks can only widen high/low (both are real feed prices) and move
-/// the close to the latest price.
+/// A fresh quote's own market timestamp decides it (the same clock the server buckets by, so a
+/// skewed device clock cannot move it). With no quote yet the feed is assumed live and the device
+/// clock decides: the quote is a round trip away and the server's bar will follow. A quote that is
+/// STALE means the market is closed or the feed is down: nothing is forming, so null - the stored
+/// bars, last bar included, are final and must stay visible (a weekly or monthly bar of a closed
+/// market is never pushed again).
+int? currentBucketFor(Timeframe tf, Tick? quote, {int brokerOffsetSec = 0, int? nowSec}) {
+  final now = nowSec ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  var ts = quote?.ts ?? 0;
+  if (ts > 1000000000000) ts = ts ~/ 1000; // ms -> sec
+  if (quote != null && ts > 0 && (now - ts).abs() > _kFreshQuoteSec) return null;
+  return tf.bucketStart(ts > 0 ? ts : now, brokerOffsetSec: brokerOffsetSec);
+}
+
+/// The series the chart draws: finished history with the SERVER's bars on top, and nothing the
+/// device derived.
+///
+/// One authority per bar, for every timeframe. The bar that is forming now is drawn only from the
+/// server's pushed bar (the candle engine's, re-pushed on every tick; its closing push is the same
+/// bar), so the live bar and the finalized bar cannot disagree. Neither this device's ticks nor
+/// the REST tip take part: the device's ticks are a different price path (routed, marked up,
+/// coalesced), and the stored tip can be up to 20 s old or the bridge's raw bar. While a bucket is
+/// forming ([currentBucket] not null) the history bars at or after it that the server has not
+/// pushed are therefore left out until it does - the gateway hands the current bars over on
+/// subscribe, so that gap is the time of one round trip. With [currentBucket] null (feed not live)
+/// nothing is forming and the stored bars are shown as they are.
+///
+/// [history] is oldest -> newest; [pushed] is keyed by bar open time.
+List<Candle> serverAuthoritativeSeries(List<Candle> history, Map<int, Candle>? pushed, {required int? currentBucket}) {
+  var end = history.length;
+  while (currentBucket != null &&
+      end > 0 &&
+      history[end - 1].t >= currentBucket &&
+      !(pushed?.containsKey(history[end - 1].t) ?? false)) {
+    end--;
+  }
+  final base = end == history.length ? history : history.sublist(0, end);
+  if (pushed == null || pushed.isEmpty) return base;
+  // Identity is the bucket time: a bar present in both sources collapses into one (the pushed one).
+  // Only the newest bars can differ from [history], so overlay them instead of re-keying and
+  // re-sorting the whole (possibly 10^5-bar) series on every tick.
+  return overlayCandles(base, pushed);
+}
+
+/// Live series = REST history with the server's pushed bars on top (see
+/// [serverAuthoritativeSeries]).
 final liveCandlesProvider = Provider.autoDispose.family<AsyncValue<List<Candle>>, ChartReq>((ref, req) {
   final base = ref.watch(candlesProvider(req));
   final history = base.valueOrNull;
@@ -646,32 +693,18 @@ final liveCandlesProvider = Provider.autoDispose.family<AsyncValue<List<Candle>>
   if (history.isEmpty) return const AsyncValue.data(<Candle>[]);
 
   final pushed = ref.watch(serverCandlesProvider.select((m) => m[ServerCandlesNotifier.seriesKey(req.symbol, req.tf.api)]));
-  final forming = ref.watch(formingCandleProvider(req));
+  final offset = ref.watch(brokerOffsetSecProvider).valueOrNull ?? 0;
+  // Rebuilds only when the bucket changes, not on every tick.
+  final current = ref.watch(quotesProvider.select((m) => currentBucketFor(req.tf, m[req.symbol], brokerOffsetSec: offset)));
 
-  // Identity is the bucket time: a bar present in both sources collapses into one. Only the
-  // newest bars can differ from [history], so overlay them instead of re-keying and re-sorting
-  // the whole (possibly 10^5-bar) series on every tick.
-  final over = <int, Candle>{...?pushed};
+  // On a quiet market nothing else moves the clock: re-evaluate when the bucket rolls (and at least
+  // once a minute, since the freshness of the quote is also time-based).
+  final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  final wait = (req.tf.nextBucketStart(nowSec, brokerOffsetSec: offset) - nowSec + 1).clamp(1, 60);
+  final timer = Timer(Duration(seconds: wait), ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
 
-  if (forming != null) {
-    final newestPushed = pushed == null || pushed.isEmpty ? 0 : pushed.keys.reduce((a, b) => a > b ? a : b);
-    // A device that is behind the server must not overwrite a newer server bar.
-    if (forming.bucket >= newestPushed) {
-      final s = over[forming.bucket] ?? _candleAt(history, forming.bucket);
-      over[forming.bucket] = s == null
-          ? forming.toCandle()
-          : Candle(
-              t: s.t,
-              o: s.o,
-              h: forming.h > s.h ? forming.h : s.h,
-              l: forming.l < s.l ? forming.l : s.l,
-              c: forming.c,
-              v: s.v,
-            );
-    }
-  }
-
-  return AsyncValue.data(overlayCandles(history, over));
+  return AsyncValue.data(serverAuthoritativeSeries(history, pushed, currentBucket: current));
 });
 
 Candle? _candleAt(List<Candle> sorted, int t) {

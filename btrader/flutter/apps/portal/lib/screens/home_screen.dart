@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../crm/crm.dart';
 import '../main.dart' show kNavy;
 import '../session/sessions.dart';
+import '../widgets/account_actions.dart';
 import '../widgets/manage_accounts.dart';
 import '../widgets/portal_drawer.dart';
 import '../widgets/portal_ui.dart';
@@ -546,12 +547,18 @@ class _AccountCard extends ConsumerWidget {
         border: Border.all(color: kNavy.withValues(alpha: 0.55), width: 1.4),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Wrap(runSpacing: 6, children: [
-          tag(a.isDemo ? 'Demo' : 'Real', bg: const Color(0x1A22C55E), fg: const Color(0xFF178F45)),
-          // Order: Real/Demo · account number · plan (Standard) [· status when not live].
-          tag(a.login, bg: live ? const Color(0x1A22C55E) : null, fg: live ? const Color(0xFF178F45) : null),
-          tag(a.plan),
-          if (!live) tag(a.status),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Wrap(runSpacing: 6, children: [
+              tag(a.isDemo ? 'Demo' : 'Real', bg: const Color(0x1A22C55E), fg: const Color(0xFF178F45)),
+              // Order: Real/Demo · account number · plan (Standard) [· status when not live].
+              tag(a.login, bg: live ? const Color(0x1A22C55E) : null, fg: live ? const Color(0xFF178F45) : null),
+              tag(a.plan),
+              if (!live) tag(a.status),
+            ]),
+          ),
+          // The 3-dot menu: change trading password / investor password / leverage.
+          SizedBox(width: 32, height: 32, child: AccountMenuButton(account: a)),
         ]),
         const SizedBox(height: 14),
         Container(

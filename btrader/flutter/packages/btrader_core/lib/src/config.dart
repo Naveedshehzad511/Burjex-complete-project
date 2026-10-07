@@ -62,15 +62,21 @@ class BtConfig {
   /// a page served from localhost / a LAN address talks to the CRM behind the
   /// same origin (so a local stack never calls the live domain); every other
   /// host uses the production CRM.
+  /// True when a page served from [host] belongs to a local / test stack that serves the CRM at
+  /// `/api/v1` on its own origin: localhost, a LAN address, or a Cloudflare quick-tunnel
+  /// (`*.trycloudflare.com`) pointing at such a stack. Anything else is production.
+  @visibleForTesting
+  static bool usesSameOriginCrm(String host) {
+    final h = host.toLowerCase();
+    return h == 'localhost' ||
+        h == '127.0.0.1' ||
+        h.endsWith('.trycloudflare.com') ||
+        RegExp(r'^(10|192\.168|172\.(1[6-9]|2\d|3[01]))[.\d]*$').hasMatch(h);
+  }
+
   static String get crmBase {
     if (_envCrmBase.isNotEmpty) return _envCrmBase.replaceAll(RegExp(r'/+$'), '');
-    if (kIsWeb) {
-      final h = Uri.base.host;
-      final local = h == 'localhost' ||
-          h == '127.0.0.1' ||
-          RegExp(r'^(10|192\.168|172\.(1[6-9]|2\d|3[01]))[.\d]*$').hasMatch(h);
-      if (local) return '${Uri.base.origin}/api/v1';
-    }
+    if (kIsWeb && usesSameOriginCrm(Uri.base.host)) return '${Uri.base.origin}/api/v1';
     return 'https://crm.burjexprime.net/api/v1';
   }
 

@@ -1190,7 +1190,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       setState(() => _tfStripOpen = false);
     }
 
-    final tfStrip = _TfStrip(
+    final tfStrip = TimeframeStrip(
       selected: selectedTf,
       onPick: pickTf,
       onSettings: () => _showChartSettings(context),
@@ -1798,53 +1798,89 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
 
 /// MT5 timeframe strip: M1 M5 M15 M30 H1 H4 D1 W1 MN ⚙. The active timeframe is
 /// highlighted.
-class _TfStrip extends StatelessWidget {
-  const _TfStrip(
-      {required this.selected, required this.onPick, required this.onSettings});
+///
+/// The GAPS between labels are equal, not the slots: nine equal slots left "M15 M30" nearly touching
+/// next to the wide gaps around "H1 H4", because the labels differ in length. Each label is sized
+/// to its text and the free width is shared out evenly around them. The font shrinks (never the
+/// gap below [minGap]) when the screen or the system text size leaves too little room, so all nine
+/// always show in full and never scroll out of sight.
+class TimeframeStrip extends StatelessWidget {
+  const TimeframeStrip({super.key, required this.selected, required this.onPick, required this.onSettings});
   final Timeframe selected;
   final void Function(Timeframe) onPick;
   final VoidCallback onSettings;
 
+  static const double _maxFont = 15.5;
+  static const double _minFont = 9.0;
+  static const double minGap = 8.0;
+  static const double _gearWidth = 40.0;
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // All nine share the row equally (MT5); a label only shrinks if a very narrow
-    // phone can't fit it at full size — never scrolls a timeframe out of sight.
-    return Row(children: [
-      const SizedBox(width: 4),
-      for (final tf in Timeframe.values)
-        Expanded(
-          child: InkWell(
+    final scaler = MediaQuery.textScalerOf(context);
+    const tfs = Timeframe.values;
+    return LayoutBuilder(builder: (context, box) {
+      final avail = box.maxWidth - _gearWidth;
+      // Measured in the heaviest weight, so picking another timeframe never moves the others.
+      double textWidth(Timeframe tf, double fs) {
+        final tp = TextPainter(
+          text: TextSpan(text: tf.mt5Label, style: TextStyle(fontSize: fs, fontWeight: FontWeight.w800)),
+          textDirection: TextDirection.ltr,
+          textScaler: scaler,
+        )..layout();
+        return tp.width;
+      }
+
+      double total(double fs) => tfs.fold<double>(0, (sum, tf) => sum + textWidth(tf, fs));
+
+      var fs = _maxFont;
+      while (fs > _minFont && (avail - total(fs)) / tfs.length < minGap) {
+        fs -= 0.5;
+      }
+      final used = total(fs);
+      // Even at the smallest font the labels cannot keep [minGap] between them (extreme text size
+      // on a tiny screen): keep the gap and scale the whole strip down instead of letting labels touch.
+      final fits = avail - used >= tfs.length * minGap;
+      // Half of the shared-out gap on each side of every label: equal gaps between neighbours.
+      final pad = fits ? (avail - used) / tfs.length / 2 - 0.01 : minGap / 2;
+
+      final items = <Widget>[
+        for (final tf in tfs)
+          InkWell(
             key: ValueKey('tf-${tf.name}'),
             borderRadius: BorderRadius.circular(8),
             onTap: () => onPick(tf),
             child: SizedBox(
               height: 44,
+              width: textWidth(tf, fs) + 2 * pad,
               child: Center(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    tf.mt5Label,
-                    style: TextStyle(
-                      fontSize: 15.5,
-                      fontWeight:
-                          tf == selected ? FontWeight.w800 : FontWeight.w600,
-                      color: tf == selected
-                          ? cs.primary
-                          : cs.onSurface.withValues(alpha: 0.8),
-                    ),
+                child: Text(
+                  tf.mt5Label,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    fontSize: fs,
+                    fontWeight: tf == selected ? FontWeight.w800 : FontWeight.w600,
+                    color: tf == selected ? cs.primary : cs.onSurface.withValues(alpha: 0.8),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      IconButton(
-          tooltip: 'Chart settings',
-          visualDensity: VisualDensity.compact,
-          icon: const Icon(Icons.settings_outlined),
-          onPressed: onSettings),
-    ]);
+      ];
+      final gear = SizedBox(
+        width: _gearWidth,
+        child: IconButton(
+            tooltip: 'Chart settings',
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: onSettings),
+      );
+      final row = Row(mainAxisSize: MainAxisSize.min, children: [...items, gear]);
+      return fits ? row : FittedBox(fit: BoxFit.scaleDown, child: row);
+    });
   }
 }
 

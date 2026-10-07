@@ -8,6 +8,7 @@ import 'screens/crm_pages.dart';
 import 'screens/charts_screen.dart';
 import 'screens/content_screens.dart';
 import 'screens/forgot_password_screen.dart';
+import 'screens/deposit_screen.dart';
 import 'screens/funding_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
@@ -74,7 +75,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => VerifyEmailScreen(token: state.uri.queryParameters['token'] ?? ''),
       ),
       // Full-screen pages (back arrow, no bottom bar).
-      GoRoute(path: '/deposit', builder: (_, __) => const FundingScreen(type: 'deposit')),
+      GoRoute(path: '/deposit', builder: (_, __) => const DepositScreen()),
       GoRoute(path: '/withdraw', builder: (_, __) => const FundingScreen(type: 'withdraw')),
       GoRoute(path: '/open-account', builder: (_, state) => OpenAccountScreen(demo: state.uri.queryParameters['type'] == 'demo')),
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
