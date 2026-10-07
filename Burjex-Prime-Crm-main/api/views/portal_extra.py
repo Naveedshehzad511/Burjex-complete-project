@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 from decimal import Decimal
 
+from django.conf import settings
+from django.core.cache import cache
 from django.utils import timezone
 from django.utils.crypto import get_random_string
 from rest_framework.views import APIView
@@ -151,7 +155,29 @@ class AccountTradingSessionAPIView(APIView):
         )
 
 
+_CRED_OTP_TTL = 600  # seconds a code stays valid
+_CRED_OTP_RESEND = 30  # seconds between codes
+_CRED_OTP_MAX_ATTEMPTS = 5
+
+
+def _cred_cache_key(what: str, user_id: int, login_id: str, mode: str) -> str:
+    return f"acct_cred_otp:{what}:{user_id}:{login_id}:{mode}"
+
+
+def _cred_digest(user_id: int, login_id: str, mode: str, code: str) -> str:
+    raw = f"{settings.SECRET_KEY}:acct-cred:{user_id}:{login_id}:{mode}:{code.strip()}".encode()
+    return hashlib.sha256(raw).hexdigest()
+
+
 class AccountCredentialAPIView(APIView):
+    """Change an account's trading or investor password (two steps: request_otp, verify_otp).
+
+    The mobile app authenticates with a token and keeps no cookies, so the code CANNOT live in the
+    Django session (it would be gone by the second call). It is kept in the shared cache instead,
+    as a hash bound to this user, account and mode; the new password is not stored at all - the
+    client sends it again with the code.
+    """
+
     permission_classes = [IsAuthenticatedClient]
 
     def post(self, request, login_id: str, mode: str):
@@ -161,38 +187,66 @@ class AccountCredentialAPIView(APIView):
         if not mt5:
             return not_found_response("Account not found.")
         action = (request.data.get("action") or "").strip()
-        session_key = f"acct_cred_otp_{request.user.id}_{login_id}_{mode}"
-        if action == "request_otp":
+        uid = request.user.id
+        code_key = _cred_cache_key("code", uid, str(login_id), mode)
+        tries_key = _cred_cache_key("tries", uid, str(login_id), mode)
+        sent_key = _cred_cache_key("sent", uid, str(login_id), mode)
+
+        def check_password():
             new_pass = (request.data.get("new_password") or "").strip()
             confirm_pass = (request.data.get("confirm_password") or "").strip()
             if len(new_pass) < 6:
-                return error_response("Password must be at least 6 characters.")
+                return None, error_response("Password must be at least 6 characters.")
             if new_pass != confirm_pass:
-                return error_response("Password confirmation does not match.")
+                return None, error_response("Password confirmation does not match.")
+            # MT5 refuses an investor password equal to the trading one (and the reverse).
+            other = mt5.get_investor_password() if mode == "trading" else mt5.get_mt5_password()
+            if other and new_pass == other:
+                return None, error_response("Trading and investor passwords must be different.")
+            return new_pass, None
+
+        if action == "request_otp":
+            _, err = check_password()
+            if err is not None:
+                return err
+            if cache.get(sent_key):
+                return error_response(f"Please wait {_CRED_OTP_RESEND}s before requesting a new code.")
             otp = get_random_string(6, allowed_chars="0123456789")
-            request.session[session_key] = {
-                "otp": otp,
-                "new_password": new_pass,
-                "otp_requested": True,
-            }
+            cache.set(code_key, _cred_digest(uid, str(login_id), mode, otp), _CRED_OTP_TTL)
+            cache.set(tries_key, 0, _CRED_OTP_TTL)
+            ok = False
             if request.user.email:
                 from admin_panel.email_service import send_dynamic_email
 
-                send_dynamic_email(
+                ok, _reason = send_dynamic_email(
                     request.user.email,
                     "Account Security OTP",
-                    f"Your OTP is: {otp}",
+                    f"Your OTP is: {otp}. It expires in 10 minutes. Do not share it.",
                     user=request.user,
                 )
+            if not ok:
+                cache.delete(code_key)
+                return error_response("Could not send the verification code. Try again.")
+            cache.set(sent_key, 1, _CRED_OTP_RESEND)
             return success_response({"otp_requested": True}, message="OTP sent to your email.")
+
         if action == "verify_otp":
+            new_pass, err = check_password()
+            if err is not None:
+                return err
             otp = (request.data.get("otp_code") or "").strip()
-            state = request.session.get(session_key) or {}
-            if not otp or otp != (state.get("otp") or ""):
+            stored = cache.get(code_key)
+            if not stored:
+                return error_response("No active code. Request a new one.")
+            tries = int(cache.get(tries_key) or 0)
+            if tries >= _CRED_OTP_MAX_ATTEMPTS:
+                cache.delete(code_key)
+                return error_response("Too many attempts. Request a new code.")
+            if not otp.isdigit() or not hmac.compare_digest(
+                stored, _cred_digest(uid, str(login_id), mode, otp)
+            ):
+                cache.set(tries_key, tries + 1, _CRED_OTP_TTL)
                 return error_response("Invalid OTP.")
-            new_pass = (state.get("new_password") or "").strip()
-            if len(new_pass) < 6:
-                return error_response("Password must be at least 6 characters.")
             try:
                 from mt5_integration.services import mt5_change_password
 
@@ -206,7 +260,9 @@ class AccountCredentialAPIView(APIView):
                     mt5.save(update_fields=["investor_password_encrypted", "updated_at"])
             except Exception:
                 return error_response("Failed to update password on MT5 server.")
-            request.session.pop(session_key, None)
+            cache.delete(code_key)
+            cache.delete(tries_key)
+            cache.delete(sent_key)
             return success_response({}, message="Password changed successfully.")
         return error_response("Invalid action. Use request_otp or verify_otp.")
 

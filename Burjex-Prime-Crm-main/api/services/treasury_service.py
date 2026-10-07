@@ -64,6 +64,18 @@ def _serialize_gateway(g: PaymentGateway) -> dict:
         "wallet_address": "" if is_m2p else g.wallet_address,
         "network": g.network,
         "can_use": g.client_can_use(),
+        # Display + conversion data the portal app needs to render the method like the web page.
+        "icon": g.icon.url if g.icon else "",
+        "display_badge": g.display_badge,
+        "category": g.category,
+        "processing_mode": g.processing_mode,
+        "fee_type": g.fee_type,
+        "fee_value": str(g.fee_value),
+        "exchange_rate": str(g.exchange_rate),
+        "rate_mode": g.rate_mode,
+        "rate_markup": str(g.rate_markup),
+        # Networks the client can pay this provider method on (USDT: TRC20 / ERC20 / BEP20, others per currency).
+        "networks": crypto_networks_for_gateway(g) if is_m2p else [],
     }
 
 
