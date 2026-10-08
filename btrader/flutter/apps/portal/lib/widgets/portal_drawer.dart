@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../crm/crm.dart';
 import '../main.dart' show kNavy;
+import '../screens/ib_screens.dart' show IbState, ibStateProvider;
 import '../session/sessions.dart';
 
 /// Side menu — same structure as the existing portal: expandable My Fund, IB
@@ -33,6 +34,7 @@ class PortalDrawer extends ConsumerWidget {
       context.push(route);
     }
 
+    final ib = ref.watch(ibStateProvider).valueOrNull;
     final cs = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     // Brand navy is unreadable on the dark surface, so icons / brand text switch to the theme's
@@ -153,17 +155,20 @@ class PortalDrawer extends ConsumerWidget {
               item(Icons.account_balance_wallet_outlined, 'My Wallet',
                   () => go('/wallet')),
               item(Icons.verified_user_outlined, 'KYC', () => go('/kyc')),
-              group(Icons.groups_outlined, 'IB Programme', const [
-                ('IB Dashboard', '/ib/dashboard'),
-                ('IB Progress', '/ib/progress'),
-                ('IB Request', '/ib/apply'),
-                ('My Clients', '/ib/clients'),
-                ('My Commission', '/ib/commission'),
-                ('IB Tree Chart', '/ib/tree'),
-                ('IB Withdraw', '/ib/withdraw'),
-                ('Team Deposits', '/ib/team-deposits'),
-                ('Team Withdrawals', '/ib/team-withdrawals'),
-              ]),
+              // The IB menu follows where the client stands. An approved IB has the dashboard (which
+              // carries clients, commission, tree, withdraw, team deposits / withdrawals and level
+              // progress, so none of those are repeated here); anyone else only needs the request
+              // page, and it goes away once the request is approved. While the state is unknown
+              // (loading / offline) both entries are offered.
+              if (ib == IbState.approved)
+                item(Icons.groups_outlined, 'IB Dashboard', () => go('/ib/dashboard'))
+              else if (ib == IbState.pending || ib == IbState.none)
+                item(Icons.groups_outlined, 'IB Request', () => go('/ib/apply'))
+              else
+                group(Icons.groups_outlined, 'IB Programme', const [
+                  ('IB Dashboard', '/ib/dashboard'),
+                  ('IB Request', '/ib/apply'),
+                ]),
               group(Icons.bar_chart, 'My Data', const [
                 ('Deposit Report', '/p/report-deposits'),
                 ('Withdraw Report', '/p/report-withdrawals'),

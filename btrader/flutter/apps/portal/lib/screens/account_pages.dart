@@ -1,4 +1,3 @@
-import 'package:btrader_core/btrader_core.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -257,69 +256,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 16),
             FilledButton(onPressed: _busy ? null : _changePassword, style: navyButton(), child: Text(_busy ? 'Updating…' : 'Update Password')),
             const SizedBox(height: 24),
-          ]);
-        },
-      ),
-    );
-  }
-}
-
-// ── KYC ─────────────────────────────────────────────────────────────────────
-
-final _kycProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final res = await ref.watch(crmDioProvider).get('/kyc/status/');
-  return ((res.data as Map)['data'] as Map).cast<String, dynamic>();
-});
-
-class KycScreen extends ConsumerWidget {
-  const KycScreen({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final k = ref.watch(_kycProvider);
-    return PortalPage(
-      title: 'KYC',
-      child: k.when(
-        loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        error: (e, _) => Padding(padding: const EdgeInsets.all(16), child: ErrorBox(crmMessage(e))),
-        data: (d) {
-          Widget row(String label, String status) {
-            final s = status.toLowerCase();
-            final ok = s.contains('approved') || s.contains('verified');
-            final bad = s.contains('reject');
-            final color = ok ? const Color(0xFF1B7A3B) : bad ? const Color(0xFFC62828) : const Color(0xFF9A5B00);
-            return InfoCard(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(children: [
-                Expanded(child: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
-                Text(status, style: TextStyle(color: color, fontWeight: FontWeight.w700)),
-              ]),
-            );
-          }
-
-          final reason = '${d['kyc_reject_reason'] ?? ''}';
-          return ListView(padding: const EdgeInsets.all(16), children: [
-            InfoCard(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Verification status', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                const SizedBox(height: 4),
-                Text('${d['kyc_status'] ?? 'PENDING'}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: kNavy)),
-                if (reason.isNotEmpty) ...[const SizedBox(height: 8), Text(reason, style: const TextStyle(color: Color(0xFFC62828)))],
-              ]),
-            ),
-            const SizedBox(height: 12),
-            row('Identity', '${d['identity_status_ui'] ?? 'Not Submitted'}'),
-            const SizedBox(height: 8),
-            row('Address', '${d['address_status_ui'] ?? 'Not Submitted'}'),
-            const SizedBox(height: 8),
-            row('Bank account', '${d['bank_status_ui'] ?? 'Not Submitted'}'),
-            const SizedBox(height: 8),
-            row('Crypto wallet', '${d['crypto_status_ui'] ?? 'Not Submitted'}'),
-            const SizedBox(height: 16),
-            Text(
-              'Document upload is completed in the client portal on the web. Your status above updates here as soon as the team reviews it.',
-              style: TextStyle(fontSize: 13, color: Theme.of(context).hintColor, height: 1.4),
-            ),
           ]);
         },
       ),

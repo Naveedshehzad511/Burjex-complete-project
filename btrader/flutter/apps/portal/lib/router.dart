@@ -10,6 +10,7 @@ import 'screens/content_screens.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/deposit_screen.dart';
 import 'screens/funding_screen.dart';
+import 'screens/kyc_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/ib_screens.dart';

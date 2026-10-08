@@ -28,13 +28,24 @@ Widget _sectionTitle(String t) => Padding(
       child: Text(t, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
     );
 
-Widget _statTile(BuildContext context, String label, String value, {Color? valueColor}) => Expanded(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: TextStyle(fontSize: 11.5, color: Theme.of(context).hintColor, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 3),
-        Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: valueColor)),
-      ]),
-    );
+Widget _statTile(BuildContext context, String label, String value, {Color? valueColor, String? path}) {
+  final tile = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text(label, style: TextStyle(fontSize: 11.5, color: Theme.of(context).hintColor, fontWeight: FontWeight.w600)),
+    const SizedBox(height: 3),
+    Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: valueColor)),
+  ]);
+  // A tile with a [path] opens its detailed list (the menu no longer repeats it).
+  return Expanded(
+    child: path == null
+        ? tile
+        : InkWell(
+            key: ValueKey('ib-stat-$path'),
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => context.push(path),
+            child: tile,
+          ),
+  );
+}
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -42,6 +53,17 @@ final _ibDashboardProvider = FutureProvider.autoDispose<Map<String, dynamic>>((r
   final dio = ref.watch(crmDioProvider);
   final res = await dio.get('/ib/dashboard/');
   return (((res.data as Map)['data']) as Map).cast<String, dynamic>();
+});
+
+/// Where the client stands with the IB programme: an approved IB (has a profile), an application
+/// under review, or not applied. Drives the menu: only an approved IB sees the dashboard, only
+/// someone who is not one needs the request page.
+enum IbState { approved, pending, none }
+
+final ibStateProvider = FutureProvider.autoDispose<IbState>((ref) async {
+  final d = await ref.watch(_ibDashboardProvider.future);
+  if (d['ib_profile'] != null) return IbState.approved;
+  return d['pending_application'] == true ? IbState.pending : IbState.none;
 });
 
 final _ibProgressProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
@@ -100,8 +122,8 @@ class IbDashboardScreen extends ConsumerWidget {
               InfoCard(
                 child: Column(children: [
                   Row(children: [
-                    _statTile(context, 'Team deposits', '${_money(d['team_deposits'])} USD', valueColor: _kGreen),
-                    _statTile(context, 'Team withdrawals', '${_money(d['team_withdrawals'])} USD'),
+                    _statTile(context, 'Team deposits', '${_money(d['team_deposits'])} USD', valueColor: _kGreen, path: '/ib/team-deposits'),
+                    _statTile(context, 'Team withdrawals', '${_money(d['team_withdrawals'])} USD', path: '/ib/team-withdrawals'),
                   ]),
                   const Divider(height: 22),
                   Row(children: [

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:btrader_core/btrader_core.dart';
+import 'package:burjex_portal/screens/ib_screens.dart' show IbState, ibStateProvider;
 import 'package:burjex_portal/widgets/portal_drawer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,11 +18,12 @@ const _labels = [
 
 final _key = GlobalKey<ScaffoldState>();
 
-Future<void> _open(WidgetTester t, Size size, {bool dark = true}) async {
+Future<void> _open(WidgetTester t, Size size, {bool dark = true, List<Override> overrides = const []}) async {
   t.view.physicalSize = size;
   t.view.devicePixelRatio = 1;
   addTearDown(t.view.reset);
   await t.pumpWidget(ProviderScope(
+    overrides: overrides,
     child: MaterialApp(
       theme: dark ? AppTheme.dark(Branding.fallback) : AppTheme.light(Branding.fallback),
       home: Scaffold(
@@ -52,6 +54,28 @@ Future<void> _loadRoboto() async {
 
 void main() {
   setUpAll(_loadRoboto);
+
+  group('the IB entry follows where the client stands', () {
+    Future<void> openAs(WidgetTester t, IbState state) =>
+        _open(t, const Size(390, 844), overrides: [ibStateProvider.overrideWith((ref) async => state)]);
+
+    testWidgets('an approved IB sees the dashboard and no request entry', (t) async {
+      await openAs(t, IbState.approved);
+      await t.scrollUntilVisible(find.text('IB Dashboard'), 80, scrollable: find.descendant(of: find.byType(Drawer), matching: find.byType(Scrollable)).first);
+      expect(find.text('IB Dashboard'), findsOneWidget);
+      expect(find.text('IB Request'), findsNothing);
+      expect(find.text('IB Programme'), findsNothing);
+    });
+
+    for (final state in [IbState.none, IbState.pending]) {
+      testWidgets('${state.name}: only the request entry, no dashboard', (t) async {
+        await openAs(t, state);
+        await t.scrollUntilVisible(find.text('IB Request'), 80, scrollable: find.descendant(of: find.byType(Drawer), matching: find.byType(Scrollable)).first);
+        expect(find.text('IB Request'), findsOneWidget);
+        expect(find.text('IB Dashboard'), findsNothing);
+      });
+    }
+  });
 
   test('width is about half the viewport, clamped, and never over 90% of a tiny screen', () {
     expect(PortalDrawer.widthFor(1366), 320, reason: 'desktop: capped, not a half-screen slab');
@@ -94,9 +118,14 @@ void main() {
         // Expanding a group keeps its children readable too.
         await t.tap(find.text('IB Programme'));
         await t.pumpAndSettle();
-        for (final l in ['IB Dashboard', 'Team Withdrawals', 'IB Tree Chart']) {
+        // While the IB state is unknown (here: no server) both entries are offered.
+        for (final l in ['IB Dashboard', 'IB Request']) {
           expect(find.text(l), findsOneWidget);
           expect(t.getSize(find.text(l)).height, lessThan(24), reason: '$l fits on one line');
+        }
+        // What the IB Dashboard already carries is not repeated in the menu.
+        for (final l in ['My Clients', 'My Commission', 'IB Tree Chart', 'IB Withdraw', 'IB Progress', 'Team Deposits', 'Team Withdrawals']) {
+          expect(find.text(l), findsNothing, reason: '$l lives on the IB Dashboard');
         }
         expect(t.takeException(), isNull, reason: 'no overflow errors');
 
