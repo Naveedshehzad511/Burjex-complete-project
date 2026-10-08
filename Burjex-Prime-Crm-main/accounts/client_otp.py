@@ -25,11 +25,11 @@ EMAIL_PREFIX = "eotp$"
 PWD_PREFIX = "potp$"
 
 
-# A fixed code that always verifies a NEW account's email (signup, in the portal app and on the CRM
-# website alike), so registration works without real email delivery. Deliberately NOT accepted for
-# password reset (purpose="password"): there it would let anyone take over any account. Override with the
-# CLIENT_OTP_STATIC_CODE environment variable; set it to an empty value to switch this off.
-DEFAULT_STATIC_SIGNUP_OTP = "373737"
+# A fixed code that verifies a NEW account's email (signup, in the portal app and on the CRM website
+# alike) without real email delivery. It is OFF by default: every code is emailed and checked. Switch it
+# on only for a test stack that has no mail, with CLIENT_OTP_STATIC_CODE=<6 digits>. Even then it is
+# never accepted for password reset (purpose="password"): there it would let anyone take over any account.
+DEFAULT_STATIC_SIGNUP_OTP = ""
 
 
 def static_signup_otp() -> str:

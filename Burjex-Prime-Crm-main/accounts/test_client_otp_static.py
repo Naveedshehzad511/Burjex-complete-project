@@ -1,4 +1,4 @@
-"""The fixed signup code (373737): verifies a NEW account's email, nothing else."""
+"""The optional fixed signup code (off by default): verifies a NEW account's email, nothing else."""
 
 import os
 from unittest import mock
@@ -24,15 +24,58 @@ def make_client(email="new.client@example.com", **kw):
     )
 
 
-class StaticSignupOtpTests(TestCase):
+class StaticSignupOtpOffByDefaultTests(TestCase):
+    """Out of the box every code is emailed and checked: no fixed code is accepted."""
+
     def setUp(self):
-        # An environment override must not leak in from the machine running the tests.
         patcher = mock.patch.dict(os.environ, {}, clear=False)
         patcher.start()
         os.environ.pop("CLIENT_OTP_STATIC_CODE", None)
         self.addCleanup(patcher.stop)
 
-    def test_default_code_is_373737(self):
+    def test_no_fixed_code_by_default(self):
+        self.assertEqual(client_otp.static_signup_otp(), "")
+
+    def test_373737_is_rejected_for_signup_and_reset(self):
+        user = make_client()
+        for purpose in ("email", "password"):
+            self.assertFalse(client_otp.verify_otp(user, "373737", purpose=purpose)[0], purpose)
+
+    def test_the_emailed_code_is_the_only_one_that_works(self):
+        user = make_client()
+        user.email_token = client_otp.EMAIL_PREFIX + client_otp._digest(user.pk, "email", "482913")
+        user.email_token_created_at = timezone.now()
+        user.save()
+        self.assertFalse(client_otp.verify_otp(user, "373737", purpose="email", consume=False)[0])
+        self.assertFalse(client_otp.verify_otp(user, "111111", purpose="email", consume=False)[0])
+        self.assertTrue(client_otp.verify_otp(user, "482913", purpose="email", consume=False)[0])
+
+
+    def test_signup_code_is_generated_emailed_and_then_verifies(self):
+        """The real path: issue_otp makes a fresh code and emails it; that code (and only it) verifies."""
+        user = make_client("dynamic.client@example.com")
+        sent = []
+        with mock.patch.object(client_otp, "send_otp_email", side_effect=lambda u, code: (sent.append(code) or (True, "ok"))):
+            ok, _ = client_otp.issue_otp(user, purpose="email")
+        self.assertTrue(ok)
+        self.assertEqual(len(sent), 1)
+        code = sent[0]
+        self.assertRegex(code, r"^\d{6}$")
+        self.assertFalse(client_otp.verify_otp(user, "373737", purpose="email", consume=False)[0])
+        self.assertTrue(client_otp.verify_otp(user, code, purpose="email")[0])
+        # single use
+        self.assertFalse(client_otp.verify_otp(user, code, purpose="email")[0])
+
+
+class StaticSignupOtpTests(TestCase):
+    """The switch for a test stack without mail: CLIENT_OTP_STATIC_CODE=373737."""
+
+    def setUp(self):
+        patcher = mock.patch.dict(os.environ, {"CLIENT_OTP_STATIC_CODE": "373737"}, clear=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_configured_code_is_used(self):
         self.assertEqual(client_otp.static_signup_otp(), "373737")
 
     def test_static_code_verifies_signup_even_if_no_email_was_ever_sent(self):
