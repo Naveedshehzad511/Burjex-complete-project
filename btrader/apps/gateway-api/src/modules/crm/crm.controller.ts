@@ -101,7 +101,7 @@ export class CrmController {
 
   @Post('users/credentials')
   @CrmAuth('crm.write')
-  @ApiOperation({ summary: 'Set trader email-login password and/or active flag' })
+  @ApiOperation({ summary: 'Set trader email-login password and/or active flag (creates the login if a password is given and it does not exist)' })
   userCredentials(@CurrentTenant() t: any, @Body() body: any) {
     return this.crm.setUserCredentials(t.id, body);
   }

@@ -148,6 +148,10 @@ def sync_btrader_login(user, *, password: str | None = None, is_active: bool | N
         body: dict = {"email": user.email.strip().lower()}
         if password:
             body["newPassword"] = password
+            # Lets BTrader create the login when it does not exist yet (no demo account).
+            body["crmUserId"] = str(user.pk)
+            body["name"] = f"{user.first_name} {user.last_name}".strip() or user.username
+            body["phone"] = getattr(user, "phone", "") or ""
         if is_active is not None:
             body["isActive"] = bool(is_active)
         if "newPassword" not in body and "isActive" not in body:
@@ -159,10 +163,11 @@ def sync_btrader_login(user, *, password: str | None = None, is_active: bool | N
         return False
 
 
-def activate_verified_client(user, *, password: str | None = None) -> None:
+def activate_verified_client(user, *, password: str | None = None) -> bool:
+    """Mark the email verified and sync the BTrader login. Returns the sync result."""
     user.email_verified = True
     user.email_verified_at = timezone.now()
     user.is_active = True
     user.email_token = ""
     user.save(update_fields=["email_verified", "email_verified_at", "is_active", "email_token"])
-    sync_btrader_login(user, password=password, is_active=True)
+    return sync_btrader_login(user, password=password, is_active=True)

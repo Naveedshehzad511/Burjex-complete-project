@@ -331,13 +331,40 @@ export class CrmService {
   async setUserCredentials(tenantId: string, body: any) {
     const email = String(body.email ?? '').trim().toLowerCase();
     if (!email) throw new BtError(BtErrorCode.VALIDATION, 'email is required');
-    const user = await prisma.user.findFirst({
-      where: { tenantId, email: { equals: email, mode: 'insensitive' } },
-    });
-    if (!user) throw new BtError(BtErrorCode.VALIDATION, 'user not found');
+    const findUser = () =>
+      prisma.user.findFirst({ where: { tenantId, email: { equals: email, mode: 'insensitive' } } });
     const data: { passwordHash?: string; isActive?: boolean } = {};
     if (body.newPassword) data.passwordHash = await bcrypt.hash(String(body.newPassword), 10);
     if (typeof body.isActive === 'boolean') data.isActive = body.isActive;
+
+    let user = await findUser();
+    if (!user) {
+      // The email login is the client's trading identity, independent of any trading
+      // account: create it when the CRM sets a password (signup verify, password reset).
+      if (!data.passwordHash) throw new BtError(BtErrorCode.VALIDATION, 'user not found');
+      const name = String(body.name ?? '').trim();
+      try {
+        await prisma.user.create({
+          data: {
+            tenantId,
+            email,
+            crmUserId: body.crmUserId != null ? String(body.crmUserId) : undefined,
+            role: 'TRADER',
+            firstName: name ? name.split(' ')[0] : undefined,
+            lastName: name ? name.split(' ').slice(1).join(' ') || undefined : undefined,
+            phone: body.phone || undefined,
+            passwordHash: data.passwordHash,
+            isActive: data.isActive !== false,
+          },
+        });
+        return { ok: true, created: true };
+      } catch (e: any) {
+        // Created concurrently (e.g. by createAccount): fall through and update it.
+        if (String(e?.code) !== 'P2002') throw e;
+        user = await findUser();
+        if (!user) throw e;
+      }
+    }
     if (!Object.keys(data).length) return { ok: true };
     await prisma.user.update({ where: { id: user.id }, data });
     return { ok: true };

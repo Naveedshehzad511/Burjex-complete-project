@@ -519,18 +519,40 @@ def verify_email_token(token: str) -> tuple[bool, str]:
     return True, "Email verified successfully. Please login."
 
 
+TRADING_LOGIN_SYNC_FAILED = (
+    "Your email is verified, but your trading login could not be set up yet. "
+    "Wait a moment and tap Verify again."
+)
+
+
+def _btrader_enabled() -> bool:
+    try:
+        from btrader_integration.services import is_btrader_configured
+
+        return is_btrader_configured()
+    except Exception:
+        return False
+
+
 def verify_email_otp(email: str, otp: str, password: str = "") -> tuple[bool, dict]:
-    from accounts.client_otp import activate_verified_client, verify_otp
+    from accounts.client_otp import activate_verified_client, sync_btrader_login, verify_otp
 
     email = (email or "").strip().lower()
     user = User.objects.filter(email__iexact=email).first()
     if not user:
         return False, {"message": "Invalid code."}
+    portal_pw = password if password and user.check_password(password) else None
     if user.email_verified and user.is_active:
-        from accounts.client_otp import sync_btrader_login
-
-        portal_pw = password if password and user.check_password(password) else None
-        sync_btrader_login(user, password=portal_pw, is_active=True)
+        # No OTP is checked here, so only a caller who knows the password gets a
+        # token (and a retry of a failed trading-login sync).
+        if not portal_pw:
+            return True, {
+                "message": "Email already verified. Please sign in.",
+                "email": user.email,
+                "already": True,
+            }
+        if _btrader_enabled() and not sync_btrader_login(user, password=portal_pw, is_active=True):
+            return False, {"message": TRADING_LOGIN_SYNC_FAILED}
         return True, {
             "message": "Email already verified.",
             "email": user.email,
@@ -540,8 +562,11 @@ def verify_email_otp(email: str, otp: str, password: str = "") -> tuple[bool, di
     ok, reason = verify_otp(user, otp, purpose="email")
     if not ok:
         return False, {"message": reason}
-    portal_pw = password if password and user.check_password(password) else None
-    activate_verified_client(user, password=portal_pw)
+    synced = activate_verified_client(user, password=portal_pw)
+    if portal_pw and not synced and _btrader_enabled():
+        # The app signs in to BTrader next; without the login it would fail with
+        # "invalid credentials". Verify again retries the sync via the branch above.
+        return False, {"message": TRADING_LOGIN_SYNC_FAILED}
     token = _issue_token(user)
     return True, {
         "message": "Email verified.",
