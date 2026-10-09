@@ -190,6 +190,7 @@ class CandleChart extends StatefulWidget {
     this.onPriceTap,
     this.onLevelDragEnd,
     this.onLevelTap,
+    this.onEmptyTap,
     this.onAutoFit,
     this.onNeedOlder,
     this.olderPending,
@@ -259,6 +260,9 @@ class CandleChart extends StatefulWidget {
 
   /// A tappable level (entry / pending line) was tapped.
   final void Function(ChartLevel level)? onLevelTap;
+
+  /// A tap that hit no line, drawing or axis (the one that opens the round menu).
+  final VoidCallback? onEmptyTap;
 
   /// "Auto fit" pressed (the chart has already reset its own view).
   final VoidCallback? onAutoFit;
@@ -332,13 +336,25 @@ const double _kMaxHeadroomFraction = 0.6;
 /// mutated, so sharing them is safe.
 class _TextCache {
   static final Map<String, TextPainter> _m = {};
+  static const int _cap = 1500;
+
+  /// Keep the cache bounded by dropping only the least recently used quarter. The old wholesale
+  /// clear() threw away the price ladder, time axis and every other still-live label with the
+  /// stale ones, so a chart with many trades (whose P/L labels change constantly) re-laid out
+  /// everything in a single frame every few seconds.
+  static void _trim() {
+    if (_m.length < _cap) return;
+    final drop = _m.keys.take(_cap ~/ 4).toList();
+    for (final k in drop) {
+      _m.remove(k);
+    }
+  }
 
   static TextPainter get(String text, double size, Color color, [FontWeight weight = FontWeight.normal]) {
     final key = '$size|${weight.index}|${color.toARGB32()}|$text';
-    final hit = _m[key];
-    if (hit != null) return hit;
-    // A pan over a long history produces many distinct labels; keep the cache bounded.
-    if (_m.length > 400) _m.clear();
+    final hit = _m.remove(key);
+    if (hit != null) return _m[key] = hit; // re-insert: most recently used goes last
+    _trim();
     return _m[key] = TextPainter(
       textDirection: TextDirection.ltr,
       text: TextSpan(text: text, style: TextStyle(color: color, fontSize: size, fontWeight: weight)),
@@ -348,9 +364,9 @@ class _TextCache {
   /// A laid-out rich-text label, kept while its inputs are unchanged (the key must name every input).
   static TextPainter rich(String key, InlineSpan Function() span, {double? maxWidth}) {
     final k = 'r|${maxWidth?.round()}|$key';
-    final hit = _m[k];
-    if (hit != null) return hit;
-    if (_m.length > 400) _m.clear();
+    final hit = _m.remove(k);
+    if (hit != null) return _m[k] = hit;
+    _trim();
     return _m[k] = TextPainter(textDirection: TextDirection.ltr, text: span())..layout(maxWidth: maxWidth ?? double.infinity);
   }
 
@@ -870,6 +886,7 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
           setState(() => _selectedDrawingId = null);
           return;
         }
+        widget.onEmptyTap?.call();
         setState(() => _radialOpen = true);
       }
 

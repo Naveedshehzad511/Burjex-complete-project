@@ -34,6 +34,12 @@ class _ConfirmedOpen {
 /// committed cannot make it vanish and reappear.
 final _confirmedOpensProvider = Provider<Map<String, _ConfirmedOpen>>((_) => <String, _ConfirmedOpen>{});
 
+/// The last list shown for each account, kept outside the autoDispose provider. Leaving the chart
+/// drops the provider's listeners, and a rebuild with nobody listening (the 30 s reconcile tick)
+/// loses its previous value - the chart then reopened with no trade lines until the refetch landed.
+/// Keyed by account id, so it is only ever replayed for the account it was recorded for.
+final _lastPositionsProvider = Provider<Map<String, List<Position>>>((_) => <String, List<Position>>{});
+
 /// Open positions for the active account: the server list, plus any trade the engine has
 /// already confirmed that the list has not caught up with yet.
 ///
@@ -41,6 +47,9 @@ final _confirmedOpensProvider = Provider<Map<String, _ConfirmedOpen>>((_) => <St
 /// are called only from a backend-confirmed fill (`accepted` response with a position id, or the
 /// engine's `opened` push). The refetch then reconciles the list against the server.
 class OpenPositionsNotifier extends AutoDisposeAsyncNotifier<List<Position>> {
+  /// The account the current value belongs to.
+  String? _shownFor;
+
   @override
   Future<List<Position>> build() async {
     // Survive leaving the screen: Trade <-> History <-> Chart must reopen on the last known
@@ -59,6 +68,36 @@ class OpenPositionsNotifier extends AutoDisposeAsyncNotifier<List<Position>> {
       if (state.isLoading || cur == null || !cur.any((p) => closedNow.contains(p.id))) return;
       state = AsyncData([for (final p in cur) if (!closedNow.contains(p.id)) p]);
     });
+    // Remember every settled list for this account, and reopen on it (minus anything the server has
+    // since reported closed) while the refetch runs behind it. A different account has no entry, so
+    // another account's trades are never shown as current.
+    final last = ref.read(_lastPositionsProvider);
+    listenSelf((_, next) {
+      final v = next.valueOrNull;
+      if (v != null && !next.isLoading) last[id] = v;
+    });
+    // A reload for a DIFFERENT account must not keep showing the previous account's trades as its
+    // own: Riverpod hands the previous account's list on as the "previous value" of the reload, and
+    // that is applied after build() returns, so it is replaced just after (before any frame paints).
+    final switched = _shownFor != null && _shownFor != id;
+    _shownFor = id;
+    final remembered = last[id];
+    List<Position>? replay() {
+      if (remembered == null) return null;
+      final closedNow = ref.read(closedPositionIdsProvider);
+      return [for (final p in remembered) if (!closedNow.contains(p.id)) p];
+    }
+
+    if (switched) {
+      Future.microtask(() {
+        if (_shownFor != id || !state.isLoading) return;
+        final r = replay();
+        // No remembered list for this account: show none rather than the other account's trades.
+        state = AsyncData(r ?? const <Position>[]);
+      });
+    } else if (remembered != null && state.valueOrNull == null) {
+      state = AsyncData(replay()!);
+    }
     final startedAt = DateTime.now();
     final data = await api.get('/positions', query: {'accountId': id, 'status': 'OPEN', 'fresh': '1'}) as List;
     final closed = ref.read(closedPositionIdsProvider);

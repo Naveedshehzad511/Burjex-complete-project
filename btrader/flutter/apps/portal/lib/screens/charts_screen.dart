@@ -469,6 +469,19 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     }
   }
 
+  /// A tap on empty chart while an SL / TP or pending-order card is open closes that card (nothing
+  /// is sent: Apply is what saves). A new-order draft is the main flow and is left alone. The chart
+  /// then opens its round menu from the same tap, as it does on an empty chart.
+  void _dismissEditOnEmptyTap() {
+    final e = _edit;
+    if (e == null || e.isDraft || _applying) return;
+    setState(() {
+      _edit = null;
+      _panelExpanded = false;
+      _serverError = null;
+    });
+  }
+
   void _onLevelDragEnd(ChartLevel l, double price) {
     if (_readonly) return _toastReadonly();
     FocusManager.instance.primaryFocus
@@ -593,7 +606,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       await (e.isPosition
           ? api.patch('/positions/${e.id}', {key: value})
           : api.patch('/orders/${e.id}', {key: value}));
-      SoundService.instance.orderModified();
+      // No sound here: this is only the SL / TP "+" / toggle on the open editing card. The
+      // confirmation sound belongs to Apply (see _apply), not to opening or toggling the controls.
       ref.invalidate(openPositionsProvider);
       ref.read(pendingOrdersProvider.notifier).reload();
     } catch (err) {
@@ -726,20 +740,26 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
   /// loss the trade would book if price reaches [px], and the distance from [ref]
   /// (entry / open price) in points. Computed from the real symbol spec (contract
   /// size, digits) and account currency; nothing is fixed.
+  // SL / TP labels are a pure function of the inputs below, and they are asked for on every tick
+  // for every line. Keyed by ALL of them, so a changed SL / TP, size, entry, contract size or
+  // currency is a different key and recomputes at once.
+  final Map<(String, String, double, double, double, double, String), String> _protLabels = {};
+
   String _protLabel(String tag, String side, double vol, double ref, double px, String sym, List<TradeSymbol> symbols) {
     TradeSymbol? spec;
     for (final s in symbols) {
       if (s.symbol == sym) spec = s;
     }
     final cs = spec?.contractSize ?? 100000.0;
-    // final digits = spec?.digits ?? 5; // only needed for points
+    final cur = _accountCurrency() ?? 'USD';
+    final key = (tag, side, vol, ref, px, cs, cur);
+    final hit = _protLabels[key];
+    if (hit != null) return hit;
+    if (_protLabels.length > 600) _protLabels.clear();
     final dir = side.toUpperCase() == 'BUY' ? 1.0 : -1.0;
     final pl = (px - ref) * dir * vol * cs;
-    // final pts = ((px - ref) * dir / math.pow(10, -digits)).round();
-    final cur = _accountCurrency() ?? 'USD';
     // Points are hidden for now; restore by appending `, ${pts >= 0 ? '+' : ''}$pts points`.
-    // return '$tag, ${pl >= 0 ? '+' : '-'}${money(pl.abs())} $cur, ${pts >= 0 ? '+' : ''}$pts points';
-    return '$tag, ${pl >= 0 ? '+' : '-'}${money(pl.abs())} $cur';
+    return _protLabels[key] = '$tag, ${pl >= 0 ? '+' : '-'}${money(pl.abs())} $cur';
   }
 
   /// Currency of the active trading account, when known.
@@ -1152,8 +1172,10 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
         .watch(chartDrawingsProvider)
         .where((d) => d.symbol == _symbol)
         .toList();
+    // Select the list itself: the loading-only transitions of a refetch (value unchanged) must not
+    // rebuild the whole chart screen.
     final positions =
-        ref.watch(openPositionsProvider).valueOrNull ?? const <Position>[];
+        ref.watch(openPositionsProvider.select((a) => a.valueOrNull)) ?? const <Position>[];
     final pendings =
         ref.watch(pendingOrdersProvider).valueOrNull ?? const <PendingOrder>[];
     final tc = Theme.of(context).extension<TradeColors>()!;
@@ -1421,6 +1443,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                         ref.read(chartDrawingsProvider.notifier).remove(id),
                     onLevelDragEnd: _onLevelDragEnd,
                     onLevelTap: _onLevelTap,
+                    onEmptyTap: _dismissEditOnEmptyTap,
                     onNeedOlder: (n, urgent) => ref
                         .read(chartHistoryLoaderProvider(req))
                         .loadOlder(visibleBars: n, urgent: urgent),
@@ -1511,7 +1534,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       final forming2 = ref.watch(formingCandleProvider(req2));
       final livePrice2 = forming2?.c ?? rawQuote2?.bid;
       final positions2 =
-          ref.watch(openPositionsProvider).valueOrNull ?? const <Position>[];
+          ref.watch(openPositionsProvider.select((a) => a.valueOrNull)) ?? const <Position>[];
       final pendings2 = ref.watch(pendingOrdersProvider).valueOrNull ??
           const <PendingOrder>[];
       final levels2 = _levels(positions2, pendings2, tc, readonly,
