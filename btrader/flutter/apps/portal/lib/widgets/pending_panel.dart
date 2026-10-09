@@ -168,7 +168,30 @@ class ChartEdit {
         if (!isBuy && !(lm > st)) out['limit'] = 'Must be above the stop price';
       }
     }
-    final ref = protectiveRef;
+    if (isPosition) {
+      // An OPEN position is judged from the market, never from its open price: the engine checks a
+      // position's SL / TP against the live quote (trigger.rs `validate_sl_tp`), so a Buy may lock in
+      // profit with an SL above its entry (below the Bid), and a losing Buy may take profit with a TP
+      // below its entry (above the Ask). Same rule as the engine, so the app never accepts a level the
+      // server would refuse. With no usable quote the engine does not check either - only the price
+      // itself is validated here, and the server has the final say.
+      final hasQuote = q != null && q.bid > 0 && q.ask > 0;
+      if (sl != null) {
+        if (!(sl! > 0)) {
+          out['sl'] = 'Invalid price';
+        } else if (hasQuote && (isBuy ? sl! >= q.bid : sl! <= q.ask)) {
+          out['sl'] = isBuy ? 'Must be below the Bid' : 'Must be above the Ask';
+        }
+      }
+      if (tp != null) {
+        if (!(tp! > 0)) {
+          out['tp'] = 'Invalid price';
+        } else if (hasQuote && (isBuy ? tp! <= q.ask : tp! >= q.bid)) {
+          out['tp'] = isBuy ? 'Must be above the Ask' : 'Must be below the Bid';
+        }
+      }
+    }
+    final ref = isPosition ? null : protectiveRef;
     if (ref != null && ref > 0) {
       if (sl != null) {
         if (!(sl! > 0)) {

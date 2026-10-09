@@ -536,8 +536,13 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     if (e == null) return;
     final digits = _spec()?.digits ?? 5;
     // A market order has no entry yet: start from the Bid (lines default to the buy side).
-    final base = e.protectiveRef ??
-        (q == null ? null : (e.isMarket ? q.bid : (e.isBuy ? q.ask : q.bid)));
+    // An OPEN position starts from the market, on the side the engine requires (Buy: SL below the
+    // Bid, TP above the Ask; Sell: SL above the Ask, TP below the Bid), so the new line is valid
+    // however far the price has moved from the open price. Without a quote it falls back to the entry.
+    final base = e.isPosition && q != null
+        ? (sl ? (e.isBuy ? q.bid : q.ask) : (e.isBuy ? q.ask : q.bid))
+        : (e.protectiveRef ??
+            (q == null ? null : (e.isMarket ? q.bid : (e.isBuy ? q.ask : q.bid))));
     if (base == null) return;
     final gap = _defaultGap(base, digits);
     final buy = e.isBuy;
