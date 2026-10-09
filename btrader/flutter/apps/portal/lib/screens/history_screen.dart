@@ -43,6 +43,15 @@ final _customRangeProvider = StateProvider<DateTimeRange?>((_) => null);
   };
 }
 
+/// The last history loaded for each (account, period window), kept OUTSIDE [_historyProvider].
+/// A provider that is rebuilt because a trade closed while nobody was listening (History not on
+/// screen) loses its previous value, so reopening History would show a loader although the rows were
+/// already known. This cache lets the screen show them at once while the refetch runs behind them.
+final _historyCacheProvider = StateProvider<Map<String, List<Deal>>>((_) => const {});
+
+String _historyKey(String? account, _Period p, DateTimeRange? custom) =>
+    '$account|${p.name}|${p == _Period.custom ? '${custom?.start.millisecondsSinceEpoch}-${custom?.end.millisecondsSinceEpoch}' : ''}';
+
 final _historyProvider = FutureProvider.autoDispose<List<Deal>>((ref) async {
   ref.keepAlive(); // reopen on the last history instantly; trade events refetch it behind the list
   final id = ref.watch(activeAccountIdProvider);
@@ -58,7 +67,10 @@ final _historyProvider = FutureProvider.autoDispose<List<Deal>>((ref) async {
     if (from != null) 'from': from.toUtc().toIso8601String(),
     if (to != null) 'to': to.toUtc().toIso8601String(),
   }) as List;
-  return data.map((e) => Deal.fromJson(e)).toList();
+  final deals = data.map((e) => Deal.fromJson(e)).toList();
+  final cache = ref.read(_historyCacheProvider);
+  ref.read(_historyCacheProvider.notifier).state = {...cache, _historyKey(id, period, custom): deals};
+  return deals;
 });
 
 const _balanceTypes = {'DEPOSIT', 'WITHDRAWAL', 'BONUS', 'DIVIDEND', 'CREDIT', 'BALANCE'};
@@ -100,9 +112,14 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final history = ref.watch(_historyProvider);
+    final fetched = ref.watch(_historyProvider);
     final period = ref.watch(_periodProvider);
     final customRange = ref.watch(_customRangeProvider);
+    // Loading with nothing to show yet, but this account / period was loaded before: show those rows
+    // (the refetch lands behind them). A loader is only for a genuine first load, and an error is
+    // never replaced by old rows.
+    final cached = ref.watch(_historyCacheProvider)[_historyKey(ref.watch(activeAccountIdProvider), period, customRange)];
+    final history = (fetched.isLoading && !fetched.hasValue && cached != null) ? AsyncData<List<Deal>>(cached) : fetched;
     final tc = Theme.of(context).extension<TradeColors>()!;
 
     return Scaffold(
