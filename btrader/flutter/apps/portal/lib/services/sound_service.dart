@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:math';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
@@ -8,7 +9,7 @@ import 'package:flutter/services.dart';
 ///
 /// Latency: each sound has its own player with the asset already loaded, so a
 /// play is `seek(0) + resume()` — no file load on the hot path. The vibration is
-/// issued first, synchronously, in the same tick as the call.
+/// issued in the same tick as the sound.
 ///
 /// Feedback fires once per confirmed order: [orderPlaced] is de-duplicated by
 /// order id, so the REST response and a later WebSocket event for the same order
@@ -26,9 +27,10 @@ class SoundService {
   }
   static final SoundService instance = SoundService._();
 
-  /// The short click played for every confirmed order event: a trade opened or closed, a pending
-  /// order placed, an order / SL / TP modified. About 200 ms, trimmed to start right at the click
-  /// (assets/sounds/order_event.wav), so it is heard within milliseconds of the confirmation.
+  /// The click played for every confirmed order event: a trade opened or closed, a pending order
+  /// placed, an order / SL / TP modified. The original recording, cropped only of its leading and
+  /// trailing silence (assets/sounds/order_event.wav, ~430 ms: the click starts 3 ms in, then its
+  /// natural decay), so it is heard within milliseconds of the confirmation and never cut short.
   static const eventAsset = 'sounds/order_event.wav';
 
   /// Native bridge to Android's Vibrator (MainActivity.kt).
@@ -40,6 +42,18 @@ class SoundService {
   bool enabled = true;
   final _seen = ListQueue<String>();
   final _assets = <AudioPlayer, String>{};
+
+  // Event sounds share ONE voice and play through a queue, so a burst (Close all of 40 positions)
+  // is heard click after click instead of being dropped, stacked or cut before it is audible.
+  // Each click is the first ~50 ms of the clip; a single event always plays in full.
+  static const _burstWindow = Duration(milliseconds: 2000); // a whole burst is spread over about this
+  static const _minGap = Duration(milliseconds: 50);        // the click is fully audible by then
+  static const _maxGap = Duration(milliseconds: 120);       // few events: the click stays clear of the next one
+  static const _minVibeGap = Duration(milliseconds: 100);   // a buzz per click would blur into one
+  final _queue = ListQueue<List<int>>(); // vibration pattern of each event still to play
+  bool _draining = false;
+  int _gapMs = 120; // ms between two clicks of the current burst
+  int _clicks = 0;  // clicks played in the current burst
 
   // Vibration patterns in ms: (delay, on, off, on ...).
   static const _tick = [0, 55];
@@ -115,6 +129,44 @@ class SoundService {
     }();
   }
 
+  /// Queue [count] event sounds, each with its own [pattern] vibration. Returns at once; the caller
+  /// never waits on audio or the vibrator.
+  void _enqueue(List<int> pattern, {int count = 1}) {
+    if (count <= 0) return;
+    if (_queue.isEmpty) {
+      _gapMs = _maxGap.inMilliseconds; // a new burst: the pace is worked out again
+      _clicks = 0;
+    }
+    for (var i = 0; i < count; i++) {
+      _queue.addLast(pattern);
+    }
+    if (!_draining) _drain();
+  }
+
+  /// Play the queued events one by one. The first plays in the same tick as the call (sound and
+  /// vibration together); the next ones follow every gap, so 40 closes take about two seconds.
+  Future<void> _drain() async {
+    _draining = true;
+    try {
+      while (_queue.isNotEmpty) {
+        final pattern = _queue.removeFirst();
+        // Pace: the whole burst fits [_burstWindow]. It only ever speeds up within a burst (more
+        // events arriving), so the clicks do not slow down as the queue empties.
+        final spread = _burstWindow.inMilliseconds ~/ (_queue.length + 1);
+        _gapMs = min(_gapMs, spread.clamp(_minGap.inMilliseconds, _maxGap.inMilliseconds));
+        _fire(_event); // sound first: the motor needs a moment to spin up, the sound does not
+        // A buzz per click would blur into one long buzz in a fast burst: vibrate every few clicks.
+        final every = (_minVibeGap.inMilliseconds / _gapMs).ceil();
+        if (_clicks++ % every == 0) _vibrate(pattern, HapticFeedback.mediumImpact);
+        // Even after the last click, hold the voice for a moment so an event right behind it does not
+        // cut the click before it is heard.
+        await Future<void>.delayed(Duration(milliseconds: _gapMs));
+      }
+    } finally {
+      _draining = false;
+    }
+  }
+
   /// A manual order was confirmed by the server. Call once per order.
   void orderPlaced([String? orderId]) {
     if (orderId != null && orderId.isNotEmpty) {
@@ -122,37 +174,37 @@ class SoundService {
       _seen.addLast(orderId);
       if (_seen.length > 64) _seen.removeFirst();
     }
-    _vibrate(_tick, HapticFeedback.mediumImpact); // very short tick
-    _fire(_event);
+    _enqueue(_tick); // very short tick
   }
 
   /// Trade opened successfully (kept for callers without an order id).
   Future<void> tradeOpen() async => orderPlaced();
 
-  /// Trade / position closed.
-  Future<void> tradeClose() async {
-    _vibrate(_tick, HapticFeedback.mediumImpact);
-    _fire(_event);
+  /// Position(s) closed: one sound (and tick) per closed position - [count] is how many the server
+  /// confirmed, e.g. 40 for Close all. The sounds are queued, never dropped.
+  Future<void> tradeClose({int count = 1}) async {
+    _enqueue(_tick, count: count);
   }
 
   /// A resting (pending) order was cancelled and the server accepted it.
   Future<void> orderCancelled() async {
-    _vibrate(_soft, HapticFeedback.mediumImpact);
-    _fire(_event);
+    _enqueue(_soft);
   }
 
   /// An existing order or position was modified (price, SL or TP) and the server accepted it.
   Future<void> orderModified() async {
-    _vibrate(_soft, HapticFeedback.mediumImpact);
-    _fire(_event);
+    _enqueue(_soft);
   }
 
   /// Any error (order rejected, market closed, network, etc.).
   Future<void> error() async {
-    _vibrate(_errPulse, HapticFeedback.heavyImpact);
     _fire(_err);
+    _vibrate(_errPulse, HapticFeedback.heavyImpact);
   }
 
   @visibleForTesting
-  void resetForTest() => _seen.clear();
+  void resetForTest() {
+    _seen.clear();
+    _queue.clear();
+  }
 }

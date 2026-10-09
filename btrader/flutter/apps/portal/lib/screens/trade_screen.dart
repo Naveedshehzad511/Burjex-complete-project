@@ -355,8 +355,10 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                         icon: Icon(Icons.more_horiz, color: Theme.of(context).hintColor),
                         onSelected: (v) async {
                           if (v == 'closeAll' && id != null) {
-                            await api.post('/accounts/$id/close-all', {});
-                            SoundService.instance.tradeClose();
+                            final res = await api.post('/accounts/$id/close-all', {});
+                            // The server says how many it closed: one sound per closed position.
+                            final closed = res is Map ? res['closed'] : null;
+                            SoundService.instance.tradeClose(count: closed is num ? closed.toInt() : 1);
                             await refresh();
                           }
                         },

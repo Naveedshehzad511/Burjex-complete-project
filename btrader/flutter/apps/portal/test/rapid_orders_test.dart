@@ -160,6 +160,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 50));
       expect(_open(c).where((p) => p.side == 'BUY').length, 12);
       await _unmount(t, c);
+      await t.pump(const Duration(seconds: 3)); // let the 13 queued order sounds play out
     });
 
     testWidgets('a rejected order is shown as rejected, never as a trade', (t) async {

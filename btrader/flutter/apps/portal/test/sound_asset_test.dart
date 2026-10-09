@@ -4,8 +4,9 @@ import 'package:burjex_portal/services/sound_service.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// The order-event click (open / close / pending placed / modified): short, loud enough, and
-/// starting at once, so it is heard within milliseconds of the confirmation.
+/// The order-event click (open / close / pending placed / modified): the original recording
+/// without its leading / trailing silence, loud enough, starting at once, so it is heard within
+/// milliseconds of the confirmation and not cut short.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -28,7 +29,7 @@ void main() {
     final start = o + 8;
     final frames = bytes ~/ (2 * channels);
     final ms = frames * 1000 / rate;
-    expect(ms, inInclusiveRange(100, 300), reason: 'a short click, cropped from the original ~0.9 s clip: $ms ms');
+    expect(ms, inInclusiveRange(300, 600), reason: 'the original click with its whole decay, only the silence around it cropped from the ~0.9 s clip: $ms ms');
 
     double at(int frame) => b.getInt16(start + frame * 2 * channels, Endian.little) / 32768;
     final firstMs = (rate * 0.010).round();
