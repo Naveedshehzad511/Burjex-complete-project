@@ -621,7 +621,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                     'slPrice': double.tryParse(sl.text),
                     'tpPrice': double.tryParse(tp.text),
                   });
-                  SoundService.instance.orderModified(position: true);
+                  SoundService.instance.orderModified();
                   if (ctx.mounted) Navigator.pop(ctx);
                 } catch (_) {
                   // Server is authoritative — reconcile even when PATCH is rejected.

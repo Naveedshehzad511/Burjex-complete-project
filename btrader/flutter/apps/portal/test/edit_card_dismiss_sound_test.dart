@@ -176,7 +176,7 @@ Map<String, dynamic> _order(String name, {bool withSl = true, bool withTp = true
 
 /// Success sound = the "modified" pulse; failure = the error pulse. Counted through the haptic bridge.
 final _pulses = <List<int>>[];
-int get _modified => _pulses.where((p) => p.length == 2 && p[1] == 60).length;
+int get _modified => _pulses.where((p) => p.length == 2 && p[1] == 40).length;
 int get _errors => _pulses.where((p) => p.length == 4).length;
 
 Map<String, dynamic> _pos({double? sl}) => {

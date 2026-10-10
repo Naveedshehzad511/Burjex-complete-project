@@ -274,7 +274,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           await ref.read(apiClientProvider).post('/orders', req.toJson());
       if (res['accepted'] == true) {
         // Feedback first — the instant the server confirms — then refresh state.
-        SoundService.instance.orderPlaced('${res['orderId'] ?? ''}', res['positionId']?.toString());
+        SoundService.instance.orderPlaced('${res['orderId'] ?? ''}');
         // The backend has confirmed this fill: show it now, then reconcile with the server
         // (one coalesced refetch for a whole burst, not one restart per order).
         ref.read(openPositionsProvider.notifier).addConfirmedFill(
@@ -608,7 +608,6 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           : api.patch('/orders/${e.id}', {key: value}));
       // No sound here: this is only the SL / TP "+" / toggle on the open editing card. The
       // confirmation sound belongs to Apply (see _apply), not to opening or toggling the controls.
-      if (e.isPosition) SoundService.instance.expectPositionChange(); // the engine's confirmation stays silent too
       ref.invalidate(openPositionsProvider);
       ref.read(pendingOrdersProvider.notifier).reload();
     } catch (err) {
@@ -671,7 +670,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                 _serverError = '${res['reason'] ?? 'The order was rejected.'}');
           return;
         }
-        SoundService.instance.orderPlaced('${res['orderId'] ?? ''}', res['positionId']?.toString());
+        SoundService.instance.orderPlaced('${res['orderId'] ?? ''}');
         ToastHost.show('${e.typeLabel} placed',
             '${e.volume!.toStringAsFixed(2)} @ ${e.entry}',
             accent: e.isBuy ? tc.buy : tc.sell);
@@ -679,7 +678,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
         // null clears the value on the server (it is not "keep the old one").
         await api
             .patch('/positions/${e.id}', {'slPrice': e.sl, 'tpPrice': e.tp});
-        SoundService.instance.orderModified(position: true);
+        SoundService.instance.orderModified();
         ToastHost.show(
             'Position updated', 'SL ${e.sl ?? '—'}  ·  TP ${e.tp ?? '—'}',
             accent: tc.profit);
