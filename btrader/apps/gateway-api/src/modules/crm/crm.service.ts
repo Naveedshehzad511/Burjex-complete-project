@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { prisma } from '@btrader/db';
 import { BtError, BtErrorCode, CrmAccountInfo, CrmPosition, CrmDeal, CrmTradingStats } from '@btrader/shared';
@@ -83,6 +83,18 @@ export class CrmService {
     return out;
   }
 
+  private readonly log = new Logger(CrmService.name);
+
+  /** Group by name: an exact match wins, otherwise a case-insensitive match (names are trimmed). */
+  private async findGroupByName(tenantId: string, name: string) {
+    const exact = await prisma.tradingGroup.findUnique({ where: { tenantId_name: { tenantId, name } } });
+    if (exact) return exact;
+    const matches = await prisma.tradingGroup.findMany({ where: { tenantId, name: { equals: name, mode: 'insensitive' } }, take: 2 });
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) this.log.warn(`createAccount: group name "${name}" matches several groups ignoring case; none assigned`);
+    return null;
+  }
+
   async createAccount(tenantId: string, body: any): Promise<{ accountId: string; login: string }> {
     // Find-or-create the trader user mapped to the CRM user id.
     const passwordHash = body.password ? await bcrypt.hash(String(body.password), 10) : null;
@@ -94,9 +106,14 @@ export class CrmService {
       : null;
 
     const groupName = (body.group ?? '').toString().trim();
-    const group = groupName
-      ? await prisma.tradingGroup.findUnique({ where: { tenantId_name: { tenantId, name: groupName } } })
-      : null;
+    const group = groupName ? await this.findGroupByName(tenantId, groupName) : null;
+    if (!groupName) {
+      this.log.warn(`createAccount: CRM sent no group name for ${String(body.email ?? '')}; account is created WITHOUT a group (no group execution delay / markup / slippage)`);
+    } else if (!group) {
+      // The account is still created (never assigned to an arbitrary group), but say so: without a
+      // group it gets no group execution delay, markup or slippage.
+      this.log.warn(`createAccount: no trading group named "${groupName}" for tenant ${tenantId}; account is created WITHOUT a group (CRM group name must match a trading group)`);
+    }
 
     const email = String(body.email ?? '').trim().toLowerCase();
     const existing = await prisma.user.findFirst({
