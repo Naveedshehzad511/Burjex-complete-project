@@ -31,6 +31,56 @@ final tradeEventEpochProvider = StateProvider<int>((_) => 0);
 /// state can reconcile anything they missed while it was down.
 final socketEpochProvider = StateProvider<int>((_) => 0);
 
+/// A trade event the ENGINE confirmed over the socket (not a button press or a REST reply).
+enum TradeEventKind { opened, closed, modified }
+
+class TradeEvent {
+  const TradeEvent(this.seq, this.kind, this.positionId);
+  final int seq;
+  final TradeEventKind kind;
+  final String positionId;
+}
+
+/// The latest confirmed trade event; the app turns it into sound + vibration. A trade closed by its
+/// SL / TP, a pending order that filled, or a change made from another device arrives ONLY here -
+/// no REST reply on this device ever mentions it.
+final lastTradeEventProvider = StateProvider<TradeEvent?>((_) => null);
+
+/// Reads position frames and says what actually happened to the position, once.
+///  * `opened`   - the engine's `opened` push (carries the full row), once per position id;
+///  * `closed`   - a closed frame, once per position id (the engine may send several);
+///  * `modified` - a live frame whose SL / TP differ from the last ones seen for that position (the
+///                 first frame of a position only sets the baseline, so nothing fires on app start).
+class TradeEventDetector {
+  final _opened = <String>{};
+  final _sltp = <String, (double?, double?)>{};
+
+  static double? _num(dynamic v) => v == null ? null : double.tryParse('$v');
+  static bool _same(double? a, double? b) => a == null || b == null ? a == b : (a - b).abs() < 1e-9;
+
+  /// [alreadyClosed]: the id was already reported closed before this frame.
+  TradeEventKind? onPosition(Map<String, dynamic> data, {required String id, required bool closed, required bool alreadyClosed}) {
+    if (id.isEmpty) return null;
+    if (closed) {
+      _sltp.remove(id);
+      return alreadyClosed ? null : TradeEventKind.closed;
+    }
+    if (data['stale'] == true) return null;
+    final hasLevels = data.containsKey('slPrice') || data.containsKey('tpPrice');
+    final cur = (_num(data['slPrice']), _num(data['tpPrice']));
+    if (data['opened'] == true) {
+      _sltp[id] = cur;
+      if (_opened.length > 500) _opened.clear();
+      return _opened.add(id) ? TradeEventKind.opened : null;
+    }
+    if (!hasLevels) return null;
+    final prev = _sltp[id];
+    _sltp[id] = cur;
+    if (prev == null) return null;
+    return _same(prev.$1, cur.$1) && _same(prev.$2, cur.$2) ? null : TradeEventKind.modified;
+  }
+}
+
 /// Owns the WebSocket for the session and routes frames into the live stores.
 /// Auto-connects when authenticated; disposes on logout.
 final marketSocketProvider = Provider<MarketSocket?>((ref) {
@@ -51,6 +101,13 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
   );
   sock.connect();
 
+  final tradeEvents = TradeEventDetector();
+  void announce(TradeEventKind? kind, String id) {
+    if (kind == null) return;
+    final prev = ref.read(lastTradeEventProvider);
+    ref.read(lastTradeEventProvider.notifier).state = TradeEvent((prev?.seq ?? 0) + 1, kind, id);
+  }
+
   final sub = sock.frames.listen((f) {
     switch (f) {
       case TickFrame(:final tick):
@@ -66,6 +123,7 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
         final book = '${data['book'] ?? ''}';
         final closed = status == 'CLOSED' || book == 'closed';
         if (closed && id.isNotEmpty) {
+          announce(tradeEvents.onPosition(data, id: id, closed: true, alreadyClosed: ref.read(closedPositionIdsProvider).contains(id)), id);
           ref.read(livePositionNotifierProvider.notifier).forget(id);
           ref.read(closedPositionIdsProvider.notifier).add(id);
           Future.microtask(() {
@@ -82,6 +140,7 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
           });
           break;
         }
+        announce(tradeEvents.onPosition(data, id: id, closed: false, alreadyClosed: false), id);
         final sym = '${data['symbol'] ?? ''}';
         final q = sym.isEmpty ? null : ref.read(quotesProvider)[sym];
         // A position this session has not seen yet is a NEW trade. When the engine's `opened`

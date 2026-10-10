@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'crm/crm.dart';
+import 'services/sound_service.dart';
 import 'session/sessions.dart';
 
 /// Responsive shell. On phones it's a bottom NavigationBar; on tablet/desktop it
@@ -94,6 +95,13 @@ class _PortalShellState extends ConsumerState<PortalShell> with WidgetsBindingOb
     // The first build can already have data (provider kept alive by Home).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _bootstrapPrimary(ref.read(crmDashboardProvider).valueOrNull);
+    });
+
+    // Every trade the engine confirms - opened, closed (also by SL / TP, or from another device), SL / TP
+    // modified - gets its sound + vibration, once (a REST reply for the same trade is matched in
+    // SoundService, so the two sources never feed back twice).
+    ref.listen<TradeEvent?>(lastTradeEventProvider, (_, e) {
+      if (e != null) SoundService.instance.onTradeEvent(e.kind);
     });
 
     // Activate live data on every tab.

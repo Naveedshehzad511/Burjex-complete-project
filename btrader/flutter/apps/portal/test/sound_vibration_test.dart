@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:btrader_core/btrader_core.dart' show TradeEventKind;
 import 'package:burjex_portal/services/sound_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -49,6 +50,106 @@ void main() {
   // Event sounds share one voice: the next event starts once the previous click has had its gap.
   Future<void> nextEvent() => Future<void>.delayed(const Duration(milliseconds: 220));
 
+
+  group('one vibration per real trade event, whichever source reports it', () {
+    int buzzes() => calls.length;
+
+    test('OPEN: REST reply then the socket event for the same trade -> one vibration', () async {
+      sound.orderPlaced('o-1', 'pos-1'); // market fill confirmed by the REST reply
+      await nextEvent();
+      sound.onTradeEvent(TradeEventKind.opened); // the engine's `opened` push for it
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('OPEN: socket event first, REST reply after -> still one vibration', () async {
+      sound.onTradeEvent(TradeEventKind.opened);
+      await nextEvent();
+      sound.orderPlaced('o-2', 'pos-2');
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('OPEN: a pending order that FILLS (socket only) vibrates, and so did placing it', () async {
+      sound.orderPlaced('o-3'); // resting order placed: no position yet, no credit taken
+      await nextEvent();
+      sound.onTradeEvent(TradeEventKind.opened); // later it fills
+      await nextEvent();
+      expect(buzzes(), 2);
+    });
+
+    test('CLOSE: a trade closed by its SL / TP (socket only) vibrates', () async {
+      sound.onTradeEvent(TradeEventKind.closed);
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('CLOSE: REST close then the socket event -> one; socket then REST -> one', () async {
+      await sound.tradeClose();
+      await nextEvent();
+      sound.onTradeEvent(TradeEventKind.closed);
+      await nextEvent();
+      expect(buzzes(), 1);
+      calls.clear();
+      sound.onTradeEvent(TradeEventKind.closed);
+      await nextEvent();
+      await sound.tradeClose();
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('CLOSE ALL of 3: REST says 3, the socket sends 3 events -> exactly 3 vibrations, not 6', () async {
+      await sound.tradeClose(count: 3);
+      for (var i = 0; i < 3; i++) {
+        sound.onTradeEvent(TradeEventKind.closed);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 1000));
+      expect(buzzes(), 3);
+    });
+
+    test('CLOSE ALL where the socket event comes first (3, then REST says 3) -> still exactly 3', () async {
+      for (var i = 0; i < 3; i++) {
+        sound.onTradeEvent(TradeEventKind.closed);
+      }
+      await sound.tradeClose(count: 3);
+      await Future<void>.delayed(const Duration(milliseconds: 1000));
+      expect(buzzes(), 3);
+    });
+
+    test('MODIFY: REST Apply on a position then the socket modified event -> one vibration', () async {
+      await sound.orderModified(position: true);
+      await nextEvent();
+      sound.onTradeEvent(TradeEventKind.modified);
+      await nextEvent();
+      expect(buzzes(), 1);
+      expect(calls.single, [0, 60]);
+    });
+
+    test('MODIFY: a change made from another device (socket only) vibrates', () async {
+      sound.onTradeEvent(TradeEventKind.modified);
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('MODIFY: the SL/TP "+" toggle stays silent - its socket confirmation is swallowed', () async {
+      sound.expectPositionChange(); // "+" saved at once
+      sound.onTradeEvent(TradeEventKind.modified); // the engine confirms it
+      await nextEvent();
+      expect(buzzes(), 0);
+      await sound.orderModified(position: true); // the user then presses Apply
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('a pending ORDER change has no socket twin, so it never leaves a credit that hides a later position change', () async {
+      await sound.orderModified(); // pending order modified
+      await nextEvent();
+      sound.onTradeEvent(TradeEventKind.modified); // an unrelated position change
+      await nextEvent();
+      expect(buzzes(), 2);
+    });
+  });
+
   test('every trade event vibrates for real on Android, each with its own pattern', () async {
     sound.orderPlaced('o1'); // market buy / sell, pending placed
     await nextEvent();
@@ -64,11 +165,11 @@ void main() {
     await nextEvent();
 
     expect(calls.length, 6, reason: 'one vibration per event');
-    expect(calls[0], [0, 55]);
-    expect(calls[1], [0, 55]);
-    expect(calls[2], [0, 55]);
-    expect(calls[3], [0, 40]);
-    expect(calls[4], [0, 40]);
+    expect(calls[0], [0, 80]);
+    expect(calls[1], [0, 80]);
+    expect(calls[2], [0, 80]);
+    expect(calls[3], [0, 60]);
+    expect(calls[4], [0, 60]);
     expect(calls[5], [0, 80, 70, 80], reason: 'an error is a double pulse, distinct from success');
     expect(platformHaptics, 0, reason: 'the weak touch tick is not used when the real vibrator answered');
   });

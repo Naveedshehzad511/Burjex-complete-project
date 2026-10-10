@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:math';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:btrader_core/btrader_core.dart' show TradeEventKind;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -56,8 +57,8 @@ class SoundService {
   int _clicks = 0;  // clicks played in the current burst
 
   // Vibration patterns in ms: (delay, on, off, on ...).
-  static const _tick = [0, 55];
-  static const _soft = [0, 40];
+  static const _tick = [0, 80];
+  static const _soft = [0, 60];
   static const _errPulse = [0, 80, 70, 80];
 
   bool get _androidApp => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -167,13 +168,69 @@ class SoundService {
     }
   }
 
+  // ── REST reply  <->  socket event: one feedback per real trade event ─────────────────────────────
+  // The same open / close / modify is reported twice - by this device's REST reply and by the engine's
+  // socket event - and the socket event is the ONLY report for a trade closed by its SL / TP, a pending
+  // order that filled, or a change made from another device. Each report is matched against an
+  // unmatched report of the other source (any order, so it also works for Close all: 40 REST closes
+  // against 40 socket events), and only an unmatched one plays. Credits expire, so a report whose
+  // partner never arrives (socket down, or no REST reply on this device) cannot suppress a later event.
+  static const _creditTtl = Duration(seconds: 12);
+  final _restCredits = <TradeEventKind, ListQueue<DateTime>>{for (final k in TradeEventKind.values) k: ListQueue()};
+  final _socketCredits = <TradeEventKind, ListQueue<DateTime>>{for (final k in TradeEventKind.values) k: ListQueue()};
+
+  int _live(ListQueue<DateTime> q) {
+    final now = DateTime.now();
+    while (q.isNotEmpty && now.difference(q.first) > _creditTtl) {
+      q.removeFirst();
+    }
+    return q.length;
+  }
+
+  /// REST reported [n] confirmed [kind] events: how many of them still need feedback.
+  int _restReport(TradeEventKind kind, int n) {
+    final socket = _socketCredits[kind]!;
+    var left = n;
+    while (left > 0 && _live(socket) > 0) {
+      socket.removeFirst();
+      left--;
+    }
+    final now = DateTime.now();
+    for (var i = 0; i < left; i++) {
+      _restCredits[kind]!.addLast(now);
+    }
+    return left;
+  }
+
+  /// The engine confirmed a [kind] event on the socket (see `lastTradeEventProvider`). Plays unless this
+  /// device's REST reply already did for it.
+  void onTradeEvent(TradeEventKind kind) {
+    final rest = _restCredits[kind]!;
+    if (_live(rest) > 0) {
+      rest.removeFirst();
+      return;
+    }
+    _socketCredits[kind]!.addLast(DateTime.now());
+    _enqueue(kind == TradeEventKind.modified ? _soft : _tick);
+  }
+
+  /// A position's SL / TP was just changed by something that is NOT an Apply (the "+" / toggle on the open
+  /// card saves at once). The engine will confirm it on the socket; that confirmation is swallowed, so
+  /// opening or toggling the SL / TP controls stays silent - the sound belongs to Apply.
+  void expectPositionChange() => _restCredits[TradeEventKind.modified]!.addLast(DateTime.now());
+
   /// A manual order was confirmed by the server. Call once per order.
-  void orderPlaced([String? orderId]) {
+  ///
+  /// [positionId]: the position this order opened (a market fill). Given, the engine's `opened` socket
+  /// event for it is recognised as the same trade and does not vibrate again; a resting order that was
+  /// only placed has none (its later fill is a separate event).
+  void orderPlaced([String? orderId, String? positionId]) {
     if (orderId != null && orderId.isNotEmpty) {
       if (_seen.contains(orderId)) return;
       _seen.addLast(orderId);
       if (_seen.length > 64) _seen.removeFirst();
     }
+    if (positionId != null && positionId.isNotEmpty && _restReport(TradeEventKind.opened, 1) == 0) return;
     _enqueue(_tick); // very short tick
   }
 
@@ -183,7 +240,7 @@ class SoundService {
   /// Position(s) closed: one sound (and tick) per closed position - [count] is how many the server
   /// confirmed, e.g. 40 for Close all. The sounds are queued, never dropped.
   Future<void> tradeClose({int count = 1}) async {
-    _enqueue(_tick, count: count);
+    _enqueue(_tick, count: _restReport(TradeEventKind.closed, count));
   }
 
   /// A resting (pending) order was cancelled and the server accepted it.
@@ -192,7 +249,11 @@ class SoundService {
   }
 
   /// An existing order or position was modified (price, SL or TP) and the server accepted it.
-  Future<void> orderModified() async {
+  ///
+  /// [position]: it was an open POSITION's SL / TP (the engine then confirms it on the socket as well,
+  /// which must not vibrate a second time); a pending order's change has no such socket event.
+  Future<void> orderModified({bool position = false}) async {
+    if (position && _restReport(TradeEventKind.modified, 1) == 0) return;
     _enqueue(_soft);
   }
 
@@ -206,5 +267,8 @@ class SoundService {
   void resetForTest() {
     _seen.clear();
     _queue.clear();
+    for (final q in [..._restCredits.values, ..._socketCredits.values]) {
+      q.clear();
+    }
   }
 }

@@ -125,7 +125,7 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
     try {
       final res = await ref.read(apiClientProvider).post('/orders', req.toJson());
       if (res['accepted'] == true) {
-        SoundService.instance.orderPlaced('${res['orderId'] ?? ''}');
+        SoundService.instance.orderPlaced('${res['orderId'] ?? ''}', res['positionId']?.toString());
         // Show the trade the backend just confirmed, then reconcile once (coalesced across a
         // burst of one-click orders) instead of restarting a refetch per order.
         final shown = ref.read(openPositionsProvider.notifier).addConfirmedFill(
