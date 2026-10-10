@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui show Gradient;
 import 'package:flutter/gestures.dart' show DeviceGestureSettings;
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
@@ -1256,6 +1257,34 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
             ),
           )),
         )),
+        // Trade lines on their OWN repaint layer: they only change with the levels or the price scale,
+        // not with a horizontal pan, so a chart with dozens of trades no longer re-records and
+        // re-rasterises hundreds of dashed lines and labels on every pan frame.
+        if (window.isNotEmpty && widget.levels.isNotEmpty)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  size: Size.infinite,
+                  isComplex: true,
+                  willChange: false,
+                  painter: _LevelsPainter(
+                    levels: widget.levels,
+                    contentKey: _levelsKey(widget.levels),
+                    hi: _levelsRange(window, start, oscs).hi,
+                    lo: _levelsRange(window, start, oscs).lo,
+                    digits: widget.digits,
+                    axisW: axisW,
+                    oscCount: oscs.length,
+                    oscFraction: _oscFraction,
+                    dragLevelKey: _dragLevelKey,
+                    dragLevelPrice: _dragLevelPrice,
+                    surface: Theme.of(context).colorScheme.surface,
+                  ),
+                ),
+              ),
+            ),
+          ),
         // MT5-style round chart menu: tap anywhere on the chart to open it (see
         // handleSelectOrTrade above), tap any wedge — or empty space — to close.
         // Centred on the price pane so it never clips against the axes.
@@ -1373,6 +1402,35 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
   }
 
   /// Split the canvas height into the price pane + N stacked oscillator panes.
+  // Content fingerprint of the level list, so a rebuilt-but-identical list (every quote tick builds a
+  // new one) does not repaint the level layer. Cached per list instance.
+  List<ChartLevel>? _keyedLevels;
+  int _keyedHash = 0;
+  int _levelsKey(List<ChartLevel> lv) {
+    if (identical(lv, _keyedLevels)) return _keyedHash;
+    var h = lv.length;
+    for (final l in lv) {
+      h = Object.hash(h, l.price, l.color.toARGB32(), l.label, l.kind, l.boxed, l.draggable, l.dashed, l.plColor?.toARGB32(), l.id);
+    }
+    _keyedLevels = lv;
+    return _keyedHash = h;
+  }
+
+  // The price range the candle painter itself uses (same inputs), so both layers share one scale.
+  List<Candle>? _rangeWindow;
+  ({double hi, double lo})? _rangeVal;
+  double _rangeV = 0, _rangeZ = 1;
+  List<ChartLevel>? _rangeLevels;
+  ({double hi, double lo}) _levelsRange(List<Candle> window, int start, List<dynamic> oscs) {
+    final cached = _rangeVal;
+    if (cached != null && identical(window, _rangeWindow) && identical(widget.levels, _rangeLevels) && _rangeV == _vShift && _rangeZ == _priceZoom) return cached;
+    _rangeWindow = window;
+    _rangeLevels = widget.levels;
+    _rangeV = _vShift;
+    _rangeZ = _priceZoom;
+    return _rangeVal = chartRange(window, widget.levels, extra: overlayValuesInWindow(widget.overlays, start, start + window.length), vShift: _vShift, priceZoom: _priceZoom);
+  }
+
   _PaneMetrics _paneMetrics(double h, int nOsc) => _computePaneMetrics(
         h,
         nOsc,
@@ -1401,6 +1459,175 @@ _PaneMetrics _computePaneMetrics(double h, int nOsc, double oscFraction, double 
   final priceH = avail - oscTotal - _oscGap;
   final paneH = (oscTotal - _oscGap * (nOsc - 1)) / nOsc;
   return _PaneMetrics(padV, priceH, padV + priceH + _oscGap, paneH);
+}
+
+/// Entry / SL / TP / pending lines, their axis tags and inline labels. Own layer (see the overlay in
+/// [_CandleChartState.build]); repaints only when the levels, the price scale or a drag change.
+///
+/// Cost is kept flat however many trades are open:
+///  * a dashed line is ONE rectangle filled with a repeating dash gradient (not ~50 separate segments);
+///  * a label / axis tag that would land on top of another is skipped for that paint (the LINE is
+///    always drawn). Which one wins is decided by priority - a line being edited, then an entry (its
+///    P/L), then SL, then TP - and everything is measured in pixels each paint, so a hidden label
+///    comes back by itself as soon as there is room (zoom, scale change, a neighbouring trade closing).
+class _LevelsPainter extends CustomPainter {
+  _LevelsPainter({
+    required this.levels,
+    required this.contentKey,
+    required this.hi,
+    required this.lo,
+    required this.digits,
+    required this.axisW,
+    required this.oscCount,
+    required this.oscFraction,
+    required this.dragLevelKey,
+    required this.dragLevelPrice,
+    required this.surface,
+  });
+  final List<ChartLevel> levels;
+  final int contentKey;
+  final double hi, lo;
+  final int digits;
+  final double axisW;
+  final int oscCount;
+  final double oscFraction;
+  final String? dragLevelKey;
+  final double? dragLevelPrice;
+  final Color surface;
+
+  /// Lower paints first and wins an overlap.
+  static int _priority(ChartLevel l, bool dragging) {
+    if (dragging || l.draggable) return 0;
+    return switch (l.kind) {
+      LevelKind.draft => 0,
+      LevelKind.entry || LevelKind.pending || LevelKind.limit => 1,
+      LevelKind.sl => 2,
+      LevelKind.tp => 3,
+    };
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final chartW = size.width - axisW;
+    final m = _computePaneMetrics(size.height, oscCount, oscFraction, _CandlePainter.padV, _CandlePainter.timeAxisH);
+    final priceTop = m.priceTop, chartH = m.priceH;
+    final range = (hi - lo) == 0 ? 1 : (hi - lo);
+    double y(double p) => priceTop + (hi - p) / range * chartH;
+
+    final shown = <(ChartLevel, double, double, bool)>[];
+    for (final lv in levels) {
+      if (lv.price <= 0) continue;
+      final dragging = dragLevelKey != null && '${lv.kind.name}:${lv.id ?? lv.label}' == dragLevelKey && dragLevelPrice != null;
+      final price = dragging ? dragLevelPrice! : lv.price;
+      final yy = y(price);
+      if (yy < priceTop - 1 || yy > priceTop + chartH + 1) continue; // off-screen line
+      shown.add((lv, price, yy, dragging));
+    }
+    if (shown.isEmpty) return;
+
+    // The dashed lines: 3 px on / 4 px off from x = 0, stopping short of the price axis, as before -
+    // one gradient-filled rectangle per line.
+    final end = chartW - 3;
+    final shaders = <int, Paint>{};
+    for (final (lv, _, yy, dragging) in shown) {
+      final color = lv.color.withValues(alpha: dragging ? 0.95 : 0.7);
+      final width = dragging ? 1.0 : kLevelStroke;
+      final paint = shaders.putIfAbsent(
+          Object.hash(color.toARGB32(), width),
+          () => Paint()
+            ..shader = ui.Gradient.linear(
+              Offset.zero,
+              const Offset(7, 0),
+              [color, color, color.withValues(alpha: 0), color.withValues(alpha: 0)],
+              const [0, 3 / 7, 3 / 7, 1],
+              TileMode.repeated,
+            ));
+      canvas.drawRect(Rect.fromLTRB(0, yy - width / 2, end, yy + width / 2), paint);
+    }
+
+    // Axis tags and inline labels, in priority order; one that would overlap an already placed one
+    // of its own kind is skipped.
+    final order = [for (var i = 0; i < shown.length; i++) i]
+      ..sort((a, b) {
+        final c = _priority(shown[a].$1, shown[a].$4).compareTo(_priority(shown[b].$1, shown[b].$4));
+        return c != 0 ? c : a.compareTo(b);
+      });
+    final labelH = _TextCache.get('Ag', 11, Colors.black, FontWeight.w600).height;
+    final tags = _Occupied(), labels = _Occupied();
+    for (final i in order) {
+      final (lv, price, yy, _) = shown[i];
+      if (tags.tryTake(yy - 8, yy + 8)) _tag(canvas, chartW, yy, price.toStringAsFixed(digits), lv.color);
+      final labelText = lv.labelFor?.call(price) ?? lv.label;
+      if (lv.boxed) {
+        if (labels.tryTake(yy - 8, yy + 8)) {
+          final lt = _TextCache.rich('b|$labelText', () => TextSpan(text: ' $labelText ', style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w700)));
+          final rr = Rect.fromLTWH(2, yy - 8, lt.width, 16);
+          canvas.drawRRect(RRect.fromRectAndRadius(rr, const Radius.circular(3)), Paint()..color = lv.color);
+          lt.paint(canvas, Offset(2, yy - 6));
+        }
+      } else if (labels.tryTake(yy - labelH - 1, yy)) {
+        // Inline MT5 label: coloured text sitting just above its own line, no box. A soft halo in the
+        // chart background keeps the text readable over candles.
+        final labelStyle = TextStyle(color: lv.color, fontSize: 11, fontWeight: FontWeight.w600, shadows: [Shadow(color: surface, blurRadius: 3), Shadow(color: surface, blurRadius: 3)]);
+        final split = lv.plColor == null ? -1 : labelText.lastIndexOf(', ');
+        final it = _TextCache.rich(
+          'i|${lv.color.toARGB32()}|${surface.toARGB32()}|${lv.plColor?.toARGB32()}|$split|$labelText',
+          () => split < 0
+              ? TextSpan(text: labelText, style: labelStyle)
+              : TextSpan(style: labelStyle, children: [
+                  TextSpan(text: labelText.substring(0, split + 2)),
+                  TextSpan(text: labelText.substring(split + 2), style: labelStyle.copyWith(color: lv.plColor)),
+                ]),
+          maxWidth: math.max(10, chartW - 8),
+        );
+        it.paint(canvas, Offset(3, yy - it.height - 1));
+      }
+      if (lv.draggable) {
+        // Grab handle at the right end — shows the line can be moved.
+        final hc = Offset(chartW - 16, yy);
+        canvas.drawCircle(hc, 8, Paint()..color = lv.color);
+        canvas.drawCircle(hc, 8, Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 1);
+        for (final dy in const [-2.0, 2.0]) {
+          canvas.drawLine(Offset(hc.dx - 3.5, hc.dy + dy), Offset(hc.dx + 3.5, hc.dy + dy), Paint()..color = Colors.white..strokeWidth = 1.2);
+        }
+      }
+    }
+  }
+
+  void _tag(Canvas c, double chartW, double yy, String txt, Color color) {
+    final t = _TextCache.get(txt, 9.5, Colors.white, FontWeight.w700);
+    final rect = Rect.fromLTWH(chartW + 1, yy - 8, axisW - 2, 16);
+    c.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), Paint()..color = color);
+    t.paint(c, Offset(chartW + 5, yy - 6));
+  }
+
+  @override
+  bool shouldRepaint(covariant _LevelsPainter old) =>
+      old.contentKey != contentKey ||
+      old.hi != hi ||
+      old.lo != lo ||
+      old.digits != digits ||
+      old.axisW != axisW ||
+      old.oscCount != oscCount ||
+      old.oscFraction != oscFraction ||
+      old.dragLevelKey != dragLevelKey ||
+      old.dragLevelPrice != dragLevelPrice ||
+      old.surface != surface;
+}
+
+/// Vertical spans already taken by labels (or tags) of one paint.
+class _Occupied {
+  final List<double> _from = [], _to = [];
+
+  /// Reserves [from, to) unless it overlaps a span already taken; returns whether it was free.
+  bool tryTake(double from, double to) {
+    for (var i = 0; i < _from.length; i++) {
+      if (from < _to[i] && to > _from[i]) return false;
+    }
+    _from.add(from);
+    _to.add(to);
+    return true;
+  }
 }
 
 class _CandlePainter extends CustomPainter {
@@ -1614,51 +1841,8 @@ class _CandlePainter extends CustomPainter {
       }
     }
 
-    // Order lines (entry / SL / TP / pending / draft). Thin on screen; the touch
-    // target is much larger (see kHitSlop). A level being dragged follows the finger.
-    for (final lv in levels) {
-      if (lv.price <= 0) continue;
-      final dragging = dragLevelKey != null && '${lv.kind.name}:${lv.id ?? lv.label}' == dragLevelKey && dragLevelPrice != null;
-      final price = dragging ? dragLevelPrice! : lv.price;
-      final yy = y(price);
-      if (yy < priceTop - 1 || yy > priceTop + chartH + 1) continue;
-      // MT5 order lines are light and subtle: a thin, slightly translucent dashed stroke with
-      // short dashes, so they never dominate the candles. (The axis tag keeps the full colour.)
-      _hline(canvas, yy, chartW, lv.color.withValues(alpha: dragging ? 0.95 : 0.7), dashed: true, width: dragging ? 1.0 : kLevelStroke, dash: 3, gap: 4);
-      _tag(canvas, chartW, yy, price.toStringAsFixed(digits), lv.color);
-      final labelText = lv.labelFor?.call(price) ?? lv.label;
-      if (lv.boxed) {
-        final lt = _TextCache.rich('b|$labelText', () => TextSpan(text: ' $labelText ', style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w700)));
-        final rr = Rect.fromLTWH(2, yy - 8, lt.width, 16);
-        canvas.drawRRect(RRect.fromRectAndRadius(rr, const Radius.circular(3)), Paint()..color = lv.color);
-        lt.paint(canvas, Offset(2, yy - 6));
-      } else {
-        // Inline MT5 label: coloured text sitting just above its own line, no box.
-        // A soft halo in the chart background keeps the text readable over candles.
-        final labelStyle = TextStyle(color: lv.color, fontSize: 11, fontWeight: FontWeight.w600, shadows: [Shadow(color: surface, blurRadius: 3), Shadow(color: surface, blurRadius: 3)]);
-        final split = lv.plColor == null ? -1 : labelText.lastIndexOf(', ');
-        final it = _TextCache.rich(
-          'i|${lv.color.toARGB32()}|${surface.toARGB32()}|${lv.plColor?.toARGB32()}|$split|$labelText',
-          () => split < 0
-              ? TextSpan(text: labelText, style: labelStyle)
-              : TextSpan(style: labelStyle, children: [
-                  TextSpan(text: labelText.substring(0, split + 2)),
-                  TextSpan(text: labelText.substring(split + 2), style: labelStyle.copyWith(color: lv.plColor)),
-                ]),
-          maxWidth: math.max(10, chartW - 8),
-        );
-        it.paint(canvas, Offset(3, yy - it.height - 1));
-      }
-      if (lv.draggable) {
-        // Grab handle at the right end — shows the line can be moved.
-        final hc = Offset(chartW - 16, yy);
-        canvas.drawCircle(hc, 8, Paint()..color = lv.color);
-        canvas.drawCircle(hc, 8, Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 1);
-        for (final dy in const [-2.0, 2.0]) {
-          canvas.drawLine(Offset(hc.dx - 3.5, hc.dy + dy), Offset(hc.dx + 3.5, hc.dy + dy), Paint()..color = Colors.white..strokeWidth = 1.2);
-        }
-      }
-    }
+    // Order lines (entry / SL / TP / pending / draft) are painted by [_LevelsPainter], on their own
+    // layer above this one, so panning the candles does not repaint every trade line each frame.
 
     // ── User drawings (horizontal line / trendline / Fibonacci). ──
     _paintDrawings(canvas, chartW, priceTop, chartH, slot, y);

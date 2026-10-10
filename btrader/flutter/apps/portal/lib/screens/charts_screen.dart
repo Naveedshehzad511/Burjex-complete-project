@@ -751,7 +751,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       if (s.symbol == sym) spec = s;
     }
     final cs = spec?.contractSize ?? 100000.0;
-    final cur = _accountCurrency() ?? 'USD';
+    final cur = _lvCur ?? _accountCurrency() ?? 'USD';
     final key = (tag, side, vol, ref, px, cs, cur);
     final hit = _protLabels[key];
     if (hit != null) return hit;
@@ -771,6 +771,22 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     return null;
   }
 
+  // Looked up once per _levels() call instead of once per position / SL / TP line.
+  String? _lvCur;
+  Color? _lvNeutral;
+
+  (String, Color) _entryLabel(Position p, Map<String, double> livePl, Map<String, Tick> quotes, List<TradeSymbol> symbols, TradeColors tc) {
+    final pl = resolvePositionPl(p, livePl: livePl, quotes: quotes, symbols: symbols);
+    // Profit blue, loss red, exactly zero the neutral text colour (judged on the 2 decimals shown).
+    final plShown = double.parse(pl.toStringAsFixed(2));
+    final color = plShown > 0
+        ? tc.profit
+        : plShown < 0
+            ? tc.loss
+            : (_lvNeutral ?? Theme.of(context).colorScheme.onSurface);
+    return ('${p.side} ${p.volume.toStringAsFixed(2)}, ${pl >= 0 ? '+' : '-'}${pl.abs().toStringAsFixed(2)} ${_lvCur ?? _accountCurrency() ?? 'USD'}', color);
+  }
+
   /// [symbol] defaults to the primary chart's symbol; [includeDraft] is false
   /// for the second (view-only) window, since a draft order belongs only to
   /// the primary chart it was started from.
@@ -782,22 +798,16 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       Map<String, Tick> quotes = const {},
       List<TradeSymbol> symbols = const []}) {
     final sym = symbol ?? _symbol;
+    _lvCur = _accountCurrency() ?? 'USD';
+    _lvNeutral = Theme.of(context).colorScheme.onSurface;
     final out = <ChartLevel>[];
     final edit = _edit;
     for (final p in positions.where((p) => p.symbol == sym)) {
       final editing = edit != null && edit.isPosition && edit.id == p.id;
       // MT5 inline label: "BUY 0.68, +1.50 USD" — P/L from the same live source
       // as the Trade tab (engine push first, else the live quote).
-      final pl = resolvePositionPl(p, livePl: livePl, quotes: quotes, symbols: symbols);
-      // Profit blue, loss red, exactly zero the neutral text colour (judged on the 2 decimals shown).
-      final plShown = double.parse(pl.toStringAsFixed(2));
-      final plColor = plShown > 0
-          ? tc.profit
-          : plShown < 0
-              ? tc.loss
-              : Theme.of(context).colorScheme.onSurface;
-      out.add(ChartLevel(p.openPrice, p.side == 'BUY' ? tc.buy : tc.sell,
-          '${p.side} ${p.volume.toStringAsFixed(2)}, ${pl >= 0 ? '+' : '-'}${pl.abs().toStringAsFixed(2)} ${_accountCurrency() ?? 'USD'}',
+      final (entryLabel, plColor) = _entryLabel(p, livePl, quotes, symbols, tc);
+      out.add(ChartLevel(p.openPrice, p.side == 'BUY' ? tc.buy : tc.sell, entryLabel,
           id: p.id, kind: LevelKind.entry, tappable: !readonly, boxed: false, plColor: plColor));
       final sl = editing ? edit.sl : p.slPrice;
       final tp = editing ? edit.tp : p.tpPrice;

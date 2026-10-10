@@ -60,7 +60,7 @@ void main() {
       ..devicePixelRatio = 1;
     addTearDown(t.view.reset);
     final out = StringBuffer('\n── pan frame ms, by number of open trades (3 lines each) ──\n');
-    for (final (trades, spread) in [(0, 0.004), (3, 0.004), (10, 0.004), (30, 0.004), (30, 0.0004)]) {
+    for (final (trades, spread) in [(0, 0.004), (3, 0.004), (10, 0.004), (30, 0.004), (70, 0.004), (150, 0.004)]) {
       final candles = bars(3000);
       await t.pumpWidget(host(CandleChart(candles: candles, digits: 5, tf: Timeframe.m5, viewKey: 'k$trades$spread', levels: levels(trades, spread))));
       await t.pump();
