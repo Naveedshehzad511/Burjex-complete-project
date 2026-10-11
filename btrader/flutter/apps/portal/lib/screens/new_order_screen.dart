@@ -30,12 +30,10 @@ class NewOrderScreen extends ConsumerStatefulWidget {
   ConsumerState<NewOrderScreen> createState() => _NewOrderScreenState();
 }
 
-/// A quote older than this (ms) is treated as no-live-price; market orders block.
-const int _kStalePriceMs = 8000;
-
 class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
-  bool _isStale(Tick? q) =>
-      q == null || DateTime.now().millisecondsSinceEpoch - q.ts > _kStalePriceMs;
+  /// No quote, or this symbol's feed has been silent for [kFeedGrace] (judged on when updates
+  /// arrived here, not on the server's timestamp vs this device's clock).
+  bool _isStale(Tick? q) => q == null || !ref.read(symbolFeedLiveProvider(_symbol));
 
   late String _symbol;
   OrderType _type = OrderType.market;
@@ -169,7 +167,8 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
     final digits = spec?.digits ?? 5;
     final tc = Theme.of(context).extension<TradeColors>()!;
     final pending = _type != OrderType.market;
-    final stale = _isStale(q);
+    final feedLive = ref.watch(symbolFeedLiveProvider(_symbol)); // rebuild when it flips
+    final stale = q == null || !feedLive;
     final blockMarket = _type == OrderType.market && stale;
 
     return Scaffold(

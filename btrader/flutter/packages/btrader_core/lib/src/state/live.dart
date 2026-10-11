@@ -243,7 +243,24 @@ final feedSubscriptionProvider = Provider<void>((ref) {
 
 /// Live quote map keyed by symbol, fed by the socket.
 class QuotesNotifier extends StateNotifier<Map<String, Tick>> {
-  QuotesNotifier() : super(const {});
+  QuotesNotifier({int Function()? nowMs}) : super(const {}) {
+    _nowMs = nowMs ?? (() => _clock.elapsedMilliseconds);
+  }
+
+  // A monotonic local clock: how long ago a quote ARRIVED must not depend on the server's
+  // timestamps or on the device's wall clock being right.
+  final Stopwatch _clock = Stopwatch()..start();
+  late final int Function() _nowMs;
+
+  /// Local time (ms, monotonic) of the last tick that carried a real update for each symbol: a
+  /// tick newer than the one before it, or one that changed the price. A republished identical
+  /// quote, a snapshot seed and anything that is not a quote do not count.
+  final Map<String, int> _lastValidRx = {};
+
+  int get nowMs => _nowMs();
+
+  /// Local arrival time of the symbol's last valid update, or null when none arrived yet.
+  int? lastValidRxMs(String symbol) => _lastValidRx[symbol];
 
   /// Accept a tick unless it is strictly older than the one already held.
   ///
@@ -278,6 +295,9 @@ class QuotesNotifier extends StateNotifier<Map<String, Tick>> {
   void set(Tick t) {
     final prev = _pending[t.symbol] ?? state[t.symbol];
     if (prev != null && t.ts > 0 && prev.ts > 0 && t.ts < prev.ts) return;
+    if (prev == null || t.ts > prev.ts || t.bid != prev.bid || t.ask != prev.ask) {
+      _lastValidRx[t.symbol] = _nowMs();
+    }
     _pending[t.symbol] = t;
     _flush ??= Timer(const Duration(milliseconds: 16), _publish);
   }
@@ -312,6 +332,53 @@ class QuotesNotifier extends StateNotifier<Map<String, Tick>> {
 }
 
 final quotesProvider = StateNotifierProvider<QuotesNotifier, Map<String, Tick>>((_) => QuotesNotifier());
+
+/// How long a symbol's feed may stay silent before its SELL / BUY buttons are disabled.
+const Duration kFeedGrace = Duration(seconds: 10);
+
+/// Whether a symbol's market feed is live: true until [grace] has passed since its last valid
+/// update, false after that, and true again the moment a valid update arrives.
+///
+/// This only drives the buttons' enabled / grey state. It never lets an order through on an old
+/// price - the server still validates the price and the execution - it just stops the UI from
+/// flipping to grey on a short hiccup. Before the first live tick of a session the clock starts at
+/// creation, so a feed that never arrives also greys out after [grace].
+class FeedLiveNotifier extends StateNotifier<bool> {
+  FeedLiveNotifier(this._quotes, this.symbol, {this.grace = kFeedGrace, Duration poll = const Duration(milliseconds: 500)})
+      : _created = _quotes.nowMs,
+        super(true) {
+    _timer = Timer.periodic(poll, (_) => check());
+  }
+
+  final QuotesNotifier _quotes;
+  final String symbol;
+  final Duration grace;
+  final int _created;
+  Timer? _timer;
+
+  /// Re-evaluate now. Called on every tick of this symbol and on a timer, so a resume turns the
+  /// buttons back on at once and silence turns them off within the poll interval of the deadline.
+  void check() {
+    if (!mounted) return;
+    final last = _quotes.lastValidRxMs(symbol) ?? _created;
+    final live = _quotes.nowMs - last <= grace.inMilliseconds;
+    if (live != state) state = live;
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+}
+
+/// Live / silent state of one symbol's feed (see [FeedLiveNotifier]); a symbol is judged only by
+/// its own updates, so a healthy symbol is never disabled because another one went quiet.
+final symbolFeedLiveProvider = StateNotifierProvider.autoDispose.family<FeedLiveNotifier, bool, String>((ref, symbol) {
+  final notifier = FeedLiveNotifier(ref.read(quotesProvider.notifier), symbol);
+  ref.listen<Tick?>(quotesProvider.select((m) => m[symbol]), (_, __) => notifier.check());
+  return notifier;
+});
 
 /// Fetches the server's last-known-quote snapshot once and seeds [quotesProvider]
 /// so symbols that aren't currently ticking still show their last real price

@@ -241,6 +241,10 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           accent: tc.loss);
       return;
     }
+    if (!ref.read(symbolFeedLiveProvider(_symbol))) {
+      ToastHost.show('No live price', 'Trading is paused until the feed updates.', accent: tc.loss);
+      return;
+    }
     final q = _shownQuote();
     if (q == null) return;
     final sym = _symbol;
@@ -1206,6 +1210,9 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
         chartTradeProvider.select((s) => s.volume), (_, v) => _syncVolField(v));
     final cs = Theme.of(context).colorScheme;
     final tradable = _tradableNow(spec.isEmpty ? null : spec.first);
+    // SELL / BUY also grey out once THIS symbol's feed has been silent for kFeedGrace.
+    final feedLive = ref.watch(symbolFeedLiveProvider(_symbol));
+    final dealsOn = tradable && feedLive;
     final draftOpen = _edit?.isDraft == true;
 
     // MT5-compact sizing: scales gently with screen width (clamped so phones,
@@ -1321,7 +1328,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
               down: tc.down,
               enabled: quote != null,
               locked: readonly,
-              tradable: tradable,
+              tradable: dealsOn,
               onTap: () => _placeMarket('SELL'),
             ),
           ),
@@ -1389,7 +1396,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
               down: tc.down,
               enabled: quote != null,
               locked: readonly,
-              tradable: tradable,
+              tradable: dealsOn,
               onTap: () => _placeMarket('BUY'),
             ),
           ),
@@ -1742,7 +1749,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                 onRemoveTp: () => _removeProtective(sl: false),
                 onApply: _apply,
                 onMarket: _placeMarket,
-                marketEnabled: quote != null && tradable && !readonly,
+                marketEnabled: quote != null && dealsOn && !readonly,
                 onClose: () => setState(() {
                   _edit = null;
                   _panelExpanded = false;
