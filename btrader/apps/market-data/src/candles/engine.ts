@@ -111,6 +111,82 @@ export function getCanonicalChartPrice(
 }
 
 /**
+ * How far a new M1 bar's first tick may sit from the previous close and still count as one continuous
+ * price path. The limit is measured in the instrument's OWN movement, not a universal percentage:
+ * a pip, a dollar and an index point are different sizes, and a gap that is routine for one
+ * instrument is a real gap for another.
+ *
+ * What is being repaired is only the price movement nobody received ticks for - at most about one
+ * minute of the instrument's normal movement. So the limit is a few multiples of the typical
+ * minute-to-minute change of the close for THAT symbol (an exponential average, so it follows the
+ * instrument's current volatility). A genuine gap (news, a session open, a stalled feed) is many
+ * times that, and is kept.
+ *
+ *   limit = JOIN_SCALE_MULT x average |close(n) - close(n-1)|        once enough minutes are seen
+ *   never more than JOIN_BACKSTOP_FRAC of the price (a runaway average cannot widen it)
+ *   JOIN_WARMUP_FRAC of the price until JOIN_WARMUP_N consecutive minutes have been observed
+ */
+export const JOIN_SCALE_MULT = 3;
+export const JOIN_BACKSTOP_FRAC = 0.0005;
+export const JOIN_WARMUP_FRAC = 0.0002;
+export const JOIN_WARMUP_N = 8;
+const JOIN_EWMA_ALPHA = 0.1;
+
+/** Typical minute-to-minute move of one symbol's M1 close. */
+export class MoveScale {
+  private ewma = 0;
+  private n = 0;
+  private lastClose?: number;
+  private lastT?: number;
+
+  /** Feed each FINISHED M1 bar once, oldest first. Only two consecutive minutes make a sample. */
+  observe(t: number, close: number): void {
+    if (this.lastT !== undefined && this.lastClose !== undefined && t - this.lastT === 60) {
+      let sample = Math.abs(close - this.lastClose);
+      // One genuine gap must not inflate the average that decides what counts as a gap.
+      if (this.n >= JOIN_WARMUP_N && this.ewma > 0) sample = Math.min(sample, JOIN_SCALE_MULT * this.ewma);
+      this.ewma = this.n === 0 ? sample : this.ewma + JOIN_EWMA_ALPHA * (sample - this.ewma);
+      this.n++;
+    }
+    this.lastClose = close;
+    this.lastT = t;
+  }
+
+  /** Largest distance from [prevClose] still treated as the same price path. */
+  limit(prevClose: number): number {
+    if (this.n < JOIN_WARMUP_N) return prevClose * JOIN_WARMUP_FRAC;
+    return Math.min(prevClose * JOIN_BACKSTOP_FRAC, JOIN_SCALE_MULT * this.ewma);
+  }
+}
+
+/**
+ * Where a new M1 bar opens.
+ *
+ * Bars used to open at their first tick. On a sparse feed the price has already moved by then, so
+ * consecutive candles floated apart (a gap that is only the ticks nobody received) while MT5 shows
+ * them connected. A new bar now opens at the previous bar's close - the last price actually seen -
+ * and its high / low are widened to include that open, so open / high / low / close stay consistent.
+ *
+ * The join happens only for a consecutive trading minute:
+ *   1. the previous bar is exactly the minute before (a tick arrived in both minutes, so there is no
+ *      missing minute, weekend or closure between them), and
+ *   2. the first tick is within [maxGap] of that close (a larger jump is a real gap; see [MoveScale]).
+ * Otherwise the bar opens at its first tick as before. No price is invented: the open is a real
+ * earlier close, never an interpolation.
+ */
+export function joinedOpen(
+  prev: { t: number; c: number } | undefined,
+  bucket: number,
+  stepSec: number,
+  firstPrice: number,
+  maxGap: number,
+): number {
+  if (!prev || bucket - prev.t !== stepSec) return firstPrice;
+  if (!(prev.c > 0) || Math.abs(firstPrice - prev.c) > maxGap) return firstPrice;
+  return prev.c;
+}
+
+/**
  * Bucket open time (epoch seconds) for a timestamp.
  *
  * Intraday and daily align to a fixed UTC grid. Weekly aligns to Monday 00:00
@@ -184,6 +260,8 @@ interface SymbolState {
   lastPrice?: number;
   /** Timestamp (ms) of the last tick that actually CHANGED the price. */
   lastChangeMs: number;
+  /** Typical minute-to-minute close move, which sets how large a gap may still be joined. */
+  scale: MoveScale;
 }
 
 export interface EngineOptions {
@@ -255,6 +333,7 @@ export class CandleEngine {
         foldedVolume: new Map(),
         foldedM1: new Map(),
         lastChangeMs: tick.timestamp,
+        scale: new MoveScale(),
       };
       this.state.set(tick.symbol, st);
     }
@@ -309,14 +388,16 @@ export class CandleEngine {
       if (prevM1) {
         prevM1.closed = true;
         out.push({ candle: { ...prevM1 }, closed: true });
+        st.scale.observe(prevM1.t, prevM1.c);
       }
+      const open = joinedOpen(prevM1, m1Bucket, TF_SECONDS[BASE_TF]!, price, prevM1 ? st.scale.limit(prevM1.c) : 0);
       m1 = {
         symbol: tick.symbol,
         tf: BASE_TF,
         t: m1Bucket,
-        o: price,
-        h: price,
-        l: price,
+        o: open,
+        h: Math.max(open, price),
+        l: Math.min(open, price),
         c: price,
         v: volume,
         closed: false,
@@ -417,7 +498,7 @@ export class CandleEngine {
     if (!st) {
       // lastChangeMs starts at 0 so a restored series is never treated as
       // stale before its first live tick arrives.
-      st = { lastTs: -1, active: new Map(), foldedVolume: new Map(), foldedM1: new Map(), lastChangeMs: 0 };
+      st = { lastTs: -1, active: new Map(), foldedVolume: new Map(), foldedM1: new Map(), lastChangeMs: 0, scale: new MoveScale() };
       this.state.set(candle.symbol, st);
     }
     st.active.set(candle.tf, { ...candle, closed: false });
