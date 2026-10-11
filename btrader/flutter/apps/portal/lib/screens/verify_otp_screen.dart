@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import '../crm/crm.dart';
 import '../pending_signup.dart';
 import '../widgets/auth_page.dart';
 
@@ -46,11 +47,21 @@ class _VerifyOtpScreenState extends ConsumerState<VerifyOtpScreen> {
             otp: _otp.text.trim(),
             password: password,
           );
-      if (password.isNotEmpty) {
-        await ref.read(authControllerProvider.notifier).login(email, password);
+      if (password.isEmpty) {
+        // The signup password is gone (e.g. the page was reloaded): sign in by hand.
+        if (mounted) context.go('/login');
+        return;
+      }
+      // Same sign-in as the Login page: the CRM session is what the router
+      // watches, so this is what opens Home.
+      final err = await ref.read(crmSessionProvider.notifier).login(email, password);
+      if (err != null) {
+        // Keep the pending password so Verify again can retry the sign-in.
+        if (mounted) setState(() => _error = err);
+        return;
       }
       ref.read(pendingSignupProvider.notifier).state = null;
-      if (mounted && password.isEmpty) context.go('/login');
+      if (mounted) context.go('/home');
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
