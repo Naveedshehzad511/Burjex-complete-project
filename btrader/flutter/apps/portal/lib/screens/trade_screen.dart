@@ -34,6 +34,8 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
     final id = ref.watch(activeAccountIdProvider);
     final positions = ref.watch(openPositionsProvider);
     final livePL = ref.watch(livePositionProvider);
+    final liveSnap = ref.watch(livePositionNotifierProvider);
+    final acctCcy = ref.watch(activeAccountCurrencyProvider);
     final quotes = ref.watch(quotesProvider);
     final symbols = ref.watch(symbolsProvider).valueOrNull ?? const <TradeSymbol>[];
     final api = ref.read(apiClientProvider);
@@ -55,7 +57,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
     final creditV = base?.credit ?? acc?.credit ?? 0;
     double floatingV = 0;
     for (final p in posList) {
-      floatingV += resolvePositionPl(p, livePl: livePL, quotes: quotes, symbols: symbols);
+      floatingV += resolvePositionPl(p, livePl: livePL, quotes: quotes, symbols: symbols, snap: liveSnap, accountCurrency: acctCcy);
     }
     final marginV = posList.isEmpty ? 0.0 : (base?.margin ?? acc?.margin ?? 0);
     final equityV = balanceV + creditV + floatingV;
@@ -183,7 +185,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
               final open = spec.isEmpty || isSymbolTradableNow(spec.first, DateTime.now().toUtc());
               // A long closes at the Bid, a short at the Ask (same rule as the P/L resolver).
               final cur = q == null ? null : (p.side == 'BUY' ? q.bid : q.ask);
-              final plNow = resolvePositionPl(p, livePl: live, quotes: ref.watch(quotesProvider), symbols: syms);
+              final plNow = resolvePositionPl(p, livePl: live, quotes: ref.watch(quotesProvider), symbols: syms, snap: ref.watch(livePositionNotifierProvider), accountCurrency: ref.watch(activeAccountCurrencyProvider));
               final hint = Theme.of(ctx).hintColor;
               final String priceText;
               if (!open) {
@@ -227,7 +229,9 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                 final plNow = resolvePositionPl(p,
                     livePl: ref.watch(livePositionProvider),
                     quotes: ref.watch(quotesProvider),
-                    symbols: ref.watch(symbolsProvider).valueOrNull ?? const <TradeSymbol>[]);
+                    symbols: ref.watch(symbolsProvider).valueOrNull ?? const <TradeSymbol>[],
+                    snap: ref.watch(livePositionNotifierProvider),
+                    accountCurrency: ref.watch(activeAccountCurrencyProvider));
                 return Text(mt5Money(plNow), style: TextStyle(color: plNow >= 0 ? tc.profit : tc.loss, fontFeatures: const [FontFeature.tabularFigures()]));
               }),
               onTap: () {
@@ -401,7 +405,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                   _TradeTile(
                     p: p,
                     display: symbolDisplay(p.symbol, suffix),
-                    pl: resolvePositionPl(p, livePl: livePL, quotes: quotes, symbols: symbols),
+                    pl: resolvePositionPl(p, livePl: livePL, quotes: quotes, symbols: symbols, snap: liveSnap, accountCurrency: acctCcy),
                     tc: tc,
                     cur: quotes[p.symbol] == null ? null : (p.side == 'BUY' ? quotes[p.symbol]!.bid : quotes[p.symbol]!.ask),
                     onTap: () => showActions(p),
@@ -441,7 +445,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final done = await ref.read(pendingOrdersProvider.notifier).cancelWhere(test);
     if (!mounted) return;
-    if (done > 0) SoundService.instance.tradeClose();
+    if (done > 0) SoundService.instance.orderCancelled(count: done); // one per cancelled pending order
     if (done < count) {
       SoundService.instance.error();
       messenger.showSnackBar(SnackBar(content: Text('Cancelled $done of $count orders')));
@@ -503,7 +507,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                 onTap: () {
                   Navigator.pop(ctx);
                   ref.read(pendingOrdersProvider.notifier).cancelWhere((x) => x.id == o.id).then((n) {
-                    if (n > 0) SoundService.instance.orderCancelled();
+                    if (n > 0) SoundService.instance.orderCancelled(count: n);
                   });
                 },
               ),
@@ -621,7 +625,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                     'slPrice': double.tryParse(sl.text),
                     'tpPrice': double.tryParse(tp.text),
                   });
-                  SoundService.instance.orderModified();
+                  SoundService.instance.orderModified(position: true);
                   if (ctx.mounted) Navigator.pop(ctx);
                 } catch (_) {
                   // Server is authoritative — reconcile even when PATCH is rejected.

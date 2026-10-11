@@ -262,8 +262,10 @@ class CandleChart extends StatefulWidget {
   /// A tappable level (entry / pending line) was tapped.
   final void Function(ChartLevel level)? onLevelTap;
 
-  /// A tap that hit no line, drawing or axis (the one that opens the round menu).
-  final VoidCallback? onEmptyTap;
+  /// A tap that hit no line, drawing or axis (the one that opens the round menu). Return true when the tap was
+  /// used up closing / collapsing an open order card: it then does NOT also open the round menu; the NEXT
+  /// empty tap does.
+  final bool Function()? onEmptyTap;
 
   /// "Auto fit" pressed (the chart has already reset its own view).
   final VoidCallback? onAutoFit;
@@ -887,7 +889,7 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
           setState(() => _selectedDrawingId = null);
           return;
         }
-        widget.onEmptyTap?.call();
+        if (widget.onEmptyTap?.call() == true) return; // this tap only closed the order card
         setState(() => _radialOpen = true);
       }
 

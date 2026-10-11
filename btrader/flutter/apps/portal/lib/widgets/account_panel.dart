@@ -38,6 +38,7 @@ class AccountPanel extends ConsumerWidget {
     // Prefer live quote-based P/L so the bar moves even if engine WS is quiet.
     final id = ref.watch(activeAccountIdProvider);
     final livePL = ref.watch(livePositionProvider);
+    final liveSnap = ref.watch(livePositionNotifierProvider);
     final quotes = ref.watch(quotesProvider);
     final symbols = ref.watch(symbolsProvider).valueOrNull ?? const <TradeSymbol>[];
     final open = ref.watch(openPositionsProvider).valueOrNull ?? const <Position>[];
@@ -45,7 +46,7 @@ class AccountPanel extends ConsumerWidget {
     if (open.isNotEmpty) {
       floating = 0;
       for (final p in open.where((p) => id == null || p.accountId == id)) {
-        floating += resolvePositionPl(p, livePl: livePL, quotes: quotes, symbols: symbols);
+        floating += resolvePositionPl(p, livePl: livePL, quotes: quotes, symbols: symbols, snap: liveSnap, accountCurrency: a.currency);
       }
     }
     final equity = a.balance + a.credit + floating;

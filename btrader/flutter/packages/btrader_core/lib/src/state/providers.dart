@@ -361,6 +361,15 @@ final activeAccountIdProvider = StateProvider<String?>((ref) {
   return accounts != null && accounts.isNotEmpty ? accounts.first.id : null;
 });
 
+/// Currency of the active trading account; null until the accounts load.
+final activeAccountCurrencyProvider = Provider<String?>((ref) {
+  final id = ref.watch(activeAccountIdProvider);
+  for (final a in ref.watch(accountsProvider).valueOrNull ?? const <Account>[]) {
+    if (a.id == id) return a.currency;
+  }
+  return null;
+});
+
 /// Enabled symbols for the **active trading account's group**.
 ///
 /// Passes `accountId` so the gateway returns only instruments assigned to that

@@ -274,7 +274,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           await ref.read(apiClientProvider).post('/orders', req.toJson());
       if (res['accepted'] == true) {
         // Feedback first — the instant the server confirms — then refresh state.
-        SoundService.instance.orderPlaced('${res['orderId'] ?? ''}');
+        SoundService.instance.orderPlaced('${res['orderId'] ?? ''}', res['positionId']?.toString());
         // The backend has confirmed this fill: show it now, then reconcile with the server
         // (one coalesced refetch for a whole burst, not one restart per order).
         ref.read(openPositionsProvider.notifier).addConfirmedFill(
@@ -469,17 +469,19 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     }
   }
 
-  /// A tap on empty chart while an SL / TP or pending-order card is open closes that card (nothing
-  /// is sent: Apply is what saves). A new-order draft is the main flow and is left alone. The chart
-  /// then opens its round menu from the same tap, as it does on an empty chart.
-  void _dismissEditOnEmptyTap() {
+  /// A tap on empty chart while ANY order card is open - an SL / TP or pending-order edit card, or the
+  /// new-order panel (collapsed or expanded) - is used up by the card: it closes (nothing is sent: Apply /
+  /// Place is what saves). Returns true then, so the chart does NOT also open its round menu from the same
+  /// tap; the next empty tap does, as it always does when no card is open.
+  bool _tapClosesCard() {
     final e = _edit;
-    if (e == null || e.isDraft || _applying) return;
+    if (e == null || _applying) return false;
     setState(() {
       _edit = null;
       _panelExpanded = false;
       _serverError = null;
     });
+    return true;
   }
 
   void _onLevelDragEnd(ChartLevel l, double price) {
@@ -608,6 +610,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           : api.patch('/orders/${e.id}', {key: value}));
       // No sound here: this is only the SL / TP "+" / toggle on the open editing card. The
       // confirmation sound belongs to Apply (see _apply), not to opening or toggling the controls.
+      if (e.isPosition) SoundService.instance.expectPositionChange(); // the engine's confirmation stays silent too
       ref.invalidate(openPositionsProvider);
       ref.read(pendingOrdersProvider.notifier).reload();
     } catch (err) {
@@ -670,7 +673,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                 _serverError = '${res['reason'] ?? 'The order was rejected.'}');
           return;
         }
-        SoundService.instance.orderPlaced('${res['orderId'] ?? ''}');
+        SoundService.instance.orderPlaced('${res['orderId'] ?? ''}', res['positionId']?.toString());
         ToastHost.show('${e.typeLabel} placed',
             '${e.volume!.toStringAsFixed(2)} @ ${e.entry}',
             accent: e.isBuy ? tc.buy : tc.sell);
@@ -678,7 +681,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
         // null clears the value on the server (it is not "keep the old one").
         await api
             .patch('/positions/${e.id}', {'slPrice': e.sl, 'tpPrice': e.tp});
-        SoundService.instance.orderModified();
+        SoundService.instance.orderModified(position: true);
         ToastHost.show(
             'Position updated', 'SL ${e.sl ?? '—'}  ·  TP ${e.tp ?? '—'}',
             accent: tc.profit);
@@ -776,7 +779,12 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
   Color? _lvNeutral;
 
   (String, Color) _entryLabel(Position p, Map<String, double> livePl, Map<String, Tick> quotes, List<TradeSymbol> symbols, TradeColors tc) {
-    final pl = resolvePositionPl(p, livePl: livePl, quotes: quotes, symbols: symbols);
+    final pl = resolvePositionPl(p,
+        livePl: livePl,
+        quotes: quotes,
+        symbols: symbols,
+        snap: ref.read(livePositionNotifierProvider),
+        accountCurrency: _lvCur ?? _accountCurrency());
     // Profit blue, loss red, exactly zero the neutral text colour (judged on the 2 decimals shown).
     final plShown = double.parse(pl.toStringAsFixed(2));
     final color = plShown > 0
@@ -1453,7 +1461,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                         ref.read(chartDrawingsProvider.notifier).remove(id),
                     onLevelDragEnd: _onLevelDragEnd,
                     onLevelTap: _onLevelTap,
-                    onEmptyTap: _dismissEditOnEmptyTap,
+                    onEmptyTap: _tapClosesCard,
                     onNeedOlder: (n, urgent) => ref
                         .read(chartHistoryLoaderProvider(req))
                         .loadOlder(visibleBars: n, urgent: urgent),
