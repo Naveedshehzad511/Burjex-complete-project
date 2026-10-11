@@ -570,8 +570,8 @@ impl Engine {
         let deal_id = Uuid::new_v4().to_string();
         let comment = audit_comment(plan.as_ref(), json!({"fillPrice": close_price, "result": "closed", "partial": partial}));
         sqlx::query(
-            r#"INSERT INTO deals (id, "tenantId", "accountId", "positionId", "symbolId", type, side, volume, price, profit, "balanceAfter", comment)
-               VALUES ($1,$2,$3,$4,$5,$6::"DealType",$7::"OrderSide",$8,$9,$10,$11,$12)"#,
+            r#"INSERT INTO deals (id, "tenantId", "accountId", "positionId", "symbolId", type, side, volume, price, profit, swap, commission, "balanceAfter", comment)
+               VALUES ($1,$2,$3,$4,$5,$6::"DealType",$7::"OrderSide",$8,$9,$10,$11,$12,$13,$14)"#,
         )
         .bind(&deal_id)
         .bind(&tenant_id)
@@ -582,7 +582,12 @@ impl Engine {
         .bind(&side)
         .bind(vol)
         .bind(close_price)
-        .bind(realized)
+        // Record the three parts the way MT5 lists them: price result in `profit`, the
+        // realized swap and commission in their own columns. They add up to `realized`,
+        // the amount that actually moves the balance.
+        .bind(realized - charges.0 - charges.1)
+        .bind(charges.0)
+        .bind(charges.1)
         .bind(new_balance)
         .bind(&comment)
         .execute(&mut *tx)
