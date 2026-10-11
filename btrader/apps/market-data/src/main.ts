@@ -27,6 +27,7 @@ import { NullAdapter } from './adapters/null-adapter';
 import { CandleEngine, CandleUpdate, DEFAULT_CHART_PRICE, bucketStart } from './candles/engine';
 import { selectFlushRows } from './candles/flush';
 import { TransformEpochs, groupTenants, transformCandle } from './candles/pricing';
+import { referenceTenant } from './candles/reference';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6380';
 
@@ -905,7 +906,16 @@ async function main() {
     // seed from it and never show blank — a stale-but-real price, MT5-style.
     pub.hset(`bt:${tenantId}:lastticks`, symbol, payload);
     stopRedis();
+    // The chart bar is built from THIS quote, in the same call that publishes the tick, so the price line
+    // and the forming candle cannot come from two different source choices (see candles/reference.ts).
+    // Published after the tick, so a client sees the price before the bar that contains it.
+    if (referenceTenant(routing.get(symbol)) === tenantId) {
+      publishCandleUpdates(pub, routing, aggregateTick(symbol, chosen.q.bid, chosen.q.ts), newsMap);
+    }
   };
+
+  /** True when a tenant routes the symbol, i.e. its published tick feeds the bar (see publishForTenant). */
+  const barFollowsTenantTick = (symbol: string): boolean => referenceTenant(routing.get(symbol)) !== null;
 
   /** Narrowest fresh+sane spread among a tenant's providers, with hysteresis. */
   const pickBestSpread = (
@@ -1046,7 +1056,8 @@ async function main() {
       }
       // Global book + canonical candle stream (one source of truth).
       (allBook.get(symbol) ?? allBook.set(symbol, new Map()).get(symbol)!).set(`${tenantId}:${raw.source}`, q);
-      aggregateCanonical(symbol, now);
+      // Routed symbols: the bar follows the tenant's published tick instead (publishForTenant).
+      if (!barFollowsTenantTick(symbol)) aggregateCanonical(symbol, now);
       // Monitor capture + tenant book (keyed by canonical name).
       captureQuote(pub, tenantId, raw.source, symbol, raw);
       const tb = tenantBook.get(tenantId) ?? tenantBook.set(tenantId, new Map()).get(tenantId)!;
@@ -1064,7 +1075,7 @@ async function main() {
     // global suffix, so raw.symbol is canonical. Drives every tenant that isn't
     // pricing off its own providers.
     (allBook.get(raw.symbol) ?? allBook.set(raw.symbol, new Map()).get(raw.symbol)!).set('default', q);
-    aggregateCanonical(raw.symbol, now);
+    if (!barFollowsTenantTick(raw.symbol)) aggregateCanonical(raw.symbol, now);
     defaultBook.set(raw.symbol, q);
     const targets = routing.get(raw.symbol);
     if (!targets) {

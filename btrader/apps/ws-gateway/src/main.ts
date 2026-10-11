@@ -18,6 +18,7 @@ import Redis from 'ioredis';
 import jwt from 'jsonwebtoken';
 import { Channels, Tick, WsFrame, CandleEvent } from '@btrader/shared';
 import { LatestCandleCache } from './candle-cache';
+import { CandleBuffer } from './candle-batch';
 
 const PORT = Number(process.env.WS_PORT ?? 4101);
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6380';
@@ -40,6 +41,9 @@ interface ClientState {
   /// Ticks awaiting the next batch flush, in arrival order.
   tickBuf: Tick[];
   tickTimer?: ReturnType<typeof setTimeout>;
+  /// Candle frames that arrived while ticks were waiting for their flush: sent right after those ticks, in
+  /// the same flush, so a bar never reaches the client ahead of the price that produced it.
+  candleBuf: CandleBuffer;
   /// True once the client has told us it understands batched tick frames.
   /// Older builds have not, and must keep receiving one tick per frame.
   wantsBatch: boolean;
@@ -190,20 +194,40 @@ function send(ws: WebSocket, frame: WsFrame) {
 /// frames stay readable in a debugger.
 function flushTicks(c: ClientState): void {
   c.tickTimer = undefined;
-  if (c.tickBuf.length === 0) return;
-  const batch = c.tickBuf;
-  c.tickBuf = [];
-  if (!c.wantsCompact) {
-    send(c.ws, { t: 'ticks', d: batch } as unknown as WsFrame);
+  if (c.tickBuf.length > 0) {
+    const batch = c.tickBuf;
+    c.tickBuf = [];
+    if (!c.wantsCompact) {
+      send(c.ws, { t: 'ticks', d: batch } as unknown as WsFrame);
+    } else {
+      const rows: Array<[number, number, number, number]> = [];
+      for (const t of batch) {
+        const id = c.symbolIds.get(t.symbol);
+        if (id === undefined) continue; // never assigned: cannot be decoded
+        rows.push([id, t.bid, t.ask, t.ts]);
+      }
+      if (rows.length > 0) send(c.ws, { t: 'k', d: rows } as unknown as WsFrame);
+    }
+  }
+  // Bars after the ticks they were built from, in the same flush.
+  if (c.candleBuf.size > 0) {
+    for (const b of c.candleBuf.drain()) send(c.ws, { t: 'candle', d: b });
+  }
+}
+
+/// Hold a bar for the next tick flush when ticks are waiting; otherwise send it at once.
+///
+/// Ticks are batched for up to TICK_BATCH_MS while bars used to go out immediately, so on every update the
+/// bar arrived ahead of its own price - the price line (drawn from ticks) trailed the candle by that much,
+/// which in a fast market is several points. Queued behind the ticks, both reach the client together.
+/// Nothing is dropped: a bar update is only replaced by a NEWER update of the same bar (a snapshot of the
+/// whole bar), and a created / closed bar always goes through.
+function queueCandle(c: ClientState, candle: CandleEvent): void {
+  if (TICK_BATCH_MS <= 0 || !c.wantsBatch || c.tickTimer === undefined) {
+    send(c.ws, { t: 'candle', d: candle });
     return;
   }
-  const rows: Array<[number, number, number, number]> = [];
-  for (const t of batch) {
-    const id = c.symbolIds.get(t.symbol);
-    if (id === undefined) continue; // never assigned: cannot be decoded
-    rows.push([id, t.bid, t.ask, t.ts]);
-  }
-  if (rows.length > 0) send(c.ws, { t: 'k', d: rows } as unknown as WsFrame);
+  c.candleBuf.push(candle);
 }
 
 /// Assign ids to any newly subscribed symbols and tell the client the mapping.
@@ -281,7 +305,7 @@ sub.on('pmessage', (_pattern, channel, message) => {
     // live subscriber has already been sent.
     latestCandles.record(tenantId, candle);
     for (const c of byTenantSymbol.get(tkey(tenantId, candle.symbol)) ?? EMPTY) {
-      send(c.ws, { t: 'candle', d: candle });
+      queueCandle(c, candle);
     }
     return;
   }
@@ -417,6 +441,7 @@ function attachClient(
     accountIds: new Set(),
     alive: true,
     tickBuf: [],
+    candleBuf: new CandleBuffer(),
     wantsBatch: false,
     wantsCompact: false,
     symbolIds: new Map(),
