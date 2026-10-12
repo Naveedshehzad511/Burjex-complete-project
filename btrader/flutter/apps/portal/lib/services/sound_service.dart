@@ -60,9 +60,11 @@ class SoundService {
   // Vibration patterns in ms: (delay, on, off, on ...).
   // Long enough to be FELT: Android's own touch haptics are 30-70 ms and only register on a good linear
   // motor; its notification buzz is ~400 ms. (55 / 40 ms reached the vibrator and ran, but was not felt.)
-  static const _tick = [0, 250]; // trade opened / closed
-  static const _soft = [0, 200]; // modified / cancelled
+  // Every confirmed trade event (open, close, modify, cancel, fill, SL / TP) uses the same pulse as an error
+  // such as insufficient funds - the one pattern known to be felt on the client's phones.
   static const _errPulse = [0, 80, 70, 80];
+  static const _tick = _errPulse; // trade opened / closed
+  static const _soft = _errPulse; // modified / cancelled
 
   bool get _androidApp => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 

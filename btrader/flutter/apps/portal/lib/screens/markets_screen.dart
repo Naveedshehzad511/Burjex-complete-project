@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import '../widgets/state_views.dart';
 import '../nav.dart';
 import '../state/watchlist.dart';
 import '../widgets/big_figure_price.dart';
@@ -20,6 +21,10 @@ class _MarketsScreenState extends ConsumerState<MarketsScreen> {
   /// Survives auth/account refreshes so Quotes never cold-spins after first load.
   List<TradeSymbol>? _lastSymbols;
 
+  /// The first symbols of the list have their chart data loaded in the background once (the chart opens on data when one
+  /// of them is picked), not all of them.
+  bool _warmed = false;
+
   @override
   Widget build(BuildContext context) {
     final ref = this.ref;
@@ -27,6 +32,9 @@ class _MarketsScreenState extends ConsumerState<MarketsScreen> {
     ref.watch(feedSubscriptionProvider);
     final symbols = ref.watch(symbolsProvider);
     final mode = ref.watch(themeModeProvider);
+    if (ref.watch(tradingAccountStatusProvider) == TradingAccountStatus.none) {
+      return Scaffold(appBar: AppBar(title: const Text('Quotes')), body: const NoTradingAccountView());
+    }
 
     // Never full-screen "search"/reload on tab open — paint last symbols while
     // a background refetch runs; spinner only on the true first cold load.
@@ -36,7 +44,7 @@ class _MarketsScreenState extends ConsumerState<MarketsScreen> {
     if (symbols.hasError && list == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Quotes')),
-        body: Center(child: Text('Failed to load symbols\n${symbols.error}', textAlign: TextAlign.center)),
+        body: LoadErrorView(symbols.error!, title: 'Could not load the quotes', onRetry: () => ref.invalidate(symbolsProvider)),
       );
     }
     if (list == null) {
@@ -57,6 +65,13 @@ class _MarketsScreenState extends ConsumerState<MarketsScreen> {
 
     final byCode = {for (final s in list) s.symbol: s};
     final allCodes = list.map((s) => s.symbol).toList();
+    if (!_warmed && allCodes.isNotEmpty) {
+      _warmed = true;
+      final warm = ref.read(chartWarmerProvider);
+      for (final code in allCodes.take(4)) {
+        warm(code);
+      }
+    }
     // Auto-universe: group Symbol Mappings appear without manual "Add symbols".
     ref.listen<AsyncValue<List<TradeSymbol>>>(symbolsProvider, (prev, next) {
       final codes = next.valueOrNull?.map((s) => s.symbol).toList();

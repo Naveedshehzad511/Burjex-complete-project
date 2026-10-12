@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import '../widgets/state_views.dart';
+import '../session/sessions.dart';
 import '../widgets/account_panel.dart';
 
 /// MT5-style account history: closed trades (entry → exit, profit) and balance
@@ -43,7 +45,7 @@ final _customRangeProvider = StateProvider<DateTimeRange?>((_) => null);
   };
 }
 
-/// The last history loaded for each (account, period window), kept OUTSIDE [_historyProvider].
+/// The last history loaded for each (account, period window), kept OUTSIDE [historyProvider].
 /// A provider that is rebuilt because a trade closed while nobody was listening (History not on
 /// screen) loses its previous value, so reopening History would show a loader although the rows were
 /// already known. This cache lets the screen show them at once while the refetch runs behind them.
@@ -52,14 +54,18 @@ final _historyCacheProvider = StateProvider<Map<String, List<Deal>>>((_) => cons
 String _historyKey(String? account, _Period p, DateTimeRange? custom) =>
     '$account|${p.name}|${p == _Period.custom ? '${custom?.start.millisecondsSinceEpoch}-${custom?.end.millisecondsSinceEpoch}' : ''}';
 
-final _historyProvider = FutureProvider.autoDispose<List<Deal>>((ref) async {
+/// A history fetch tagged with the account it was made for: on an account switch Riverpod keeps the previous
+/// answer as the loading value, and the screen must be able to tell it is not this account's.
+typedef AccountDeals = ({String? account, List<Deal> deals});
+
+final historyProvider = FutureProvider.autoDispose<AccountDeals>((ref) async {
   ref.keepAlive(); // reopen on the last history instantly; trade events refetch it behind the list
   final id = ref.watch(activeAccountIdProvider);
   final period = ref.watch(_periodProvider);
   final custom = ref.watch(_customRangeProvider);
   // New fills / closes are pushed over the socket; refetch when one happens.
   ref.watch(tradeEventEpochProvider);
-  if (id == null) return [];
+  if (id == null) return (account: null, deals: <Deal>[]);
   final api = ref.watch(apiClientProvider);
   final (from, to) = _window(period, custom);
   final data = await api.get('/history/deals', query: {
@@ -70,7 +76,8 @@ final _historyProvider = FutureProvider.autoDispose<List<Deal>>((ref) async {
   final deals = data.map((e) => Deal.fromJson(e)).toList();
   final cache = ref.read(_historyCacheProvider);
   ref.read(_historyCacheProvider.notifier).state = {...cache, _historyKey(id, period, custom): deals};
-  return deals;
+  // The account may have changed while the request was in flight: this answer is then not for it.
+  return (account: id, deals: deals);
 });
 
 const _balanceTypes = {'DEPOSIT', 'WITHDRAWAL', 'BONUS', 'DIVIDEND', 'CREDIT', 'BALANCE'};
@@ -112,14 +119,32 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final fetched = ref.watch(_historyProvider);
+    if (ref.watch(tradingAccountStatusProvider) == TradingAccountStatus.none) {
+      return Scaffold(appBar: AppBar(title: const Text('History')), body: const NoTradingAccountView(what: 'your history'));
+    }
+    final fetched = ref.watch(historyProvider);
     final period = ref.watch(_periodProvider);
     final customRange = ref.watch(_customRangeProvider);
     // Loading with nothing to show yet, but this account / period was loaded before: show those rows
     // (the refetch lands behind them). A loader is only for a genuine first load, and an error is
     // never replaced by old rows.
-    final cached = ref.watch(_historyCacheProvider)[_historyKey(ref.watch(activeAccountIdProvider), period, customRange)];
-    final history = (fetched.isLoading && !fetched.hasValue && cached != null) ? AsyncData<List<Deal>>(cached) : fetched;
+    final activeId = ref.watch(activeAccountIdProvider);
+    final cached = ref.watch(_historyCacheProvider)[_historyKey(activeId, period, customRange)];
+    // Only a fetch made for the ACTIVE account is shown. While the other account's answer is still the
+    // current value (a switch in progress) show this account's cached rows, or a loader - never the
+    // previous account's trades.
+    final mine = fetched.valueOrNull;
+    final switching = ref.watch(tradingSessionProvider.select((s) => s.loading));
+    final history = switching
+        ? const AsyncLoading<List<Deal>>()
+        // An error is shown as an error, never hidden behind the previous rows.
+        : (fetched.hasError && !fetched.isLoading)
+            ? AsyncError<List<Deal>>(fetched.error!, fetched.stackTrace ?? StackTrace.empty)
+            : (mine != null && mine.account == activeId)
+                ? AsyncData<List<Deal>>(mine.deals)
+                : cached != null
+                    ? AsyncData<List<Deal>>(cached)
+                    : const AsyncLoading<List<Deal>>();
     final tc = Theme.of(context).extension<TradeColors>()!;
 
     return Scaffold(
@@ -145,7 +170,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         skipLoadingOnReload: true,
         skipLoadingOnRefresh: true,
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
+        error: (e, _) => LoadErrorView(e, onRetry: () => ref.invalidate(historyProvider)),
         data: (all) {
           final rows = all.where((d) => d.isTrade || _balanceTypes.contains(d.type)).toList();
           if (rows.isEmpty) {

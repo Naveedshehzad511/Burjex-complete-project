@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../crm/crm.dart';
 import '../main.dart' show kNavy;
 import '../session/sessions.dart';
+import '../state/live_figures.dart';
 import '../widgets/account_actions.dart';
 import '../widgets/manage_accounts.dart';
 import '../widgets/portal_drawer.dart';
@@ -138,15 +139,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   final allLive = accounts.isNotEmpty && known.length == accounts.length;
                   final metrics = CrmMetrics(
                     balance: base.balance,
-                    equity: allLive ? known.fold<double>(0, (s, t) => s + t.equity) : base.equity,
+                    equity: allLive ? known.fold<double>(0, (s, t) => s + t.liveEquity) : base.equity,
                     openPnl: allLive ? known.fold<double>(0, (s, t) => s + t.floatingPL) : base.openPnl,
                     withdrawable: base.withdrawable,
                     margin: known.fold<double>(0, (s, t) => s + t.margin),
                   );
+                  // The active account's floating P/L moves with the market (as on the Trade tab), not with the
+                  // engine's 5 s snapshot: it is folded in by the stats row itself, so only those three figures
+                  // rebuild on a price change, not this whole page.
+                  // Whether the other accounts are known to the trading side or not (the CRM lists every account, the
+                  // trading session may hold just the one in use), the active account is carried to the tick: what
+                  // the card holds for it now is swapped for its live figures.
+                  final activeId = ref.watch(activeAccountIdProvider);
+                  _LiveSwap? liveSwap;
+                  for (var i = 0; i < accounts.length; i++) {
+                    final t = tAccts[i];
+                    if (t == null || t.id != activeId) continue;
+                    liveSwap = allLive
+                        ? _LiveSwap(t.id, t.liveEquity, t.floatingPL) // the snapshot is what the sums hold
+                        : _LiveSwap(t.id, accounts[i].equity, accounts[i].equity - accounts[i].balance); // the CRM row is
+                    break;
+                  }
                   return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     if (ref.watch(crmDashboardOfflineProvider)) const _OfflineBanner(),
-                    _PerformanceCard(demo: _demo, metrics: metrics, hidden: _hidden, onToggleHidden: _toggleHidden),
-                    if (profile != null && !profile.kycApproved) ...[const SizedBox(height: 10), const _KycNotice()],
+                    _PerformanceCard(demo: _demo, metrics: metrics, hidden: _hidden, onToggleHidden: _toggleHidden, liveSwap: liveSwap),
+                    if (profile != null && !profile.kycApproved) ...[const SizedBox(height: 10), _KycNotice(profile.kycStatus)],
                     const ViewingOtherAccountNotice(),
                     const SizedBox(height: 22),
                     Row(children: [
@@ -193,13 +210,26 @@ Account? _tradingByLogin(WidgetRef ref, String login) {
   return null;
 }
 
+/// Equity of one account card. The active account's is the live one (balance + credit + floating P/L as on the Trade
+/// tab); any other account's is its last engine snapshot, or the CRM's figure when the trading side has none.
+double _accountEquity(WidgetRef ref, CrmAccount a) {
+  final t = _tradingByLogin(ref, a.login);
+  if (t == null) return a.equity;
+  if (t.id != ref.watch(activeAccountIdProvider)) return t.liveEquity; // only the active account follows the ticks
+  final f = ref.watch(activeLiveFiguresProvider);
+  return f != null && f.accountId == t.id ? f.equity : t.liveEquity;
+}
+
 /// The single large account card: mode, Open Account, balance (+ eye), performance.
 class _PerformanceCard extends StatelessWidget {
-  const _PerformanceCard({required this.demo, required this.metrics, required this.hidden, required this.onToggleHidden});
+  const _PerformanceCard({required this.demo, required this.metrics, required this.hidden, required this.onToggleHidden, this.liveSwap});
   final bool demo;
   final CrmMetrics metrics;
   final bool hidden;
   final VoidCallback onToggleHidden;
+
+  /// The account (one of those summed in [metrics]) whose figures are carried to the latest tick.
+  final _LiveSwap? liveSwap;
 
   String _money(double v) => hidden ? '••••••' : v.toStringAsFixed(2);
 
@@ -299,15 +329,45 @@ class _PerformanceCard extends StatelessWidget {
         const SizedBox(height: 16),
         Container(height: 1, color: Colors.white.withValues(alpha: 0.12)),
         const SizedBox(height: 14),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _Stat('Equity', _money(metrics.equity)),
-          _StatDivider(),
-          _Stat('Margin', _money(metrics.margin)),
-          _StatDivider(),
-          _Stat('Open PnL', _money(metrics.openPnl)),
-        ]),
+        _LiveStatsRow(metrics: metrics, hidden: hidden, liveSwap: liveSwap),
       ]),
     );
+  }
+}
+
+/// What the card's sums currently hold for the active account, to be replaced by its live figures.
+class _LiveSwap {
+  const _LiveSwap(this.accountId, this.equity, this.floating);
+  final String accountId;
+  final double equity, floating;
+}
+
+/// Equity / Margin / Open PnL of the card. The summed figures come from the engine's snapshots; for the active
+/// account the floating P/L is replaced by the live one (the same figure the Trade tab shows), so equity and open PnL
+/// move with every price change and match the Trade tab. Only this row watches the live figures.
+class _LiveStatsRow extends ConsumerWidget {
+  const _LiveStatsRow({required this.metrics, required this.hidden, required this.liveSwap});
+  final CrmMetrics metrics;
+  final bool hidden;
+  final _LiveSwap? liveSwap;
+
+  String _money(double v) => hidden ? '••••••' : v.toStringAsFixed(2);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final swap = liveSwap;
+    final f = swap == null ? null : ref.watch(activeLiveFiguresProvider);
+    final live = f != null && swap != null && f.accountId == swap.accountId;
+    // The account's old share of the sums out, its live figures in.
+    final equity = live ? metrics.equity - swap.equity + f.equity : metrics.equity;
+    final openPnl = live ? metrics.openPnl - swap.floating + f.floating : metrics.openPnl;
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _Stat('Equity', _money(equity)),
+      _StatDivider(),
+      _Stat('Margin', _money(metrics.margin)),
+      _StatDivider(),
+      _Stat('Open PnL', _money(openPnl)),
+    ]);
   }
 }
 
@@ -341,7 +401,21 @@ class _StatDivider extends StatelessWidget {
 
 /// Understated KYC reminder — visible, but no longer a red banner over the page.
 class _KycNotice extends StatelessWidget {
-  const _KycNotice();
+  const _KycNotice(this.status);
+  final String status;
+
+  /// What the CRM's KYC status means for the client (PENDING / REJECTED / EXPIRED; anything else is "pending").
+  String get _message {
+    switch (status.toUpperCase()) {
+      case 'REJECTED':
+        return 'KYC was rejected — resubmit your documents to unlock withdrawals.';
+      case 'EXPIRED':
+        return 'KYC has expired — renew it to unlock withdrawals.';
+      default:
+        return 'KYC is pending — complete it to unlock withdrawals.';
+    }
+  }
+
   @override
   Widget build(BuildContext context) => InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -352,7 +426,7 @@ class _KycNotice extends StatelessWidget {
             const Icon(Icons.info_outline, size: 16, color: Color(0xFFB7791F)),
             const SizedBox(width: 6),
             Expanded(
-              child: Text('KYC is pending — complete it to unlock withdrawals.',
+              child: Text(_message,
                   style: TextStyle(fontSize: 12.5, color: Theme.of(context).hintColor, fontWeight: FontWeight.w500)),
             ),
             Text('Verify', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.primary)),
@@ -570,7 +644,7 @@ class _AccountCard extends ConsumerWidget {
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             stat('Balance', v(a.balance), flex: 5),
             statDivider(),
-            stat('Equity', v(_tradingByLogin(ref, a.login)?.equity ?? a.equity), flex: 5),
+            stat('Equity', v(_accountEquity(ref, a)), flex: 5),
             statDivider(),
             stat('Leverage', '1:${a.leverage}', flex: 4),
           ]),

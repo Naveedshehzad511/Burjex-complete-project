@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'crm/crm.dart';
+import 'screens/history_screen.dart' show historyProvider;
+import 'screens/ib_screens.dart' show refreshIbState;
 import 'services/sound_service.dart';
 import 'session/sessions.dart';
 
@@ -39,6 +41,9 @@ class _PortalShellState extends ConsumerState<PortalShell> with WidgetsBindingOb
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _warmChartAtStart();
+    });
   }
 
   @override
@@ -50,10 +55,20 @@ class _PortalShellState extends ConsumerState<PortalShell> with WidgetsBindingOb
   /// Coming back from the background: make sure the price feed is really alive.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) ref.read(marketSocketProvider)?.onAppResumed();
+    if (state == AppLifecycleState.resumed) {
+      ref.read(marketSocketProvider)?.onAppResumed();
+      refreshCrmProfile(ref); // the administrator may have approved / rejected KYC while the app was away
+      refreshIbState(ref); // ... or approved an IB application
+    }
   }
 
   bool _booting = false;
+
+  /// Load the chart's newest bars while Home is showing, so the first visit to Chart (or Quotes -> Chart) is not
+  /// a loader.
+  void _warmChartAtStart() {
+    ref.read(chartWarmerProvider)(''); // the series the chart was last on, from storage
+  }
 
   /// Once the CRM tells us which accounts the user has, reopen the account Quotes /
   /// Chart / Trade / History were last on — including another client's account
@@ -103,6 +118,10 @@ class _PortalShellState extends ConsumerState<PortalShell> with WidgetsBindingOb
     ref.listen<TradeEvent?>(lastTradeEventProvider, (_, e) {
       if (e != null) SoundService.instance.onTradeEvent(e.kind);
     });
+
+    // History starts loading as soon as the app has an account (while Home is on screen), so the tab opens on
+    // data instead of a loader. The provider is kept alive and refetches itself on every trade event.
+    ref.listen(historyProvider, (_, __) {});
 
     // Activate live data on every tab.
     final sock = ref.watch(marketSocketProvider);

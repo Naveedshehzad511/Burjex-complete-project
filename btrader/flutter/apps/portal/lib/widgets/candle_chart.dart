@@ -113,6 +113,20 @@ double xForTimeInWindow(List<Candle> w, int t, double slot) {
   return slot * (n - 1) + slot / 2;
 }
 
+/// The chart time under pixel [dx] for placing a drawing point: snapped to the bar whose slot it falls in, and
+/// continued past the last (or before the first) bar by whole bar-steps, so a point can be put in the empty
+/// area to the right of the newest candle - the future - instead of being pulled back onto it. The inverse of
+/// [xForTimeInWindow] at the slot centres, so a placed point and its drawn position agree.
+int snapTimeAtX(List<Candle> w, double dx, double xShift, double slot) {
+  final n = w.length;
+  if (n == 0) return 0;
+  if (n == 1) return w.first.t;
+  final i = ((dx - xShift) / slot).floor(); // slot index; < 0 or >= n is outside the loaded bars
+  if (i >= 0 && i < n) return w[i].t;
+  if (i < 0) return w.first.t + i * (w[1].t - w[0].t);
+  return w.last.t + (i - (n - 1)) * (w[n - 1].t - w[n - 2].t);
+}
+
 /// Padded visible price range (high/low) for a window of candles + overlay
 /// levels + indicator overlay values. Shared by the painter and the tap→price
 /// mapping so they never drift.
@@ -732,10 +746,9 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
         if (widget.onAnchor == null || window.isEmpty) return;
         if (pos.dx < 0 || pos.dx >= _chartW) return;
         if (pos.dy < metrics.priceTop || pos.dy > metrics.priceTop + metrics.priceH) return;
-        final idx = ((pos.dx - xShift) / slotPx).floor().clamp(0, window.length - 1);
         final r = chartRange(window, widget.levels, extra: overlayExtra, vShift: _vShift, priceZoom: _priceZoom);
         final price = r.hi - (pos.dy - metrics.priceTop) / metrics.priceH * (r.hi - r.lo);
-        widget.onAnchor!(DrawingAnchor(window[idx].t, price));
+        widget.onAnchor!(DrawingAnchor(snapTimeAtX(window, pos.dx, xShift, slotPx), price));
       }
 
       void zoom(double factor) => setState(() {
@@ -751,7 +764,7 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
       double priceAtY(double dy) =>
           r.hi - (dy.clamp(metrics.priceTop, metrics.priceTop + metrics.priceH) - metrics.priceTop) / metrics.priceH * priceSpan;
       double pxForTime(int t) => xForTimeInWindow(window, t, slotB) + xShift;
-      int timeAtX(double dx) => window[((dx - xShift) / slotB).floor().clamp(0, window.length - 1)].t;
+      int timeAtX(double dx) => snapTimeAtX(window, dx, xShift, slotB);
 
       // Inverse of [xForTimeInWindow] WITHOUT clamping to the visible bars: interpolates between
       // bars and extrapolates past the edges, so a drawing dragged partly off-screen keeps its shape.

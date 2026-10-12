@@ -5,6 +5,7 @@ import 'package:btrader_core/btrader_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../widgets/state_views.dart';
 import '../services/sound_service.dart';
 import '../session/sessions.dart';
 import '../state/chart_trade.dart';
@@ -455,13 +456,13 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     if (id == null || _edit?.isDraft == true) return;
     if (l.kind == LevelKind.entry) {
       final p =
-          (ref.read(openPositionsProvider).valueOrNull ?? const <Position>[])
+          (ref.read(accountPositionsProvider).valueOrNull ?? const <Position>[])
               .where((x) => x.id == id);
       if (p.isNotEmpty) _beginPositionEdit(p.first);
     } else if (l.kind == LevelKind.sl || l.kind == LevelKind.tp) {
       // A protective line is plain until tapped; tapping opens its owner's editor,
       // which is what makes the drag handle appear (see `_levels`).
-      final p = (ref.read(openPositionsProvider).valueOrNull ?? const <Position>[]).where((x) => x.id == id);
+      final p = (ref.read(accountPositionsProvider).valueOrNull ?? const <Position>[]).where((x) => x.id == id);
       if (p.isNotEmpty) return _beginPositionEdit(p.first);
       final o = (ref.read(pendingOrdersProvider).valueOrNull ?? const <PendingOrder>[]).where((x) => x.id == id);
       if (o.isNotEmpty) _beginOrderEdit(o.first);
@@ -499,7 +500,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     if (_edit != null && _edit!.isDraft && _edit!.targetId != id) return;
     if (_edit == null || _edit!.targetId != id) {
       final pos =
-          (ref.read(openPositionsProvider).valueOrNull ?? const <Position>[])
+          (ref.read(accountPositionsProvider).valueOrNull ?? const <Position>[])
               .where((x) => x.id == id);
       final ord = (ref.read(pendingOrdersProvider).valueOrNull ??
               const <PendingOrder>[])
@@ -686,6 +687,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
         await api
             .patch('/positions/${e.id}', {'slPrice': e.sl, 'tpPrice': e.tp});
         SoundService.instance.orderModified(position: true);
+        // Confirmed by the server: the line moves to exactly this price now, not after a refetch.
+        ref.read(openPositionsProvider.notifier).applyConfirmedLevels(e.id!, sl: e.sl, tp: e.tp);
         ToastHost.show(
             'Position updated', 'SL ${e.sl ?? '—'}  ·  TP ${e.tp ?? '—'}',
             accent: tc.profit);
@@ -1148,6 +1151,9 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     ref.watch(marketSocketProvider);
     ref.watch(feedSubscriptionProvider);
     ref.watch(chartSymbolProvider);
+    if (ref.watch(tradingAccountStatusProvider) == TradingAccountStatus.none) {
+      return const Scaffold(body: SafeArea(child: NoTradingAccountView()));
+    }
     ref.listen<String>(chartSymbolProvider, (prev, next) {
       if (prev == next || next.isEmpty) return;
       setState(() => _edit = null); // an edit belongs to one symbol
@@ -1197,7 +1203,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     // Select the list itself: the loading-only transitions of a refetch (value unchanged) must not
     // rebuild the whole chart screen.
     final positions =
-        ref.watch(openPositionsProvider.select((a) => a.valueOrNull)) ?? const <Position>[];
+        ref.watch(accountPositionsProvider.select((a) => a.valueOrNull)) ?? const <Position>[];
     final pendings =
         ref.watch(pendingOrdersProvider).valueOrNull ?? const <PendingOrder>[];
     final tc = Theme.of(context).extension<TradeColors>()!;
@@ -1426,9 +1432,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       return series.when(
           loading: () =>
               const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          error: (e, _) => Center(
-              child:
-                  Text('Chart unavailable\n$e', textAlign: TextAlign.center)),
+          error: (e, _) => LoadErrorView(e, title: 'Chart unavailable', onRetry: () => ref.invalidate(candlesProvider(req))),
           data: (candles) {
             if (candles.isEmpty)
               return const Center(child: Text('No data for this symbol yet.'));
@@ -1559,7 +1563,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       final forming2 = ref.watch(formingCandleProvider(req2));
       final livePrice2 = forming2?.c ?? rawQuote2?.bid;
       final positions2 =
-          ref.watch(openPositionsProvider.select((a) => a.valueOrNull)) ?? const <Position>[];
+          ref.watch(accountPositionsProvider.select((a) => a.valueOrNull)) ?? const <Position>[];
       final pendings2 = ref.watch(pendingOrdersProvider).valueOrNull ??
           const <PendingOrder>[];
       final levels2 = _levels(positions2, pendings2, tc, readonly,

@@ -4,12 +4,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'router.dart';
 import 'services/sound_service.dart';
+import 'session/app_reset.dart';
 import 'widgets/trade_toast.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SoundService.instance.warmUp(); // load the trade sounds now, not on the first trade
-  runApp(const ProviderScope(child: PortalApp()));
+  runApp(const _AppRoot());
+}
+
+/// The provider tree is keyed on the session generation: a logout bumps it ([resetAppForNewUser]) and every provider
+/// - and with it every trace of the previous user - is discarded, so the next login starts clean.
+class _AppRoot extends StatelessWidget {
+  const _AppRoot();
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        valueListenable: appSessionGeneration,
+        builder: (_, generation, __) => ProviderScope(key: ValueKey(generation), child: const PortalApp()),
+      );
 }
 
 /// Burjex Prime navy — the one brand colour used across every screen.

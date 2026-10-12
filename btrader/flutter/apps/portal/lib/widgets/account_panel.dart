@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import '../state/live_figures.dart';
+
 /// Resolves the active account merged with the latest live snapshot (if any).
 final activeAccountProvider = Provider<Account?>((ref) {
   final accounts = ref.watch(accountsProvider).valueOrNull ?? const [];
@@ -35,22 +37,11 @@ class AccountPanel extends ConsumerWidget {
     final tc = Theme.of(context).extension<TradeColors>()!;
     if (a == null) return const SizedBox.shrink();
 
-    // Prefer live quote-based P/L so the bar moves even if engine WS is quiet.
-    final id = ref.watch(activeAccountIdProvider);
-    final livePL = ref.watch(livePositionProvider);
-    final liveSnap = ref.watch(livePositionNotifierProvider);
-    final quotes = ref.watch(quotesProvider);
-    final symbols = ref.watch(symbolsProvider).valueOrNull ?? const <TradeSymbol>[];
-    final open = ref.watch(openPositionsProvider).valueOrNull ?? const <Position>[];
-    double floating = a.floatingPL;
-    if (open.isNotEmpty) {
-      floating = 0;
-      for (final p in open.where((p) => id == null || p.accountId == id)) {
-        floating += resolvePositionPl(p, livePl: livePL, quotes: quotes, symbols: symbols, snap: liveSnap, accountCurrency: a.currency);
-      }
-    }
-    final equity = a.balance + a.credit + floating;
-    final freeMargin = equity - a.margin;
+    // The one derivation every screen uses (tick-level P/L, equity, free margin): see [LiveFigures].
+    final f = ref.watch(activeLiveFiguresProvider);
+    final floating = f?.floating ?? a.floatingPL;
+    final equity = f?.equity ?? (a.balance + a.credit + a.floatingPL);
+    final freeMargin = f?.freeMargin ?? (equity - a.margin);
     final marginLevel = a.margin > 0 ? equity / a.margin * 100 : 0.0;
     final plColor = floating >= 0 ? tc.profit : tc.loss;
 

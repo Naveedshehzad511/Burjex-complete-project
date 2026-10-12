@@ -115,7 +115,12 @@ class PendingOrder {
 /// disappears the instant the server says so, with no refresh.
 class PendingOrdersController extends StateNotifier<AsyncValue<List<PendingOrder>>> {
   PendingOrdersController(this._ref) : super(const AsyncValue.loading()) {
-    _ref.listen<String?>(activeAccountIdProvider, (_, __) => reload(), fireImmediately: false);
+    _ref.listen<String?>(activeAccountIdProvider, (_, __) {
+      // The other account's resting orders must not stay on screen while this account's load: drop
+      // them at once (the loading value has none) and fetch.
+      state = const AsyncValue.loading();
+      reload();
+    }, fireImmediately: false);
     _ref.listen<int>(sessionEpochProvider, (_, __) => reload());
     _ref.listen<int>(socketEpochProvider, (_, __) {
       // Events sent while the socket was down are gone, so reconcile with the server.

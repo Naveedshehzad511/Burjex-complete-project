@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/push_service.dart';
+import '../session/app_reset.dart';
 
 /// Same key btrader_core reads (IB referral etc.), so both layers share one CRM token.
 const kCrmTokenKey = 'crm_token';
@@ -15,12 +16,26 @@ const kCrmTokenKey = 'crm_token';
 String crmMessage(Object? e, [String fallback = 'Something went wrong. Please try again.']) {
   dynamic data = e;
   if (e is DioException) {
-    data = e.response?.data;
-    if (data == null) {
-      return e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout
-          ? 'Cannot reach the server. Check your connection.'
-          : fallback;
+    final status = e.response?.statusCode;
+    // The condition decides the message: a lost connection, a slow server, an ended session, a refused request and a
+    // server fault are different problems, and none of them should read as "Authentication required".
+    switch (e.type) {
+      case DioExceptionType.connectionError:
+        return 'No internet connection. Check your network and try again.';
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return 'The server is taking too long to respond. Please try again.';
+      default:
     }
+    if (status == 401) return 'Your session has expired. Please sign in again.';
+    if (status == 403) {
+      final m = e.response?.data is Map ? (e.response!.data as Map)['message'] : null;
+      return m is String && m.isNotEmpty ? m : 'You do not have permission to do this.';
+    }
+    if (status != null && status >= 500) return 'The server had a problem. Please try again shortly.';
+    data = e.response?.data;
+    if (data == null) return fallback;
   }
   if (data is Map) {
     final errors = data['errors'];
@@ -96,7 +111,10 @@ class CrmSession extends StateNotifier<CrmAuthState> {
     final p = await SharedPreferences.getInstance();
     await p.remove(kCrmTokenKey);
     await p.remove(_kDashCacheKey);
+    await p.remove(kCrmProfileCacheKey);
+    await p.remove(kCrmIbStateCacheKey);
     _dashSeeded = false;
+    _profileSeeded = false;
     if (token != null) {
       unawaited(PushService.instance.unregister(token));
       // Best effort — the local session is already gone.
@@ -105,6 +123,8 @@ class CrmSession extends StateNotifier<CrmAuthState> {
           .then((_) {}, onError: (_) {}));
     }
     await _ref.read(authControllerProvider.notifier).logout();
+    // Last: the app is rebuilt from nothing for whoever signs in next.
+    unawaited(resetAppForNewUser());
   }
 }
 
@@ -307,12 +327,15 @@ class CrmProfile {
   bool get kycApproved => kycStatus.toUpperCase() == 'APPROVED' || kycStatus.toUpperCase() == 'VERIFIED';
 }
 
-final crmProfileProvider = FutureProvider.autoDispose<CrmProfile>((ref) async {
-  ref.watch(crmSessionProvider.select((s) => s.token));
-  final res = await ref.watch(crmDioProvider).get('/me/');
-  final data = (res.data as Map)['data'] as Map;
-  final u = (data['user'] as Map).cast<String, dynamic>();
-  return CrmProfile(
+/// The last profile the CRM returned, kept on disk so a cold start shows the KYC status (and the rest) at once
+/// instead of nothing until the network answers. The CRM stays the source of truth: every session start
+/// fetches it again and replaces the copy.
+const kCrmProfileCacheKey = 'crm_profile_cache';
+
+/// The saved IB standing (see ibStateProvider); like the profile it belongs to one user and goes at logout.
+const kCrmIbStateCacheKey = 'crm_ib_state';
+
+CrmProfile _parseProfile(Map<String, dynamic> u) => CrmProfile(
     name: (u['display_name'] ?? u['email'] ?? '').toString(),
     email: (u['email'] ?? '').toString(),
     firstName: (u['first_name'] ?? '').toString(),
@@ -324,4 +347,45 @@ final crmProfileProvider = FutureProvider.autoDispose<CrmProfile>((ref) async {
     kycStatus: (u['kyc_status'] ?? '').toString(),
     walletBalance: crmNum(u['wallet_balance']),
   );
+
+bool _profileSeeded = false;
+
+/// Stale-while-revalidate, like the dashboard: the saved copy is returned at once on the first read of a
+/// session and the provider then refetches; a failed fetch keeps the saved copy (only a 401, the session
+/// ended, drops it). The result is never a hardcoded status.
+final crmProfileProvider = FutureProvider.autoDispose<CrmProfile>((ref) async {
+  ref.watch(crmSessionProvider.select((s) => s.token));
+  ref.keepAlive();
+  final prefs = await SharedPreferences.getInstance();
+  Map<String, dynamic>? cached;
+  try {
+    final raw = prefs.getString(kCrmProfileCacheKey);
+    if (raw != null) cached = (jsonDecode(raw) as Map).cast<String, dynamic>();
+  } catch (_) {}
+  if (cached != null && !_profileSeeded) {
+    _profileSeeded = true;
+    Future.microtask(() {
+      try {
+        ref.invalidateSelf();
+      } catch (_) {}
+    });
+    return _parseProfile(cached);
+  }
+  try {
+    final res = await ref.watch(crmDioProvider).get('/me/');
+    final data = (res.data as Map)['data'] as Map;
+    final u = (data['user'] as Map).cast<String, dynamic>();
+    unawaited(prefs.setString(kCrmProfileCacheKey, jsonEncode(u)));
+    return _parseProfile(u);
+  } catch (e) {
+    final authEnded = e is DioException && e.response?.statusCode == 401;
+    if (cached != null && !authEnded) return _parseProfile(cached);
+    rethrow;
+  }
 });
+
+/// Re-read the profile (KYC status included) from the CRM, e.g. when the app returns to the foreground, so an
+/// approval or rejection made by the administrator shows without reinstalling or restarting.
+void refreshCrmProfile(WidgetRef ref) {
+  if (ref.read(crmSessionProvider).authenticated) ref.invalidate(crmProfileProvider);
+}

@@ -1,3 +1,5 @@
+const Object _keep = Object();
+
 class Position {
   final String id;
   final String accountId;
@@ -107,9 +109,13 @@ class Position {
     );
   }
 
-  Position copyWith({double? profit}) => Position(
+  /// A copy with another P/L and / or other protective levels. [slPrice] / [tpPrice] left out keep the
+  /// current level; passing null clears it (a removed SL / TP).
+  Position copyWith({double? profit, Object? slPrice = _keep, Object? tpPrice = _keep}) => Position(
         id: id, accountId: accountId, accountLogin: accountLogin, side: side, status: status, volume: volume,
-        openPrice: openPrice, slPrice: slPrice, tpPrice: tpPrice,
+        openPrice: openPrice,
+        slPrice: identical(slPrice, _keep) ? this.slPrice : slPrice as double?,
+        tpPrice: identical(tpPrice, _keep) ? this.tpPrice : tpPrice as double?,
         profit: profit ?? this.profit, swap: swap, symbol: symbol, digits: digits, openedAt: openedAt,
         commission: commission, marginUsed: marginUsed, closePrice: closePrice, closedAt: closedAt, comment: comment,
       );

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,6 +20,27 @@ final openPositionsTickProvider = StreamProvider.autoDispose<int>(
 final openPositionsProvider =
     AsyncNotifierProvider.autoDispose<OpenPositionsNotifier, List<Position>>(OpenPositionsNotifier.new);
 
+/// After this device confirmed an SL / TP change, engine frames that disagree are ignored for this long.
+const Duration _kPushIgnoreAfterConfirm = Duration(seconds: 4);
+
+/// The open positions of the ACTIVE account, and only those.
+///
+/// [openPositionsProvider] reloads when the account changes and, while it does, Riverpod hands the previous
+/// account's list on as the loading value; a screen reading it would show account A's trades under account B
+/// until B's answer (or a microtask) replaced them. This view never does: rows that belong to another account
+/// are dropped, and a list that is entirely another account's is reported as loading, not as data.
+final accountPositionsProvider = Provider.autoDispose<AsyncValue<List<Position>>>((ref) {
+  final id = ref.watch(activeAccountIdProvider);
+  final raw = ref.watch(openPositionsProvider);
+  final list = raw.valueOrNull;
+  if (list == null) return raw;
+  // A row without an account id (older API) is taken as the active account's.
+  bool mine(Position p) => p.accountId.isEmpty || p.accountId == id;
+  final own = list.where(mine).toList();
+  if (own.isEmpty && list.isNotEmpty) return const AsyncLoading(); // still the previous account's list
+  return AsyncData(own.length == list.length ? list : own);
+});
+
 /// How long a backend-confirmed trade is kept while the server's positions list has not listed it yet.
 const Duration _kConfirmedGrace = Duration(seconds: 10);
 
@@ -33,6 +55,18 @@ class _ConfirmedOpen {
 /// kept outside the autoDispose provider so a refetch that started before the trade
 /// committed cannot make it vanish and reappear.
 final _confirmedOpensProvider = Provider<Map<String, _ConfirmedOpen>>((_) => <String, _ConfirmedOpen>{});
+
+/// SL / TP the server has CONFIRMED for an open position (a successful PATCH, or the engine's own push),
+/// and when. A positions refetch that started before the change committed can still return the OLD
+/// levels; they are laid over such a list so the chart line never goes back to a stale price.
+class _ConfirmedLevels {
+  _ConfirmedLevels(this.sl, this.tp) : at = DateTime.now();
+  final double? sl;
+  final double? tp;
+  final DateTime at;
+}
+
+final _confirmedLevelsProvider = Provider<Map<String, _ConfirmedLevels>>((_) => <String, _ConfirmedLevels>{});
 
 /// The last list shown for each account, kept outside the autoDispose provider. Leaving the chart
 /// drops the provider's listeners, and a rebuild with nobody listening (the 30 s reconcile tick)
@@ -105,7 +139,48 @@ class OpenPositionsNotifier extends AutoDisposeAsyncNotifier<List<Position>> {
         .map((e) => Position.fromJson(e as Map<String, dynamic>))
         .where((p) => !closed.contains(p.id))
         .toList();
-    return _withConfirmed(id, fetched, closed, startedAt);
+    return _withLevels(_withConfirmed(id, fetched, closed, startedAt), startedAt);
+  }
+
+  /// Confirmed SL / TP laid over a fetched list. A fetch that began before the change was confirmed may
+  /// carry the old levels, so the confirmed ones win; once the server list agrees (or the entry is old
+  /// enough that a later fetch must have seen it) the entry is dropped.
+  List<Position> _withLevels(List<Position> list, DateTime startedAt) {
+    final levels = ref.read(_confirmedLevelsProvider);
+    if (levels.isEmpty) return list;
+    return [
+      for (final p in list)
+        () {
+          final c = levels[p.id];
+          if (c == null) return p;
+          final agrees = p.slPrice == c.sl && p.tpPrice == c.tp;
+          if (agrees || (c.at.isBefore(startedAt) && DateTime.now().difference(c.at) > _kConfirmedGrace)) {
+            levels.remove(p.id);
+            return p;
+          }
+          return p.copyWith(slPrice: c.sl, tpPrice: c.tp);
+        }(),
+    ];
+  }
+
+  /// The server confirmed new SL / TP for an open position (null clears one): show them now, exactly as
+  /// confirmed, without waiting for a refetch or a later push.
+  ///
+  /// [fromPush] marks the engine's own periodic frames: those repeat the current levels all the time (no
+  /// change, nothing to do), and one that was already on its way when this device's change committed
+  /// still carries the OLD levels, so it never overrides a change confirmed in the last few seconds.
+  void applyConfirmedLevels(String id, {required double? sl, required double? tp, bool fromPush = false}) {
+    final levels = ref.read(_confirmedLevelsProvider);
+    final cur = state.valueOrNull;
+    final shown = cur?.where((p) => p.id == id).firstOrNull;
+    if (fromPush) {
+      final recent = levels[id];
+      if (recent != null && DateTime.now().difference(recent.at) < _kPushIgnoreAfterConfirm && (recent.sl != sl || recent.tp != tp)) return;
+      if (shown == null || (shown.slPrice == sl && shown.tpPrice == tp)) return;
+    }
+    levels[id] = _ConfirmedLevels(sl, tp);
+    if (cur == null) return;
+    state = AsyncData([for (final p in cur) p.id == id ? p.copyWith(slPrice: sl, tpPrice: tp) : p]);
   }
 
   /// Fetched rows plus confirmed opens the server list does not carry yet. A confirmed trade
@@ -343,6 +418,9 @@ final chartHistoryStateProvider =
 /// The batch is sized from the visible range (see [olderBatchFor]) and is never shown to the
 /// user as a page - it is just how the one continuous series is filled in.
 const int kOlderMinBatch = 500;
+
+/// Bars fetched when a chart series is opened for the first time.
+const int kFirstLoadBars = 800;
 const int kOlderMaxBatch = 5000;
 
 /// Bars kept in memory per series (MT5's "max bars in chart" idea). Older history beyond this
@@ -360,26 +438,108 @@ int olderBatchFor(int visibleBars, {bool urgent = false}) => urgent
 /// The broker's UTC offset in seconds (the gateway's `BROKER_UTC_OFFSET_SEC`), which decides where
 /// H4 and D1 bars begin. Fetched once per session from `/market/clock`; 0 when unavailable, which
 /// is the plain UTC grid and exactly what the client did before this existed.
-final brokerOffsetSecProvider = FutureProvider<int>((ref) async {
-  ref.watch(sessionEpochProvider);
+///
+/// The last value is saved: the next start has it at once (no round trip in front of the chart) and the clock is
+/// asked again behind it, replacing it only if it changed.
+const _kOffsetKey = 'bt_broker_offset_sec';
+
+Future<int?> _fetchBrokerOffset(Ref ref) async {
   try {
-    final api = ref.watch(apiClientProvider);
-    final d = await api.get('/market/clock');
+    final d = await ref.read(apiClientProvider).get('/market/clock');
     final v = d is Map ? d['brokerUtcOffsetSec'] : null;
     if (v is num) return v.toInt();
     return int.tryParse('${v ?? 0}') ?? 0;
   } catch (_) {
-    return 0;
+    return null;
   }
+}
+
+final brokerOffsetSecProvider = FutureProvider<int>((ref) async {
+  ref.watch(sessionEpochProvider);
+  ref.watch(apiClientProvider);
+  int? saved;
+  SharedPreferences? prefs;
+  try {
+    prefs = await SharedPreferences.getInstance();
+    saved = prefs.getInt(_kOffsetKey);
+  } catch (_) {}
+  if (saved != null) {
+    unawaited(_fetchBrokerOffset(ref).then((fresh) async {
+      if (fresh == null || fresh == saved) return;
+      try {
+        await prefs?.setInt(_kOffsetKey, fresh);
+        ref.invalidateSelf();
+      } catch (_) {}
+    }));
+    return saved;
+  }
+  final fresh = await _fetchBrokerOffset(ref);
+  if (fresh != null) unawaited(prefs?.setInt(_kOffsetKey, fresh) ?? Future<void>.value());
+  return fresh ?? 0;
 });
+
+// ── Candles kept on disk ─────────────────────────────────────────────────────────────────────────────
+// The newest bars of the series the user has opened are saved, so the next app start opens the chart on them at
+// once - no loader - while the current bars are fetched behind them and replace them. They are history only: the
+// live price, the forming bar and the buttons all come from the live feed, and the series hides any stored bar at or
+// after the bucket that is forming until the server has pushed it ([serverAuthoritativeSeries]).
+const _kDiskPrefix = 'bt_candles_v1|';
+const _kDiskIndex = 'bt_candles_index_v1';
+const _kDiskBars = 300;
+const _kDiskSeries = 24;
+
+String _diskKey(ChartReq r) => '$_kDiskPrefix${r.symbol}|${r.tf.api}';
+
+Future<List<Candle>?> _readDiskCandles(ChartReq req) async {
+  try {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString(_diskKey(req));
+    if (raw == null) return null;
+    final rows = jsonDecode(raw) as List;
+    final out = [
+      for (final r in rows)
+        Candle(t: (r[0] as num).toInt(), o: (r[1] as num).toDouble(), h: (r[2] as num).toDouble(), l: (r[3] as num).toDouble(), c: (r[4] as num).toDouble(), v: (r[5] as num).toDouble()),
+    ];
+    return out.isEmpty ? null : out;
+  } catch (_) {
+    return null; // missing, corrupt or no storage: just load from the network
+  }
+}
+
+Future<void> _writeDiskCandles(ChartReq req, List<Candle> candles) async {
+  try {
+    if (candles.isEmpty) return;
+    final p = await SharedPreferences.getInstance();
+    final tail = candles.length > _kDiskBars ? candles.sublist(candles.length - _kDiskBars) : candles;
+    await p.setString(_diskKey(req), jsonEncode([for (final c in tail) [c.t, c.o, c.h, c.l, c.c, c.v]]));
+    // Keep the most recently used series only, so the storage stays small.
+    final key = _diskKey(req);
+    final index = (p.getStringList(_kDiskIndex) ?? <String>[])..remove(key);
+    index.add(key);
+    while (index.length > _kDiskSeries) {
+      await p.remove(index.removeAt(0));
+    }
+    await p.setStringList(_kDiskIndex, index);
+  } catch (_) {/* best effort */}
+}
 
 /// Historical (completed) candles from the gateway. Cached per symbol+TF so
 /// changing timeframe after the first load does not wait on the network again.
 final candlesProvider = FutureProvider.autoDispose.family<List<Candle>, ChartReq>((ref, req) async {
-  // The offset decides where H4 / D1 bars begin, so it is known before any bar is placed.
-  await ref.watch(brokerOffsetSecProvider.future);
+  // The offset decides where H4 / D1 bars begin. It is watched (a change rebuilds the series) but not waited for
+  // first: it loads alongside the bars, not in front of them.
+  final offsetLoaded = ref.watch(brokerOffsetSecProvider.future);
   final cache = ref.read(_candleCacheProvider);
-  final cached = cache[req];
+  var cached = cache[req];
+  var fromDisk = false;
+  if (cached == null || cached.isEmpty) {
+    final disk = await _readDiskCandles(req);
+    if (disk != null) {
+      cached = disk;
+      fromDisk = true;
+      ref.read(_candleCacheProvider.notifier).state = {...ref.read(_candleCacheProvider), req: disk};
+    }
+  }
   // KeepAlive while this chart series is in use; cache outlives the provider.
   final link = ref.keepAlive();
   Timer? disposeTimer;
@@ -400,11 +560,15 @@ final candlesProvider = FutureProvider.autoDispose.family<List<Candle>, ChartReq
     ref.listen(socketEpochProvider, (_, __) {
       _refreshCandles(ref, req);
     });
+    // Shown from disk: the current bars are fetched right away and replace them.
+    if (fromDisk) Future.microtask(() => _refreshCandles(ref, req));
     return cached;
   }
 
-  final candles = await _fetchCandles(ref, req);
+  final both = await Future.wait<Object>([_fetchCandles(ref, req), offsetLoaded]);
+  final candles = both[0] as List<Candle>;
   ref.read(_candleCacheProvider.notifier).state = {...ref.read(_candleCacheProvider), req: candles};
+  unawaited(_writeDiskCandles(req, candles));
   return candles;
 });
 
@@ -413,8 +577,10 @@ Future<List<Candle>> _fetchCandles(Ref ref, ChartReq req, {int? before, int? lim
   final data = await api.get('/market/candles', query: {
     'symbol': req.symbol,
     'tf': req.tf.api,
-    // Deep history on first load; gateway caps apply server-side.
-    'limit': '${limit ?? (before == null ? 5000 : kOlderMinBatch)}',
+    // The first load is only the newest bars (enough for the first screen and the indicators): a deep 5000-bar
+    // answer was ~490 KB on M1 and the chart waited for all of it. Older bars follow in the background as the
+    // viewport nears the oldest loaded one (see [ChartHistoryLoader]), so nothing is lost - it just arrives later.
+    'limit': '${limit ?? (before == null ? kFirstLoadBars : kOlderMinBatch)}',
     if (before != null) 'before': '$before',
   }) as List;
   return data.map((e) => Candle.fromJson(e)).toList();
@@ -450,11 +616,11 @@ Future<void> _refreshCandles(Ref ref, ChartReq req) async {
       fresh = await _fetchCandles(ref, req); // gap: refill from a full tail
     }
     final cache = ref.read(_candleCacheProvider);
-    ref.read(_candleCacheProvider.notifier).state = {
-      ...cache,
-      req: _mergeKeepingOlder(cache[req], fresh),
-    };
-    ref.invalidate(candlesProvider(req));
+    final merged = _mergeKeepingOlder(cache[req], fresh);
+    ref.read(_candleCacheProvider.notifier).state = {...cache, req: merged};
+    unawaited(_writeDiskCandles(req, merged));
+    // Through the container: the series asks itself to be rebuilt, which the provider's own ref does not allow.
+    ref.container.invalidate(candlesProvider(req));
   } catch (_) {
     // Keep serving cache on refresh failure.
   }
@@ -524,6 +690,35 @@ class ChartHistoryLoader {
           st.copyWith(loadingOlder: false, retryAtMs: DateTime.now().millisecondsSinceEpoch + 5000);
     }
   }
+}
+
+/// Start loading [symbol]'s newest bars on the timeframe the chart will open on, without waiting for the chart:
+/// called when the user taps a symbol in Quotes and when the app starts, so by the time the Chart is on screen
+/// the request is already done (or well under way) and there is no loader. Safe to call repeatedly - the series
+/// is kept once loaded - and a failure is ignored, the chart then simply loads it itself.
+final chartWarmerProvider = Provider<void Function(String symbol)>((ref) => (String symbol) => unawaited(_warmChart(ref, symbol)));
+
+/// [symbol] empty = the symbol the chart was last on. The saved symbol and timeframe are read from storage rather
+/// than from the controllers, which restore them a moment after start - warming the default series instead of the
+/// one the chart will open on would be wasted work.
+Future<void> _warmChart(Ref ref, String symbol) async {
+  try {
+    String sym = symbol;
+    var tf = ref.read(chartTfProvider);
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (sym.isEmpty) sym = p.getString('bt_chart_symbol') ?? '';
+      final saved = p.getString('bt_chart_tf');
+      final hit = Timeframe.values.where((t) => t.name == saved);
+      if (hit.isNotEmpty) tf = hit.first;
+    } catch (_) {}
+    if (sym.isEmpty) return;
+    final req = candlesProvider(ChartReq(sym, tf));
+    // Listened to while it loads, so a failure is a plain error state here and not an unhandled one.
+    final sub = ref.container.listen<AsyncValue<List<Candle>>>(req, (_, __) {});
+    // A failed warm-up must not leave its error cached for the chart: drop it, the chart then loads afresh.
+    await ref.read(req.future).then((_) {}, onError: (_) => ref.invalidate(req)).whenComplete(sub.close);
+  } catch (_) {}
 }
 
 /// Warm every timeframe for [symbol] so TF chips switch instantly after first open.

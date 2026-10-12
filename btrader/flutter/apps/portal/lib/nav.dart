@@ -1,4 +1,6 @@
+import 'package:btrader_core/btrader_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'screens/charts_screen.dart';
@@ -46,6 +48,8 @@ class TraderNav {
   static void openChart(BuildContext context, String symbol) {
     final router = GoRouter.maybeOf(context);
     if (router != null) {
+      // The chart's data starts loading now, not after the Chart tab has been built.
+      ProviderScope.containerOf(context, listen: false).read(chartWarmerProvider)(symbol);
       router.go('/chart?symbol=${Uri.encodeComponent(symbol)}');
       return;
     }

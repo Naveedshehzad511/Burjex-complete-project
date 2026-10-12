@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import '../widgets/state_views.dart';
 import '../nav.dart';
 import '../services/sound_service.dart';
 import '../state/pending_orders.dart';
@@ -29,10 +30,17 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
   @override
   Widget build(BuildContext context) {
     final tc = Theme.of(context).extension<TradeColors>()!;
+    if (ref.watch(tradingAccountStatusProvider) == TradingAccountStatus.none) {
+      return Scaffold(appBar: AppBar(title: const Text('Trade')), body: const NoTradingAccountView(what: 'trade'));
+    }
     final accounts = ref.watch(accountsProvider).valueOrNull ?? const <Account>[];
     final liveAcc = ref.watch(liveAccountProvider);
     final id = ref.watch(activeAccountIdProvider);
-    final positions = ref.watch(openPositionsProvider);
+    // While another account is being opened (its login is in flight) the old account's data must not
+    // show as the new one's: the loading state is shown until the switch is done.
+    final switching = ref.watch(tradingSessionProvider.select((s) => s.loading));
+    final scoped = ref.watch(accountPositionsProvider);
+    final positions = switching ? const AsyncLoading<List<Position>>() : scoped;
     final livePL = ref.watch(livePositionProvider);
     final liveSnap = ref.watch(livePositionNotifierProvider);
     final acctCcy = ref.watch(activeAccountCurrencyProvider);
@@ -53,13 +61,14 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
     // while "No open trades"). Prefer engine WS P/L; else estimate from live quotes
     // so the row never sticks at 0.00 while the market moves.
     final posList = positions.valueOrNull ?? const <Position>[];
-    final balanceV = base?.balance ?? acc?.balance ?? 0;
-    final creditV = base?.credit ?? acc?.credit ?? 0;
+    // The live-merged account (engine snapshot over the REST row) - the same one Home and the account panel use.
+    final balanceV = acc?.balance ?? base?.balance ?? 0;
+    final creditV = acc?.credit ?? base?.credit ?? 0;
     double floatingV = 0;
     for (final p in posList) {
       floatingV += resolvePositionPl(p, livePl: livePL, quotes: quotes, symbols: symbols, snap: liveSnap, accountCurrency: acctCcy);
     }
-    final marginV = posList.isEmpty ? 0.0 : (base?.margin ?? acc?.margin ?? 0);
+    final marginV = posList.isEmpty ? 0.0 : (acc?.margin ?? base?.margin ?? 0);
     final equityV = balanceV + creditV + floatingV;
     final freeMarginV = equityV - marginV;
     final marginLevelV = marginV > 0 ? equityV / marginV * 100 : 0.0;
@@ -380,7 +389,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
             skipLoadingOnReload: true,
             skipLoadingOnRefresh: true,
             loading: () => const Padding(padding: EdgeInsets.all(30), child: Center(child: CircularProgressIndicator())),
-            error: (e, _) => Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('$e'))),
+            error: (e, _) => Padding(padding: const EdgeInsets.all(24), child: LoadErrorView(e, onRetry: () => ref.invalidate(openPositionsProvider))),
             data: (list) {
               if (list.isEmpty) {
                 return Padding(

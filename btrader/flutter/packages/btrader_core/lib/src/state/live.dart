@@ -148,6 +148,16 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
           break;
         }
         announce(tradeEvents.onPosition(data, id: id, closed: false), id);
+        // The engine's own confirmation of new SL / TP (this device, another device, or the platform): the
+        // chart line follows it at once, like it follows this device's own confirmed change.
+        if (data['opened'] != true && id.isNotEmpty && (data.containsKey('slPrice') || data.containsKey('tpPrice'))) {
+          ref.read(openPositionsProvider.notifier).applyConfirmedLevels(
+                id,
+                sl: double.tryParse('${data['slPrice']}'),
+                tp: double.tryParse('${data['tpPrice']}'),
+                fromPush: true,
+              );
+        }
         final sym = '${data['symbol'] ?? ''}';
         final q = sym.isEmpty ? null : ref.read(quotesProvider)[sym];
         // A position this session has not seen yet is a NEW trade. When the engine's `opened`
@@ -464,9 +474,20 @@ class LiveAccountNotifier extends StateNotifier<Map<String, Account>> {
   /// views (a trader's own account) don't need this — they self-correct.
   final Map<String, DateTime> seenAt = {};
 
+  /// The engine's own timestamp (ms) of the newest snapshot applied per account.
+  final Map<String, num> _engineTs = {};
+
   void set(Map<String, dynamic> snap) {
     final id = snap['accountId'] as String? ?? snap['id'] as String?;
     if (id == null) return;
+    // A snapshot that left the engine BEFORE one already applied (frames can arrive out of order across a reconnect
+    // or a batched flush) must not put older balance / equity / margin back.
+    final ts = snap['ts'];
+    if (ts is num) {
+      final last = _engineTs[id];
+      if (last != null && ts < last) return;
+      _engineTs[id] = ts;
+    }
     seenAt[id] = DateTime.now();
     final prev = state[id];
     // Merge into the existing account when possible so login / group metadata

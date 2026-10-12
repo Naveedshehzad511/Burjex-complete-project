@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../crm/crm.dart';
 import '../main.dart' show kNavy;
@@ -60,11 +63,41 @@ final _ibDashboardProvider = FutureProvider.autoDispose<Map<String, dynamic>>((r
 /// someone who is not one needs the request page.
 enum IbState { approved, pending, none }
 
-final ibStateProvider = FutureProvider.autoDispose<IbState>((ref) async {
-  final d = await ref.watch(_ibDashboardProvider.future);
+const _kIbStateKey = kCrmIbStateCacheKey;
+
+IbState _ibStateOf(Map<String, dynamic> d) {
   if (d['ib_profile'] != null) return IbState.approved;
   return d['pending_application'] == true ? IbState.pending : IbState.none;
+}
+
+/// The client's IB standing as the CRM reports it. It is kept for the whole session (not rebuilt each time the menu
+/// opens) with the last answer saved on disk, so the menu shows the right entry at once after a restart; the CRM is
+/// always asked again, and the state is re-read when an application is sent, when the app returns to the foreground
+/// and when the CRM session changes ([refreshIbState]).
+final ibStateProvider = FutureProvider<IbState>((ref) async {
+  ref.watch(crmSessionProvider.select((s) => s.token));
+  final prefs = await SharedPreferences.getInstance();
+  try {
+    final d = await ref.watch(crmDioProvider).get('/ib/dashboard/');
+    final data = (((d.data as Map)['data']) as Map).cast<String, dynamic>();
+    final st = _ibStateOf(data);
+    unawaited(prefs.setString(_kIbStateKey, st.name));
+    return st;
+  } catch (e) {
+    final saved = prefs.getString(_kIbStateKey);
+    final authEnded = e is DioException && e.response?.statusCode == 401;
+    final hit = IbState.values.where((s) => s.name == saved);
+    if (hit.isNotEmpty && !authEnded) return hit.first; // offline: the last known state, never a guess
+    rethrow;
+  }
 });
+
+/// Re-read the IB standing (and the dashboard behind it).
+void refreshIbState(WidgetRef ref) {
+  if (!ref.read(crmSessionProvider).authenticated) return;
+  ref.invalidate(ibStateProvider);
+  ref.invalidate(_ibDashboardProvider);
+}
 
 final _ibProgressProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final dio = ref.watch(crmDioProvider);
@@ -83,7 +116,7 @@ class IbDashboardScreen extends ConsumerWidget {
       actions: [
         IconButton(
           onPressed: () {
-            ref.invalidate(_ibDashboardProvider);
+            refreshIbState(ref);
             ref.invalidate(_ibProgressProvider);
           },
           icon: const Icon(Icons.refresh),
@@ -92,7 +125,22 @@ class IbDashboardScreen extends ConsumerWidget {
       child: dash.when(
         loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
         error: (e, _) => ListView(padding: const EdgeInsets.all(16), children: [ErrorBox(crmMessage(e, 'Could not load your IB dashboard.'))]),
-        data: (d) => RefreshIndicator(
+        data: (d) => d['ib_profile'] == null
+            // Not (yet) an IB: there is no dashboard to show, only the way to become one.
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.groups_outlined, size: 56),
+                    const SizedBox(height: 14),
+                    Text(d['pending_application'] == true ? 'Your IB application is under review' : 'You are not an Introducing Broker yet',
+                        textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 18),
+                    FilledButton(onPressed: () => context.go('/ib/apply'), style: navyButton(), child: Text(d['pending_application'] == true ? 'View application' : 'Apply to become an IB')),
+                  ]),
+                ),
+              )
+            : RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(_ibDashboardProvider);
             ref.invalidate(_ibProgressProvider);
@@ -421,6 +469,7 @@ class _IbApplyScreenState extends ConsumerState<IbApplyScreen> {
     try {
       final body = {for (final e in _answers.entries) 'question_${e.key}': e.value};
       await ref.read(crmDioProvider).post('/ib/apply/', data: body);
+      refreshIbState(ref); // the menu turns to the pending state now, without a restart
       if (mounted) setState(() => _submitted = true);
     } on DioException catch (e) {
       if (mounted) setState(() => _error = crmMessage(e, 'Could not submit your application.'));
@@ -509,6 +558,31 @@ class _IbApplyScreenState extends ConsumerState<IbApplyScreen> {
   @override
   Widget build(BuildContext context) {
     final form = ref.watch(_ibApplyFormProvider);
+    final ib = ref.watch(ibStateProvider).valueOrNull;
+    // An approved IB has no application to make, and one already sent is under review: the form is for
+    // someone who has not applied.
+    if (ib == IbState.approved || (ib == IbState.pending && !_submitted)) {
+      final approved = ib == IbState.approved;
+      return PortalPage(
+        title: 'IB Application',
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(approved ? Icons.verified_outlined : Icons.hourglass_top, size: 56, color: _kGreen),
+            const SizedBox(height: 14),
+            Text(approved ? 'You are an Introducing Broker' : 'Your application is under review',
+                textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Text(approved ? 'Your IB dashboard has your clients and commission.' : 'Our team will review it shortly.',
+                textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).hintColor)),
+            if (approved) ...[
+              const SizedBox(height: 18),
+              FilledButton(onPressed: () => context.go('/ib/dashboard'), style: navyButton(), child: const Text('Open IB dashboard')),
+            ],
+          ]),
+        ),
+      );
+    }
     return PortalPage(
       title: 'IB Application',
       child: _submitted
