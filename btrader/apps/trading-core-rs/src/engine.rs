@@ -787,7 +787,7 @@ impl Engine {
             "swap": 0.0,
             "openedAt": opened_at.to_rfc3339(),
         });
-        self.publish_after_fill_with(tenant_id, &account.id, &position_id, "opened", &snap, None, Some(position_json))
+        self.publish_after_fill_with(tenant_id, &account.id, &position_id, "opened", &snap, None, Some(position_json), None)
             .await;
 
         let result = ExecResult {

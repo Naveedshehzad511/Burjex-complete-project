@@ -487,8 +487,9 @@ impl Engine {
         kind: &str,
         snap: &Snapshot,
         profit: Option<f64>,
+        crm_extra: Option<serde_json::Value>,
     ) {
-        self.publish_after_fill_with(tenant_id, account_id, position_id, kind, snap, profit, None)
+        self.publish_after_fill_with(tenant_id, account_id, position_id, kind, snap, profit, None, crm_extra)
             .await;
     }
 
@@ -503,6 +504,7 @@ impl Engine {
         snap: &Snapshot,
         profit: Option<f64>,
         position_extra: Option<serde_json::Value>,
+        crm_extra: Option<serde_json::Value>,
     ) {
         let mut position = json!({
             "id": position_id,
@@ -541,10 +543,18 @@ impl Engine {
             }),
         )
         .await;
+        // The CRM pays the IB's commission from this event, so a close carries what that needs: the deal (the
+        // key that makes a repeated event a no-op), the symbol and the lots closed.
+        let mut crm_payload = json!({"login": snap.login, "positionId": position_id, "profit": profit});
+        if let (Some(obj), Some(extra)) = (crm_payload.as_object_mut(), crm_extra.as_ref().and_then(|v| v.as_object())) {
+            for (k, v) in extra {
+                obj.insert(k.clone(), v.clone());
+            }
+        }
         self.crm_outbox(
             tenant_id,
             if kind == "opened" { "position.opened" } else { "position.closed" },
-            json!({"login": snap.login, "positionId": position_id, "profit": profit}),
+            crm_payload,
         )
         .await;
     }

@@ -122,13 +122,23 @@ def btrader_webhook(request):
             try:
                 from ib.btrader_rebates import credit_btrader_close
 
-                credit_btrader_close(
+                outcome = credit_btrader_close(
                     login=_extract_login(data) or _extract_login(payload),
                     deal_id=str(data.get("dealId") or data.get("deal_id") or payload.get("dealId") or ""),
                     symbol=str(data.get("symbol") or payload.get("symbol") or ""),
                     lots=data.get("volume") if data.get("volume") is not None else payload.get("volume"),
                     position_id=str(data.get("positionId") or data.get("position_id") or payload.get("positionId") or ""),
                 )
+                # A close that pays nobody is normal (demo, no IB, no rule, a repeat); say which, so a missing
+                # commission can be traced instead of silently never appearing.
+                if not outcome.get("credited"):
+                    logger.info(
+                        "BTrader IB rebate skipped: %s (event=%s login=%s symbol=%s)",
+                        outcome.get("reason"),
+                        event_id,
+                        _extract_login(data) or _extract_login(payload),
+                        data.get("symbol") or payload.get("symbol") or "",
+                    )
             except Exception:
                 logger.exception("BTrader IB rebate failed type=%s id=%s", event_type, event_id)
     except Exception:

@@ -660,8 +660,16 @@ impl Engine {
             floating_pl: after.floating_pl,
             ts: now_ms(),
         };
-        self.publish_after_fill(&tenant_id, &account_id, &position_id, "closed", &snap, Some(realized))
-            .await;
+        self.publish_after_fill(
+            &tenant_id,
+            &account_id,
+            &position_id,
+            "closed",
+            &snap,
+            Some(realized),
+            Some(json!({"dealId": deal_id, "symbol": symbol, "volume": vol, "partial": partial})),
+        )
+        .await;
         Ok(ExecResult {
             accepted: true,
             order_id: None,
