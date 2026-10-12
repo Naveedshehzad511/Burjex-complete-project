@@ -72,6 +72,7 @@ class BTraderClient:
         self.ticks_sent = 0
         self.candles_sent = 0
         self.failures = 0
+        self.candle_failures = 0
         self._tick_lock = threading.Lock()
         self._tick_pending = None  # latest batch waiting to ship (coalesced)
         self._tick_worker = threading.Thread(target=self._tick_sender_loop, daemon=True)
@@ -138,9 +139,13 @@ class BTraderClient:
                     self.candles_sent += 1
             else:
                 self.failures += 1
+                if not tick:
+                    self.candle_failures += 1
                 log("WARN", f"ingest {r.status_code}: {r.text[:200]}")
         except Exception as e:
             self.failures += 1
+            if not tick:
+                self.candle_failures += 1
             log("WARN", f"ingest post failed: {e}")
 
 
@@ -231,6 +236,8 @@ class Mt5Source:
     def __init__(self, cfg):
         self.cfg = cfg
         self.m = MT5Manager.ManagerAPI()
+        # Backfill and candle refresh run on separate threads; never overlap ChartRequests.
+        self._chart_lock = threading.Lock()
 
     def connect(self):
         pump = MT5Manager.ManagerAPI.EnPumpModes.PUMP_MODE_FULL
@@ -334,7 +341,8 @@ class Mt5Source:
 
     def m1_bars(self, symbol, from_unix, to_unix):
         """Return list of (t,o,h,l,c,v) M1 bars (epoch seconds)."""
-        bars = self.m.ChartRequest(symbol, int(from_unix), int(to_unix))
+        with self._chart_lock:
+            bars = self.m.ChartRequest(symbol, int(from_unix), int(to_unix))
         if not bars:
             return []
         out = []
@@ -750,6 +758,10 @@ def run(cfg):
         def failures(self):
             return sum(c.failures for c in clients)
 
+        @property
+        def candle_failures(self):
+            return sum(c.candle_failures for c in clients)
+
     client = FanoutClient()
     log("INFO", "feed ingest targets=" + ",".join(urls))
     suffix = cfg.get("SymbolSuffixStrip", "")
@@ -785,6 +797,13 @@ def run(cfg):
                         log("INFO", "candle history seeded")
                     except Exception as e:
                         log("WARN", f"candle seed failed: {e}")
+                    # Deep one-time history on its own thread so the 45s refresh keeps running.
+                    if int(cfg.get("BackfillDays", 0) or 0) > 0 and not session_stop.is_set():
+                        threading.Thread(
+                            target=backfill_candles,
+                            args=(src, client, cfg, feed_syms, suffix, session_stop, canon_by_mt5),
+                            daemon=True,
+                        ).start()
                     if not session_stop.is_set():
                         candle_refresh_loop(
                             src, client, cfg, feed_syms, suffix, session_stop, canon_by_mt5
@@ -993,6 +1012,163 @@ def push_window(src, client, cfg, symbols, suffix, frm, to, want_bars=1500, chun
                         time.sleep(pace_ms / 1000.0)
 
 
+# ============================================================================
+#  One-time deep history backfill (BackfillDays > 0).
+#
+#  The startup seed is capped (HistoryBars) because it re-runs on every start.
+#  This walks the full MT5 history once, a week at a time, and records each
+#  finished symbol in backfill_state.json so a restart resumes instead of
+#  starting over. Delete that file to run it again.
+#
+#  Depth is per TF: the portal holds at most 100k bars per chart, and the API
+#  rolls every TF up from M1 while M1 exists, so deep M1/M5 only costs disk.
+# ============================================================================
+BACKFILL_TF_DAYS_DEFAULT = {"1m": 90, "5m": 400}
+# After a reconnect the new session's backfill waits for the old one to stop,
+# so two threads never share backfill_state.json.
+_BACKFILL_LOCK = threading.Lock()
+
+
+def _backfill_tf_days(cfg):
+    days = int(cfg.get("BackfillDays", 0) or 0)
+    if days <= 0:
+        return {}
+    over = cfg.get("BackfillDaysByTf") or {}
+    return {
+        tf: max(1, min(int(over.get(tf, BACKFILL_TF_DAYS_DEFAULT.get(tf, days))), days))
+        for tf in _candle_tfs(cfg)
+    }
+
+
+def _load_backfill_state(path, key):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            st = json.load(f)
+        if st.get("key") == key:
+            return st
+    except Exception:
+        pass
+    return {"key": key, "done": [], "complete": False}
+
+
+def _save_backfill_state(path, st):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(st, f, indent=1)
+    os.replace(tmp, path)
+
+
+def backfill_candles(src, client, cfg, symbols, suffix, stop, canon_by_mt5=None):
+    with _BACKFILL_LOCK:
+        if stop.is_set():
+            return
+        try:
+            _backfill_run(src, client, cfg, symbols, suffix, stop, canon_by_mt5)
+        except Exception as e:
+            log("WARN", f"backfill stopped: {e} (resumes on next start)")
+
+
+def _backfill_run(src, client, cfg, symbols, suffix, stop, canon_by_mt5=None):
+    tf_days = _backfill_tf_days(cfg)
+    if not tf_days:
+        return
+    state_path = cfg.get("_backfill_state_path") or "backfill_state.json"
+    key = json.dumps(tf_days, sort_keys=True)
+    st = _load_backfill_state(state_path, key)
+    if st.get("complete"):
+        log("INFO", f"backfill already complete {key} (delete {os.path.basename(state_path)} to redo)")
+        return
+
+    canon_by_mt5 = canon_by_mt5 or {}
+    seed_syms = _seed_symbol_set(cfg, symbols, suffix, canon_by_mt5)
+    done = set(st.get("done") or [])
+    todo = [s for s in seed_syms if (canon_by_mt5.get(s) or feed_canon(s, suffix)) not in done]
+    try:
+        raw_off = cfg.get("BrokerUtcOffsetSec")
+        off = int((broker_utc_offset_sec(src) if raw_off is None else raw_off) or 0)
+    except Exception:
+        off = 0
+    chunk_sec = max(1, int(cfg.get("BackfillChunkDays", cfg.get("HistoryChunkDays", 7)))) * 86400
+    pace = max(0, int(cfg.get("BackfillPostPaceMs", cfg.get("CandlePostPaceMs", 40)))) / 1000.0
+
+    # Every window starts on a broker midnight and chunks are whole days, so no
+    # D1/H4 bucket is ever split across two chunks, and the API's M1 -> stored-TF
+    # seam falls exactly on a day boundary.
+    def day_floor(t):
+        return ((t + off) // 86400) * 86400 - off
+
+    now = int(time.time())
+    tf_from = {tf: day_floor(now - d * 86400) for tf, d in tf_days.items()}
+    start = min(tf_from.values())
+    log("INFO", f"backfill: {len(todo)} of {len(seed_syms)} symbol(s) to go, days per TF {key}")
+
+    for n, sym in enumerate(todo, 1):
+        out_sym = canon_by_mt5.get(sym) or feed_canon(sym, suffix)
+        fails_before = client.candle_failures
+        ok = True
+        sent = 0
+        # Per-TF buffer: a 7-day chunk is only ~7 D1 bars, so post in full 800-bar
+        # bodies instead of one tiny POST per TF per chunk.
+        pending = {tf: [] for tf in tf_from}
+
+        def flush(tf, all_=False):
+            nonlocal sent
+            buf = pending[tf]
+            while len(buf) >= 800 or (all_ and buf):
+                part, buf[:] = buf[:800], buf[800:]
+                client.send_candles(
+                    out_sym,
+                    tf,
+                    [{"t": b[0], "o": b[1], "h": b[2], "l": b[3], "c": b[4], "v": b[5]} for b in part],
+                )
+                sent += len(part)
+                if pace:
+                    time.sleep(pace)
+
+        cur = start
+        while cur < now:
+            if stop.is_set():
+                log("INFO", f"backfill paused at {out_sym}; resumes on next start")
+                return
+            end = min(cur + chunk_sec, now)
+            try:
+                m1 = [b for b in src.m1_bars(sym, cur, end) if cur <= b[0] < end]
+            except Exception as e:
+                log("WARN", f"backfill {out_sym} {cur}-{end}: {e}")
+                ok = False
+                m1 = []
+            if m1:
+                for tf, frm in tf_from.items():
+                    if end <= frm:
+                        continue
+                    sec = TF_SECONDS[tf]
+                    # Closed bars only: the forming tip belongs to the live feed / 45s refresh,
+                    # and a backfill copy arriving late would rewind it.
+                    pending[tf].extend(
+                        b for b in aggregate(m1, sec, broker_offset_sec=off) if b[0] >= frm and b[0] + sec <= now
+                    )
+                    flush(tf)
+            cur = end
+        for tf in pending:
+            flush(tf, all_=True)
+        if ok and client.candle_failures == fails_before:
+            done.add(out_sym)
+            st["done"] = sorted(done)
+            _save_backfill_state(state_path, st)
+            log("INFO", f"backfill {n}/{len(todo)} {out_sym}: {sent} bar(s)")
+        else:
+            log("WARN", f"backfill {n}/{len(todo)} {out_sym}: errors, will retry on next start")
+
+    if len(done) >= len({canon_by_mt5.get(s) or feed_canon(s, suffix) for s in seed_syms}):
+        st["complete"] = True
+        _save_backfill_state(state_path, st)
+        log("INFO", "backfill complete")
+    else:
+        log("WARN", "backfill finished with errors; restart the bridge to retry the failed symbols")
+
+
 if __name__ == "__main__":
     cfg_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-    run(load_config(cfg_path))
+    cfg = load_config(cfg_path)
+    cfg["_backfill_state_path"] = os.path.join(os.path.dirname(os.path.abspath(cfg_path)), "backfill_state.json")
+    run(cfg)
