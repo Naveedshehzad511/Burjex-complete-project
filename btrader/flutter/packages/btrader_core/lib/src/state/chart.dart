@@ -550,14 +550,18 @@ final candlesProvider = FutureProvider.autoDispose.family<List<Candle>, ChartReq
   ref.onResume(() => disposeTimer?.cancel());
   ref.onDispose(() => disposeTimer?.cancel());
 
+  // Catching up after a reconnect (the app came back from the background, the network returned) is set up whatever way the
+  // series was first opened - from memory, from the saved copy or by a first download. It used to be set up only when bars
+  // were already held, so a chart opened with nothing cached never re-synchronised on a reconnect until something else
+  // happened to rebuild it. Bars that closed while the socket was down were never pushed; the stored (final) ones are what
+  // the chart shows for them. A refresh with nothing held yet is skipped: the first download is the one in flight.
+  ref.listen(socketEpochProvider, (_, __) {
+    _refreshCandles(ref, req);
+  });
+
   // Soft background refresh only when we already have data (don't blank UI).
   if (cached != null && cached.isNotEmpty) {
     ref.listen(_chartTicker, (_, __) {
-      _refreshCandles(ref, req);
-    });
-    // Bars that closed while the socket was down were never pushed; the stored (final) ones are
-    // what the chart shows for them, so fetch them as soon as the socket is back.
-    ref.listen(socketEpochProvider, (_, __) {
       _refreshCandles(ref, req);
     });
     // Shown from disk: the current bars are fetched right away and replace them.
@@ -603,26 +607,61 @@ List<Candle> _mergeKeepingOlder(List<Candle>? existing, List<Candle> fresh) {
   return [for (final t in times) byT[t]!];
 }
 
-/// Latest-tail size for the 30s soft refresh. The full 5000-bar fetch is only needed when the
-/// tail does not overlap what is cached (e.g. the app was asleep for hours) - otherwise it
-/// just re-downloaded and re-merged the whole history every 30 seconds.
+/// Latest-tail size for the 30s soft refresh: enough to overlap what is cached when the app was only briefly away.
 const int _kRefreshTail = 600;
 
+/// How many pages (each [kFirstLoadBars] bars) a gap behind the newest bars may be filled with before the stale bars
+/// are dropped instead. Past that the missing stretch is longer than it is worth fetching in one go: the chart keeps
+/// the contiguous recent bars and the older ones load as the user scrolls back (the server decides how far).
+const int _kGapMaxPages = 12;
+
+/// Fresh bars that do not reach back to [haveLastT] leave a hole between what is held and what just arrived (the app was
+/// closed or in the background for a while). Fetch the missing stretch backwards from the fresh bars with the same `before`
+/// cursor the scroll-back uses, one small page at a time, until it meets the held bars, the server has nothing earlier
+/// (a genuine gap: a closed market, or history the server does not have - kept as it is), or the budget is spent.
+///
+/// Returns the bars to merge and whether the held bars are still cut off from them ([cutOff]).
+Future<({List<Candle> bars, bool cutOff})> _bridgeGap(Ref ref, ChartReq req, List<Candle> fresh, int haveLastT) async {
+  var bars = fresh;
+  for (var page = 0; page < _kGapMaxPages && bars.isNotEmpty && bars.first.t > haveLastT; page++) {
+    final older = await _fetchCandles(ref, req, before: bars.first.t, limit: kFirstLoadBars);
+    final strictlyOlder = older.where((c) => c.t < bars.first.t).toList()..sort((x, y) => x.t.compareTo(y.t));
+    if (strictlyOlder.isEmpty) return (bars: bars, cutOff: false); // the server has nothing earlier: a real gap stays
+    bars = [...strictlyOlder, ...bars];
+  }
+  return (bars: bars, cutOff: bars.isNotEmpty && bars.first.t > haveLastT);
+}
+
+final Set<ChartReq> _refreshing = <ChartReq>{};
+
 Future<void> _refreshCandles(Ref ref, ChartReq req) async {
+  final held = ref.read(_candleCacheProvider)[req];
+  if (held == null || held.isEmpty) return; // the first download is still the one in flight
+  if (!_refreshing.add(req)) return; // one synchronisation per series at a time (ticker, resume and reconnect can overlap)
   try {
     final have = ref.read(_candleCacheProvider)[req];
-    var fresh = await _fetchCandles(ref, req, limit: have == null || have.isEmpty ? null : _kRefreshTail);
-    if (have != null && have.isNotEmpty && fresh.isNotEmpty && fresh.first.t > have.last.t) {
-      fresh = await _fetchCandles(ref, req); // gap: refill from a full tail
+    final holding = have != null && have.isNotEmpty;
+    var fresh = await _fetchCandles(ref, req, limit: holding ? _kRefreshTail : null);
+    var dropHeld = false;
+    if (holding && fresh.isNotEmpty && fresh.first.t > have.last.t) {
+      final bridged = await _bridgeGap(ref, req, fresh, have.last.t);
+      fresh = bridged.bars;
+      dropHeld = bridged.cutOff; // too long to fill now: do not leave a hole, keep the contiguous recent bars
     }
     final cache = ref.read(_candleCacheProvider);
-    final merged = _mergeKeepingOlder(cache[req], fresh);
+    final merged = dropHeld ? fresh : _mergeKeepingOlder(cache[req], fresh);
     ref.read(_candleCacheProvider.notifier).state = {...cache, req: merged};
+    if (dropHeld) {
+      // The bars before the kept ones were dropped: older history may be asked for again.
+      ref.read(chartHistoryStateProvider(req).notifier).state = const ChartHistoryState();
+    }
     unawaited(_writeDiskCandles(req, merged));
     // Through the container: the series asks itself to be rebuilt, which the provider's own ref does not allow.
     ref.container.invalidate(candlesProvider(req));
   } catch (_) {
     // Keep serving cache on refresh failure.
+  } finally {
+    _refreshing.remove(req);
   }
 }
 
