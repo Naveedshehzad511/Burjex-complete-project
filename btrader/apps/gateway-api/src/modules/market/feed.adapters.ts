@@ -3,11 +3,18 @@ import { Candle, CandleQuery, ChartFeedAdapter, Timeframe, TF_SECONDS } from './
 
 /**
  * Internal candle store — serves OHLC from B-Trader's market_candles table
- * (MT5 ChartRequest M1 pushed by the bridge).
+ * (MT5 history pushed by the bridge / history uploader, plus the live engine).
  *
- * Spec: M1 is the only base. Higher TFs are pure M1 rollups (same OHLC rules
- * as MT5 Terminal / mt5_bridge.aggregate). Pre-baked TF rows are ignored when
- * M1 coverage exists so API and mobile never disagree.
+ * Every TF is stored as its own series: the uploaders push MT5's bars for each
+ * TF and the live candle engine keeps each forming bar current. Those stored
+ * series reach back as far as the broker's history, while M1 usually covers
+ * only a few weeks — so higher TFs are served from storage, and an M1 rollup
+ * is only the fallback for a TF that has no stored rows yet (mid-seed).
+ *
+ * Rolling up from M1 first used to end the chart where M1 ended: the page
+ * holding the truncated first M1 day rolled up to nothing, and an empty page
+ * tells the client the history is exhausted, so the stored years behind it
+ * were never requested.
  */
 export class InternalAdapter implements ChartFeedAdapter {
   readonly name = 'internal';
@@ -20,8 +27,18 @@ export class InternalAdapter implements ChartFeedAdapter {
       return loadSeries(symbol, '1m', q.limit, before);
     }
 
-    // Prefer deep M1 → rollup (authoritative). Fall back to stored TF only if
-    // M1 is empty (legacy / mid-seed). `before` pages back through the SAME M1
+    if (q.tf === '1w' || q.tf === '1mn') {
+      const d1 = await loadSeries(symbol, '1d', 5000, before);
+      if (d1.length > 0) {
+        const bucket = q.tf === '1w' ? weekBucketUtc : monthBucketUtc;
+        return aggregateCandles(d1, bucket).slice(-q.limit);
+      }
+    } else {
+      const stored = await loadSeries(symbol, q.tf, q.limit, before);
+      if (stored.length > 0) return stored;
+    }
+
+    // No stored series for this TF: roll it up from M1. `before` pages back through the SAME M1
     // window so a paged rollup lines up with what a fresh (unpaged) load would
     // have produced for that span.
     // History pages may read a deeper M1 window than the live tail: a page of
@@ -38,14 +55,7 @@ export class InternalAdapter implements ChartFeedAdapter {
       if (m1.length >= m1Need && rolled.length > 1) rolled = rolled.slice(1);
       return rolled.slice(-q.limit);
     }
-
-    // Legacy fallback: stored series / D1→W1/MN.
-    if (q.tf === '1w' || q.tf === '1mn') {
-      const d1 = await loadSeries(symbol, '1d', 5000, before);
-      const bucket = q.tf === '1w' ? weekBucketUtc : monthBucketUtc;
-      return aggregateCandles(d1, bucket).slice(-q.limit);
-    }
-    return loadSeries(symbol, q.tf, q.limit, before);
+    return [];
   }
 }
 
