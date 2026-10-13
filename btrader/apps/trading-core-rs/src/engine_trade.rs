@@ -660,6 +660,7 @@ impl Engine {
             floating_pl: after.floating_pl,
             ts: now_ms(),
         };
+        let client_symbol = self.client_symbol_for(group_id.as_deref(), &dummy_sym.id, &symbol).await;
         self.publish_after_fill(
             &tenant_id,
             &account_id,
@@ -667,7 +668,7 @@ impl Engine {
             "closed",
             &snap,
             Some(realized),
-            Some(json!({"dealId": deal_id, "symbol": symbol, "volume": vol, "partial": partial})),
+            Some(json!({"dealId": deal_id, "symbol": symbol, "clientSymbol": client_symbol, "volume": vol, "partial": partial})),
         )
         .await;
         Ok(ExecResult {

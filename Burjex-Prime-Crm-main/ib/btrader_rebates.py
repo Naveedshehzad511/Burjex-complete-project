@@ -29,6 +29,11 @@ def _dec(value, default="0") -> Decimal:
         return Decimal(default)
 
 
+def _base_symbol(name: str) -> str:
+    """XAUUSD.s / XAUUSD.e / XAUUSD -> XAUUSD (the instrument, without the client's suffix)."""
+    return (name or "").strip().split(".")[0].upper()
+
+
 def resolve_btrader_rebate_per_lot(*, ib_user: User, symbol: str) -> Decimal:
     """Return $ paid to the IB for 1.00 lot on this BTrader symbol, else 0."""
     name = (symbol or "").strip()
@@ -38,12 +43,20 @@ def resolve_btrader_rebate_per_lot(*, ib_user: User, symbol: str) -> Decimal:
         is_active=True,
         platform=IBCommissionMatrixRule.Platform.BTRADER,
         commission_mode=IBCommissionMatrixRule.CommissionMode.FIXED_PER_LOT,
-        matrix_symbol_name__iexact=name,
     )
     profile = IBProfile.objects.filter(user=ib_user).select_related("ib_level").first()
     if profile and profile.ib_level_id:
         qs = qs.filter(ib_level_id=profile.ib_level_id)
-    row = qs.order_by("-priority", "-id").first()
+    ordered = qs.order_by("-priority", "-id")
+    row = ordered.filter(matrix_symbol_name__iexact=name).first()
+    if not row:
+        # The engine names the instrument it trades (XAUUSD); an administrator picks rules by the client's name for it
+        # (XAUUSD.s). When nothing matches the exact name, a rule for the same instrument under a client suffix applies.
+        base = _base_symbol(name)
+        for cand in ordered:
+            if _base_symbol(cand.matrix_symbol_name) == base:
+                row = cand
+                break
     if not row:
         return _ZERO
     rate = _dec(row.value)

@@ -479,6 +479,51 @@ impl Engine {
             .collect()
     }
 
+    /// The symbol name this account's client sees (e.g. XAUUSD.s): the mapping of its trading group, else the group's
+    /// symbol pack, else the engine symbol itself. It is the name an administrator picks when setting an IB commission
+    /// rule, so the CRM can match the rule to the trade.
+    pub(crate) async fn client_symbol_for(&self, group_id: Option<&str>, symbol_id: &str, symbol: &str) -> String {
+        let Some(gid) = group_id else {
+            return symbol.to_string();
+        };
+        if let Ok(Some(r)) = sqlx::query(
+            r#"SELECT "clientSymbol" FROM trading_group_symbol_mappings
+               WHERE "tradingGroupId"=$1 AND enabled=true AND ("symbolId"=$2 OR upper("lpSymbol")=upper($3))
+               ORDER BY ("symbolId"=$2) DESC LIMIT 1"#,
+        )
+        .bind(gid)
+        .bind(symbol_id)
+        .bind(symbol)
+        .fetch_optional(&self.pool)
+        .await
+        {
+            if let Ok(c) = r.try_get::<String, _>("clientSymbol") {
+                if !c.trim().is_empty() {
+                    return c;
+                }
+            }
+        }
+        if let Ok(Some(r)) = sqlx::query(
+            r#"SELECT i."clientSymbol" AS cs FROM client_symbol_group_items i
+               JOIN trading_groups g ON g."clientSymbolGroupId" = i."groupId"
+               WHERE g.id=$1 AND i.enabled=true AND (i."symbolId"=$2 OR upper(i."lpSymbol")=upper($3))
+               ORDER BY (i."symbolId"=$2) DESC LIMIT 1"#,
+        )
+        .bind(gid)
+        .bind(symbol_id)
+        .bind(symbol)
+        .fetch_optional(&self.pool)
+        .await
+        {
+            if let Ok(c) = r.try_get::<String, _>("cs") {
+                if !c.trim().is_empty() {
+                    return c;
+                }
+            }
+        }
+        symbol.to_string()
+    }
+
     pub(crate) async fn publish_after_fill(
         &self,
         tenant_id: &str,

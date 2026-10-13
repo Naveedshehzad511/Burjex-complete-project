@@ -125,7 +125,10 @@ def btrader_webhook(request):
                 outcome = credit_btrader_close(
                     login=_extract_login(data) or _extract_login(payload),
                     deal_id=str(data.get("dealId") or data.get("deal_id") or payload.get("dealId") or ""),
-                    symbol=str(data.get("symbol") or payload.get("symbol") or ""),
+                    # The client's name for the instrument (what the admin's rule is set on), else the engine's.
+                    symbol=str(
+                        data.get("clientSymbol") or payload.get("clientSymbol") or data.get("symbol") or payload.get("symbol") or ""
+                    ),
                     lots=data.get("volume") if data.get("volume") is not None else payload.get("volume"),
                     position_id=str(data.get("positionId") or data.get("position_id") or payload.get("positionId") or ""),
                 )
