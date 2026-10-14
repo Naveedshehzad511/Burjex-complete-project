@@ -173,13 +173,10 @@ class TradeSymbol {
     return null;
   }
 
-  /// The cost text of a Quotes row. A commission-only group shows its commission and no spread
-  /// number; any other group shows its spread in points with the dollar cost of 1.00 lot.
-  String quoteCostLabel(int spreadPoints, {String currency = 'USD'}) {
-    if (isCommissionOnly) return commissionText(currency: currency) ?? '';
-    final usd = dollarsPerLot(spreadPoints);
-    return usd == null ? '$spreadPoints' : '$spreadPoints · ${_money(usd, currency)} / lot';
-  }
+  /// The spread shown on a Quotes row, in points (like MT5's spread column). A commission-only
+  /// group shows 0; any other group shows the live spread, which already follows the admin's
+  /// configured spread. Display only: prices and charges are not affected.
+  String quoteCostLabel(int spreadPoints) => isCommissionOnly ? '0' : '$spreadPoints';
 
   /// The pricing lines of the symbol properties sheet, from the admin's configuration.
   List<(String, String)> pricingRows({String currency = 'USD'}) {
