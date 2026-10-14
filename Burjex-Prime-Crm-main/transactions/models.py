@@ -177,6 +177,15 @@ class Transaction(models.Model):
     # Payment gateway reference / blockchain tx hash
     reference = models.CharField(max_length=200, blank=True)
     account_details = models.TextField(blank=True, default="")
+    # Withdrawals only: the live trading account the money is taken from. Null = the wallet (the
+    # original behaviour). Set when the client withdraws directly from a trading account.
+    trading_account = models.ForeignKey(
+        "admin_panel.TradingAccount",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="withdraw_transactions",
+    )
 
     # Uploaded payment screenshot/receipt (optional).
     # For deposits, admins can review this on approval screens.

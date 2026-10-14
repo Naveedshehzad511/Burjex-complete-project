@@ -44,13 +44,14 @@ class HistoryScreen extends ConsumerWidget {
             if (d.isTrade) {
               profit += d.profit;
               swap += d.swap;
-              commission += d.commission;
             } else if (d.type == 'WITHDRAWAL') {
               withdrawal += d.amount;
             } else if (_balanceTypes.contains(d.type)) {
               deposit += d.amount;
             }
           }
+          // Commission is debited at execution and lives on the OPEN deals; see totalCommission.
+          commission = totalCommission(all);
           final balance = all.isNotEmpty ? all.first.balanceAfter : 0;
 
           final suffix = ref.watch(clientSuffixProvider);

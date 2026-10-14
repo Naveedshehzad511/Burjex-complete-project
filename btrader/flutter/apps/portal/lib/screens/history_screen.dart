@@ -184,13 +184,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             if (d.isTrade) {
               profit += d.profit;
               swap += d.swap;
-              commission += d.commission;
             } else if (d.type == 'WITHDRAWAL') {
               withdrawal += d.amount;
             } else if (_balanceTypes.contains(d.type)) {
               deposit += d.amount;
             }
           }
+          // Commission is debited when a trade is executed, so it sits on the OPEN deals (which
+          // are not rows of their own here); positions opened earlier still carry it on their close.
+          commission = totalCommission(all);
           final balance = all.isNotEmpty ? all.first.balanceAfter : 0;
 
           final suffix = ref.watch(clientSuffixProvider);
@@ -204,6 +206,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             for (final d in rows)
               _HistoryRow(
                 d: d,
+                commission: d.isTrade ? tradeRowCommission(d) : 0,
                 tc: tc,
                 suffix: suffix,
                 expanded: d.isTrade && _expandedId == d.id,
@@ -245,8 +248,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 }
 
 class _HistoryRow extends StatelessWidget {
-  const _HistoryRow({required this.d, required this.tc, required this.suffix, this.expanded = false, this.onTap});
+  const _HistoryRow({required this.d, required this.tc, required this.suffix, this.commission = 0, this.expanded = false, this.onTap});
   final Deal d;
+
+  /// Commission for a closed-trade row: the close deal's own plus the one debited at execution.
+  final double commission;
   final String suffix;
   final TradeColors tc;
 
@@ -297,7 +303,7 @@ class _HistoryRow extends StatelessWidget {
           ),
           AnimatedCrossFade(
             firstChild: const SizedBox(width: double.infinity),
-            secondChild: _DealDetails(d: d),
+            secondChild: _DealDetails(d: d, commission: commission),
             crossFadeState: expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 160),
             sizeCurve: Curves.easeInOut,
@@ -331,8 +337,9 @@ class _HistoryRow extends StatelessWidget {
 /// the API actually returned one. Every value comes straight off [Deal];
 /// nothing here is invented when the backend didn't provide it.
 class _DealDetails extends StatelessWidget {
-  const _DealDetails({required this.d});
+  const _DealDetails({required this.d, required this.commission});
   final Deal d;
+  final double commission;
 
   /// The real position/deal id, shortened for display the same way the rest
   /// of the app shortens ids for on-screen tickets (never a fabricated number).
@@ -393,7 +400,7 @@ class _DealDetails extends StatelessWidget {
           ]),
         ),
         line('S / L:', sl, 'Swap:', money(d.swap)),
-        line('T / P:', tp, 'Commission:', money(d.commission)),
+        line('T / P:', tp, 'Commission:', money(commission)),
         if (comment != null) ...[
           const SizedBox(height: 2),
           Text(comment, style: labelStyle.copyWith(fontStyle: FontStyle.italic)),

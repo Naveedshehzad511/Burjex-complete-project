@@ -5,6 +5,7 @@ import { BtError, BtErrorCode, CrmAccountInfo, CrmPosition, CrmDeal, CrmTradingS
 import { positionProfit, resolveFxFactor } from '@btrader/engine-core';
 import { FinancialService } from '../financial/financial.service';
 import { EngineProvider } from '../trading/engine.provider';
+import { totalCommission } from '../../common/position-commission';
 
 const num = (v: any) => (v == null ? 0 : Number(v));
 
@@ -241,7 +242,9 @@ export class CrmService {
         slPrice: p.slPrice ? num(p.slPrice) : undefined,
         tpPrice: p.tpPrice ? num(p.tpPrice) : undefined,
         swap: num(p.swap),
-        commission: num(p.commission),
+        // What was debited at open plus anything still to be realized at close. `profit` above uses
+        // only the latter: the former is already inside the balance.
+        commission: totalCommission(p),
         profit,
         openedAt: p.openedAt.toISOString(),
       };

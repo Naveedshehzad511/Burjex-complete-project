@@ -21,6 +21,7 @@ from admin_panel.models import ComplianceSettings, Match2PayIntegrationSettings,
 from admin_panel.templated_mail import send_event_email
 from enterprise.audit import get_client_ip
 from transactions.models import BalanceLedger, Match2PayTransaction, PaymentGateway, Transaction
+from transactions import trading_withdraw as trading_withdraw_service
 from transactions.real_ledger import filter_real_ledger_transactions
 from transactions.services.match2pay_client import (
     ALLOWED_NETWORKS,
@@ -409,11 +410,18 @@ def create_withdraw(request, user, data: dict) -> tuple[bool, dict]:
     if not gateway.client_can_use():
         return False, {"message": "This withdrawal method is temporarily under maintenance."}
 
-    withdraw_from = (data.get("withdraw_from") or "wallet").strip().lower()
-    if withdraw_from != "wallet":
-        return False, {
-            "message": "Withdrawals are only allowed from Wallet. Please transfer funds to Wallet first.",
-        }
+    withdraw_from = (data.get("withdraw_from") or "wallet").strip()
+    source_account = None
+    if trading_withdraw_service.is_trading_source(withdraw_from):
+        # Wallet-only unless an administrator has switched direct trading-account withdrawals on.
+        if not ws.allow_direct_trading_withdraw:
+            return False, {
+                "message": "Withdrawals are only allowed from Wallet. Please transfer funds to Wallet first.",
+            }
+        # Ownership, status and live/BTrader eligibility are decided here from the id alone.
+        source_account = trading_withdraw_service.resolve_source(user, withdraw_from)
+        if source_account is None:
+            return False, {"message": "Select a valid live trading account."}
 
     if (
         compliance_settings.withdrawal_requires_compliance
@@ -536,6 +544,19 @@ def create_withdraw(request, user, data: dict) -> tuple[bool, dict]:
         if pend_n >= ws.wallet_max_pending_withdrawals:
             return False, {"message": "Maximum pending withdrawals reached. Please wait for processing."}
 
+    live_allowed = None
+    if source_account is not None:
+        # Check the live funds before an OTP is sent for a request that cannot be honoured. Open
+        # positions reduce free margin; the user's other pending requests on this account count too.
+        live_allowed, _snapshot, live_err = trading_withdraw_service.live_allowed(source_account)
+        if live_allowed is None:
+            return False, {"message": live_err}
+        if amount > live_allowed - trading_withdraw_service.pending_requested(source_account):
+            return False, {
+                "message": "Insufficient available funds on the selected trading account "
+                "(open positions and pending withdrawal requests reduce what can be withdrawn).",
+            }
+
     otp_required = (
         compliance_settings.otp_email_enabled
         or compliance_settings.otp_sms_enabled
@@ -568,6 +589,18 @@ def create_withdraw(request, user, data: dict) -> tuple[bool, dict]:
         if not expected_otp or submitted_otp != expected_otp:
             return False, {"message": "Invalid OTP.", "errors": {"otp_code": ["Invalid OTP."]}}
         request.session.pop(session_key, None)
+
+    if source_account is not None:
+        return _create_trading_withdraw(
+            user=user,
+            form=form,
+            gateway=gateway,
+            account_details=account_details,
+            amount=amount,
+            request_uid=request_uid,
+            withdraw_from=withdraw_from,
+            live_allowed=live_allowed,
+        )
 
     try:
         with transaction.atomic():
@@ -690,6 +723,135 @@ def create_withdraw(request, user, data: dict) -> tuple[bool, dict]:
     }
 
 
+def _create_trading_withdraw(
+    *, user, form, gateway, account_details, amount, request_uid, withdraw_from, live_allowed
+) -> tuple[bool, dict]:
+    """Record a withdrawal request taken from a trading account (direct-withdraw setting on).
+
+    Nothing is debited and the wallet / `pending_withdraw` are not touched: the account is debited
+    only when an administrator approves (see transactions.trading_withdraw). Duplicate requests are
+    blocked by `request_uid` and a short same-amount window, exactly as for wallet withdrawals.
+    """
+    try:
+        with transaction.atomic():
+            locked_user = User.objects.select_for_update().get(id=user.id)
+            if filter_real_ledger_transactions(
+                Transaction.objects.select_for_update().filter(actor=locked_user, request_uid=request_uid)
+            ).exists():
+                return False, {"message": "Duplicate withdrawal request blocked."}
+            duplicate_cutoff = timezone.now() - timedelta(seconds=8)
+            if filter_real_ledger_transactions(
+                Transaction.objects.filter(
+                    actor=locked_user,
+                    tx_type=Transaction.TxType.CLIENT_WITHDRAW,
+                    status=Transaction.Status.PENDING,
+                    amount=amount,
+                    payment_gateway=gateway,
+                    created_at__gte=duplicate_cutoff,
+                )
+            ).exists():
+                return False, {"message": "Duplicate withdrawal blocked. Please wait a moment."}
+            if amount <= 0:
+                return False, {"message": "Withdrawal amount must be greater than zero."}
+
+            # Serialise requests on this account, then count what is already pending against it.
+            locked_src = trading_withdraw_service.resolve_source(locked_user, withdraw_from, lock=True)
+            if locked_src is None:
+                return False, {"message": "Select a valid live trading account."}
+            if amount > live_allowed - trading_withdraw_service.pending_requested(locked_src):
+                return False, {
+                    "message": "Insufficient available funds on the selected trading account "
+                    "(open positions and pending withdrawal requests reduce what can be withdrawn).",
+                }
+
+            tx = Transaction.objects.create(
+                tx_type=Transaction.TxType.CLIENT_WITHDRAW,
+                status=Transaction.Status.PENDING,
+                actor=locked_user,
+                amount=amount,
+                currency=form.cleaned_data["currency"],
+                reference=form.cleaned_data.get("reference", "") or "",
+                account_details=account_details,
+                payment_gateway=gateway,
+                notes=form.cleaned_data.get("notes", "")
+                or f"Withdraw request from client portal (source: {trading_withdraw_service.source_label(locked_src)}).",
+                request_uid=request_uid,
+                trading_account=locked_src,
+                balance_snapshot_wallet=locked_user.wallet_balance,
+                balance_snapshot_pending=locked_user.pending_withdraw,
+            )
+    except Exception:
+        logger.exception("API trading-account withdrawal create failed", extra={"user_id": user.id})
+        return False, {"message": "Unable to create withdrawal request. Please retry."}
+
+    source = trading_withdraw_service.source_label(tx.trading_account)
+    try:
+        from enterprise.staff_notify import broadcast_staff_notification
+
+        wdr_tok = f"[withdraw_tx:{tx.id}]"
+        submitted_local = timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M")
+        broadcast_staff_notification(
+            "New Withdrawal Request",
+            f"{wdr_tok} {user.display_name()} · {amount} {tx.currency} · "
+            f"{gateway.get_payment_method_display()} ({gateway.name}) · from {source} · {submitted_local} · Ref #{tx.id}",
+            action_url=reverse("admin-pending-withdraw"),
+            dedupe_body_contains=wdr_tok,
+        )
+    except Exception:
+        logger.exception("Withdrawal staff notification failed", extra={"tx_id": tx.id})
+
+    try:
+        send_event_email(
+            "withdrawal_submitted",
+            to_email=user.email,
+            user=user,
+            extra_context={"amount": f"{amount} {form.cleaned_data['currency']}", "status": "Pending"},
+        )
+    except Exception:
+        logger.exception("Withdrawal submitted email failed", extra={"tx_id": tx.id})
+
+    return True, {
+        "otp_required": False,
+        "transaction_id": tx.id,
+        "status": tx.status,
+        "amount": str(tx.amount),
+        "currency": tx.currency,
+        "request_uid": request_uid,
+        "withdraw_from": withdraw_from,
+        "source_account": tx.trading_account.account_number,
+        "message": "Your withdrawal request has been successfully submitted",
+    }
+
+
+def withdraw_trading_sources(user) -> tuple[bool, list[dict]]:
+    """(setting on, accounts a withdrawal may be taken from, with their live withdrawable amount).
+
+    With the setting off this is (False, []) and the client shows the wallet only. A failed live
+    lookup for one account is reported on that account and never hides the wallet or the others.
+    """
+    if not trading_withdraw_service.direct_withdraw_enabled():
+        return False, []
+    rows = []
+    for account in trading_withdraw_service.eligible_accounts(user):
+        withdrawable, snapshot, err = trading_withdraw_service.available_now(account)
+        mt5 = account.mt5_account
+        rows.append(
+            {
+                "id": account.id,
+                "key": f"{trading_withdraw_service.SOURCE_PREFIX}{account.id}",
+                "account_number": account.account_number,
+                "login_id": trading_withdraw_service.account_login(account),
+                "account_type": account.account_type,
+                "currency": account.currency,
+                "balance": str(snapshot.get("balance", mt5.balance if mt5 else account.balance)),
+                "free_margin": str(snapshot.get("freeMargin", mt5.free_margin if mt5 else 0)),
+                "withdrawable": None if withdrawable is None else str(withdrawable),
+                "error": err or None,
+            }
+        )
+    return True, rows
+
+
 def wallet_summary(user) -> dict:
     user.refresh_from_db(fields=["wallet_balance", "pending_withdraw"])
     ws = WalletTreasurySettings.get_solo()
@@ -735,11 +897,14 @@ def serialize_transaction(tx: Transaction) -> dict:
         "gateway": tx.payment_gateway.name if tx.payment_gateway_id else None,
         "gateway_id": tx.payment_gateway_id,
         "created_at": tx.created_at.isoformat() if tx.created_at else None,
+        # Where a withdrawal is taken from: null = the wallet (the original behaviour).
+        "source_account": tx.trading_account.account_number if tx.trading_account_id else None,
+        "source": trading_withdraw_service.source_label(tx.trading_account) if tx.trading_account_id else "Wallet",
     }
 
 
 def list_user_transactions(user, *, tx_types=None, limit=50):
-    qs = Transaction.objects.filter(actor=user).select_related("payment_gateway").order_by("-created_at")
+    qs = Transaction.objects.filter(actor=user).select_related("payment_gateway", "trading_account").order_by("-created_at")
     if tx_types:
         qs = qs.filter(tx_type__in=tx_types)
     qs = filter_real_ledger_transactions(qs)

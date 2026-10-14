@@ -95,7 +95,7 @@
               <tr>
                 <td class="font-medium text-indigo-600 dark:text-indigo-400">{{ t.reference|default:"-" }}</td>
                 <td class="font-bold text-slate-800 dark:text-slate-200">{{ t.amount }} {{ t.currency }}</td>
-                <td>{{ t.payment_gateway.name|default:"-" }}</td>
+                <td>{{ t.payment_gateway.name|default:"-" }}{% if t.trading_account %}<div class="text-xs text-slate-500">From trading account {{ t.trading_account.account_number }}</div>{% endif %}</td>
                 <td class="text-xs text-slate-500">{{ t.notes|default:"-" }}</td>
                 <td class="text-xs text-slate-500 max-w-[200px] truncate" title="{{ t.account_details }}">{{ t.account_details|default:"-"|truncatechars:40 }}</td>
                 {% if req_type == "deposit" %}

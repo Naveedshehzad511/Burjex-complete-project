@@ -149,6 +149,7 @@ class SymbolMappingEditor extends StatelessWidget {
                           decoration: const InputDecoration(
                             labelText: 'Min spread (points)',
                             isDense: true,
+                            helperText: 'The spread clients get; 0 = no floor',
                           ),
                         ),
                       ),
@@ -160,7 +161,7 @@ class SymbolMappingEditor extends StatelessWidget {
                           decoration: const InputDecoration(
                             labelText: 'Max spread (points)',
                             isDense: true,
-                            helperText: '0 = no cap',
+                            helperText: '0 = no cap. 1 pt = one price step (XAUUSD: $1 per lot)',
                           ),
                         ),
                       ),

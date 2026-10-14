@@ -1793,6 +1793,12 @@ class WalletTreasurySettings(models.Model):
     wallet_max_withdraw = models.DecimalField(max_digits=20, decimal_places=2, default=0)
     wallet_daily_withdraw_limit = models.DecimalField(max_digits=20, decimal_places=2, default=0)
     wallet_withdraw_maintenance = models.BooleanField(default=False)
+    # When on, a client may request a withdrawal straight from one of their live trading accounts
+    # (in addition to the wallet). Off = wallet-only, exactly as before.
+    allow_direct_trading_withdraw = models.BooleanField(
+        default=False,
+        help_text="Let clients withdraw directly from an eligible live trading account (otherwise wallet only).",
+    )
 
     allow_wallet_to_trading = models.BooleanField(default=True)
     allow_trading_to_wallet = models.BooleanField(default=True)

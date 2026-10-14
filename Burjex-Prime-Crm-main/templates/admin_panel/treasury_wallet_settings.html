@@ -36,6 +36,7 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
         <label class="flex items-center gap-2"><input type="checkbox" name="allow_withdrawals_from_wallet" {% if obj.allow_withdrawals_from_wallet %}checked{% endif %}> Allow withdrawals from wallet</label>
         <label class="flex items-center gap-2"><input type="checkbox" name="wallet_withdraw_maintenance" {% if obj.wallet_withdraw_maintenance %}checked{% endif %}> Withdrawal maintenance mode</label>
+        <label class="flex items-center gap-2"><input type="checkbox" name="allow_direct_trading_withdraw" {% if obj.allow_direct_trading_withdraw %}checked{% endif %}> Allow withdrawals directly from a live trading account (off = wallet only)</label>
         <div><label class="text-xs text-slate-600">Min withdraw</label><input name="wallet_min_withdraw" value="{{ obj.wallet_min_withdraw }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
         <div><label class="text-xs text-slate-600">Max withdraw (0 = no cap)</label><input name="wallet_max_withdraw" value="{{ obj.wallet_max_withdraw }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>
         <div><label class="text-xs text-slate-600">Daily withdraw limit (0 = off)</label><input name="wallet_daily_withdraw_limit" value="{{ obj.wallet_daily_withdraw_limit }}" class="mt-1 w-full border rounded-lg px-3 py-2"></div>

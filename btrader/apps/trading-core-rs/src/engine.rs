@@ -1,7 +1,7 @@
 use crate::books::{BookRow, MemoryClaims, PendingBook, PositionBook};
 use crate::calc::{
-    apply_markup, compute_aggregates, dealing_commission, execution_applies, pending_type_to_apply_kind,
-    required_margin, round_lots, round_price, snap_volume, slippage_bound, SymbolCalcSpec,
+    apply_markup, balance_after_open, compute_aggregates, dealing_commission, execution_applies,
+    group_markup_for_quote, open_funds_required, pending_type_to_apply_kind, required_margin, round_lots, round_price, snap_volume, slippage_bound, SymbolCalcSpec,
 };
 use crate::error::{
     BtError, BtResult, INSUFFICIENT_MARGIN, INVALID_PRICE, INVALID_VOLUME, MARKET_CLOSED, NO_PRICE,
@@ -493,7 +493,12 @@ impl Engine {
             Some("SPREAD_ONLY" | "SPREAD_AND_COMMISSION" | "COMMISSION_ONLY")
         );
         let symbol_book_markup = if mapping_owns { 0.0 } else { f64::from(sym.spread_markup) };
-        let total_markup = symbol_book_markup + pricing.markup_points + news_markup;
+        // The group's spread rule is applied to the quote as it is now (after any execution delay).
+        let group_markup = match self.prices.get(tenant_id, &req.symbol) {
+            Some(t) => group_markup_for_quote(&pricing, t.bid, t.ask, sym.digits),
+            None => pricing.markup_points,
+        };
+        let total_markup = symbol_book_markup + group_markup + news_markup;
         let with_markup = apply_markup(&req.side, px, total_markup, sym.digits);
         let honour_ref = req.price;
         // Instant market: honour click. Pending (stop/limit) with apply-to: honour
@@ -638,17 +643,22 @@ impl Engine {
         }
         let views = self.open_views_tx(&mut tx, tenant_id, &account.id, &locked.currency).await?;
         let live = compute_aggregates(locked.balance, locked.credit, &views);
-        if live.free_margin < margin {
+        // The commission is debited from the balance in this same transaction, so the account
+        // must be able to carry it on top of the margin. Nothing has been written yet: a refusal
+        // here leaves every table untouched.
+        let required = open_funds_required(margin, commission);
+        if live.free_margin < required {
             return Err(BtError::new(
                 INSUFFICIENT_MARGIN,
-                format!("insufficient free margin: need {margin}, available {}", live.free_margin),
+                format!("insufficient free margin: need {required}, available {}", live.free_margin),
             ));
         }
+        let new_balance = balance_after_open(locked.balance, commission);
 
         sqlx::query(
             r#"INSERT INTO positions (
                  id, "tenantId", "accountId", "symbolId", side, status, book, volume, "coveredVolume",
-                 "openPrice", "slPrice", "tpPrice", "marginUsed", commission, comment, "updatedAt"
+                 "openPrice", "slPrice", "tpPrice", "marginUsed", "commissionCharged", comment, "updatedAt"
                ) VALUES (
                  $1,$2,$3,$4,$5::"OrderSide",'OPEN'::"PositionStatus",$6::"BookType",$7,$8,$9,$10,$11,$12,$13,$14,NOW()
                )"#,
@@ -701,9 +711,9 @@ impl Engine {
 
         sqlx::query(
             r#"INSERT INTO deals (
-                 id, "tenantId", "accountId", "positionId", "symbolId", type, side, volume, price, "balanceAfter", comment
+                 id, "tenantId", "accountId", "positionId", "symbolId", type, side, volume, price, commission, "balanceAfter", comment
                ) VALUES (
-                 $1,$2,$3,$4,$5,'OPEN'::"DealType",$6::"OrderSide",$7,$8,$9,$10
+                 $1,$2,$3,$4,$5,'OPEN'::"DealType",$6::"OrderSide",$7,$8,$9,$10,$11
                )"#,
         )
         .bind(&deal_id)
@@ -714,15 +724,16 @@ impl Engine {
         .bind(&req.side)
         .bind(volume)
         .bind(fill_price)
-        .bind(locked.balance)
+        .bind(commission)
+        .bind(new_balance)
         .bind(&comment)
         .execute(&mut *tx)
         .await?;
 
         let views_after = self.open_views_tx(&mut tx, tenant_id, &account.id, &locked.currency).await?;
-        let after = compute_aggregates(locked.balance, locked.credit, &views_after);
+        let after = compute_aggregates(new_balance, locked.credit, &views_after);
         sqlx::query(
-            r#"UPDATE accounts SET equity=$1, margin=$2, "freeMargin"=$3, "marginLevel"=$4, "floatingPL"=$5
+            r#"UPDATE accounts SET balance=$7, equity=$1, margin=$2, "freeMargin"=$3, "marginLevel"=$4, "floatingPL"=$5
                WHERE id=$6"#,
         )
         .bind(after.equity)
@@ -731,6 +742,7 @@ impl Engine {
         .bind(after.margin_level)
         .bind(after.floating_pl)
         .bind(&locked.id)
+        .bind(new_balance)
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
@@ -740,7 +752,7 @@ impl Engine {
             login: locked.login.clone(),
             currency: locked.currency.clone(),
             leverage: locked.leverage,
-            balance: locked.balance,
+            balance: new_balance,
             credit: locked.credit,
             equity: after.equity,
             margin: after.margin,
@@ -762,7 +774,8 @@ impl Engine {
             tp_price: req.tp_price,
             margin_used: margin,
             swap: 0.0,
-            commission,
+            // Already debited at open (see `commissionCharged`); nothing is left to realize at close.
+            commission: 0.0,
             covered_volume,
             opened_at,
             account_currency: account.currency.clone(),

@@ -197,21 +197,16 @@ export interface SymbolMappingPricing {
 }
 
 /**
- * Live Spread Markup (points) per Symbol Group Markup Engine Spec §5.1.
+ * Per-side price adjustment (points) that makes a group's TOTAL client spread equal what the
+ * admin configured. Mirrors `spread_markup_from_band` in the Rust engine.
  *
- * Min / Max are **markup** amounts (not a total-spread band):
- * - Normal markets → applied markup ≈ Minimum
- * - When LP spread widens → markup may rise with it, never above Maximum
- * - COMMISSION_ONLY → 0 (raw feed spread; commission charged separately)
+ * Min / Max spread are the spread the client gets, not a markup on top of the market:
+ * total = the live market spread clamped into [min, max] (max 0 = no cap, min 0 = no floor).
+ * Bid and ask each move by half of the difference, so ask' - bid' == total. The result is
+ * negative when the market spread is wider than the cap (the client is quoted inside the market).
  *
- * Returns the **per-side** points the engine applies to the fill price.
- * Quote UI applies the same value to bid (−) and ask (+) so total spread
- * widens by `2 * perSide` when both sides move — for a configured markup M,
- * perSide = M / 2 so the visible total extra equals M (spec point shift).
- *
- * When min=max=0 under a mapping, markup is 0 (no silent legacy fallback).
- * `legacyMarkupPoints` is only used when there is no mapping band at all
- * (caller passes it for pre-mapping groups).
+ * - COMMISSION_ONLY -> 0 (raw market prices; the charge is the commission)
+ * - min = max = 0 under a spread method -> `legacyMarkupPoints` (0 unless passed), no silent fallback
  */
 export function spreadMarkupFromBand(
   lpSpreadPoints: number,
@@ -228,14 +223,11 @@ export function spreadMarkupFromBand(
       ? Math.max(0, legacyMarkupPoints)
       : 0;
   }
-  // Spec: floor at min; track LP spread upward; cap at max (max=0 → fixed min).
   const lp = Math.max(0, lpSpreadPoints);
-  let totalMarkup = min;
-  if (max > 0) {
-    totalMarkup = Math.min(max, Math.max(min, lp));
-  }
-  // Per-side so bid/ask each move by half → total extra spread ≈ totalMarkup.
-  return totalMarkup / 2;
+  let total = lp;
+  if (min > 0 && total < min) total = min;
+  if (max > 0 && total > max) total = max;
+  return (total - lp) / 2;
 }
 
 /** Resolve commission from a mapping's pricing method (NONE when spread-only). */
@@ -270,9 +262,12 @@ export function applyMarkup(
 }
 
 /**
- * Dealing commission in the ACCOUNT currency, returned as a NEGATIVE number to
- * store on the position (it flows into equity immediately and realizes at
- * close). Charged in full at open:
+ * Dealing commission in the ACCOUNT currency, returned as a NEGATIVE number.
+ * It is debited from the balance when the trade is executed (see
+ * `balanceAfterOpen`) and recorded on the OPEN deal; the position keeps it in
+ * `commissionCharged` and carries `commission = 0`, so close never charges it
+ * again. (Positions opened before this change still hold it in `commission` and
+ * realize it once at close.) The amount is charged in full at open:
  *   PER_LOT  : value × lots               (round-turn)
  *   PER_SIDE : value × lots × 2           (open + close booked up front)
  *   PERCENT  : value% × notional × 2      (both sides)
@@ -298,6 +293,23 @@ export function dealingCommission(
     default:
       return 0;
   }
+}
+
+/**
+ * Free funds a fill needs: the margin it locks plus the commission debited from
+ * the balance at open (`commission` is negative when charged). A positive
+ * commission needs nothing extra. Mirrors `open_funds_required` in the Rust engine.
+ */
+export function openFundsRequired(margin: number, commission: number): number {
+  return margin + Math.max(0, -commission);
+}
+
+/**
+ * Balance right after a fill: the commission is debited at execution, once.
+ * Mirrors `balance_after_open` in the Rust engine.
+ */
+export function balanceAfterOpen(balance: number, commission: number): number {
+  return balance + commission;
 }
 
 /**

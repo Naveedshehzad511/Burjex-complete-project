@@ -2294,7 +2294,7 @@ def pending_withdraw(request):
         "rejected": base_counts.filter(status=Transaction.Status.REJECTED).count(),
     }
 
-    qs = Transaction.objects.select_related("actor", "payment_gateway").filter(tx_type__in=withdraw_types)
+    qs = Transaction.objects.select_related("actor", "payment_gateway", "trading_account").filter(tx_type__in=withdraw_types)
     if list_status == "approved":
         qs = qs.filter(status__in=[Transaction.Status.APPROVED, Transaction.Status.COMPLETED])
     elif list_status == "rejected":
@@ -2390,11 +2390,60 @@ def pending_withdraw(request):
                             pass
                     return redirect(back_url)
 
-                user = User.objects.select_for_update().get(id=tx.actor_id)
-                pending_amt = Decimal(str(user.pending_withdraw or 0))
-                amt = Decimal(str(tx.amount or 0))
+                if tx.trading_account_id:
+                    # Taken directly from a trading account: no wallet reservation exists to release or
+                    # debit. Approval debits the account (idempotently); rejection just closes the request.
+                    from transactions import trading_withdraw as _tw
 
-                if action == "approve":
+                    if action == "approve":
+                        ok_tw, msg_tw = _tw.approve(tx, request.user)
+                        if not ok_tw:
+                            messages.error(request, msg_tw)
+                            return redirect(back_url)
+                        messages.success(request, msg_tw)
+                        try:
+                            log_audit(
+                                action="WITHDRAW_APPROVE",
+                                entity_type="Transaction",
+                                entity_id=str(tx.id),
+                                actor=request.user,
+                                channel=AuditLogChannel.ADMIN,
+                                request=request,
+                                ip=get_client_ip(request),
+                                metadata={
+                                    "amount": str(tx.amount),
+                                    "currency": tx.currency,
+                                    "source_trading_account": tx.trading_account.account_number,
+                                },
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        _tw.reject(tx, request.user, reject_reason)
+                        messages.success(request, f"Rejected withdraw #{tx.id}.")
+                        try:
+                            log_audit(
+                                action="WITHDRAW_REJECT",
+                                entity_type="Transaction",
+                                entity_id=str(tx.id),
+                                actor=request.user,
+                                channel=AuditLogChannel.ADMIN,
+                                request=request,
+                                ip=get_client_ip(request),
+                                metadata={"reject_reason": reject_reason, "source_trading_account": tx.trading_account.account_number},
+                            )
+                        except Exception:
+                            pass
+                    # The wallet bookkeeping below does not apply; the notification emails after this
+                    # block still run, exactly as for a wallet withdrawal.
+                else:
+                    user = User.objects.select_for_update().get(id=tx.actor_id)
+                    pending_amt = Decimal(str(user.pending_withdraw or 0))
+                    amt = Decimal(str(tx.amount or 0))
+
+                if tx.trading_account_id:
+                    pass
+                elif action == "approve":
                     from transactions.utils import ensure_unique_action
                     try:
                         ensure_unique_action(f"WITHDRAW_APP_{tx.id}", "WITHDRAW_APPROVE")
@@ -2585,7 +2634,11 @@ def pending_withdraw(request):
                 "account_display": acct_display,
                 "destination_line": _withdraw_destination_line(t.account_details),
                 "method_label": method_label,
-                "funds_source_label": "Wallet (client withdrawal)",
+                "funds_source_label": (
+                    f"Trading account {t.trading_account.account_number} (direct withdrawal)"
+                    if t.trading_account_id
+                    else "Wallet (client withdrawal)"
+                ),
                 "transfers_filter_email": actor.email or "",
             }
         )
@@ -4108,6 +4161,7 @@ def treasury_wallet_settings(request):
         obj.wallet_max_withdraw = _pg_decimal(request.POST.get("wallet_max_withdraw"))
         obj.wallet_daily_withdraw_limit = _pg_decimal(request.POST.get("wallet_daily_withdraw_limit"))
         obj.wallet_withdraw_maintenance = request.POST.get("wallet_withdraw_maintenance") == "on"
+        obj.allow_direct_trading_withdraw = request.POST.get("allow_direct_trading_withdraw") == "on"
         obj.allow_wallet_to_trading = request.POST.get("allow_wallet_to_trading") == "on"
         obj.allow_trading_to_wallet = request.POST.get("allow_trading_to_wallet") == "on"
         obj.allow_p2p_transfers = request.POST.get("allow_p2p_transfers") == "on"
@@ -4443,6 +4497,51 @@ def payment_requests(request):
                         messages.success(request, f"IB Withdrawal request of ${locked_tx.amount} approved.")
                         return redirect(f"{reverse('admin-payment-requests')}?type={req_type}")
 
+                    if locked_tx.trading_account_id:
+                        # Taken directly from a trading account: debit it (idempotently) on approval.
+                        from transactions import trading_withdraw as _tw
+
+                        ok_tw, msg_tw = _tw.approve(locked_tx, request.user)
+                        if not ok_tw:
+                            messages.error(request, msg_tw)
+                            return redirect(f"{reverse('admin-payment-requests')}?type={req_type}")
+                        log_audit(
+                            action="WITHDRAW_APPROVE",
+                            entity_type="Transaction",
+                            entity_id=str(locked_tx.id),
+                            actor=request.user,
+                            channel=AuditLogChannel.ADMIN,
+                            request=request,
+                            ip=get_client_ip(request),
+                            metadata={
+                                "amount": str(locked_tx.amount),
+                                "currency": locked_tx.currency,
+                                "via": "payment_requests",
+                                "source_trading_account": locked_tx.trading_account.account_number,
+                            },
+                        )
+                        if locked_tx.actor and locked_tx.actor.email:
+                            try:
+                                send_event_email(
+                                    "withdrawal_approved",
+                                    to_email=locked_tx.actor.email,
+                                    user=locked_tx.actor,
+                                    extra_context={
+                                        "name": locked_tx.actor.display_name(),
+                                        "client_name": locked_tx.actor.display_name(),
+                                        "amount": f"{locked_tx.amount} {locked_tx.currency}",
+                                        "withdrawal_amount": f"{locked_tx.amount} {locked_tx.currency}",
+                                        "method": locked_tx.payment_gateway.name if locked_tx.payment_gateway else "-",
+                                        "payment_method": locked_tx.payment_gateway.name if locked_tx.payment_gateway else "-",
+                                        "transaction_id": str(locked_tx.id),
+                                        "date": timezone.localtime(locked_tx.processed_at).strftime("%Y-%m-%d %H:%M") if locked_tx.processed_at else "",
+                                    },
+                                )
+                            except Exception:
+                                logger.exception("payment_requests withdrawal_approved email failed", extra={"tx_id": locked_tx.id})
+                        messages.success(request, msg_tw)
+                        return redirect(f"{reverse('admin-payment-requests')}?type={req_type}")
+
                     user = User.objects.select_for_update().get(id=locked_tx.actor_id)
                     amt = Decimal(str(locked_tx.amount or 0))
                     pending_amt = Decimal(str(user.pending_withdraw or 0))
@@ -4540,6 +4639,28 @@ def payment_requests(request):
                             metadata={"amount": str(locked_tx.amount), "ib_user_id": locked_tx.actor_id, "reason": reject_reason},
                         )
                         messages.success(request, f"IB Withdrawal request of ${locked_tx.amount} rejected.")
+                        return redirect(f"{reverse('admin-payment-requests')}?type={req_type}")
+
+                    if locked_tx.trading_account_id:
+                        # Nothing was reserved or debited for a trading-account request: just close it.
+                        from transactions import trading_withdraw as _tw
+
+                        _tw.reject(locked_tx, request.user, reject_reason)
+                        log_audit(
+                            action="WITHDRAW_REJECT",
+                            entity_type="Transaction",
+                            entity_id=str(locked_tx.id),
+                            actor=request.user,
+                            channel=AuditLogChannel.ADMIN,
+                            request=request,
+                            ip=get_client_ip(request),
+                            metadata={
+                                "reject_reason": reject_reason,
+                                "via": "payment_requests",
+                                "source_trading_account": locked_tx.trading_account.account_number,
+                            },
+                        )
+                        messages.success(request, "Request updated successfully.")
                         return redirect(f"{reverse('admin-payment-requests')}?type={req_type}")
 
                     user = User.objects.select_for_update().get(id=locked_tx.actor_id)
@@ -4705,7 +4826,7 @@ def payment_requests(request):
             from_date = (td - timedelta(days=6)).isoformat()
             to_date = td.isoformat()
     qs = (
-        Transaction.objects.select_related("actor", "payment_gateway", "actor__referred_by")
+        Transaction.objects.select_related("actor", "payment_gateway", "actor__referred_by", "trading_account")
         .filter(tx_type__in=tx_types, is_demo_ledger=False)
         .order_by("-created_at")
     )

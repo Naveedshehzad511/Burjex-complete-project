@@ -207,11 +207,7 @@ class _MarketsScreenState extends ConsumerState<MarketsScreen> {
           row('Class', s.klass),
           row('Digits', '${s.digits}'),
           row('Client symbol', s.displaySymbol),
-          row('Pricing', s.pricingMethod ?? 'group default'),
-          if (s.minSpreadPoints > 0 || s.maxSpreadPoints > 0)
-            row('Spread band', '${s.minSpreadPoints}–${s.maxSpreadPoints == 0 ? '∞' : s.maxSpreadPoints} pts')
-          else
-            row('Group markup', '${s.markupPoints} pts'),
+          for (final (k, v) in s.pricingRows()) row(k, v),
           row('Min lot', '${s.minLot}'),
           row('Max lot', '${s.maxLot}'),
           row('Lot step', '${s.lotStep}'),
@@ -333,7 +329,7 @@ class _QuoteRow extends StatelessWidget {
                   const SizedBox(width: 8),
                   Icon(Icons.hourglass_empty, size: 11, color: faint),
                   const SizedBox(width: 2),
-                  Text('$spread', style: TextStyle(fontSize: 11, color: faint)),
+                  Text(symbol.quoteCostLabel(spread), style: TextStyle(fontSize: 11, color: faint)),
                 ],
               ]),
             ]),

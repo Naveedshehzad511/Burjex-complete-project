@@ -3,6 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { prisma } from '@btrader/db';
 import { PORTAL_READ_CACHE_MS, ttlWrap } from '../../common/ttl-cache';
+import { withTotalCommission } from '../../common/position-commission';
 
 /** A readable random trading password (no ambiguous chars like O/0, I/l). */
 function genPassword(): string {
@@ -265,14 +266,16 @@ export class AccountsService {
 
   /** All open positions tenant-wide (optionally scoped to one client's accounts). */
   allPositions(tenantId: string, userId?: string) {
-    return prisma.position.findMany({
-      where: { tenantId, status: 'OPEN', ...(userId ? { account: { userId } } : {}) },
-      include: {
-        symbol: { select: { symbol: true, digits: true } },
-        account: { select: { login: true, userId: true } },
-      },
-      orderBy: { openedAt: 'desc' },
-      take: 1000,
-    });
+    return prisma.position
+      .findMany({
+        where: { tenantId, status: 'OPEN', ...(userId ? { account: { userId } } : {}) },
+        include: {
+          symbol: { select: { symbol: true, digits: true } },
+          account: { select: { login: true, userId: true } },
+        },
+        orderBy: { openedAt: 'desc' },
+        take: 1000,
+      })
+      .then((rows) => rows.map(withTotalCommission));
   }
 }

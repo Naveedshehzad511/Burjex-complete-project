@@ -116,10 +116,14 @@ class WithdrawMethodsAPIView(APIView):
             for c in cryptos
         ]
         gateways = treasury_service.withdraw_gateways()
+        direct_enabled, trading_accounts = treasury_service.withdraw_trading_sources(request.user)
         return success_response(
             {
                 "allowed": ok,
                 "block_reason": None if ok else msg,
+                # Direct withdrawal from a live trading account (admin setting; off = wallet only).
+                "direct_withdraw_enabled": direct_enabled,
+                "trading_accounts": trading_accounts,
                 "gateways": gateways,
                 "methods": self._methods(bank_accounts, crypto_addresses),
                 "request_uid": uuid.uuid4().hex,

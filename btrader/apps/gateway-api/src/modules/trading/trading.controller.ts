@@ -19,6 +19,7 @@ import { EngineProvider } from './engine.provider';
 import { AuditService } from '../audit/audit.service';
 import { PlaceOrderDto, ModifyPositionDto, ModifyOrderDto, ClosePositionDto } from './dto';
 import { PORTAL_READ_CACHE_MS, ttlDelPrefix, ttlWrap } from '../../common/ttl-cache';
+import { withTotalCommission } from '../../common/position-commission';
 
 const STAFF_ROLES = new Set(['SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_STAFF', 'SERVICE']);
 
@@ -166,12 +167,14 @@ export class TradingController {
     @Query('fresh') fresh?: string,
   ) {
     return ttlWrap(`pos:${t.id}:${accountId}:${status}`, fresh ? 0 : PORTAL_READ_CACHE_MS, () =>
-      prisma.position.findMany({
-        where: { tenantId: t.id, accountId, status: status as any },
-        include: { symbol: { select: { symbol: true, digits: true } } },
-        orderBy: { openedAt: 'desc' },
-        take: 500,
-      }),
+      prisma.position
+        .findMany({
+          where: { tenantId: t.id, accountId, status: status as any },
+          include: { symbol: { select: { symbol: true, digits: true } } },
+          orderBy: { openedAt: 'desc' },
+          take: 500,
+        })
+        .then((rows) => rows.map(withTotalCommission)),
     );
   }
 
@@ -261,7 +264,7 @@ export class TradingController {
     // (entry → exit), plus the signed balance change per deal.
     const symIds = [...new Set(deals.map((d) => d.symbolId).filter(Boolean) as string[])];
     const posIds = [...new Set(deals.map((d) => d.positionId).filter(Boolean) as string[])];
-    const [syms, poss] = await Promise.all([
+    const [syms, poss, openDeals] = await Promise.all([
       symIds.length
         ? prisma.symbol.findMany({ where: { id: { in: symIds } }, select: { id: true, symbol: true, digits: true } })
         : Promise.resolve([]),
@@ -274,7 +277,20 @@ export class TradingController {
             select: { id: true, openPrice: true, slPrice: true, tpPrice: true, openedAt: true },
           })
         : Promise.resolve([]),
+      // Commission is debited when a trade is executed and sits on its OPEN deal. Looked up by
+      // position, not by the date window, so a trade closed in the window but opened before it
+      // still shows the commission it paid.
+      posIds.length
+        ? prisma.deal.findMany({
+            where: { tenantId: t.id, accountId, positionId: { in: posIds }, type: 'OPEN' },
+            select: { positionId: true, commission: true },
+          })
+        : Promise.resolve([]),
     ]);
+    const openCommissionByPos = new Map<string, number>();
+    for (const o of openDeals) {
+      if (o.positionId) openCommissionByPos.set(o.positionId, (openCommissionByPos.get(o.positionId) ?? 0) + Number(o.commission));
+    }
     const symMap = new Map(syms.map((s) => [s.id, s]));
     const posMap = new Map(poss.map((p) => [p.id, p]));
 
@@ -297,6 +313,9 @@ export class TradingController {
       profit: d.profit,
       swap: d.swap,
       commission: d.commission,
+      // Charged at execution (0 for positions opened before that change, whose commission is on
+      // their close deal). Clients add it to the final CLOSE row only, so it is shown once.
+      openCommission: d.positionId ? openCommissionByPos.get(d.positionId) ?? 0 : 0,
       balanceAfter: d.balanceAfter,
       comment: d.comment,
       createdAt: d.createdAt,

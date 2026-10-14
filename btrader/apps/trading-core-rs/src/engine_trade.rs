@@ -468,6 +468,11 @@ impl Engine {
         let mut close_px = px;
         if override_px.is_none() {
             if let Some(pricing) = pricing.as_ref() {
+                // The group's spread rule applied to the quote as it is now.
+                let group_markup = match self.prices.get(&tenant_id, &symbol) {
+                    Some(t) => crate::calc::group_markup_for_quote(pricing, t.bid, t.ask, digits),
+                    None => pricing.markup_points,
+                };
                 // Instant + checked kind: exact price, no group slippage (markup stays).
                 let slip_points = if apply_kind.is_some_and(|k| instant_honours(pricing, k)) {
                     0.0
@@ -487,7 +492,7 @@ impl Engine {
                     } else {
                         // apply-to unchecked: live market, gap may slip through the level.
                         let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
-                        let total = pricing.markup_points + slip_points;
+                        let total = group_markup + slip_points;
                         if total != 0.0 {
                             close_px = apply_markup(close_side, px, total, digits);
                         }
@@ -499,7 +504,7 @@ impl Engine {
                     }
                 } else {
                     let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
-                    let total = pricing.markup_points + slip_points;
+                    let total = group_markup + slip_points;
                     if total != 0.0 {
                         close_px = apply_markup(close_side, px, total, digits);
                     }
@@ -798,7 +803,7 @@ impl Engine {
             Some("SPREAD_ONLY" | "SPREAD_AND_COMMISSION" | "COMMISSION_ONLY")
         );
         let symbol_book = if mapping_owns { 0.0 } else { f64::from(sym.spread_markup) };
-        let total = symbol_book + pricing.markup_points + news;
+        let total = symbol_book + crate::calc::group_markup_for_quote(pricing, bid, ask, sym.digits) + news;
         Some((
             apply_markup("SELL", bid, total, sym.digits),
             apply_markup("BUY", ask, total, sym.digits),

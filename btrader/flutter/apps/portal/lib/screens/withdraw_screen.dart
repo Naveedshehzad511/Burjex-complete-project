@@ -43,6 +43,18 @@ class _Account {
   final String details;
 }
 
+/// A live trading account a withdrawal can be taken from (only offered when the CRM has direct
+/// trading-account withdrawals switched on). [withdrawable] is null when the live balance could not be read.
+class _TradingSource {
+  const _TradingSource({required this.key, required this.label, required this.currency, required this.balance, required this.withdrawable, required this.error});
+  final String key; // 'TRADING:<id>', exactly what the CRM expects back
+  final String label;
+  final String currency;
+  final double balance;
+  final double? withdrawable;
+  final String error;
+}
+
 class _Method {
   const _Method({
     required this.key,
@@ -66,8 +78,18 @@ class _Method {
 }
 
 class _Withdrawal {
-  const _Withdrawal({required this.allowed, required this.reason, required this.methods, required this.uid, required this.wallet});
+  const _Withdrawal({
+    required this.allowed,
+    required this.reason,
+    required this.methods,
+    required this.uid,
+    required this.wallet,
+    this.directEnabled = false,
+    this.accounts = const [],
+  });
   final bool allowed;
+  final bool directEnabled;
+  final List<_TradingSource> accounts;
   final String reason;
   final List<_Method> methods;
   final String uid;
@@ -97,12 +119,25 @@ final _withdrawProvider = FutureProvider.autoDispose<_Withdrawal>((ref) async {
       emptyHint: '${j['empty_hint'] ?? ''}',
     ));
   }
+  final accounts = <_TradingSource>[
+    for (final a in (d['trading_accounts'] as List? ?? const []))
+      _TradingSource(
+        key: '${(a as Map)['key']}',
+        label: '${a['login_id'] ?? a['account_number']}',
+        currency: '${a['currency'] ?? 'USD'}',
+        balance: crmNum(a['balance']),
+        withdrawable: a['withdrawable'] == null ? null : crmNum(a['withdrawable']),
+        error: '${a['error'] ?? ''}',
+      ),
+  ];
   return _Withdrawal(
     allowed: d['allowed'] != false,
     reason: '${d['block_reason'] ?? ''}',
     methods: methods,
     uid: '${d['request_uid'] ?? ''}',
     wallet: crmNum(wallet['available_balance'] ?? wallet['wallet_balance']),
+    directEnabled: d['direct_withdraw_enabled'] == true,
+    accounts: accounts,
   );
 });
 
@@ -124,6 +159,7 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
   final _swift = TextEditingController();
   final _address = TextEditingController();
 
+  String _source = 'wallet'; // 'wallet' or a trading account's 'TRADING:<id>'
   String? _method; // key of the selected method
   int? _savedId; // a verified account chosen from the list
   String? _network;
@@ -148,6 +184,10 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
     _error = null;
   }
 
+  /// The selected trading account, or null for the wallet (also when the account is no longer offered).
+  _TradingSource? _account(_Withdrawal w) =>
+      w.directEnabled ? w.accounts.where((a) => a.key == _source).firstOrNull : null;
+
   _Method? _selected(_Withdrawal w) {
     final enabled = w.methods.where((m) => m.enabled).toList();
     if (enabled.isEmpty) return null;
@@ -158,7 +198,15 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
   String? _validate(_Withdrawal w, _Method m, List<Map<String, dynamic>> networks) {
     final amt = double.tryParse(_amount.text.trim());
     if (amt == null || amt <= 0) return 'Enter a valid amount.';
-    if (amt > w.wallet) return 'The amount is more than your available wallet balance (${w.wallet.toStringAsFixed(2)} ${m.currency}).';
+    final acct = _account(w);
+    if (acct != null) {
+      if (acct.withdrawable == null) return 'The live balance of account ${acct.label} could not be read. Try again in a moment.';
+      if (amt > acct.withdrawable!) {
+        return 'The amount is more than the funds available to withdraw from account ${acct.label} (${acct.withdrawable!.toStringAsFixed(2)} ${acct.currency}).';
+      }
+    } else if (amt > w.wallet) {
+      return 'The amount is more than your available wallet balance (${w.wallet.toStringAsFixed(2)} ${m.currency}).';
+    }
     if (m.min > 0 && amt < m.min) return 'The minimum withdrawal for this method is ${m.min.toStringAsFixed(2)} ${m.currency}.';
     if (m.max > 0 && amt > m.max) return 'The maximum withdrawal for this method is ${m.max.toStringAsFixed(2)} ${m.currency}.';
     if (m.accounts.isNotEmpty) {
@@ -192,7 +240,7 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
         'method': m.key.toUpperCase(),
         'amount': amt.toStringAsFixed(2),
         'currency': m.currency,
-        'withdraw_from': 'wallet',
+        'withdraw_from': _account(w)?.key ?? 'wallet',
         if (w.uid.isNotEmpty) 'request_uid': w.uid, // the CRM ignores a repeat of the same request
         if (m.accounts.isNotEmpty)
           (m.key == 'bank' ? 'bank_account' : 'crypto_address'): _savedId
@@ -249,15 +297,54 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
           final m = _selected(w);
           return ListView(padding: const EdgeInsets.all(16), children: [
             if (!w.allowed) ...[ErrorBox(w.reason.isEmpty ? 'Withdrawals are not available right now.' : w.reason), const SizedBox(height: 12)],
+            if (w.directEnabled && w.accounts.isNotEmpty) ...[
+              DropdownButtonFormField<String>(
+                key: const ValueKey('source'),
+                initialValue: _account(w)?.key ?? 'wallet',
+                isExpanded: true,
+                decoration: portalField(context, 'Withdraw from'),
+                items: [
+                  DropdownMenuItem(value: 'wallet', child: Text('My Wallet — ${w.wallet.toStringAsFixed(2)} USD')),
+                  for (final a in w.accounts)
+                    DropdownMenuItem(
+                        value: a.key, child: Text('${a.label} — Balance ${a.balance.toStringAsFixed(2)}', overflow: TextOverflow.ellipsis)),
+                ],
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() {
+                          _source = v ?? 'wallet';
+                          _error = null;
+                        }),
+              ),
+              const SizedBox(height: 12),
+            ],
             InfoCard(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('WALLET AVAILABLE', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Text('${w.wallet.toStringAsFixed(2)} USD', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: kNavy)),
-              ]),
+              child: Builder(builder: (context) {
+                final acct = _account(w);
+                final figure = acct == null
+                    ? '${w.wallet.toStringAsFixed(2)} USD'
+                    : acct.withdrawable == null
+                        ? 'Unavailable'
+                        : '${acct.withdrawable!.toStringAsFixed(2)} ${acct.currency}';
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(acct == null ? 'WALLET AVAILABLE' : 'AVAILABLE TO WITHDRAW · ${acct.label}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  Text(figure, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: kNavy)),
+                  if (acct != null) ...[
+                    const SizedBox(height: 4),
+                    Text('Balance ${acct.balance.toStringAsFixed(2)} ${acct.currency}. Open positions reduce what can be withdrawn.',
+                        style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
+                    if (acct.error.isNotEmpty) Text(acct.error, style: const TextStyle(fontSize: 12, color: Color(0xFFE5484D))),
+                  ],
+                ]);
+              }),
             ),
             const SizedBox(height: 8),
-            Text('Withdrawals are paid from your wallet. Admin approval completes the payout.',
+            Text(
+                _account(w) == null
+                    ? 'Withdrawals are paid from your wallet. Admin approval completes the payout.'
+                    : 'The amount is taken from this trading account when the withdrawal is approved.',
                 style: TextStyle(fontSize: 12.5, color: Theme.of(context).hintColor)),
             const SizedBox(height: 14),
             if (m == null)

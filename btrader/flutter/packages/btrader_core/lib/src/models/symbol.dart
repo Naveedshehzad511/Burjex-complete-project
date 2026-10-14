@@ -20,6 +20,15 @@ class TradeSymbol {
   final int minSpreadPoints;
   /// Total client spread cap (points). 0 = no cap.
   final int maxSpreadPoints;
+
+  /// Commission the admin set for this symbol in the account's group (NONE / PER_LOT / PER_SIDE /
+  /// ROUND_TURN / PERCENT) and its value (money per lot, or a percentage for PERCENT).
+  final String? commissionType;
+  final double commissionValue;
+
+  /// Quote currency of the instrument (USD for XAUUSD / EURUSD / BTCUSD). Dollar equivalents are
+  /// only shown when it is USD, because only then is a point's value a plain dollar amount.
+  final String? quoteCurrency;
   final bool enabled;
 
   /// Admin-configured trading-session windows (day/open/close, UTC). Empty
@@ -45,6 +54,9 @@ class TradeSymbol {
     this.pricingMethod,
     this.minSpreadPoints = 0,
     this.maxSpreadPoints = 0,
+    this.commissionType,
+    this.commissionValue = 0,
+    this.quoteCurrency,
     required this.enabled,
     this.tradingSessions = const [],
   });
@@ -76,6 +88,9 @@ class TradeSymbol {
       maxSpreadPoints: (j['maxSpreadPoints'] is num)
           ? (j['maxSpreadPoints'] as num).round()
           : int.tryParse('${j['maxSpreadPoints'] ?? 0}') ?? 0,
+      commissionType: j['commissionType']?.toString(),
+      commissionValue: _d(j['commissionValue']),
+      quoteCurrency: j['quoteCurrency']?.toString(),
       enabled: j['enabled'] ?? true,
       tradingSessions: TradingSessionWindow.listFromJson(j['tradingSessions']),
     );
@@ -123,6 +138,81 @@ class TradeSymbol {
       ask: raw.ask + delta,
       ts: raw.ts,
     );
+  }
+
+  /// The group charges commission only: prices are the market's, nothing is added to the spread.
+  bool get isCommissionOnly => pricingMethod == 'COMMISSION_ONLY';
+
+  /// Money for [points] of price movement on 1.00 lot, in the account currency (USD) - null when
+  /// the quote currency is not USD, where a point's value needs a conversion rate.
+  /// XAUUSD (2 digits, contract 100): 1 point = 0.01 x 100 = $1 per lot.
+  double? dollarsPerLot(num points) {
+    if ((quoteCurrency ?? 'USD').toUpperCase() != 'USD') return null;
+    return points * _pointSize(digits) * contractSize;
+  }
+
+  static String _money(double v, String currency) =>
+      currency.toUpperCase() == 'USD' ? '\$${v.toStringAsFixed(2)}' : '${v.toStringAsFixed(2)} $currency';
+
+  /// The commission exactly as the admin configured it, or null when there is none.
+  String? commissionText({String currency = 'USD'}) {
+    final t = (commissionType ?? 'NONE').toUpperCase();
+    if (t == 'NONE' || !(commissionValue > 0)) return null;
+    switch (t) {
+      case 'PER_LOT':
+        return '${_money(commissionValue, currency)} / lot';
+      case 'ROUND_TURN':
+        return '${_money(commissionValue, currency)} / lot (round turn)';
+      case 'PER_SIDE':
+        return '${_money(commissionValue, currency)} / lot per side';
+      case 'PERCENT':
+        var v = commissionValue.toStringAsFixed(4);
+        v = v.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+        return '$v% of value per side';
+    }
+    return null;
+  }
+
+  /// The cost text of a Quotes row. A commission-only group shows its commission and no spread
+  /// number; any other group shows its spread in points with the dollar cost of 1.00 lot.
+  String quoteCostLabel(int spreadPoints, {String currency = 'USD'}) {
+    if (isCommissionOnly) return commissionText(currency: currency) ?? '';
+    final usd = dollarsPerLot(spreadPoints);
+    return usd == null ? '$spreadPoints' : '$spreadPoints · ${_money(usd, currency)} / lot';
+  }
+
+  /// The pricing lines of the symbol properties sheet, from the admin's configuration.
+  List<(String, String)> pricingRows({String currency = 'USD'}) {
+    String pts(num v) {
+      final usd = dollarsPerLot(v);
+      return usd == null ? '$v pts' : '$v pts (${_money(usd, currency)} / lot)';
+    }
+
+    if (isCommissionOnly) {
+      return [
+        ('Pricing', 'Commission only'),
+        ('Commission', commissionText(currency: currency) ?? '—'),
+        ('Spread markup', 'None'),
+      ];
+    }
+    final rows = <(String, String)>[];
+    if (pricingMethod == null) {
+      rows.add(('Pricing', 'Group default'));
+      if (markupPoints != 0) rows.add(('Group markup', pts(markupPoints)));
+      return rows;
+    }
+    rows.add(('Pricing', pricingMethod == 'SPREAD_AND_COMMISSION' ? 'Spread + commission' : 'Spread'));
+    if (minSpreadPoints > 0 && minSpreadPoints == maxSpreadPoints) {
+      rows.add(('Spread', pts(minSpreadPoints)));
+    } else if (minSpreadPoints > 0 || maxSpreadPoints > 0) {
+      if (minSpreadPoints > 0) rows.add(('Min spread', pts(minSpreadPoints)));
+      if (maxSpreadPoints > 0) rows.add(('Max spread', pts(maxSpreadPoints)));
+    } else {
+      rows.add(('Spread', 'Market'));
+    }
+    final c = commissionText(currency: currency);
+    if (c != null) rows.add(('Commission', c));
+    return rows;
   }
 
   static double _pointSize(int digits) {

@@ -905,7 +905,12 @@ model Position {
 
   marginUsed    Decimal        @default(0) @db.Decimal(28, 8)
   swap          Decimal        @default(0) @db.Decimal(28, 8)
+  // Commission still to be realized into the balance at close. Positions opened before
+  // commission was charged at execution carry it here; new positions carry 0 (see below).
   commission    Decimal        @default(0) @db.Decimal(28, 8)
+  // Commission already debited from the balance, and written on the OPEN deal, when the
+  // position was executed. Never realized again at close. Display total = commission + commissionCharged.
+  commissionCharged Decimal    @default(0) @db.Decimal(28, 8)
   profit        Decimal        @default(0) @db.Decimal(28, 8)  // realized at close; floating while open (cache)
 
   comment       String?
