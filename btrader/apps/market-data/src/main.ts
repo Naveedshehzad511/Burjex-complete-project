@@ -24,7 +24,7 @@ import { MockAdapter } from './adapters/mock-adapter';
 import { GenericWsAdapter } from './adapters/generic-ws-adapter';
 import { Mt5IngestAdapter, FeedSource } from './adapters/mt5-ingest-adapter';
 import { NullAdapter } from './adapters/null-adapter';
-import { CandleEngine, CandleUpdate, DEFAULT_CHART_PRICE, bucketStart } from './candles/engine';
+import { CandleEngine, CandleUpdate, CanonicalCandle, DEFAULT_CHART_PRICE, bucketStart } from './candles/engine';
 import { selectFlushRows } from './candles/flush';
 import { TransformEpochs, groupTenants, transformCandle } from './candles/pricing';
 import { referenceTenant } from './candles/reference';
@@ -58,6 +58,12 @@ const TF_SECONDS: Record<string, number> = {
   '1d': 86400,
 };
 const CANDLE_TFS = Object.keys(TF_SECONDS);
+/**
+ * Built and pushed live, never stored: the gateway rolls W1 / MN up from stored D1. Without a live
+ * bar the client leaves the current week / month off the chart (it only draws a forming bar the
+ * server has pushed), so these must be on the engine even though nothing persists them.
+ */
+const LIVE_ONLY_TFS = ['1w', '1mn'];
 /** How often we scan for work (ms). Actual tip writes are further throttled. */
 const CANDLE_FLUSH_SCAN_MS = Number(process.env.CANDLE_FLUSH_SCAN_MS ?? 5_000);
 /** Min time between DB writes of the same forming tip (ms). Closed bars bypass this. */
@@ -180,7 +186,7 @@ const BROKER_UTC_OFFSET_SEC = (() => {
 })();
 
 const candleEngine = new CandleEngine({
-  timeframes: CANDLE_TFS,
+  timeframes: [...CANDLE_TFS, ...LIVE_ONLY_TFS],
   chartPrice: DEFAULT_CHART_PRICE, // BID — the B-Trader product specification
   brokerOffsetSec: BROKER_UTC_OFFSET_SEC,
 });
@@ -246,6 +252,31 @@ async function resumeCandleEngine(): Promise<void> {
         if (prev === undefined || t0 < prev) canonicalSince.set(r.symbol, t0);
       }
     }
+    // W1 / MN have no stored rows (LIVE_ONLY_TFS): rebuild the forming week and month from their
+    // stored D1 bars, the same rollup the gateway serves, or the first tick after a restart would
+    // open them at the current price and drop their real open / high / low.
+    for (const tf of LIVE_ONLY_TFS) {
+      const t = bucketStart(nowSec, tf, BROKER_UTC_OFFSET_SEC);
+      const days = await prisma.marketCandle.findMany({
+        where: { tf: '1d', t: { gte: t } },
+        orderBy: [{ symbol: 'asc' }, { t: 'asc' }],
+        select: { symbol: true, o: true, h: true, l: true, c: true, v: true },
+      });
+      const bars = new Map<string, CanonicalCandle>();
+      for (const d of days) {
+        const cur = bars.get(d.symbol);
+        if (!cur) {
+          bars.set(d.symbol, { symbol: d.symbol, tf, t, o: Number(d.o), h: Number(d.h), l: Number(d.l), c: Number(d.c), v: Number(d.v ?? 0), closed: false });
+          continue;
+        }
+        cur.h = Math.max(cur.h, Number(d.h));
+        cur.l = Math.min(cur.l, Number(d.l));
+        cur.c = Number(d.c);
+        cur.v += Number(d.v ?? 0);
+      }
+      candleEngine.restoreAll([...bars.values()]);
+      restored += bars.size;
+    }
     console.log(`[market-data] resumed ${restored} forming candle(s) after restart`);
   } catch (e) {
     // A cold database or a first-ever boot is not fatal: the engine simply
@@ -274,6 +305,9 @@ function aggregateTick(symbol: string, bid: number, tsMs: number): CandleUpdate[
 
   for (const u of updates) {
     const c = u.candle;
+    // W1 / MN are published only (see LIVE_ONLY_TFS). Skipped before canonicalSince too: a week's
+    // open would otherwise pull the live/history boundary back to Monday.
+    if (!(c.tf in TF_SECONDS)) continue;
     const key = `${symbol}|${c.tf}`;
     if (!canonicalSince.has(symbol)) canonicalSince.set(symbol, c.t);
 
