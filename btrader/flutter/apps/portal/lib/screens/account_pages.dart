@@ -36,8 +36,11 @@ final _accountTypesProvider = FutureProvider.autoDispose<({List<_AccountType> ty
       lev,
     ));
   }
-  final cur = [for (final c in (d['portal_currencies'] as List? ?? const ['USD'])) '$c'];
-  return (types: types, currencies: cur.isEmpty ? const ['USD'] : cur);
+  // Client request: USD only for now. PKR / EUR / AED (and any other currency the CRM lists)
+  // are disabled; restore the lines below to bring them back.
+  // final cur = [for (final c in (d['portal_currencies'] as List? ?? const ['USD'])) '$c'];
+  // return (types: types, currencies: cur.isEmpty ? const ['USD'] : cur);
+  return (types: types, currencies: const ['USD']);
 });
 
 class OpenAccountScreen extends ConsumerStatefulWidget {
