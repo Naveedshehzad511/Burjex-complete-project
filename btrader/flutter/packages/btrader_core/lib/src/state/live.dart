@@ -344,7 +344,8 @@ class QuotesNotifier extends StateNotifier<Map<String, Tick>> {
 final quotesProvider = StateNotifierProvider<QuotesNotifier, Map<String, Tick>>((_) => QuotesNotifier());
 
 /// How long a symbol's feed may stay silent before its SELL / BUY buttons are disabled.
-const Duration kFeedGrace = Duration(seconds: 10);
+/// Keep in step with the engine's MAX_PRICE_AGE_MS, so an enabled button is never refused for age.
+const Duration kFeedGrace = Duration(seconds: 15);
 
 /// Whether a symbol's market feed is live: true until [grace] has passed since its last valid
 /// update, false after that, and true again the moment a valid update arrives.
@@ -353,12 +354,19 @@ const Duration kFeedGrace = Duration(seconds: 10);
 /// price - the server still validates the price and the execution - it just stops the UI from
 /// flipping to grey on a short hiccup. Before the first live tick of a session the clock starts at
 /// creation, so a feed that never arrives also greys out after [grace].
+///
+/// The first state is computed, not assumed: a notifier recreated for a symbol that has already
+/// been silent past [grace] (the chart reopened, a tab switched back) starts grey instead of
+/// showing enabled for one poll interval and then flipping.
 class FeedLiveNotifier extends StateNotifier<bool> {
   FeedLiveNotifier(this._quotes, this.symbol, {this.grace = kFeedGrace, Duration poll = const Duration(milliseconds: 500)})
       : _created = _quotes.nowMs,
-        super(true) {
+        super(_isLive(_quotes, symbol, _quotes.nowMs, grace)) {
     _timer = Timer.periodic(poll, (_) => check());
   }
+
+  static bool _isLive(QuotesNotifier quotes, String symbol, int since, Duration grace) =>
+      quotes.nowMs - (quotes.lastValidRxMs(symbol) ?? since) <= grace.inMilliseconds;
 
   final QuotesNotifier _quotes;
   final String symbol;
@@ -370,8 +378,7 @@ class FeedLiveNotifier extends StateNotifier<bool> {
   /// buttons back on at once and silence turns them off within the poll interval of the deadline.
   void check() {
     if (!mounted) return;
-    final last = _quotes.lastValidRxMs(symbol) ?? _created;
-    final live = _quotes.nowMs - last <= grace.inMilliseconds;
+    final live = _isLive(_quotes, symbol, _created, grace);
     if (live != state) state = live;
   }
 

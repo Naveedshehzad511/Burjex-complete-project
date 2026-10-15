@@ -2236,10 +2236,12 @@ class _DealCardState extends State<_DealCard> {
   @override
   Widget build(BuildContext context) {
     final active = widget.enabled && !widget.locked && widget.tradable;
-    // MT5: a flat grey panel with white text — "SELL" / "BUY" small top-left, the
-    // price bottom-right with the pip digits enlarged. The panel flashes blue / red
-    // on an up / down tick and settles back to grey. Market closed: dim grey, no flash.
-    final fill = !widget.tradable ? _kMarketClosedGrey : (_flash ?? _kDealGrey);
+    // White text — "SELL" / "BUY" small top-left, the price bottom-right with the pip
+    // digits enlarged. The panel flashes blue / red on an up / down tick and settles
+    // back to its side colour (red SELL / blue BUY), never to grey: grey means only
+    // "not tradable" (market closed or no live feed for kFeedGrace), so a pause
+    // between ticks can no longer look like the buttons were disabled.
+    final fill = !widget.tradable ? _kMarketClosedGrey : (_flash ?? widget.base);
     return Opacity(
       opacity: active || widget.locked ? 1 : 0.6,
       child: Material(
@@ -2276,9 +2278,6 @@ class _DealCardState extends State<_DealCard> {
     );
   }
 }
-
-/// MT5's resting colour for the SELL / BUY panels.
-const _kDealGrey = Color(0xFFB9BCC2);
 
 class _StepIcon extends StatelessWidget {
   const _StepIcon({required this.icon, required this.onTap, this.tooltip});
