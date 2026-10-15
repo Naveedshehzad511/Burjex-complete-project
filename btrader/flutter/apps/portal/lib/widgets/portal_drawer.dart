@@ -114,10 +114,16 @@ class PortalDrawer extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 6, 6),
             child: Row(children: [
-              Image.asset('assets/branding/logo_mark.png',
-                  width: 36,
-                  height: 36,
-                  errorBuilder: (_, __, ___) => const SizedBox(width: 36)),
+              // The mark is dark blue: a white tile keeps it readable on the navy drawer.
+              Container(
+                width: 38,
+                height: 38,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                    color: Colors.white, borderRadius: BorderRadius.circular(9)),
+                child: Image.asset('assets/branding/logo_mark.png',
+                    errorBuilder: (_, __, ___) => const SizedBox()),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text('Burjex Prime',

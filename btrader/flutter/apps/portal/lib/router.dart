@@ -38,7 +38,7 @@ const _authRoutes = {
 /// go_router with an auth redirect driven by the CRM session.
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    initialLocation: '/home',
+    initialLocation: '/',
     refreshListenable: _AuthListenable(ref),
     redirect: (context, state) {
       final auth = ref.read(crmSessionProvider);
