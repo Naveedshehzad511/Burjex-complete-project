@@ -29,16 +29,21 @@ const Duration _kPushIgnoreAfterConfirm = Duration(seconds: 4);
 /// account's list on as the loading value; a screen reading it would show account A's trades under account B
 /// until B's answer (or a microtask) replaced them. This view never does: rows that belong to another account
 /// are dropped, and a list that is entirely another account's is reported as loading, not as data.
+///
+/// A trade the server has confirmed closed is never in it, even while a refetch is running: the list kept on
+/// screen during a reload is the one from before the close, and the row used to stay until the reload landed.
 final accountPositionsProvider = Provider.autoDispose<AsyncValue<List<Position>>>((ref) {
   final id = ref.watch(activeAccountIdProvider);
   final raw = ref.watch(openPositionsProvider);
+  final closed = ref.watch(closedPositionIdsProvider);
   final list = raw.valueOrNull;
   if (list == null) return raw;
   // A row without an account id (older API) is taken as the active account's.
   bool mine(Position p) => p.accountId.isEmpty || p.accountId == id;
   final own = list.where(mine).toList();
   if (own.isEmpty && list.isNotEmpty) return const AsyncLoading(); // still the previous account's list
-  return AsyncData(own.length == list.length ? list : own);
+  final open = closed.isEmpty ? own : own.where((p) => !closed.contains(p.id)).toList();
+  return AsyncData(open.length == list.length ? list : open);
 });
 
 /// How long a backend-confirmed trade is kept while the server's positions list has not listed it yet.
@@ -181,6 +186,15 @@ class OpenPositionsNotifier extends AutoDisposeAsyncNotifier<List<Position>> {
     levels[id] = _ConfirmedLevels(sl, tp);
     if (cur == null) return;
     state = AsyncData([for (final p in cur) p.id == id ? p.copyWith(slPrice: sl, tpPrice: tp) : p]);
+  }
+
+  /// The server confirmed a partial close: the position stays, with the volume that is left. The refetch
+  /// that follows the close reconciles everything else on the row.
+  void applyConfirmedVolume(String id, double volume) {
+    final cur = state.valueOrNull;
+    if (cur == null || !cur.any((p) => p.id == id && p.volume != volume)) return;
+    final next = [for (final p in cur) p.id == id ? p.copyWith(volume: volume) : p];
+    state = state.isLoading ? AsyncLoading<List<Position>>().copyWithPrevious(AsyncData(next)) : AsyncData(next);
   }
 
   /// Fetched rows plus confirmed opens the server list does not carry yet. A confirmed trade

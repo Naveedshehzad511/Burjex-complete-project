@@ -666,13 +666,27 @@ impl Engine {
             ts: now_ms(),
         };
         let client_symbol = self.client_symbol_for(group_id.as_deref(), &dummy_sym.id, &symbol).await;
-        self.publish_after_fill(
+        // A partial close leaves the position open: clients get it as OPEN with the size that is left
+        // (and that size's floating P/L at the close price), never as CLOSED. The CRM still gets
+        // `position.closed` with the realized profit and the lots closed, exactly as for a full close.
+        let position_extra = partial.then(|| {
+            let remaining = open_vol - vol;
+            let floating = crate::calc::position_profit(&side, remaining, open_price, close_price, &spec, conv)
+                + charges.2
+                + charges.3;
+            json!({
+                "partial": true, "symbol": symbol, "side": side, "volume": remaining,
+                "closedVolume": vol, "openPrice": open_price, "currentPrice": close_price, "profit": floating,
+            })
+        });
+        self.publish_after_fill_with(
             &tenant_id,
             &account_id,
             &position_id,
-            "closed",
+            if partial { "partial" } else { "closed" },
             &snap,
             Some(realized),
+            position_extra,
             Some(json!({"dealId": deal_id, "symbol": symbol, "clientSymbol": client_symbol, "volume": vol, "partial": partial})),
         )
         .await;

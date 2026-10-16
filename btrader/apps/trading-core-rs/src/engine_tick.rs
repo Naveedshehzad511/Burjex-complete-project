@@ -677,7 +677,12 @@ impl Engine {
         };
         let mut accounts = Vec::new();
         let mut seen = HashSet::new();
-        for p in self.book.for_symbol(tenant_id, &sym.id) {
+        for listed in self.book.for_symbol(tenant_id, &sym.id) {
+            // The list is a copy taken before this loop's awaits: a trade closed (or partly
+            // closed) since must not be pushed as OPEN with its old size after its close event.
+            let Some(p) = self.book.get(&listed.id) else {
+                continue;
+            };
             // Already claimed for SL/TP — do not keep pushing OPEN+PnL or the
             // portal will show the trade as active after the stop has fired.
             if p.exec_claim_kind.is_some() || self.claims.has(&p.id) {

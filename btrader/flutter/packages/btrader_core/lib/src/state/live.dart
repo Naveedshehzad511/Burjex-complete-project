@@ -125,60 +125,7 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
       case AccountFrame(:final data):
         ref.read(liveAccountProvider.notifier).set(data);
       case PositionFrame(:final data):
-        final id = '${data['id'] ?? data['positionId'] ?? ''}';
-        final status = '${data['status'] ?? ''}'.toUpperCase();
-        final book = '${data['book'] ?? ''}';
-        final closed = status == 'CLOSED' || book == 'closed';
-        if (closed && id.isNotEmpty) {
-          announce(tradeEvents.onPosition(data, id: id, closed: true), id);
-          ref.read(livePositionNotifierProvider.notifier).forget(id);
-          ref.read(closedPositionIdsProvider.notifier).add(id);
-          Future.microtask(() {
-            ref.read(positionsRefreshProvider).request();
-            ref.read(accountsRefreshProvider).request();
-            ref.read(tradeEventEpochProvider.notifier).state++;
-          });
-          break;
-        }
-        if (data['stale'] == true) {
-          Future.microtask(() {
-            ref.read(positionsRefreshProvider).request();
-            ref.read(accountsRefreshProvider).request();
-          });
-          break;
-        }
-        announce(tradeEvents.onPosition(data, id: id, closed: false), id);
-        // The engine's own confirmation of new SL / TP (this device, another device, or the platform): the
-        // chart line follows it at once, like it follows this device's own confirmed change.
-        if (data['opened'] != true && id.isNotEmpty && (data.containsKey('slPrice') || data.containsKey('tpPrice'))) {
-          ref.read(openPositionsProvider.notifier).applyConfirmedLevels(
-                id,
-                sl: double.tryParse('${data['slPrice']}'),
-                tp: double.tryParse('${data['tpPrice']}'),
-                fromPush: true,
-              );
-        }
-        final sym = '${data['symbol'] ?? ''}';
-        final q = sym.isEmpty ? null : ref.read(quotesProvider)[sym];
-        // A position this session has not seen yet is a NEW trade. When the engine's `opened`
-        // push carries the confirmed row, show it right away (no refetch needed to see it);
-        // either way reconcile the list against the server, coalesced across a burst.
-        final isNew = id.isNotEmpty && !ref.read(livePositionNotifierProvider).pl.containsKey(id);
-        final opened = Position.tryFromOpenedEvent(data);
-        if (opened != null) {
-          ref.read(openPositionsProvider.notifier).addConfirmed(opened);
-        }
-        // An `opened` push has no P/L yet: leave the figure to the live quote estimate until the
-        // first live snapshot arrives, instead of pinning it at 0.00.
-        if (data['opened'] != true || data['profit'] != null) {
-          ref.read(livePositionNotifierProvider.notifier).set(data, fallbackQuote: q);
-        }
-        if (isNew) {
-          Future.microtask(() {
-            ref.read(positionsRefreshProvider).request();
-            ref.read(accountsRefreshProvider).request();
-          });
-        }
+        applyPositionFrame(ref, data, events: tradeEvents, announce: announce);
       case OrderFrame(:final data):
         Future.microtask(() {
           final status = '${data['status'] ?? ''}'.toUpperCase();
@@ -203,6 +150,72 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
   return sock;
 });
 
+/// One engine position update (opened / live P/L / SL-TP / partial close / close) applied to the live stores.
+void applyPositionFrame(
+  Ref ref,
+  Map<String, dynamic> data, {
+  required TradeEventDetector events,
+  required void Function(TradeEventKind? kind, String id) announce,
+}) {
+  final id = '${data['id'] ?? data['positionId'] ?? ''}';
+  final status = '${data['status'] ?? ''}'.toUpperCase();
+  final book = '${data['book'] ?? ''}';
+  final closed = status == 'CLOSED' || book == 'closed';
+  if (closed && id.isNotEmpty) {
+    announce(events.onPosition(data, id: id, closed: true), id);
+    ref.read(positionClosesProvider).closed(id);
+    return;
+  }
+  // A close is final: a later OPEN update for the same trade (the engine's live P/L loop can publish
+  // one just after the close) must not bring its P/L back or trigger another reload.
+  if (id.isNotEmpty && ref.read(closedPositionIdsProvider).contains(id)) return;
+  // A partial close: the trade stays open with the volume that is left (the frame carries that size and
+  // its P/L, which the live figure below picks up).
+  if (data['partial'] == true && id.isNotEmpty) {
+    final left = double.tryParse('${data['volume']}');
+    if (left != null) ref.read(positionClosesProvider).partial(id, left);
+  }
+  if (data['stale'] == true) {
+    Future.microtask(() {
+      ref.read(positionsRefreshProvider).request();
+      ref.read(accountsRefreshProvider).request();
+    });
+    return;
+  }
+  announce(events.onPosition(data, id: id, closed: false), id);
+  // The engine's own confirmation of new SL / TP (this device, another device, or the platform): the
+  // chart line follows it at once, like it follows this device's own confirmed change.
+  if (data['opened'] != true && id.isNotEmpty && (data.containsKey('slPrice') || data.containsKey('tpPrice'))) {
+    ref.read(openPositionsProvider.notifier).applyConfirmedLevels(
+          id,
+          sl: double.tryParse('${data['slPrice']}'),
+          tp: double.tryParse('${data['tpPrice']}'),
+          fromPush: true,
+        );
+  }
+  final sym = '${data['symbol'] ?? ''}';
+  final q = sym.isEmpty ? null : ref.read(quotesProvider)[sym];
+  // A position this session has not seen yet is a NEW trade. When the engine's `opened`
+  // push carries the confirmed row, show it right away (no refetch needed to see it);
+  // either way reconcile the list against the server, coalesced across a burst.
+  final isNew = id.isNotEmpty && !ref.read(livePositionNotifierProvider).pl.containsKey(id);
+  final opened = Position.tryFromOpenedEvent(data);
+  if (opened != null) {
+    ref.read(openPositionsProvider.notifier).addConfirmed(opened);
+  }
+  // An `opened` push has no P/L yet: leave the figure to the live quote estimate until the
+  // first live snapshot arrives, instead of pinning it at 0.00.
+  if (data['opened'] != true || data['profit'] != null) {
+    ref.read(livePositionNotifierProvider.notifier).set(data, fallbackQuote: q);
+  }
+  if (isNew) {
+    Future.microtask(() {
+      ref.read(positionsRefreshProvider).request();
+      ref.read(accountsRefreshProvider).request();
+    });
+  }
+}
+
 /// Position ids the server has already closed. Overlay so the chart/portfolio
 /// drop the row on the close event without waiting for a list refetch.
 class ClosedPositionIds extends StateNotifier<Set<String>> {
@@ -217,6 +230,64 @@ class ClosedPositionIds extends StateNotifier<Set<String>> {
 
 final closedPositionIdsProvider =
     StateNotifierProvider<ClosedPositionIds, Set<String>>((_) => ClosedPositionIds());
+
+/// What this device does once the SERVER has confirmed a close - from the close request's own answer or
+/// from the engine's push, whichever arrives first. Nothing here runs on a guess: a request that fails or
+/// is not accepted changes nothing.
+class PositionCloses {
+  PositionCloses(this._ref);
+  final Ref _ref;
+
+  /// Remaining volume last applied per partially closed trade, so the answer and the push for the same
+  /// partial close reconcile once.
+  final Map<String, double> _partials = {};
+
+  /// A full close: the row leaves the open list at once, then the list, the account and History reconcile
+  /// once. The second confirmation of the same close (the push after the answer, or the reverse) is a no-op.
+  void closed(String id) {
+    if (id.isEmpty || _ref.read(closedPositionIdsProvider).contains(id)) return;
+    _partials.remove(id);
+    _ref.read(livePositionNotifierProvider.notifier).forget(id);
+    _ref.read(closedPositionIdsProvider.notifier).add(id);
+    _reconcile();
+  }
+
+  /// A partial close: the trade stays, with [remaining] lots.
+  void partial(String id, double remaining) {
+    if (id.isEmpty || _ref.read(closedPositionIdsProvider).contains(id) || _partials[id] == remaining) return;
+    _partials[id] = remaining;
+    _ref.read(openPositionsProvider.notifier).applyConfirmedVolume(id, remaining);
+    _reconcile();
+  }
+
+  /// The answer to `POST /positions/:id/close` for a trade of [openVolume] lots, [requestedVolume] null for
+  /// a full close. Returns true when the server confirmed the close (and it has been applied), false when it
+  /// did not, in which case nothing changed.
+  bool applyCloseResponse(Object? res, {required String id, required double openVolume, double? requestedVolume}) {
+    if (res is! Map || res['accepted'] != true) return false;
+    // The account as of this close (balance with the realized P/L), so the figures change with the row.
+    final account = res['account'];
+    if (account is Map) _ref.read(liveAccountProvider.notifier).set(Map<String, dynamic>.from(account));
+    final filled = double.tryParse('${res['filledVolume']}') ?? requestedVolume ?? openVolume;
+    final left = double.parse((openVolume - filled).toStringAsFixed(8));
+    if (requestedVolume == null || left <= 0) {
+      closed(id);
+    } else {
+      partial(id, left);
+    }
+    return true;
+  }
+
+  void _reconcile() {
+    Future.microtask(() {
+      _ref.read(positionsRefreshProvider).request();
+      _ref.read(accountsRefreshProvider).request();
+      _ref.read(tradeEventEpochProvider.notifier).state++;
+    });
+  }
+}
+
+final positionClosesProvider = Provider<PositionCloses>((ref) => PositionCloses(ref));
 
 /// Subscribes the WebSocket to every available symbol so ticks actually flow.
 /// The WS gateway only forwards ticks for subscribed symbols — watch this

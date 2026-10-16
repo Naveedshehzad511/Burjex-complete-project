@@ -111,8 +111,8 @@ class Position {
 
   /// A copy with another P/L and / or other protective levels. [slPrice] / [tpPrice] left out keep the
   /// current level; passing null clears it (a removed SL / TP).
-  Position copyWith({double? profit, Object? slPrice = _keep, Object? tpPrice = _keep}) => Position(
-        id: id, accountId: accountId, accountLogin: accountLogin, side: side, status: status, volume: volume,
+  Position copyWith({double? volume, double? profit, Object? slPrice = _keep, Object? tpPrice = _keep}) => Position(
+        id: id, accountId: accountId, accountLogin: accountLogin, side: side, status: status, volume: volume ?? this.volume,
         openPrice: openPrice,
         slPrice: identical(slPrice, _keep) ? this.slPrice : slPrice as double?,
         tpPrice: identical(tpPrice, _keep) ? this.tpPrice : tpPrice as double?,

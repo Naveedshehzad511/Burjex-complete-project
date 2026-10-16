@@ -19,6 +19,7 @@ import jwt from 'jsonwebtoken';
 import { Channels, Tick, WsFrame, CandleEvent } from '@btrader/shared';
 import { LatestCandleCache } from './candle-cache';
 import { CandleBuffer } from './candle-batch';
+import { ClosedPositions } from './closed-positions';
 
 const PORT = Number(process.env.WS_PORT ?? 4101);
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6380';
@@ -135,6 +136,9 @@ const redis = new Redis(REDIS_URL);
 /// Newest server candle per tenant + symbol + timeframe (see candle-cache.ts). In memory only: no
 /// Redis writes, and a gateway restart just refills it from the next tick.
 const latestCandles = new LatestCandleCache(Number(process.env.WS_CANDLE_CACHE_MAX ?? 50_000));
+
+/// Positions already reported closed: a stale OPEN update for one is never forwarded (see closed-positions.ts).
+const closedPositions = new ClosedPositions();
 
 /// Buffer one engine event for a client, coalescing where it is safe to.
 ///
@@ -361,6 +365,7 @@ sub.on('pmessage', (_pattern, channel, message) => {
     }
     if (posBody && posAccount) {
       const key = String(posBody.id ?? posBody.positionId);
+      if (closedPositions.isStale(tkey(tenantId, key), isClosedOrSlTp)) return;
       for (const c of byAccount.get(tkey(tenantId, posAccount)) ?? EMPTY) {
         queueEvt(c, 'position', key, posBody);
       }

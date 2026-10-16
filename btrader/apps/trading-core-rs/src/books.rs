@@ -90,6 +90,14 @@ impl PositionBook {
         }
     }
 
+    /// The position as it is in the book NOW (None once it has been closed).
+    pub fn get(&self, id: &str) -> Option<BookRow> {
+        let k = self.where_id.get(id)?;
+        let b = self.buckets.get(k.as_str())?;
+        let row = b.get(id)?;
+        Some(row.value().clone())
+    }
+
     pub fn map(&self, id: &str, f: impl FnOnce(&mut BookRow)) {
         if let Some(k) = self.where_id.get(id) {
             if let Some(b) = self.buckets.get(k.as_str()) {
@@ -356,5 +364,56 @@ mod stop_limit_book_tests {
         // Sell Stop Limit whose limit is already satisfied when the stop is hit.
         book.upsert(row("s", "acct-9", "SELL", 3050.0, 3048.0, 2.0));
         assert_eq!(tick(&book, 3049.0, 3049.5), vec!["s"]);
+    }
+}
+
+#[cfg(test)]
+mod position_book_tests {
+    //! The live P/L loop iterates a COPY of the book taken before its awaits; it re-reads each row with
+    //! `get` right before publishing, so a trade closed or partly closed meanwhile is never pushed as OPEN
+    //! with its old size after its close event.
+    use super::*;
+
+    fn pos(id: &str, vol: f64) -> BookRow {
+        BookRow {
+            id: id.into(),
+            tenant_id: "t".into(),
+            account_id: "a".into(),
+            symbol_id: "s".into(),
+            side: "BUY".into(),
+            volume: vol,
+            open_price: 1.1,
+            sl_price: None,
+            tp_price: None,
+            margin_used: 0.0,
+            swap: 0.0,
+            commission: 0.0,
+            covered_volume: 0.0,
+            opened_at: Utc::now(),
+            account_currency: "USD".into(),
+            group_id: None,
+            exec_claim_kind: None,
+        }
+    }
+
+    #[test]
+    fn get_sees_a_close_or_a_partial_close_made_after_the_copy() {
+        let book = PositionBook::new();
+        book.upsert(pos("p1", 0.1));
+        book.upsert(pos("p2", 0.1));
+        let copy = book.for_symbol("t", "s");
+        assert_eq!(copy.len(), 2);
+
+        book.remove("p1"); // full close
+        book.map("p2", |r| r.volume = 0.06); // partial close
+
+        let mut live = Vec::new();
+        for listed in copy {
+            if let Some(p) = book.get(&listed.id) {
+                live.push((p.id, p.volume));
+            }
+        }
+        assert_eq!(live, vec![("p2".to_string(), 0.06)]);
+        assert!(book.get("nope").is_none());
     }
 }

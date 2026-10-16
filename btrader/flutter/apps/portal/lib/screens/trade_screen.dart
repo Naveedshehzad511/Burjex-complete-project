@@ -78,13 +78,20 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
       ref.invalidate(accountsProvider);
     }
 
-    Future<void> close(String pid, {double? volume}) async {
+    // The row leaves the list as soon as the server confirms the close (its answer or the engine's push,
+    // whichever comes first), not when the reload that follows lands. A failed close leaves it as it is.
+    Future<void> close(Position p, {double? volume}) async {
       final messenger = ScaffoldMessenger.of(context);
+      final closes = ref.read(positionClosesProvider);
+      Object? res;
       try {
-        await api.post('/positions/$pid/close', volume != null ? {'volume': volume} : {});
-        SoundService.instance.tradeClose();
-        await refresh();
+        res = await api.post('/positions/${p.id}/close', volume != null ? {'volume': volume} : {});
       } catch (_) {
+        res = null;
+      }
+      if (closes.applyCloseResponse(res, id: p.id, openVolume: p.volume, requestedVolume: volume)) {
+        SoundService.instance.tradeClose();
+      } else {
         SoundService.instance.error();
         messenger.showSnackBar(const SnackBar(content: Text('Close failed')));
       }
@@ -161,7 +168,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                   final v = double.parse(vol.clamp(minLot, maxV).toStringAsFixed(2));
                   Navigator.pop(ctx);
                   // Closing the whole open volume is a full close.
-                  close(p.id, volume: v >= maxV ? null : v);
+                  close(p, volume: v >= maxV ? null : v);
                 },
                 style: FilledButton.styleFrom(backgroundColor: tc.loss, padding: const EdgeInsets.symmetric(vertical: 14)),
                 child: Text('Close ${vol.toStringAsFixed(2)} lots'),
@@ -245,7 +252,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
               }),
               onTap: () {
                 Navigator.pop(ctx);
-                close(p.id);
+                close(p);
               },
             ),
             ListTile(
@@ -368,11 +375,24 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                         icon: Icon(Icons.more_horiz, color: Theme.of(context).hintColor),
                         onSelected: (v) async {
                           if (v == 'closeAll' && id != null) {
-                            final res = await api.post('/accounts/$id/close-all', {});
-                            // The server says how many it closed: one sound per closed position.
+                            final messenger = ScaffoldMessenger.of(context);
+                            final Object? res;
+                            try {
+                              res = await api.post('/accounts/$id/close-all', {});
+                            } catch (_) {
+                              SoundService.instance.error();
+                              messenger.showSnackBar(const SnackBar(content: Text('Close all failed')));
+                              ref.read(positionsRefreshProvider).request();
+                              return;
+                            }
+                            // The server says how many it closed: one sound per closed position. Each row
+                            // already left the list on its own confirmed close push; this reload only
+                            // reconciles (coalesced with the ones those pushes asked for).
                             final closed = res is Map ? res['closed'] : null;
                             SoundService.instance.tradeClose(count: closed is num ? closed.toInt() : 1);
-                            await refresh();
+                            ref.read(positionsRefreshProvider).request();
+                            ref.read(accountsRefreshProvider).request();
+                            ref.read(tradeEventEpochProvider.notifier).state++;
                           }
                         },
                         itemBuilder: (_) => [
