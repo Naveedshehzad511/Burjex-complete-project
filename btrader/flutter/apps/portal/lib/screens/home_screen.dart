@@ -37,10 +37,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     _restorePrefs();
-    // The CRM ledger has no push channel; a light refresh keeps balances current.
+    // The CRM ledger has no push channel; a light refresh keeps balances current. Until KYC is approved the
+    // profile is re-read on the same beat, so an approval / rejection by the administrator shows on this
+    // screen without leaving it (it used to wait for the app to come back to the foreground).
     _poll = Timer.periodic(const Duration(seconds: 12), (_) {
-      if (mounted) ref.invalidate(crmDashboardProvider);
+      if (!mounted) return;
+      ref.invalidate(crmDashboardProvider);
+      _refreshKycIfPending();
     });
+  }
+
+  void _refreshKycIfPending() {
+    final profile = ref.read(crmProfileProvider).valueOrNull;
+    if (profile == null || !profile.kycApproved) refreshCrmProfile(ref);
   }
 
   @override
@@ -102,6 +111,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(crmDashboardProvider);
+            _refreshKycIfPending();
             await ref.read(crmDashboardProvider.future).catchError((_) => const CrmDashboard(real: CrmMetrics(), demo: CrmMetrics(), accounts: [], userName: '', walletBalance: 0));
           },
           child: ListView(
