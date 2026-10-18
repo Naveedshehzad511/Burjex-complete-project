@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,6 +21,8 @@ import 'screens/new_order_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/reset_password_screen.dart';
+import 'screens/security_screens.dart';
+import 'security/app_lock.dart';
 import 'screens/trade_screen.dart';
 import 'screens/verify_email_screen.dart';
 import 'screens/verify_otp_screen.dart';
@@ -47,6 +50,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       final onAuth = _authRoutes.contains(loc);
       if (!auth.authenticated) return onAuth ? null : '/login';
       if (loc == '/reset-password' || loc == '/verify-email') return null;
+      // First sign-in on this phone: the optional PIN / Face Lock screen, once (Skip counts as answered).
+      final lock = ref.read(appLockProvider);
+      final needsSetup = !kIsWeb && lock.loaded && !lock.promptDone;
+      if (needsSetup) return loc == '/security-setup' ? null : '/security-setup';
+      if (loc == '/security-setup') return '/home';
       if (onAuth) return '/home';
       return null;
     },
@@ -76,9 +84,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => VerifyEmailScreen(token: state.uri.queryParameters['token'] ?? ''),
       ),
       // Full-screen pages (back arrow, no bottom bar).
-      GoRoute(path: '/deposit', builder: (_, __) => const DepositScreen()),
+      GoRoute(path: '/deposit', builder: (_, state) => DepositScreen(account: state.uri.queryParameters['account'])),
       GoRoute(path: '/withdraw', builder: (_, __) => const WithdrawScreen()),
       GoRoute(path: '/open-account', builder: (_, state) => OpenAccountScreen(demo: state.uri.queryParameters['type'] == 'demo')),
+      GoRoute(path: '/security-setup', builder: (_, __) => const SecuritySetupScreen()),
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
       GoRoute(path: '/kyc', builder: (_, __) => const KycScreen()),
       GoRoute(path: '/wallet', builder: (_, __) => const WalletScreen()),
@@ -126,5 +135,6 @@ final routerProvider = Provider<GoRouter>((ref) {
 class _AuthListenable extends ChangeNotifier {
   _AuthListenable(Ref ref) {
     ref.listen(crmSessionProvider, (_, __) => notifyListeners());
+    ref.listen(appLockProvider.select((s) => (s.loaded, s.promptDone)), (_, __) => notifyListeners());
   }
 }

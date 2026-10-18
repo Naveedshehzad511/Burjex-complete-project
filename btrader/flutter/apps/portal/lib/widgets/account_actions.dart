@@ -13,15 +13,19 @@ import 'trade_toast.dart';
 enum AccountAction { tradingPassword, investorPassword, leverage }
 
 class AccountMenuButton extends ConsumerWidget {
-  const AccountMenuButton({super.key, required this.account});
+  const AccountMenuButton({super.key, required this.account, this.child});
   final CrmAccount account;
+
+  /// Opens the same menu from a custom button (Home's "Manage"); the 3-dot icon when null.
+  final Widget? child;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return PopupMenuButton<AccountAction>(
       tooltip: 'Account settings',
-      icon: const Icon(Icons.more_vert),
+      icon: child == null ? const Icon(Icons.more_vert) : null,
       padding: EdgeInsets.zero,
+      child: child,
       onSelected: (a) {
         switch (a) {
           case AccountAction.tradingPassword:

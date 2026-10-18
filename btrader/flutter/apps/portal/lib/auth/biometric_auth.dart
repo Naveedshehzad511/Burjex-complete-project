@@ -49,6 +49,19 @@ class BiometricAuth {
     }
   }
 
+  /// The device's own check, nothing remembered: true when the client passes it. [biometricOnly] false lets the
+  /// device screen-lock code stand in for a face / fingerprint that does not match. Used by the app lock.
+  Future<bool> authenticate({required String reason, bool biometricOnly = false}) async {
+    try {
+      return await _auth.authenticate(
+        localizedReason: reason,
+        options: AuthenticationOptions(stickyAuth: true, biometricOnly: biometricOnly),
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// True once a credential has been remembered on this device.
   Future<bool> hasSaved() async {
     try {

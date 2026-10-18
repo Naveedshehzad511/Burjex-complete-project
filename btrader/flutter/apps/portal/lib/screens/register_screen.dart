@@ -21,12 +21,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _last = TextEditingController();
   final _email = TextEditingController();
   final _phone = TextEditingController();
-  final _address = TextEditingController();
   final _pass = TextEditingController();
   final _confirm = TextEditingController();
   final _refCode = TextEditingController();
   SignupCountry? _country;
-  bool _human = true;
   bool _busy = false;
   String? _error;
   String? _ok;
@@ -46,7 +44,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _last.dispose();
     _email.dispose();
     _phone.dispose();
-    _address.dispose();
     _pass.dispose();
     _confirm.dispose();
     _refCode.dispose();
@@ -92,10 +89,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       setState(() => _error = 'Passwords do not match');
       return;
     }
-    if (!_human) {
-      setState(() => _error = 'Confirm you are human');
-      return;
-    }
     setState(() {
       _busy = true;
       _error = null;
@@ -111,10 +104,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         'email': _email.text.trim(),
         'phone': phone,
         'country': _country!.name,
-        'address': _address.text.trim(),
         'password': _pass.text,
         'confirm_password': _confirm.text,
-        'captcha': 'on',
+        // The Partner Code, whether it came from the referral link or was typed: the server checks it and refuses a wrong one.
         if (_refCode.text.trim().isNotEmpty) 'signup_ref': _refCode.text.trim(),
       });
       if (!mounted) return;
@@ -199,21 +191,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   ),
                 ]),
                 const SizedBox(height: 10),
-                TextField(controller: _address, decoration: _dec('Address')),
-                const SizedBox(height: 10),
                 TextField(controller: _pass, obscureText: true, decoration: _dec('Password *')),
                 const SizedBox(height: 10),
                 TextField(controller: _confirm, obscureText: true, decoration: _dec('Confirm password *')),
                 const SizedBox(height: 10),
-                TextField(controller: _refCode, decoration: _dec('IB ID (optional)')),
-                const SizedBox(height: 8),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.trailing,
-                  value: _human,
-                  onChanged: (v) => setState(() => _human = v ?? false),
-                  title: const Text('I am human / not a robot'),
+                TextField(
+                  controller: _refCode,
+                  textCapitalization: TextCapitalization.characters,
+                  autocorrect: false,
+                  decoration: _dec('Partner Code (optional)'),
                 ),
+                const SizedBox(height: 8),
                 if (_ok != null) Text(_ok!, style: const TextStyle(color: Color(0xFF0B7A4B))),
                 if (_error != null) Text(_error!, style: const TextStyle(color: Color(0xFFE5484D))),
                 const SizedBox(height: 12),

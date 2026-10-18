@@ -197,6 +197,41 @@ class IbDashboardScreen extends ConsumerWidget {
   }
 }
 
+/// A value (Partner Code / referral link) on the IB card with a copy button.
+Widget _copyRow(BuildContext context, String? label, String value, String copied) => Row(children: [
+      Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+          child: Row(children: [
+            if (label != null) ...[
+              Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12.5)),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: Text(value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: label != null ? FontWeight.w800 : FontWeight.w400, letterSpacing: label != null ? 0.6 : 0)),
+            ),
+          ]),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Material(
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            await Clipboard.setData(ClipboardData(text: value));
+            if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(copied)));
+          },
+          child: const Padding(padding: EdgeInsets.all(10), child: Icon(Icons.copy, size: 18, color: Colors.white)),
+        ),
+      ),
+    ]);
+
 class _IbWalletCard extends StatelessWidget {
   const _IbWalletCard({required this.d});
   final Map<String, dynamic> d;
@@ -205,6 +240,7 @@ class _IbWalletCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final profile = d['ib_profile'] as Map?;
     final link = '${profile?['referral_link'] ?? ''}';
+    final code = '${profile?['ib_code'] ?? ''}'.trim();
     final pending = d['pending_application'] == true;
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
@@ -227,31 +263,13 @@ class _IbWalletCard extends StatelessWidget {
         ],
         const SizedBox(height: 16),
         if (profile != null) ...[
+          // Partner Code and referral link both resolve to this IB at sign-up.
+          if (code.isNotEmpty) ...[
+            _copyRow(context, 'Partner Code', code, 'Partner Code copied'),
+            const SizedBox(height: 8),
+          ],
           if (link.isNotEmpty) ...[
-            Row(children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
-                  child: Text(link, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12.5)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Material(
-                color: Colors.white.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(12),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () async {
-                    await Clipboard.setData(ClipboardData(text: link));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Referral link copied')));
-                    }
-                  },
-                  child: const Padding(padding: EdgeInsets.all(10), child: Icon(Icons.copy, size: 18, color: Colors.white)),
-                ),
-              ),
-            ]),
+            _copyRow(context, null, link, 'Referral link copied'),
             const SizedBox(height: 8),
             Text('${profile['link_clicks'] ?? 0} link clicks', style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12)),
           ],

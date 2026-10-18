@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../crm/crm.dart';
 import '../main.dart' show kNavy;
 import '../widgets/portal_ui.dart';
+import 'security_screens.dart';
 
 // ── Open account ────────────────────────────────────────────────────────────
 
@@ -243,9 +244,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ro('Last name', u.lastName),
             ro('Phone', u.phone),
             ro('Country', u.country),
-            ro('Address', u.address),
-            Text('Name, phone, country and address cannot be edited after account creation.',
+            Text('Name, phone and country cannot be edited after account creation.',
                 style: TextStyle(fontSize: 12.5, color: Theme.of(context).hintColor)),
+            const SizedBox(height: 22),
+            const SecuritySettingsCard(),
             const SizedBox(height: 22),
             const Text('Change password', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),

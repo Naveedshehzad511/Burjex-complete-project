@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Real vibration for trade feedback (HapticFeedback alone is only a touch tick that many phones mute). -->
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- Face Lock: the system biometric prompt (face / fingerprint). -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <application
         android:label="Burjex Prime"
         android:name="${applicationName}"

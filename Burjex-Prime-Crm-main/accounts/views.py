@@ -436,7 +436,7 @@ def client_signup_view(request):
             if ref_code:
                 from django.db.models import F
                 from ib.models import IBProfile
-                IBProfile.objects.filter(ib_code=ref_code).update(link_clicks=F("link_clicks") + 1)
+                IBProfile.objects.filter(ib_code__iexact=ref_code).update(link_clicks=F("link_clicks") + 1)
         if "ib" in request.GET:
             request.session["signup_ib_user_id"] = (request.GET.get("ib") or "").strip()
         if "ref" not in request.GET and "ib" not in request.GET:
@@ -460,6 +460,14 @@ def client_signup_view(request):
             require_verification_email=ev.enabled,
         )
         ok = form.is_valid()
+        if ok:
+            # Same rule as the app: a Partner Code / IB link that matches no approved IB stops the registration.
+            from ib.referral import signup_partner_code_error
+
+            code_error = signup_partner_code_error(request)
+            if code_error:
+                form.add_error(None, code_error)
+                ok = False
         logger.info("client_signup POST form.is_valid()=%s", ok)
         if not ok:
             logger.warning("client_signup form.errors=%s", form.errors)

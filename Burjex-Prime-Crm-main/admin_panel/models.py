@@ -1287,8 +1287,8 @@ class SignupSettings(models.Model):
     phone_mode = models.CharField(max_length=10, choices=FieldMode.choices, default=FieldMode.REQUIRED)
     password_mode = models.CharField(max_length=10, choices=FieldMode.choices, default=FieldMode.REQUIRED)
     country_mode = models.CharField(max_length=10, choices=FieldMode.choices, default=FieldMode.OPTIONAL)
-    address_mode = models.CharField(max_length=10, choices=FieldMode.choices, default=FieldMode.OPTIONAL)
-    captcha_enabled = models.BooleanField(default=True)
+    address_mode = models.CharField(max_length=10, choices=FieldMode.choices, default=FieldMode.HIDDEN)
+    captcha_enabled = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     @classmethod

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'router.dart';
+import 'screens/security_screens.dart';
 import 'services/sound_service.dart';
 import 'session/app_reset.dart';
 import 'widgets/trade_toast.dart';
@@ -47,7 +48,7 @@ class PortalApp extends ConsumerWidget {
       darkTheme: AppTheme.dark(brand),
       themeMode: mode,
       routerConfig: router,
-      builder: (context, child) => ToastHost(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => LockGate(child: ToastHost(child: child ?? const SizedBox.shrink())),
     );
   }
 }

@@ -33,6 +33,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _hidden = false;
   Timer? _poll;
 
+  /// The account each category's slider is on (kept while the 12 s refresh rebuilds the page).
+  final _selected = <bool, String?>{};
+
   @override
   void initState() {
     super.initState();
@@ -70,6 +73,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _setDemo(bool v) async {
     setState(() => _demo = v);
     (await SharedPreferences.getInstance()).setString(_kHomeTabKey, v ? 'demo' : 'real');
+  }
+
+  /// Choose any account, Real or Demo, from one list: the category and the slider both follow it.
+  Future<void> _pickAccount(List<CrmAccount> all) async {
+    final picked = await showModalBottomSheet<CrmAccount>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final groups = [for (final demo in const [false, true]) (demo, all.where((a) => a.isDemo == demo).toList())];
+        return SafeArea(
+          child: ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), children: [
+            for (final (demo, list) in groups)
+              if (list.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
+                  child: Text(demo ? 'Demo' : 'Real', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                ),
+                for (final a in list)
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    title: Text('${a.plan} #${a.login}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: a.platform.isEmpty ? null : Text(a.platform),
+                    trailing: Text(_hidden ? '••••' : '${a.balance.toStringAsFixed(2)} ${a.currency}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    selected: a.isDemo == _demo && a.login == (_selected[_demo] ?? list.first.login),
+                    onTap: () => Navigator.pop(ctx, a),
+                  ),
+              ],
+          ]),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    _selected[picked.isDemo] = picked.login;
+    if (picked.isDemo != _demo) {
+      await _setDemo(picked.isDemo);
+    } else {
+      setState(() {});
+    }
   }
 
   Future<void> _toggleHidden() async {
@@ -196,7 +238,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ]),
                       )
                     else
-                      for (final a in accounts) _AccountCard(account: a, hidden: _hidden),
+                      // Real / Demo each slide through their own accounts; the card on screen is the selected one.
+                      _AccountSlider(
+                        key: ValueKey(_demo),
+                        accounts: accounts,
+                        selected: _selected[_demo],
+                        onSelected: (login) => _selected[_demo] = login,
+                        cardBuilder: (a) => _AccountCard(
+                          account: a,
+                          hidden: _hidden,
+                          onToggleHidden: _toggleHidden,
+                          onPick: d.accounts.length > 1 ? () => _pickAccount(d.accounts) : null,
+                        ),
+                      ),
                   ]);
                 },
               ),
@@ -560,117 +614,274 @@ class _ModeCard extends StatelessWidget {
       );
 }
 
+/// The accounts of one category as a horizontal swipe slider (one card each, dots under it). Keeps the card the
+/// client is on when the list refreshes, and follows [selected] when it is changed from outside (the picker).
+class _AccountSlider extends StatefulWidget {
+  const _AccountSlider({super.key, required this.accounts, required this.selected, required this.onSelected, required this.cardBuilder});
+  final List<CrmAccount> accounts;
+  final String? selected;
+  final ValueChanged<String> onSelected;
+  final Widget Function(CrmAccount) cardBuilder;
+
+  @override
+  State<_AccountSlider> createState() => _AccountSliderState();
+}
+
+class _AccountSliderState extends State<_AccountSlider> {
+  late int _i = _indexOf(widget.selected);
+  late String _login = widget.accounts[_i].login;
+  late final PageController _c = PageController(initialPage: _i);
+
+  int _indexOf(String? login) {
+    final i = widget.accounts.indexWhere((a) => a.login == login);
+    return i < 0 ? 0 : i;
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_AccountSlider old) {
+    super.didUpdateWidget(old);
+    if (widget.selected != old.selected && widget.selected != _login) {
+      // Chosen elsewhere (the account picker): slide to it.
+      final to = _indexOf(widget.selected);
+      _i = to;
+      _login = widget.accounts[to].login;
+      if (_c.hasClients) _c.animateToPage(to, duration: const Duration(milliseconds: 280), curve: Curves.easeOutCubic);
+      return;
+    }
+    // A refresh: stay on the same account even if the list changed around it.
+    final at = widget.accounts.indexWhere((a) => a.login == _login);
+    final to = at >= 0 ? at : _i.clamp(0, widget.accounts.length - 1);
+    if (to != _i || at < 0) {
+      _i = to;
+      _login = widget.accounts[to].login;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _c.hasClients) _c.jumpToPage(to);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accounts = widget.accounts;
+    final n = accounts.length;
+    final cs = Theme.of(context).colorScheme;
+    return Column(children: [
+      // The invisible card gives the slider its height (it follows the text size and the width); the pages fill it.
+      Stack(children: [
+        Visibility(
+          visible: false,
+          maintainSize: true,
+          maintainAnimation: true,
+          maintainState: true,
+          child: widget.cardBuilder(accounts[_i.clamp(0, n - 1)]),
+        ),
+        Positioned.fill(
+          child: PageView.builder(
+            controller: _c,
+            itemCount: n,
+            onPageChanged: (i) {
+              _login = accounts[i].login;
+              widget.onSelected(_login);
+              setState(() => _i = i);
+            },
+            itemBuilder: (_, i) => Padding(
+              padding: EdgeInsets.symmetric(horizontal: n > 1 ? 2 : 0),
+              child: widget.cardBuilder(accounts[i]),
+            ),
+          ),
+        ),
+      ]),
+      if (n > 1)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            for (var i = 0; i < n; i++)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: i == _i ? 18 : 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: i == _i ? kNavy : cs.onSurface.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+          ]),
+        ),
+    ]);
+  }
+}
+
+/// One trading account, laid out like the client's reference: account chip, Real/Demo + platform + plan tags, balance
+/// (with the eye), equity, then Manage / Deposit. Only values the CRM returns are shown. Withdraw and Trade, which
+/// the old card had, stay as a second row.
 class _AccountCard extends ConsumerWidget {
-  const _AccountCard({required this.account, required this.hidden});
+  const _AccountCard({required this.account, required this.hidden, required this.onToggleHidden, this.onPick});
   final CrmAccount account;
   final bool hidden;
+  final VoidCallback onToggleHidden;
+
+  /// Opens the account picker; null when there is only one account (nothing to choose).
+  final VoidCallback? onPick;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final a = account;
+    final live = a.status.toUpperCase() == 'ACTIVE' && a.tradingEnabled;
     String v(double x) => hidden ? '••••' : x.toStringAsFixed(2);
-    Widget tag(String t, {Color? bg, Color? fg}) => Container(
+    final whiteFaint = Colors.white.withValues(alpha: 0.75);
+
+    Widget outlined(String t) => Container(
           margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white.withValues(alpha: 0.55))),
+          child: Text(t, maxLines: 1, style: TextStyle(color: whiteFaint, fontSize: 12, fontWeight: FontWeight.w600)),
+        );
+    Widget pill(String t) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: bg ?? Theme.of(context).colorScheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: (fg ?? Theme.of(context).dividerColor).withValues(alpha: 0.4)),
-          ),
-          child: Text(t, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(20)),
+          child: Text(t, maxLines: 1, style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
         );
-    // Label on top, number large, currency small underneath — each stat gets its own
-    // column (flex by content) so values never run into each other.
-    Widget stat(String l, String val, {String? unit, int flex = 1}) => Expanded(
-          flex: flex,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(l, maxLines: 1, style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
-            ),
-            const SizedBox(height: 3),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(val, maxLines: 1, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-            ),
-            if (unit != null)
-              Text(unit, maxLines: 1, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Theme.of(context).hintColor)),
-          ]),
-        );
-    Widget statDivider() => Container(
-          width: 1,
-          height: 42,
-          margin: const EdgeInsets.symmetric(horizontal: 10),
-          color: Theme.of(context).dividerColor,
-        );
-    Widget action(String label, IconData icon, Color color, VoidCallback? onTap) => Expanded(
+    // White pill buttons; a disabled one fades instead of disappearing.
+    Widget button(String label, IconData icon, VoidCallback? onTap, {bool solid = true}) => Expanded(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: FilledButton.icon(
               onPressed: onTap,
-              icon: Icon(icon, size: 15),
-              label: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+              icon: Icon(icon, size: 17),
+              label: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14))),
               style: FilledButton.styleFrom(
-                backgroundColor: color,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                backgroundColor: solid ? Colors.white : Colors.white.withValues(alpha: 0.16),
+                foregroundColor: solid ? kNavy : Colors.white,
+                disabledBackgroundColor: Colors.white.withValues(alpha: 0.12),
+                disabledForegroundColor: Colors.white.withValues(alpha: 0.4),
+                padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
               ),
             ),
           ),
         );
-    final live = a.status.toUpperCase() == 'ACTIVE' && a.tradingEnabled;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kNavy.withValues(alpha: 0.55), width: 1.4),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-            child: Wrap(runSpacing: 6, children: [
-              tag(a.isDemo ? 'Demo' : 'Real', bg: const Color(0x1A22C55E), fg: const Color(0xFF178F45)),
-              // Order: Real/Demo · account number · plan (Standard) [· status when not live].
-              tag(a.login, bg: live ? const Color(0x1A22C55E) : null, fg: live ? const Color(0xFF178F45) : null),
-              tag(a.plan),
-              if (!live) tag(a.status),
+    // "Manage" is the old 3-dot menu (trading password / investor password / leverage) on a button.
+    final manage = Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: AccountMenuButton(
+          account: a,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(26)),
+            child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.tune, size: 17, color: kNavy),
+              SizedBox(width: 6),
+              Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text('Manage', maxLines: 1, style: TextStyle(color: kNavy, fontWeight: FontWeight.w800, fontSize: 14)))),
             ]),
           ),
-          // The 3-dot menu: change trading password / investor password / leverage.
-          SizedBox(width: 32, height: 32, child: AccountMenuButton(account: a)),
-        ]),
-        const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+    );
+    final trade = button(
+      'Trade',
+      Icons.show_chart,
+      live
+          ? () async {
+              // Open this account for trading (credentials come from the CRM), then go to Trade.
+              unawaited(ref.read(tradingSessionProvider.notifier).openOwn(a.login));
+              context.go('/trade');
+            }
+          : null,
+      solid: a.isDemo,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: a.isDemo ? const [Color(0xFF1B2A6B), Color(0xFF14397A), Color(0xFF0B6A8F)] : const [Color(0xFF071A33), kNavy, Color(0xFF0B5FA8)],
+        ),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: const [BoxShadow(color: Color(0x33002D58), blurRadius: 20, offset: Offset(0, 8))],
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Flexible(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: onPick,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(22)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Flexible(
+                    child: Text('${a.plan} #${a.login}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800)),
+                  ),
+                  if (onPick != null) const Icon(Icons.keyboard_arrow_down, size: 20, color: Colors.white),
+                ]),
+              ),
+            ),
           ),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            stat('Balance', v(a.balance), flex: 5),
-            statDivider(),
-            stat('Equity', v(_accountEquity(ref, a)), flex: 5),
-            statDivider(),
-            stat('Leverage', '1:${a.leverage}', flex: 4),
+        ]),
+        const SizedBox(height: 12),
+        // One line whatever the text size: a long label shrinks instead of wrapping.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(children: [
+            outlined(a.isDemo ? 'Demo' : 'Real'),
+            outlined([a.platform, a.plan].where((e) => e.isNotEmpty).join(' ')),
+            if (!live) outlined(a.status),
           ]),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 10),
         Row(children: [
-          if (!a.isDemo) action('Deposit', Icons.add_circle_outline, kNavy, a.depositEnabled ? () => context.push('/deposit') : null),
-          if (!a.isDemo) action('Withdraw', Icons.remove_circle_outline, const Color(0xFFD33F3A), a.withdrawEnabled ? () => context.push('/withdraw') : null),
-          action('Trade', Icons.show_chart, kNavy, live
-              ? () async {
-                  // Open this account for trading (credentials come from the CRM), then go to Trade.
-                  unawaited(ref.read(tradingSessionProvider.notifier).openOwn(a.login));
-                  context.go('/trade');
-                }
-              : null),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(v(a.balance), maxLines: 1, style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, height: 1.1)),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(a.currency, style: TextStyle(color: whiteFaint, fontSize: 14, fontWeight: FontWeight.w600)),
+          InkWell(
+            onTap: onToggleHidden,
+            customBorder: const CircleBorder(),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 22, color: Colors.white),
+            ),
+          ),
         ]),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(children: [
+            pill('Equity ${v(_accountEquity(ref, a))}'),
+            const SizedBox(width: 8),
+            pill('1:${a.leverage}'),
+          ]),
+        ),
+        const SizedBox(height: 16),
+        Row(children: [
+          manage,
+          if (!a.isDemo) button('Deposit', Icons.arrow_upward, a.depositEnabled ? () => context.push('/deposit?account=${a.login}') : null) else trade,
+        ]),
+        if (!a.isDemo) ...[
+          const SizedBox(height: 8),
+          Row(children: [
+            button('Withdraw', Icons.arrow_downward, a.withdrawEnabled ? () => context.push('/withdraw') : null, solid: false),
+            trade,
+          ]),
+        ],
       ]),
     );
   }

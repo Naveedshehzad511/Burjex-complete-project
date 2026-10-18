@@ -8,11 +8,12 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import io.flutter.FlutterInjector
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+// local_auth (PIN / Face Lock) needs a FragmentActivity to show the system biometric sheet.
+class MainActivity : FlutterFragmentActivity() {
     // The trade-event click. A native SoundPool with several streams: every click starts at once and
     // independently. (The audio plugin's low-latency player keeps ONE stream, so in a burst of trades a click
     // either cut the previous one or never started - 10 trades vibrated 10 times but sounded about 3.)

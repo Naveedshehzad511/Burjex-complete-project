@@ -231,7 +231,9 @@ String crmAssetUrl(String path) {
 /// the amount, a payment slip only where the method needs one. Everything comes from the CRM, so
 /// changing a method there changes this screen.
 class DepositScreen extends ConsumerStatefulWidget {
-  const DepositScreen({super.key});
+  /// [account] is the login Home's card was showing: the deposit is credited to it (when it can take one).
+  const DepositScreen({super.key, this.account});
+  final String? account;
 
   @override
   ConsumerState<DepositScreen> createState() => _DepositScreenState();
@@ -242,7 +244,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   final _reference = TextEditingController();
   final _notes = TextEditingController();
   int? _methodId;
-  String _target = 'wallet';
+  late String _target = widget.account ?? 'wallet';
   String? _network;
   PlatformFile? _proof;
   bool _busy = false;
@@ -297,11 +299,13 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     });
     try {
       final dio = ref.read(crmDioProvider);
+      // The account Home passed in may not take deposits: it then goes to the wallet, as the picker shows.
+      final target = s.targets.any((t) => t.value == _target) ? _target : 'wallet';
       if (m.kind == DepositKind.gateway) {
         final res = await dio.post('/deposits/crypto/', data: {
           'gateway': m.id,
           'crypto_network': _network,
-          'trading_account': _target,
+          'trading_account': target,
           'amount': amt.toStringAsFixed(2),
         });
         _session = ((res.data as Map)['data'] as Map).cast<String, dynamic>();
@@ -317,7 +321,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
             'currency':
                 'USD', // the client enters dollars; the rate only tells how much to send
             'reference': _reference.text.trim(),
-            'trading_account': _target,
+            'trading_account': target,
             if (_notes.text.trim().isNotEmpty) 'notes': _notes.text.trim(),
             if (_proof?.bytes != null)
               'payment_screenshot': MultipartFile.fromBytes(_proof!.bytes!,

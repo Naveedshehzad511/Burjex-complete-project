@@ -303,14 +303,27 @@ def client_signup(request, data: dict) -> tuple[bool, dict]:
 
     signup_ref = (payload.get("signup_ref") or "").strip()
     signup_ib_legacy = (payload.get("signup_ib_legacy") or "").strip()
-    if signup_ref and hasattr(request, "session"):
-        request.session["signup_ib_ref"] = signup_ref
-        from django.db.models import F
-        from ib.models import IBProfile
+    if hasattr(request, "session"):
+        # The session is where assign_ib_from_signup_referral reads the code; a stale one must not survive a signup
+        # that carries none (or a different one).
+        request.session.pop("signup_ib_ref", None)
+        request.session.pop("signup_ib_user_id", None)
+        if signup_ref:
+            request.session["signup_ib_ref"] = signup_ref
+        if signup_ib_legacy:
+            request.session["signup_ib_user_id"] = signup_ib_legacy
+    # A Partner Code that matches no approved IB stops the registration: going on would leave the client believing
+    # they are linked to an IB when they are not.
+    if signup_ref or signup_ib_legacy:
+        from ib.referral import INVALID_PARTNER_CODE_MESSAGE, resolve_signup_inviter
 
-        IBProfile.objects.filter(ib_code=signup_ref).update(link_clicks=F("link_clicks") + 1)
-    if signup_ib_legacy and hasattr(request, "session"):
-        request.session["signup_ib_user_id"] = signup_ib_legacy
+        if resolve_signup_inviter(signup_ref, signup_ib_legacy) is None:
+            return False, {"message": INVALID_PARTNER_CODE_MESSAGE, "errors": {"signup_ref": [INVALID_PARTNER_CODE_MESSAGE]}}
+        if signup_ref:
+            from django.db.models import F
+            from ib.models import IBProfile
+
+            IBProfile.objects.filter(ib_code__iexact=signup_ref).update(link_clicks=F("link_clicks") + 1)
 
     form = ClientSignupForm(
         payload,

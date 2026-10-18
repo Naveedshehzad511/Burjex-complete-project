@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../security/app_lock.dart' show kCrmUserKey;
 import '../services/push_service.dart';
 import '../session/app_reset.dart';
 
@@ -95,6 +96,10 @@ class CrmSession extends StateNotifier<CrmAuthState> {
       if (token.isEmpty) return 'Login failed.';
       final p = await SharedPreferences.getInstance();
       await p.setString(kCrmTokenKey, token);
+      // Whose PIN / Face Lock this device holds for this sign-in: the CRM user id (else the typed email).
+      final user = data['user'];
+      final who = '${user is Map ? (user['id'] ?? user['email'] ?? '') : ''}'.trim();
+      await p.setString(kCrmUserKey, (who.isNotEmpty ? who : email).toLowerCase());
       state = CrmAuthState(loading: false, token: token);
       unawaited(PushService.instance.register(token));
       return null;
@@ -113,6 +118,7 @@ class CrmSession extends StateNotifier<CrmAuthState> {
     await p.remove(_kDashCacheKey);
     await p.remove(kCrmProfileCacheKey);
     await p.remove(kCrmIbStateCacheKey);
+    await p.remove(kCrmUserKey); // the PIN / Face Lock stay on the device, under that user, for their next sign-in
     _dashSeeded = false;
     _profileSeeded = false;
     if (token != null) {
