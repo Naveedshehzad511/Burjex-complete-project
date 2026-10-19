@@ -1,9 +1,10 @@
 import { Controller, Get, Query, UseGuards, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/jwt.guard';
-import { CurrentTenant } from '../../common/decorators';
+import { CurrentTenant, CurrentUser } from '../../common/decorators';
 import { CandlesService } from './candles.service';
 import { QuotesService } from './quotes.service';
+import { MoversService } from './movers.service';
 import { Timeframe } from './feed.types';
 
 /**
@@ -20,6 +21,7 @@ export class MarketController {
   constructor(
     private readonly candles: CandlesService,
     private readonly quotes: QuotesService,
+    private readonly movers: MoversService,
   ) {}
 
   @Get('clock')
@@ -44,6 +46,19 @@ export class MarketController {
   async getQuotes(@CurrentTenant() t: any, @Query('symbol') symbol?: string) {
     const tenantId = t?.id || (await this.quotes.getDefaultTenantId());
     return this.quotes.snapshot(tenantId, symbol);
+  }
+
+  @Get('movers')
+  @ApiOperation({
+    summary:
+      'Top Gainers / Top Losers for the Home screen: up to 5 each, across Commodities, Crypto, Indices and Stocks, ' +
+      '% change against the previous day close, from the instruments the trading group of the account offers.',
+  })
+  @ApiQuery({ name: 'accountId', required: false })
+  async getMovers(@CurrentTenant() t: any, @CurrentUser() u: any, @Query('accountId') accountId?: string) {
+    const tenantId = t?.id || (await this.quotes.getDefaultTenantId());
+    const isAdmin = u?.role === 'SUPER_ADMIN' || u?.role === 'TENANT_ADMIN' || u?.role === 'TENANT_STAFF';
+    return this.movers.movers(tenantId, accountId, isAdmin ? undefined : u?.id);
   }
 
   @Get('candles')

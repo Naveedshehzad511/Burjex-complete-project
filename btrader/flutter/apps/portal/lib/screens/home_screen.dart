@@ -10,8 +10,10 @@ import '../crm/crm.dart';
 import '../main.dart' show kNavy;
 import '../session/sessions.dart';
 import '../state/live_figures.dart';
+import '../state/movers.dart';
 import '../widgets/account_actions.dart';
 import '../widgets/manage_accounts.dart';
+import '../widgets/market_movers.dart';
 import '../widgets/portal_drawer.dart';
 import '../widgets/portal_ui.dart';
 
@@ -47,6 +49,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (!mounted) return;
       ref.invalidate(crmDashboardProvider);
       _refreshKycIfPending();
+      ref.read(moversProvider.notifier).refresh(); // Top Gainers / Losers ride the same beat
     });
   }
 
@@ -254,6 +257,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ]);
                 },
               ),
+              // Market sections load on their own: a slow or failed dashboard never hides them, and they never
+              // wait for it. (Order: account list, [news], Top Gainers, Top Losers, [stories].)
+              const MoversSection(side: MoversSide.gainers),
+              const MoversSection(side: MoversSide.losers),
             ],
           ),
         ),

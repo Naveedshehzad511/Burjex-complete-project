@@ -8,5 +8,6 @@ import { AuditModule } from '../audit/audit.module';
   imports: [JwtModule.register({}), AuditModule],
   controllers: [SymbolsController],
   providers: [SymbolsService],
+  exports: [SymbolsService],
 })
 export class SymbolsModule {}
