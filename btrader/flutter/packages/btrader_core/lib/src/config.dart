@@ -26,6 +26,14 @@ class BtConfig {
   // Dev: sent as X-BT-Tenant. Production resolves the tenant by host instead.
   static const tenant = String.fromEnvironment('TENANT', defaultValue: 'demo');
 
+  /// The production host a RELEASE mobile build talks to when it was built without API_BASE / WS_URL (an archive
+  /// made straight from Xcode / Android Studio passes no --dart-define). Without it such a build pointed at a LAN
+  /// address: the CRM screens worked (they have a production default) and every trading screen failed to load.
+  /// Set by the app before runApp; debug builds keep the local defaults below.
+  static String? releaseFallbackHost;
+
+  static String? get _releaseHost => !kIsWeb && kReleaseMode ? releaseFallbackHost : null;
+
   static const int apiPort = 4100;
   static const int wsPort = 4101;
 
@@ -53,6 +61,7 @@ class BtConfig {
     // Web builds are served behind Caddy on portal/admin.burjexprime.net —
     // same-origin /v1 (no hardcoded :4100, which breaks HTTPS / mixed content).
     if (kIsWeb) return Uri.base.origin;
+    if (_releaseHost != null) return 'https://$_releaseHost';
     return 'http://$resolvedHost:$apiPort';
   }
 
@@ -87,6 +96,7 @@ class BtConfig {
       final scheme = u.scheme == 'https' ? 'wss' : 'ws';
       return '$scheme://${u.host}${u.hasPort ? ':${u.port}' : ''}';
     }
+    if (_releaseHost != null) return 'wss://$_releaseHost';
     return 'ws://$resolvedHost:$wsPort';
   }
 }

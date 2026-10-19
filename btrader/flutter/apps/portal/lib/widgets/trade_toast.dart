@@ -71,12 +71,17 @@ class _ToastHostState extends State<ToastHost> {
         right: 0,
         child: IgnorePointer(
           ignoring: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final t in _toasts)
-                _ToastCard(key: t.key, data: t, onClose: () => _remove(t)),
-            ],
+          // The toasts sit above the Navigator, outside every screen's Material: without one their text took
+          // Flutter's fallback style (monospace, underlined) instead of the app font.
+          child: Material(
+            type: MaterialType.transparency,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final t in _toasts)
+                  _ToastCard(key: t.key, data: t, onClose: () => _remove(t)),
+              ],
+            ),
           ),
         ),
       ),

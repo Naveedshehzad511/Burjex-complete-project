@@ -10,6 +10,9 @@ import 'widgets/trade_toast.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // A release build made without --dart-define-from-file (e.g. archived straight from Xcode) still talks to
+  // production instead of a LAN address. API_BASE / WS_URL, when given, win.
+  BtConfig.releaseFallbackHost = 'portal.burjexprime.net';
   SoundService.instance.warmUp(); // load the trade sounds now, not on the first trade
   runApp(const _AppRoot());
 }
