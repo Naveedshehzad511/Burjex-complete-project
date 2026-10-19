@@ -224,8 +224,9 @@ class ActiveAccountBar extends ConsumerWidget {
     // read-only and managed sessions still show.
     if (onlyWhenSpecial && !(s.managed || s.readonly || s.error != null)) return const SizedBox.shrink();
     return Container(
-      margin: EdgeInsets.fromLTRB(16, compact ? 4 : 8, 16, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: EdgeInsets.fromLTRB(16, compact ? 4 : 8, 16, compact ? 2 : 4),
+      // The compact bar (over the chart) takes only the room its one line needs.
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: compact ? 4 : 8),
       decoration: BoxDecoration(
         color: s.readonly ? _kInvestorBg : Theme.of(context).colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(12),
@@ -254,24 +255,33 @@ class ActiveAccountBar extends ConsumerWidget {
         if (s.error != null && s.login != null)
           TextButton(
             onPressed: () => ref.read(tradingSessionProvider.notifier).openOwn(s.login!),
+            // No 48 px tap-target padding in the compact bar: it would make the row taller than its text.
+            style: compact ? TextButton.styleFrom(minimumSize: const Size(0, 32), tapTargetSize: MaterialTapTargetSize.shrinkWrap, padding: const EdgeInsets.symmetric(horizontal: 8)) : null,
             child: const Text('Retry'),
           ),
         if (own.length > 1 || ref.watch(managedAccountsProvider).isNotEmpty || s.managed)
-          PopupMenuButton<String>(
-            tooltip: 'Switch account',
-            icon: const Icon(Icons.swap_vert, size: 20),
-            onSelected: (v) {
-              if (v == '__manage') {
-                showManageAccountDialog(context);
-              } else {
-                ref.read(tradingSessionProvider.notifier).openOwn(v);
-              }
-            },
-            itemBuilder: (_) => [
-              for (final a in own.where((a) => a.tradingEnabled))
-                PopupMenuItem(value: a.login, child: Text('My account #${a.login} · ${a.isDemo ? 'Demo' : 'Real'}')),
-              const PopupMenuItem(value: '__manage', child: Text('Managed accounts…')),
-            ],
+          // The menu button's default 48 px minimum size is what made this bar ~70 px tall for one line of text:
+          // a 32 px box keeps the icon (and a usable tap target) while the bar fits its content.
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: PopupMenuButton<String>(
+              padding: EdgeInsets.zero,
+              tooltip: 'Switch account',
+              icon: const Icon(Icons.swap_vert, size: 20),
+              onSelected: (v) {
+                if (v == '__manage') {
+                  showManageAccountDialog(context);
+                } else {
+                  ref.read(tradingSessionProvider.notifier).openOwn(v);
+                }
+              },
+              itemBuilder: (_) => [
+                for (final a in own.where((a) => a.tradingEnabled))
+                  PopupMenuItem(value: a.login, child: Text('My account #${a.login} · ${a.isDemo ? 'Demo' : 'Real'}')),
+                const PopupMenuItem(value: '__manage', child: Text('Managed accounts…')),
+              ],
+            ),
           ),
       ]),
     );
