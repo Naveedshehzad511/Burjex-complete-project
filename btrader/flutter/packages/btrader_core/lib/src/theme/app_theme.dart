@@ -46,6 +46,11 @@ class TradeColors extends ThemeExtension<TradeColors> {
   }
 }
 
+/// The app font: the Roboto bundled in this package (pubspec.yaml), so iOS draws the same font and weights as
+/// Android (which has Roboto built in; iOS fell back to San Francisco, visibly bolder). Text painted straight on
+/// a canvas (TextPainter) does not inherit the theme and must name it itself.
+const String kAppFontFamily = 'packages/btrader_core/Roboto';
+
 /// Builds light and dark Material 3 themes seeded from the tenant's brand color,
 /// so every broker brand gets its own look with one source of truth.
 class AppTheme {
@@ -71,7 +76,7 @@ class AppTheme {
       colorScheme: scheme,
       scaffoldBackgroundColor: bg,
       dividerColor: divider,
-      fontFamily: 'Roboto',
+      fontFamily: kAppFontFamily,
       extensions: <ThemeExtension<dynamic>>[
         TradeColors(
           // Unified scheme: BLUE = positive, RED = negative (everywhere).

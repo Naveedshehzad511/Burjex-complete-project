@@ -22,3 +22,19 @@ dev_dependencies:
   flutter_lints: ^4.0.0
 
 flutter:
+  # Roboto ships with the apps (Android has it built in, iOS does not: without these files iOS fell back to
+  # San Francisco, which draws the same weights visibly bolder). Static 400-800 instances of Roboto 3.016
+  # (the Android build), SIL OFL 1.1 - see fonts/OFL.txt. Apps use it as `packages/btrader_core/Roboto`.
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: fonts/Roboto-Regular.ttf
+          weight: 400
+        - asset: fonts/Roboto-Medium.ttf
+          weight: 500
+        - asset: fonts/Roboto-SemiBold.ttf
+          weight: 600
+        - asset: fonts/Roboto-Bold.ttf
+          weight: 700
+        - asset: fonts/Roboto-ExtraBold.ttf
+          weight: 800

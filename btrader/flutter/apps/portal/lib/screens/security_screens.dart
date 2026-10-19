@@ -225,7 +225,8 @@ class _LockScreenState extends ConsumerState<LockScreen> {
                     },
                     footer: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                       if (face) TextButton.icon(onPressed: _face, icon: const Icon(Icons.face_outlined, size: 20), label: Text('Use ${faceLockLabel()}')),
-                      TextButton(onPressed: () => setState(() => _confirmSignOut = true), child: const Text('Forgot PIN?')),
+                      // "Forgot PIN?" hidden for now (the flow behind it is kept); uncomment to offer it again.
+                      // TextButton(onPressed: () => setState(() => _confirmSignOut = true), child: const Text('Forgot PIN?')),
                     ]),
                   )
                 : Center(

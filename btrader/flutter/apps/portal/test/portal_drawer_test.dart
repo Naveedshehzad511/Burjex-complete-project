@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:btrader_core/btrader_core.dart';
 import 'package:burjex_portal/screens/ib_screens.dart' show IbState, ibStateProvider;
 import 'package:burjex_portal/widgets/portal_drawer.dart';
@@ -39,15 +37,11 @@ Future<void> _open(WidgetTester t, Size size, {bool dark = true, List<Override> 
 }
 
 /// The test runner's default font (Ahem) draws every glyph as a full-width square, which says
-/// nothing about whether a label fits. Load the real Roboto the app uses so widths are honest.
+/// nothing about whether a label fits. Load the Roboto the app bundles (every weight) so widths are honest.
 Future<void> _loadRoboto() async {
-  final root = Platform.environment['FLUTTER_ROOT'];
-  if (root == null) return;
-  final dir = '$root/bin/cache/artifacts/material_fonts';
-  final loader = FontLoader('Roboto');
-  for (final f in ['regular', 'medium', 'bold']) {
-    final file = File('$dir/roboto-$f.ttf');
-    if (file.existsSync()) loader.addFont(Future.value(ByteData.sublistView(file.readAsBytesSync())));
+  final loader = FontLoader(kAppFontFamily);
+  for (final f in ['Regular', 'Medium', 'SemiBold', 'Bold', 'ExtraBold']) {
+    loader.addFont(rootBundle.load('packages/btrader_core/fonts/Roboto-$f.ttf'));
   }
   await loader.load();
 }

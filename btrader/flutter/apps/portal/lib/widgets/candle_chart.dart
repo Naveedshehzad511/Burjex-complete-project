@@ -374,7 +374,7 @@ class _TextCache {
     _trim();
     return _m[key] = TextPainter(
       textDirection: TextDirection.ltr,
-      text: TextSpan(text: text, style: TextStyle(color: color, fontSize: size, fontWeight: weight)),
+      text: TextSpan(text: text, style: TextStyle(fontFamily: kAppFontFamily, color: color, fontSize: size, fontWeight: weight)),
     )..layout();
   }
 
@@ -1575,7 +1575,7 @@ class _LevelsPainter extends CustomPainter {
       final labelText = lv.labelFor?.call(price) ?? lv.label;
       if (lv.boxed) {
         if (labels.tryTake(yy - 8, yy + 8)) {
-          final lt = _TextCache.rich('b|$labelText', () => TextSpan(text: ' $labelText ', style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w700)));
+          final lt = _TextCache.rich('b|$labelText', () => TextSpan(text: ' $labelText ', style: const TextStyle(fontFamily: kAppFontFamily, color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w700)));
           final rr = Rect.fromLTWH(2, yy - 8, lt.width, 16);
           canvas.drawRRect(RRect.fromRectAndRadius(rr, const Radius.circular(3)), Paint()..color = lv.color);
           lt.paint(canvas, Offset(2, yy - 6));
@@ -1583,7 +1583,7 @@ class _LevelsPainter extends CustomPainter {
       } else if (labels.tryTake(yy - labelH - 1, yy)) {
         // Inline MT5 label: coloured text sitting just above its own line, no box. A soft halo in the
         // chart background keeps the text readable over candles.
-        final labelStyle = TextStyle(color: lv.color, fontSize: 11, fontWeight: FontWeight.w600, shadows: [Shadow(color: surface, blurRadius: 3), Shadow(color: surface, blurRadius: 3)]);
+        final labelStyle = TextStyle(fontFamily: kAppFontFamily, color: lv.color, fontSize: 11, fontWeight: FontWeight.w600, shadows: [Shadow(color: surface, blurRadius: 3), Shadow(color: surface, blurRadius: 3)]);
         final split = lv.plColor == null ? -1 : labelText.lastIndexOf(', ');
         final it = _TextCache.rich(
           'i|${lv.color.toARGB32()}|${surface.toARGB32()}|${lv.plColor?.toARGB32()}|$split|$labelText',
@@ -1887,7 +1887,7 @@ class _CandlePainter extends CustomPainter {
           '${_timeLabel(k, tf)}';
       final ip = TextPainter(
         textDirection: TextDirection.ltr,
-        text: TextSpan(text: info, style: TextStyle(color: onSurface, fontSize: 10, height: 1.3)),
+        text: TextSpan(text: info, style: TextStyle(fontFamily: kAppFontFamily, color: onSurface, fontSize: 10, height: 1.3)),
       )..layout();
       // Below the symbol caption (top-left), so the two never overlap.
       final box = Rect.fromLTWH(6, 66, ip.width + 12, ip.height + 8);
@@ -2081,7 +2081,7 @@ class _CandlePainter extends CustomPainter {
               Paint()..color = color.withValues(alpha: lv == 0 || lv == 1 ? 0.9 : 0.55)..strokeWidth = 1);
           tpF.text = TextSpan(
             text: '${(lv * 100).toStringAsFixed(1)}  ${p.toStringAsFixed(digits)}',
-            style: TextStyle(color: color, fontSize: 8.5),
+            style: TextStyle(fontFamily: kAppFontFamily, color: color, fontSize: 8.5),
           );
           tpF.layout();
           tpF.paint(canvas, Offset(left + 2, yy - 10));
@@ -2153,7 +2153,7 @@ class _CandlePainter extends CustomPainter {
       _hlineFaint(canvas, gy, chartW, text);
       final gt = TextPainter(
         textDirection: TextDirection.ltr,
-        text: TextSpan(text: g.toStringAsFixed(0), style: TextStyle(color: text, fontSize: 8)),
+        text: TextSpan(text: g.toStringAsFixed(0), style: TextStyle(fontFamily: kAppFontFamily, color: text, fontSize: 8)),
       )..layout();
       gt.paint(canvas, Offset(chartW + 2, gy - 5));
     }
@@ -2204,14 +2204,14 @@ class _CandlePainter extends CustomPainter {
     // Pane header label.
     final ht = TextPainter(
       textDirection: TextDirection.ltr,
-      text: TextSpan(text: ind.label.isEmpty ? ind.type.shortName : ind.label, style: TextStyle(color: text, fontSize: 9.5, fontWeight: FontWeight.w600)),
+      text: TextSpan(text: ind.label.isEmpty ? ind.type.shortName : ind.label, style: TextStyle(fontFamily: kAppFontFamily, color: text, fontSize: 9.5, fontWeight: FontWeight.w600)),
     )..layout();
     ht.paint(canvas, Offset(4, top + 2));
 
     // Right-axis: hi / lo (fixed-range panes also show the midpoint).
     final tp = TextPainter(textDirection: TextDirection.ltr);
     void axisLabel(double v, double atY) {
-      tp.text = TextSpan(text: _oscNum(v), style: TextStyle(color: text, fontSize: 8));
+      tp.text = TextSpan(text: _oscNum(v), style: TextStyle(fontFamily: kAppFontFamily, color: text, fontSize: 8));
       tp.layout();
       tp.paint(canvas, Offset(chartW + 4, atY - 4));
     }

@@ -212,7 +212,7 @@ class _RadialMenuPainter extends CustomPainter {
       _paintIcon(canvas, radialToolIcon(tool), pos - Offset(0, roomy ? 8 : 0), roomy ? 22 : 20, fg);
       if (roomy) {
         final tp = TextPainter(textDirection: TextDirection.ltr, textAlign: TextAlign.center);
-        tp.text = TextSpan(text: tool.shortLabel, style: TextStyle(fontSize: 9.5, fontWeight: isSel ? FontWeight.w800 : FontWeight.w600, color: fg));
+        tp.text = TextSpan(text: tool.shortLabel, style: TextStyle(fontFamily: kAppFontFamily, fontSize: 9.5, fontWeight: isSel ? FontWeight.w800 : FontWeight.w600, color: fg));
         tp.layout();
         tp.paint(canvas, pos + Offset(-tp.width / 2, 8));
       }

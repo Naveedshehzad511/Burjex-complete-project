@@ -1882,7 +1882,7 @@ class TimeframeStrip extends StatelessWidget {
       // Measured in the heaviest weight, so picking another timeframe never moves the others.
       double textWidth(Timeframe tf, double fs) {
         final tp = TextPainter(
-          text: TextSpan(text: tf.mt5Label, style: TextStyle(fontSize: fs, fontWeight: FontWeight.w800)),
+          text: TextSpan(text: tf.mt5Label, style: TextStyle(fontFamily: kAppFontFamily, fontSize: fs, fontWeight: FontWeight.w800)),
           textDirection: TextDirection.ltr,
           textScaler: scaler,
         )..layout();
