@@ -750,17 +750,19 @@ class _AccountCard extends ConsumerWidget {
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white.withValues(alpha: 0.55))),
           child: Text(t, maxLines: 1, style: TextStyle(color: whiteFaint, fontSize: 12, fontWeight: FontWeight.w600)),
         );
-    // One equal-width column: a small label with its value directly below. Both shrink rather than wrap or clip.
-    Widget statColumn(String label, String value) => Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(right: 8),
+    // One equal-width third: a small label with its value directly below, thin divider before the 2nd and 3rd.
+    // Label and value shrink rather than wrap or clip.
+    Widget statColumn(String label, String value, {bool divider = false}) => Expanded(
+          child: Container(
+            padding: EdgeInsets.only(left: divider ? 12 : 0),
+            decoration: divider ? BoxDecoration(border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.18)))) : null,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
                 child: Text(label, maxLines: 1, style: TextStyle(color: whiteFaint, fontSize: 12, fontWeight: FontWeight.w600)),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 4),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
@@ -770,39 +772,30 @@ class _AccountCard extends ConsumerWidget {
           ),
         );
     // White pill buttons; a disabled one fades instead of disappearing.
-    Widget button(String label, IconData icon, VoidCallback? onTap, {bool solid = true}) => Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: FilledButton.icon(
-              onPressed: onTap,
-              icon: Icon(icon, size: 17),
-              label: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14))),
-              style: FilledButton.styleFrom(
-                backgroundColor: solid ? Colors.white : Colors.white.withValues(alpha: 0.16),
-                foregroundColor: solid ? kNavy : Colors.white,
-                disabledBackgroundColor: Colors.white.withValues(alpha: 0.12),
-                disabledForegroundColor: Colors.white.withValues(alpha: 0.4),
-                padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-              ),
-            ),
+    Widget buttonBody(String label, IconData icon, VoidCallback? onTap, {bool solid = true}) => FilledButton.icon(
+          onPressed: onTap,
+          icon: Icon(icon, size: 17),
+          label: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14))),
+          style: FilledButton.styleFrom(
+            backgroundColor: solid ? Colors.white : Colors.white.withValues(alpha: 0.16),
+            foregroundColor: solid ? kNavy : Colors.white,
+            disabledBackgroundColor: Colors.white.withValues(alpha: 0.12),
+            disabledForegroundColor: Colors.white.withValues(alpha: 0.4),
+            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
           ),
+        );
+    Widget button(String label, IconData icon, VoidCallback? onTap, {bool solid = true}) => Expanded(
+          child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: buttonBody(label, icon, onTap, solid: solid)),
         );
     // "Manage" is the old 3-dot menu (trading password / investor password / leverage) on a button.
     final manage = Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
+        // The same button as the others (identical size and style); the menu opens on tap through the wrapper.
         child: AccountMenuButton(
           account: a,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(26)),
-            child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.tune, size: 17, color: kNavy),
-              SizedBox(width: 6),
-              Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text('Manage', maxLines: 1, style: TextStyle(color: kNavy, fontWeight: FontWeight.w800, fontSize: 14)))),
-            ]),
-          ),
+          child: IgnorePointer(child: SizedBox(width: double.infinity, child: buttonBody('Manage', Icons.tune, () {}))),
         ),
       ),
     );
@@ -833,8 +826,10 @@ class _AccountCard extends ConsumerWidget {
       ),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Flexible(
-            child: InkWell(
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InkWell(
               borderRadius: BorderRadius.circular(22),
               onTap: onPick,
               child: Container(
@@ -848,6 +843,7 @@ class _AccountCard extends ConsumerWidget {
                 ]),
               ),
             ),
+            ),
           ),
           const SizedBox(width: 10),
           // Real or Demo, from the account itself: a white badge on the right of the account chip.
@@ -856,6 +852,15 @@ class _AccountCard extends ConsumerWidget {
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
             child: Text(a.isDemo ? 'Demo' : 'Real', maxLines: 1, style: const TextStyle(color: kNavy, fontSize: 14, fontWeight: FontWeight.w800)),
           ),
+          // Hide / show the amounts.
+          InkWell(
+            onTap: onToggleHidden,
+            customBorder: const CircleBorder(),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 22, color: Colors.white),
+            ),
+          ),
         ]),
         // An inactive / disabled account says so (this tag only appears when the account cannot trade).
         if (!live) ...[
@@ -863,19 +868,11 @@ class _AccountCard extends ConsumerWidget {
           Row(children: [outlined(a.status)]),
         ],
         const SizedBox(height: 16),
-        // Balance, Equity and Leverage: one row, three equal columns, label above value. The eye hides / shows the amounts.
+        // Balance, Equity and Leverage: one row, three equal columns, label above value.
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           statColumn('Balance (${a.currency})', v(a.balance)),
-          statColumn('Equity', v(_accountEquity(ref, a))),
-          statColumn('Leverage', '1:${a.leverage}'),
-          InkWell(
-            onTap: onToggleHidden,
-            customBorder: const CircleBorder(),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Icon(hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 22, color: Colors.white),
-            ),
-          ),
+          statColumn('Equity', v(_accountEquity(ref, a)), divider: true),
+          statColumn('Leverage', '1:${a.leverage}', divider: true),
         ]),
         const SizedBox(height: 16),
         Row(children: [
