@@ -74,9 +74,10 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
         await api.post('/positions/$pid/close', volume != null ? {'volume': volume} : {});
         SoundService.instance.tradeClose();
         await refresh();
-      } catch (_) {
+      } catch (e) {
+        // The engine says why (e.g. "Market is closed"); show its words, never a success.
         SoundService.instance.error();
-        messenger.showSnackBar(const SnackBar(content: Text('Close failed')));
+        messenger.showSnackBar(SnackBar(content: Text(apiErrorMessage(e, fallback: 'Close failed'))));
       }
     }
 
@@ -316,8 +317,23 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
                     : TextButton(
                         onPressed: () async {
                           if (id != null) {
-                            await api.post('/accounts/$id/close-all', {});
+                            final messenger = ScaffoldMessenger.of(context);
+                            final Object? res;
+                            try {
+                              res = await api.post('/accounts/$id/close-all', {});
+                            } catch (e) {
+                              // Nothing could be closed (market closed / no live price): say so, no success.
+                              SoundService.instance.error();
+                              messenger.showSnackBar(SnackBar(content: Text(apiErrorMessage(e, fallback: 'Close all failed'))));
+                              return;
+                            }
                             SoundService.instance.tradeClose();
+                            // Some positions were skipped: report exactly what happened.
+                            final skipped = res is Map ? res['skipped'] : null;
+                            final summary = res is Map ? res['message'] : null;
+                            if (skipped is num && skipped > 0 && summary is String && summary.isNotEmpty) {
+                              messenger.showSnackBar(SnackBar(content: Text(summary)));
+                            }
                             await refresh();
                           }
                         },
@@ -401,8 +417,12 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> {
                   });
                   SoundService.instance.tradeOpen();
                   if (ctx.mounted) Navigator.pop(ctx);
-                } catch (_) {
-                  // Server is authoritative — reconcile even when PATCH is rejected.
+                } catch (e) {
+                  // Server is authoritative — say why it refused, and reconcile.
+                  SoundService.instance.error();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e, fallback: 'Could not save SL/TP'))));
+                  }
                 }
                 await refresh();
               },

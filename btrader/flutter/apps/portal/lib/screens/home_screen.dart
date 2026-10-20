@@ -725,8 +725,8 @@ class _AccountSliderState extends State<_AccountSlider> {
   }
 }
 
-/// One trading account, laid out like the client's reference: account chip, Real/Demo + platform + plan tags, balance
-/// (with the eye), equity, then Manage / Deposit. Only values the CRM returns are shown. Withdraw and Trade, which
+/// One trading account, laid out like the client's reference: account chip, Real/Demo tag, then Balance / Equity /
+/// Leverage in one row (with the eye), then Manage / Deposit. Only values the CRM returns are shown. Withdraw and Trade, which
 /// the old card had, stay as a second row.
 class _AccountCard extends ConsumerWidget {
   const _AccountCard({required this.account, required this.hidden, required this.onToggleHidden, this.onPick});
@@ -750,10 +750,24 @@ class _AccountCard extends ConsumerWidget {
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white.withValues(alpha: 0.55))),
           child: Text(t, maxLines: 1, style: TextStyle(color: whiteFaint, fontSize: 12, fontWeight: FontWeight.w600)),
         );
-    Widget pill(String t) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(20)),
-          child: Text(t, maxLines: 1, style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
+    // One equal-width column: a small label with its value directly below. Both shrink rather than wrap or clip.
+    Widget statColumn(String label, String value) => Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(label, maxLines: 1, style: TextStyle(color: whiteFaint, fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 3),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(value, maxLines: 1, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800, height: 1.1)),
+              ),
+            ]),
+          ),
         );
     // White pill buttons; a disabled one fades instead of disappearing.
     Widget button(String label, IconData icon, VoidCallback? onTap, {bool solid = true}) => Expanded(
@@ -835,48 +849,34 @@ class _AccountCard extends ConsumerWidget {
               ),
             ),
           ),
-        ]),
-        const SizedBox(height: 12),
-        // One line whatever the text size: a long label shrinks instead of wrapping.
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Row(children: [
-            outlined(a.isDemo ? 'Demo' : 'Real'),
-            outlined([a.platform, a.plan].where((e) => e.isNotEmpty).join(' ')),
-            if (!live) outlined(a.status),
-          ]),
-        ),
-        const SizedBox(height: 10),
-        Row(children: [
-          Flexible(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(v(a.balance), maxLines: 1, style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, height: 1.1)),
-            ),
+          const SizedBox(width: 10),
+          // Real or Demo, from the account itself: a white badge on the right of the account chip.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+            child: Text(a.isDemo ? 'Demo' : 'Real', maxLines: 1, style: const TextStyle(color: kNavy, fontSize: 14, fontWeight: FontWeight.w800)),
           ),
-          const SizedBox(width: 6),
-          Text(a.currency, style: TextStyle(color: whiteFaint, fontSize: 14, fontWeight: FontWeight.w600)),
+        ]),
+        // An inactive / disabled account says so (this tag only appears when the account cannot trade).
+        if (!live) ...[
+          const SizedBox(height: 10),
+          Row(children: [outlined(a.status)]),
+        ],
+        const SizedBox(height: 16),
+        // Balance, Equity and Leverage: one row, three equal columns, label above value. The eye hides / shows the amounts.
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          statColumn('Balance (${a.currency})', v(a.balance)),
+          statColumn('Equity', v(_accountEquity(ref, a))),
+          statColumn('Leverage', '1:${a.leverage}'),
           InkWell(
             onTap: onToggleHidden,
             customBorder: const CircleBorder(),
             child: Padding(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(6),
               child: Icon(hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 22, color: Colors.white),
             ),
           ),
         ]),
-        const SizedBox(height: 4),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Row(children: [
-            pill('Equity ${v(_accountEquity(ref, a))}'),
-            const SizedBox(width: 8),
-            pill('1:${a.leverage}'),
-          ]),
-        ),
         const SizedBox(height: 16),
         Row(children: [
           manage,

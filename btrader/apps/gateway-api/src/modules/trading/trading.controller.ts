@@ -79,7 +79,7 @@ export class TradingController {
     // canonical symbol if the app ever sends the suffixed name (e.g. "EURUSD.s").
     const symbol = await this.stripGroupSuffix(t.id, (dto as any).accountId, dto.symbol);
     const res = await latency.time('order.place.total', () =>
-      this.eng.engine.placeOrder(t.id, { ...dto, symbol, source: 'mobile' } as any),
+      this.eng.engine.placeOrder(t.id, { ...dto, symbol, source: 'mobile' } as any, STAFF_ROLES.has(u?.role)),
     );
     ttlDelPrefix(`orders:${t.id}:${(dto as any).accountId}`);
     ttlDelPrefix(`pos:${t.id}:${(dto as any).accountId}`);
@@ -139,7 +139,7 @@ export class TradingController {
     @Body() dto: ModifyOrderDto,
   ) {
     const accountId = await this.assertOrderAccess(t.id, u, id);
-    await this.eng.engine.modifyOrder(t.id, id, dto);
+    await this.eng.engine.modifyOrder(t.id, id, dto, STAFF_ROLES.has(u?.role));
     ttlDelPrefix(`orders:${t.id}:${accountId}`);
     void this.audit.log(t.id, u.id, 'ORDER_MODIFY', 'order', id, { after: dto });
     return { ok: true };
@@ -150,7 +150,7 @@ export class TradingController {
   @ApiOperation({ summary: 'Cancel a pending order' })
   async cancel(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string) {
     const accountId = await this.assertOrderAccess(t.id, u, id);
-    await this.eng.engine.cancelOrder(t.id, id);
+    await this.eng.engine.cancelOrder(t.id, id, STAFF_ROLES.has(u?.role));
     ttlDelPrefix(`orders:${t.id}:${accountId}`);
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     void this.audit.log(t.id, u.id, 'ORDER_CANCEL', 'order', id);
@@ -183,7 +183,7 @@ export class TradingController {
   @ApiOperation({ summary: 'Modify SL/TP on an open position' })
   async modify(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string, @Body() dto: ModifyPositionDto) {
     const accountId = await this.assertPositionAccess(t.id, u, id);
-    const saved = await this.eng.engine.modifyPosition(t.id, id, dto.slPrice, dto.tpPrice);
+    const saved = await this.eng.engine.modifyPosition(t.id, id, dto.slPrice, dto.tpPrice, STAFF_ROLES.has(u?.role));
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     void this.audit.log(t.id, u.id, 'POSITION_MODIFY', 'position', id, { after: dto });
     return { ok: true, ...saved };
@@ -211,6 +211,7 @@ export class TradingController {
     const res = await this.eng.engine.closePosition(t.id, id, dto.volume, {
       accountIdForQueue: accountId,
       requireAccountId: u.acct || undefined,
+      byStaff: STAFF_ROLES.has(u?.role),
     });
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     ttlDelPrefix(`orders:${t.id}:${accountId}`);
@@ -232,11 +233,14 @@ export class TradingController {
   @ApiOperation({ summary: 'Close all open positions on an account' })
   async closeAll(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('accountId') accountId: string) {
     await this.assertAccountAccess(t.id, u, accountId);
-    const closed = await this.eng.engine.closeAll(t.id, accountId);
+    const res = await this.eng.engine.closeAll(t.id, accountId, STAFF_ROLES.has(u?.role));
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     ttlDelPrefix(`orders:${t.id}:${accountId}`);
-    void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'account', accountId, { meta: { closed } });
-    return { closed };
+    void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'account', accountId, {
+      meta: { closed: res.closed, skipped: res.skipped },
+    });
+    // `closed` keeps its old meaning; `skipped` / `message` report what was not closed and why.
+    return res;
   }
 
   // ── History ───────────────────────────────────────────────────────────────

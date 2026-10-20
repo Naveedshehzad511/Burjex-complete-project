@@ -187,7 +187,9 @@ impl Engine {
             live_throttle: DashMap::new(),
             acct_live_at: DashMap::new(),
             stop_out_checked: DashMap::new(),
-            max_price_age_ms: env_i64("MAX_PRICE_AGE_MS", 8000),
+            // One freshness limit for every "is the price live?" decision (client actions and market fills).
+            // 15 s, the same as the app's kFeedGrace, so an enabled control is never refused for age.
+            max_price_age_ms: env_i64("MAX_PRICE_AGE_MS", 15_000),
             max_feed_still_ms: env_i64("MAX_FEED_STILL_MS", 120_000),
             order_rate_max: env_i64("ORDER_RATE_MAX", 40) as usize,
             order_rate_window_ms: env_i64("ORDER_RATE_WINDOW_MS", 1000),
@@ -369,10 +371,7 @@ impl Engine {
             return Err(BtError::new(SYMBOL_DISABLED, "symbol disabled"));
         }
         self.assert_group_symbol_access(&account, &sym).await?;
-        let sessions = parse_sessions(sym.trading_sessions.as_ref());
-        if !is_symbol_tradable(&sessions, &sym.class, Utc::now()) {
-            return Err(BtError::new(MARKET_CLOSED, "market closed"));
-        }
+        self.assert_client_action_sym(tenant_id, &sym)?;
         if sym.news_mode && sym.news_halt_opens {
             return Err(BtError::new(MARKET_CLOSED, "trading paused — news event (new orders halted)"));
         }
@@ -425,6 +424,40 @@ impl Engine {
         Ok(res)
     }
 
+    /// Session + live-price state of a symbol, from the one rule in `guard.rs`. `market_open` is
+    /// passed in so callers that only need the price part (a fill that already passed the session
+    /// check) can skip the session lookup.
+    pub(crate) fn live_price_gate(&self, tenant_id: &str, symbol: &str, market_open: bool) -> crate::guard::Gate {
+        crate::guard::evaluate(
+            market_open,
+            self.prices.age_ms(tenant_id, symbol),
+            self.prices.still_ms(tenant_id),
+            self.max_price_age_ms,
+            self.max_feed_still_ms,
+        )
+    }
+
+    /// Refuse a CLIENT-initiated order action unless the symbol's market is open (admin-configured
+    /// sessions) and its live price is valid. Never used by automatic execution.
+    pub(crate) fn assert_client_action_sym(&self, tenant_id: &str, sym: &SymbolRow) -> BtResult<()> {
+        // Admin / dealer actions are exempt from the client restriction.
+        if crate::guard::is_staff_action() {
+            return Ok(());
+        }
+        let sessions = parse_sessions(sym.trading_sessions.as_ref());
+        let open = is_symbol_tradable(&sessions, &sym.class, Utc::now());
+        self.live_price_gate(tenant_id, &sym.symbol, open).into_result()
+    }
+
+    /// Same, looking the symbol up by name. An unknown symbol is left to the action's own
+    /// validation to report.
+    pub(crate) async fn assert_client_action(&self, tenant_id: &str, symbol: &str) -> BtResult<()> {
+        match self.load_symbol(tenant_id, symbol).await? {
+            Some(sym) => self.assert_client_action_sym(tenant_id, &sym),
+            None => Ok(()),
+        }
+    }
+
     /// Read-only half of a market fill: wait the group's delay (unless already waited),
     /// read the live price, apply markup / slippage, work out commission, margin and book.
     /// Needs no account lock — the margin is re-checked against the locked row in
@@ -467,24 +500,8 @@ impl Engine {
         let Some(px) = px else {
             return Err(BtError::new(NO_PRICE, "no price"));
         };
-        if self.max_price_age_ms > 0 {
-            match self.prices.age_ms(tenant_id, &req.symbol) {
-                Some(age) if age <= self.max_price_age_ms => {}
-                _ => {
-                    return Err(BtError::new(NO_PRICE, "no live price (feed stale or late) — order not filled"));
-                }
-            }
-        }
-        if self.max_feed_still_ms > 0 {
-            if let Some(still) = self.prices.still_ms(tenant_id) {
-                if still > self.max_feed_still_ms {
-                    return Err(BtError::new(
-                        NO_PRICE,
-                        format!("feed frozen — no price has moved for {}s", still / 1000),
-                    ));
-                }
-            }
-        }
+        // The price must still be live now, after any execution delay (same rule as the guard).
+        self.live_price_gate(tenant_id, &req.symbol, true).into_result()?;
 
         let conv = self.quote_to_account_strict(tenant_id, &account.currency, &spec.quote_currency)?;
         let news_markup = if sym.news_mode { f64::from(sym.news_spread_points) } else { 0.0 };

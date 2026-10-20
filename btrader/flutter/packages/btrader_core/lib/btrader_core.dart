@@ -27,6 +27,7 @@ export 'src/indicators/compute.dart';
 
 export 'src/state/providers.dart';
 export 'src/state/live.dart';
+export 'src/state/order_gate.dart';
 export 'src/state/chart.dart';
 export 'src/state/indicators.dart';
 export 'src/state/drawings.dart';

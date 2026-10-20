@@ -88,6 +88,12 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
         const SnackBar(content: Text('No live price — trading paused until the feed updates')));
       return;
     }
+    // Every order type (market and all pending kinds) needs an open market and a live price.
+    final block = orderBlockFor(ref.read, _symbol);
+    if (block != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(block)));
+      return;
+    }
     final tc = Theme.of(context).extension<TradeColors>()!;
     if (ref.read(tradingSessionProvider).readonly) {
       ToastHost.show('Read-only account', 'Signed in with the investor password — trading is disabled.', accent: tc.loss);

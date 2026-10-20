@@ -25,6 +25,22 @@ String _categoryLabel(String c) {
   }
 }
 
+/// The icon shown for a category on a card (the name stays as the icon's tooltip / accessibility label).
+IconData _categoryIcon(String c) {
+  switch (c) {
+    case 'COMMODITIES':
+      return Icons.diamond_outlined;
+    case 'CRYPTO':
+      return Icons.currency_bitcoin;
+    case 'INDICES':
+      return Icons.show_chart;
+    case 'STOCKS':
+      return Icons.candlestick_chart_outlined;
+    default:
+      return Icons.category_outlined;
+  }
+}
+
 /// "Top Gainers" / "Top Losers" on Home: a horizontally swipeable row of up to five cards (the strongest mover of
 /// each of Commodities, Crypto, Indices and Stocks, then the next strongest). It loads on its own, apart from the
 /// rest of the screen, and says so when it is loading, stale, empty or cannot be reached.
@@ -69,7 +85,7 @@ class MoversSection extends ConsumerWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 22),
       Row(children: [
-        Expanded(child: Text(_gainers ? 'Top Gainers' : 'Top Losers', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800))),
+        Expanded(child: Text(_gainers ? 'Top Gainers' : 'Top Losers', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
         if (state.stale && data != null) _StaleNote(asOf: data.asOf),
       ]),
       const SizedBox(height: 12),
@@ -112,7 +128,7 @@ class _CardsRow extends StatelessWidget {
               for (final m in cards)
                 Padding(
                   padding: const EdgeInsets.only(right: 10),
-                  child: SizedBox(width: w, child: _MoverCard(mover: m)),
+                  child: SizedBox(width: w, child: _MoverCard(mover: m, scale: (w / 190).clamp(0.88, 1.0))),
                 ),
             ]),
           ),
@@ -121,8 +137,11 @@ class _CardsRow extends StatelessWidget {
 }
 
 class _MoverCard extends StatelessWidget {
-  const _MoverCard({required this.mover});
+  const _MoverCard({required this.mover, this.scale = 1.0});
   final Mover mover;
+
+  /// Text scale from the card's width (a narrow phone gets slightly smaller text, never larger than the base sizes).
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
@@ -142,21 +161,24 @@ class _MoverCard extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(color: hint.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-          child: Text(_categoryLabel(mover.category), maxLines: 1, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: hint)),
+          child: Tooltip(
+            message: _categoryLabel(mover.category),
+            child: Icon(_categoryIcon(mover.category), size: 15 * scale, color: hint, semanticLabel: _categoryLabel(mover.category)),
+          ),
         ),
         const SizedBox(height: 10),
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
-          child: Text(mover.symbol, maxLines: 1, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          child: Text(mover.symbol, maxLines: 1, style: TextStyle(fontSize: 14.5 * scale, fontWeight: FontWeight.w800)),
         ),
         const SizedBox(height: 2),
-        Text(mover.name.isEmpty ? ' ' : mover.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: hint)),
+        Text(mover.name.isEmpty ? ' ' : mover.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11 * scale, color: hint)),
         const SizedBox(height: 10),
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
-          child: Text(mover.price.toStringAsFixed(mover.digits), maxLines: 1, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          child: Text(mover.price.toStringAsFixed(mover.digits), maxLines: 1, style: TextStyle(fontSize: 13 * scale, fontWeight: FontWeight.w600)),
         ),
         const SizedBox(height: 8),
         // Shrinks rather than overflows on a narrow screen or a large text size.
@@ -167,9 +189,9 @@ class _MoverCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(20)),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(up ? Icons.trending_up : Icons.trending_down, size: 15, color: color),
+              Icon(up ? Icons.trending_up : Icons.trending_down, size: 14 * scale, color: color),
               const SizedBox(width: 4),
-              Text(pct, maxLines: 1, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: color)),
+              Text(pct, maxLines: 1, style: TextStyle(fontSize: 12 * scale, fontWeight: FontWeight.w800, color: color)),
             ]),
           ),
         ),

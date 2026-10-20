@@ -59,6 +59,9 @@ pub struct PlaceBody {
     #[serde(rename = "clientOrderId")]
     client_order_id: Option<String>,
     source: Option<String>,
+    /// Set by the gateway when the caller is staff (admin / dealer): exempt from the client guard.
+    #[serde(rename = "byStaff", default)]
+    by_staff: bool,
 }
 
 async fn place(State(st): State<AppState>, headers: HeaderMap, Json(b): Json<PlaceBody>) -> Result<Json<Value>, BtError> {
@@ -80,13 +83,15 @@ async fn place(State(st): State<AppState>, headers: HeaderMap, Json(b): Json<Pla
         client_order_id: b.client_order_id,
         source: b.source,
     };
-    Ok(Json(st.engine.place_order(&b.tenant_id, req).await?.json()))
+    Ok(Json(crate::guard::run_as(b.by_staff, st.engine.place_order(&b.tenant_id, req)).await?.json()))
 }
 
 #[derive(Deserialize)]
 struct TenantBody {
     #[serde(rename = "tenantId")]
     tenant_id: String,
+    #[serde(rename = "byStaff", default)]
+    by_staff: bool,
 }
 
 #[derive(Deserialize)]
@@ -100,6 +105,8 @@ struct CloseBody {
     require_account_id: Option<String>,
     #[serde(rename = "accountIdForQueue")]
     account_id_for_queue: Option<String>,
+    #[serde(rename = "byStaff", default)]
+    by_staff: bool,
 }
 
 async fn close(
@@ -110,8 +117,9 @@ async fn close(
 ) -> Result<Json<Value>, BtError> {
     auth(&headers, &st.token)?;
     Ok(Json(
-        st.engine
-            .close_position(
+        crate::guard::run_as(
+            b.by_staff,
+            st.engine.close_position(
                 &b.tenant_id,
                 &id,
                 b.volume,
@@ -123,9 +131,10 @@ async fn close(
                 false,
                 false,
                 b.account_id_for_queue,
-            )
-            .await?
-            .json(),
+            ),
+        )
+        .await?
+        .json(),
     ))
 }
 
@@ -135,12 +144,14 @@ struct CloseAllBody {
     tenant_id: String,
     #[serde(rename = "accountId")]
     account_id: String,
+    #[serde(rename = "byStaff", default)]
+    by_staff: bool,
 }
 
 async fn close_all(State(st): State<AppState>, headers: HeaderMap, Json(b): Json<CloseAllBody>) -> Result<Json<Value>, BtError> {
     auth(&headers, &st.token)?;
-    let n = st.engine.close_all(&b.tenant_id, &b.account_id).await?;
-    Ok(Json(json!({"closed": n})))
+    let res = crate::guard::run_as(b.by_staff, st.engine.close_all(&b.tenant_id, &b.account_id)).await?;
+    Ok(Json(res.json()))
 }
 
 async fn modify_pos(
@@ -161,7 +172,8 @@ async fn modify_pos(
     } else {
         None
     };
-    Ok(Json(st.engine.modify_position(tenant, &id, sl, tp).await?))
+    let staff = b.get("byStaff").and_then(|v| v.as_bool()).unwrap_or(false);
+    Ok(Json(crate::guard::run_as(staff, st.engine.modify_position(tenant, &id, sl, tp)).await?))
 }
 
 async fn cancel(
@@ -171,7 +183,7 @@ async fn cancel(
     Json(b): Json<TenantBody>,
 ) -> Result<Json<Value>, BtError> {
     auth(&headers, &st.token)?;
-    st.engine.cancel_order(&b.tenant_id, &id).await?;
+    crate::guard::run_as(b.by_staff, st.engine.cancel_order(&b.tenant_id, &id)).await?;
     Ok(Json(json!({"ok": true})))
 }
 
@@ -188,7 +200,8 @@ async fn modify_order(
     let sl = opt_num(&b, "slPrice");
     let tp = opt_num(&b, "tpPrice");
     let volume = b.get("volume").and_then(|v| v.as_f64());
-    st.engine.modify_order(tenant, &id, price, stop, sl, tp, volume).await?;
+    let staff = b.get("byStaff").and_then(|v| v.as_bool()).unwrap_or(false);
+    crate::guard::run_as(staff, st.engine.modify_order(tenant, &id, price, stop, sl, tp, volume)).await?;
     Ok(Json(json!({"ok": true})))
 }
 

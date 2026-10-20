@@ -82,18 +82,27 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
     // whichever comes first), not when the reload that follows lands. A failed close leaves it as it is.
     Future<void> close(Position p, {double? volume}) async {
       final messenger = ScaffoldMessenger.of(context);
+      // Market closed / no live price: nothing is sent, and the user is told why.
+      final block = orderBlockFor(ref.read, p.symbol);
+      if (block != null) {
+        SoundService.instance.error();
+        messenger.showSnackBar(SnackBar(content: Text(block)));
+        return;
+      }
       final closes = ref.read(positionClosesProvider);
       Object? res;
+      var failure = 'Close failed';
       try {
         res = await api.post('/positions/${p.id}/close', volume != null ? {'volume': volume} : {});
-      } catch (_) {
+      } catch (e) {
         res = null;
+        failure = apiErrorMessage(e, fallback: 'Close failed');
       }
       if (closes.applyCloseResponse(res, id: p.id, openVolume: p.volume, requestedVolume: volume)) {
         SoundService.instance.tradeClose();
       } else {
         SoundService.instance.error();
-        messenger.showSnackBar(const SnackBar(content: Text('Close failed')));
+        messenger.showSnackBar(SnackBar(content: Text(failure)));
       }
     }
 
@@ -376,14 +385,38 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                         onSelected: (v) async {
                           if (v == 'closeAll' && id != null) {
                             final messenger = ScaffoldMessenger.of(context);
+                            // Nothing to close right now (every symbol is blocked): do not send it. A
+                            // mix is sent; the server closes the open ones and reports the rest.
+                            final held = positions.valueOrNull ?? const <Position>[];
+                            String? firstBlock;
+                            var allBlocked = held.isNotEmpty;
+                            for (final hp in held) {
+                              final b = orderBlockFor(ref.read, hp.symbol);
+                              if (b == null) {
+                                allBlocked = false;
+                                break;
+                              }
+                              firstBlock ??= b;
+                            }
+                            if (allBlocked && firstBlock != null) {
+                              SoundService.instance.error();
+                              messenger.showSnackBar(SnackBar(content: Text(firstBlock)));
+                              return;
+                            }
                             final Object? res;
                             try {
                               res = await api.post('/accounts/$id/close-all', {});
-                            } catch (_) {
+                            } catch (e) {
                               SoundService.instance.error();
-                              messenger.showSnackBar(const SnackBar(content: Text('Close all failed')));
+                              messenger.showSnackBar(SnackBar(content: Text(apiErrorMessage(e, fallback: 'Close all failed'))));
                               ref.read(positionsRefreshProvider).request();
                               return;
+                            }
+                            // Some positions were skipped (blocked symbol or a failed close): say exactly so.
+                            final skipped = res is Map ? res['skipped'] : null;
+                            final summary = res is Map ? res['message'] : null;
+                            if (skipped is num && skipped > 0 && summary is String && summary.isNotEmpty) {
+                              messenger.showSnackBar(SnackBar(content: Text(summary)));
                             }
                             // The server says how many it closed: one sound per closed position. Each row
                             // already left the list on its own confirmed close push; this reload only
@@ -477,7 +510,8 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
     if (done > 0) SoundService.instance.orderCancelled(count: done); // one per cancelled pending order
     if (done < count) {
       SoundService.instance.error();
-      messenger.showSnackBar(SnackBar(content: Text('Cancelled $done of $count orders')));
+      final why = ref.read(pendingOrdersProvider.notifier).lastCancelMessage;
+      messenger.showSnackBar(SnackBar(content: Text('Cancelled $done of $count orders${why == null ? '' : ' — $why'}')));
     }
   }
 
@@ -535,8 +569,15 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                 title: Text('Delete order', style: TextStyle(color: tc.loss, fontWeight: FontWeight.w600)),
                 onTap: () {
                   Navigator.pop(ctx);
+                  final messenger = ScaffoldMessenger.of(context);
                   ref.read(pendingOrdersProvider.notifier).cancelWhere((x) => x.id == o.id).then((n) {
-                    if (n > 0) SoundService.instance.orderCancelled(count: n);
+                    if (n > 0) {
+                      SoundService.instance.orderCancelled(count: n);
+                    } else {
+                      SoundService.instance.error();
+                      final why = ref.read(pendingOrdersProvider.notifier).lastCancelMessage;
+                      if (why != null) messenger.showSnackBar(SnackBar(content: Text(why)));
+                    }
                   });
                 },
               ),
@@ -649,6 +690,13 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
             width: double.infinity,
             child: FilledButton(
               onPressed: () async {
+                // Market closed / no live price: nothing is sent, and the user is told why.
+                final block = orderBlockFor(ref.read, p.symbol);
+                if (block != null) {
+                  SoundService.instance.error();
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(block)));
+                  return;
+                }
                 try {
                   await ref.read(apiClientProvider).patch('/positions/${p.id}', {
                     'slPrice': double.tryParse(sl.text),
@@ -656,8 +704,12 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                   });
                   SoundService.instance.orderModified(position: true);
                   if (ctx.mounted) Navigator.pop(ctx);
-                } catch (_) {
-                  // Server is authoritative — reconcile even when PATCH is rejected.
+                } catch (e) {
+                  // Server is authoritative — say why it refused, and reconcile.
+                  SoundService.instance.error();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e, fallback: 'Could not save SL/TP'))));
+                  }
                 }
                 await refresh();
               },

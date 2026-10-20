@@ -37,20 +37,23 @@ class RustMatchingClient {
     return json;
   }
 
-  placeOrder(tenantId: string, req: any) {
-    return this.rpc('POST', '/v1/place', { tenantId, ...req, type: req.type });
+  // `byStaff` (admin / dealer) exempts a call from the engine's client-action guard (market closed /
+  // no live price). It is set from the caller's role here, AFTER any request fields are spread, so a
+  // client can never send it themselves.
+  placeOrder(tenantId: string, req: any, byStaff = false) {
+    return this.rpc('POST', '/v1/place', { tenantId, ...req, type: req.type, byStaff });
   }
 
-  modifyOrder(tenantId: string, id: string, dto: any) {
-    return this.rpc('PATCH', `/v1/orders/${id}`, { tenantId, ...dto });
+  modifyOrder(tenantId: string, id: string, dto: any, byStaff = false) {
+    return this.rpc('PATCH', `/v1/orders/${id}`, { tenantId, ...dto, byStaff });
   }
 
-  cancelOrder(tenantId: string, id: string) {
-    return this.rpc('DELETE', `/v1/orders/${id}`, { tenantId });
+  cancelOrder(tenantId: string, id: string, byStaff = false) {
+    return this.rpc('DELETE', `/v1/orders/${id}`, { tenantId, byStaff });
   }
 
-  modifyPosition(tenantId: string, id: string, slPrice?: number | null, tpPrice?: number | null) {
-    return this.rpc('PATCH', `/v1/positions/${id}`, { tenantId, slPrice, tpPrice });
+  modifyPosition(tenantId: string, id: string, slPrice?: number | null, tpPrice?: number | null, byStaff = false) {
+    return this.rpc('PATCH', `/v1/positions/${id}`, { tenantId, slPrice, tpPrice, byStaff });
   }
 
   setPositionOpenPrice(tenantId: string, id: string, openPrice: number) {
@@ -64,12 +67,23 @@ class RustMatchingClient {
       closePriceOverride: opts?.closePriceOverride,
       requireAccountId: opts?.requireAccountId,
       accountIdForQueue: opts?.accountIdForQueue,
+      byStaff: !!opts?.byStaff,
     });
   }
 
-  async closeAll(tenantId: string, accountId: string): Promise<number> {
-    const r = await this.rpc('POST', '/v1/close-all', { tenantId, accountId });
-    return Number(r.closed ?? 0);
+  /** Close All: how many were closed, and which were skipped (blocked symbol / failed close) with why. */
+  async closeAll(
+    tenantId: string,
+    accountId: string,
+    byStaff = false,
+  ): Promise<{ closed: number; skipped: number; skippedDetails: unknown[]; message: string }> {
+    const r = await this.rpc('POST', '/v1/close-all', { tenantId, accountId, byStaff });
+    return {
+      closed: Number(r.closed ?? 0),
+      skipped: Number(r.skipped ?? 0),
+      skippedDetails: Array.isArray(r.skippedDetails) ? r.skippedDetails : [],
+      message: String(r.message ?? ''),
+    };
   }
 
   coverMore(tenantId: string, id: string, lots: number) {

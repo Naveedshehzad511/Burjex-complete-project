@@ -214,19 +214,33 @@ class PendingOrdersController extends StateNotifier<AsyncValue<List<PendingOrder
     final targets = [for (final o in state.valueOrNull ?? const <PendingOrder>[]) if (test == null || test(o)) o];
     final api = _ref.read(apiClientProvider);
     var n = 0;
+    lastCancelMessage = null;
     await Future.wait([
       for (final o in targets)
         () async {
+          // Market closed / no live price for this order's symbol: do not send it. The server
+          // refuses it too; this only saves the request and gives the reason.
+          final block = orderBlockFor(_ref.read, o.symbol);
+          if (block != null) {
+            lastCancelMessage ??= block;
+            return;
+          }
           try {
             await api.delete('/orders/${o.id}');
             if (mounted) removeLocal(o.id);
             n++;
-          } catch (_) {}
+          } catch (e) {
+            final m = apiErrorMessage(e, fallback: '');
+            if (m.isNotEmpty) lastCancelMessage ??= m;
+          }
         }(),
     ]);
     await reload();
     return n;
   }
+
+  /// Why the last [cancelWhere] left orders in place (the first reason), or null.
+  String? lastCancelMessage;
 
   /// Drop an order locally right after the server accepted its cancellation.
   void removeLocal(String id) {

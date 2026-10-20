@@ -8,6 +8,7 @@ mod engine_tick;
 mod engine_trade;
 mod error;
 mod feed;
+mod guard;
 mod http;
 mod models;
 mod policy;

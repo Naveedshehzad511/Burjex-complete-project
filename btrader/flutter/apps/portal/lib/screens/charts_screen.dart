@@ -606,6 +606,14 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       setState(() => put(before));
       return _toastReadonly();
     }
+    // Market closed / no live price: put the line back and say why; nothing is sent.
+    final block = orderBlockFor(ref.read, _symbol);
+    if (block != null) {
+      setState(() => put(before));
+      SoundService.instance.error();
+      ToastHost.show(value == null ? 'Could not remove ${sl ? 'SL' : 'TP'}' : 'Could not set ${sl ? 'SL' : 'TP'}', block, accent: tc.loss);
+      return;
+    }
     final key = sl ? 'slPrice' : 'tpPrice';
     _protectiveSaving = true;
     try {
@@ -638,6 +646,13 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     if (e == null || _applying) return;
     if (_readonly) return _toastReadonly();
     final tc = Theme.of(context).extension<TradeColors>()!;
+    // Placing a pending order, or changing a position / pending order, needs an open market and a live price.
+    final block = orderBlockFor(ref.read, _symbol);
+    if (block != null) {
+      SoundService.instance.error();
+      ToastHost.show(e.isDraft ? 'Order not placed' : 'Update failed', block, accent: tc.loss);
+      return;
+    }
     final l = _lots();
     final errs =
         e.errors(_shownQuote(), minLot: l.min, maxLot: l.max, lotStep: l.step);
@@ -727,6 +742,12 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     final e = _edit;
     if (e == null || !e.isOrder || _applying) return;
     final tc = Theme.of(context).extension<TradeColors>()!;
+    final block = orderBlockFor(ref.read, _symbol);
+    if (block != null) {
+      SoundService.instance.error();
+      ToastHost.show('Could not cancel', block, accent: tc.loss);
+      return;
+    }
     setState(() {
       _applying = true;
       _serverError = null;

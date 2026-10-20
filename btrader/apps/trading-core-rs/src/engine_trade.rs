@@ -19,6 +19,46 @@ use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
+/// What a client's Close All did: how many positions were closed and which were skipped (blocked
+/// symbol or a failed close) with the reason for each.
+pub struct CloseAllResult {
+    pub closed: i64,
+    pub skipped: Vec<(String, BtError)>,
+}
+
+impl CloseAllResult {
+    /// The exact outcome for the client, e.g.
+    /// "3 positions closed, 2 skipped because the market is closed or live pricing is unavailable."
+    pub fn message(&self) -> String {
+        let n = |v: i64| if v == 1 { "position".to_string() } else { "positions".to_string() };
+        let skipped = self.skipped.len() as i64;
+        if skipped == 0 {
+            return format!("{} {} closed.", self.closed, n(self.closed));
+        }
+        let all_blocked = self
+            .skipped
+            .iter()
+            .all(|(_, e)| e.code == crate::error::MARKET_CLOSED || e.code == crate::error::NO_PRICE);
+        let why = if all_blocked {
+            "because the market is closed or live pricing is unavailable"
+        } else {
+            "because they could not be closed"
+        };
+        format!("{} {} closed, {} skipped {}.", self.closed, n(self.closed), skipped, why)
+    }
+
+    pub fn json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "closed": self.closed,
+            "skipped": self.skipped.len(),
+            "skippedDetails": self.skipped.iter().map(|(sym, e)| serde_json::json!({
+                "symbol": sym, "code": e.code, "message": e.message,
+            })).collect::<Vec<_>>(),
+            "message": self.message(),
+        })
+    }
+}
+
 impl Engine {
     /// Publish the FULL current state of an order, read back from the database, so
     /// clients can redraw it without a refetch. It carries `accountId` because the
@@ -312,6 +352,12 @@ impl Engine {
                 .ok_or_else(|| BtError::new(POSITION_NOT_FOUND, "position not found"))?;
             row.try_get("accountId").unwrap_or_default()
         };
+        // A client closing a position needs an open market and a live price. SL / TP triggers (a
+        // protective kind), stop-out (floor_balance) and the dealer's manual-price close are not
+        // client actions and are not held up by this.
+        if protective_kind.is_none() && !floor_balance && close_price_override.is_none() {
+            self.assert_client_action_for_position(tenant_id, position_id).await?;
+        }
         // Wait the group's CURRENT delay for this close kind before taking the account lock.
         let t0 = Instant::now();
         let mut prewaited = false;
@@ -702,34 +748,87 @@ impl Engine {
         })
     }
 
-    pub async fn close_all(&self, tenant_id: &str, account_id: &str) -> BtResult<i64> {
+    /// The symbol of an open position, for the client-action guard. A position that does not
+    /// exist is left for the close itself to report.
+    pub(crate) async fn assert_client_action_for_position(&self, tenant_id: &str, position_id: &str) -> BtResult<()> {
+        let row = sqlx::query(
+            r#"SELECT s.symbol FROM positions p JOIN symbols s ON s.id=p."symbolId"
+               WHERE p.id=$1 AND p."tenantId"=$2 AND p.status='OPEN'"#,
+        )
+        .bind(position_id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        match row {
+            Some(r) => self.assert_client_action(tenant_id, &r.try_get::<String, _>("symbol").unwrap_or_default()).await,
+            None => Ok(()),
+        }
+    }
+
+    /// Close All for a client. Positions whose symbol is blocked (market closed / no live price)
+    /// or that fail to close are SKIPPED and reported with their reason; the rest are closed. When
+    /// nothing at all can be closed the whole request is refused, so a rejected action is never
+    /// reported as a success.
+    pub async fn close_all(&self, tenant_id: &str, account_id: &str) -> BtResult<CloseAllResult> {
+        let rows = sqlx::query(
+            r#"SELECT p.id, s.symbol FROM positions p JOIN symbols s ON s.id=p."symbolId"
+               WHERE p."tenantId"=$1 AND p."accountId"=$2 AND p.status='OPEN'"#,
+        )
+        .bind(tenant_id)
+        .bind(account_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut allowed: Vec<(String, String)> = Vec::new();
+        let mut skipped: Vec<(String, BtError)> = Vec::new();
+        for r in rows {
+            let id: String = r.try_get("id").unwrap_or_default();
+            let symbol: String = r.try_get("symbol").unwrap_or_default();
+            match self.assert_client_action(tenant_id, &symbol).await {
+                Ok(()) => allowed.push((id, symbol)),
+                Err(e) => skipped.push((symbol, e)),
+            }
+        }
+        if allowed.is_empty() {
+            return match skipped.first() {
+                Some((_, first)) => Err(BtError::new(
+                    first.code,
+                    format!("{} — {} position(s) not closed", first.message, skipped.len()),
+                )),
+                None => Ok(CloseAllResult { closed: 0, skipped }),
+            };
+        }
         let aid = account_id.to_string();
         // One delay for the whole action (not per position), waited outside the lock.
         let t0 = Instant::now();
         let waited = self.pre_wait(tenant_id, account_id, "closeAll").await?;
         tracing::info!(target: "exec_audit", "[EXEC] kind=closeAll account={} waited={} wait_ms={}", account_id, waited, t0.elapsed().as_millis());
         let tenant = tenant_id.to_string();
-        self.with_account(&aid, || self.close_all_exclusive(tenant.clone(), aid.clone())).await
+        let (closed, failed) = self
+            .with_account(&aid, || self.close_all_exclusive(tenant.clone(), aid.clone(), allowed.clone()))
+            .await?;
+        skipped.extend(failed);
+        Ok(CloseAllResult { closed, skipped })
     }
 
-    async fn close_all_exclusive(&self, tenant_id: String, account_id: String) -> BtResult<i64> {
-        let rows = sqlx::query(r#"SELECT id FROM positions WHERE "tenantId"=$1 AND "accountId"=$2 AND status='OPEN'"#)
-            .bind(&tenant_id)
-            .bind(&account_id)
-            .fetch_all(&self.pool)
-            .await?;
+    /// Closes the given positions; the ones that fail are returned with their error, never hidden.
+    async fn close_all_exclusive(
+        &self,
+        tenant_id: String,
+        _account_id: String,
+        positions: Vec<(String, String)>,
+    ) -> BtResult<(i64, Vec<(String, BtError)>)> {
         let mut closed = 0i64;
-        for r in rows {
-            let id: String = r.try_get("id").unwrap_or_default();
-            if self
+        let mut failed: Vec<(String, BtError)> = Vec::new();
+        for (id, symbol) in positions {
+            match self
                 .close_exclusive(tenant_id.clone(), id, None, None, None, None, true, None, true, false, true)
                 .await
-                .is_ok()
             {
-                closed += 1;
+                Ok(_) => closed += 1,
+                Err(e) => failed.push((symbol, e)),
             }
         }
-        Ok(closed)
+        Ok((closed, failed))
     }
 
     pub async fn modify_position(&self, tenant_id: &str, position_id: &str, sl: Option<Option<f64>>, tp: Option<Option<f64>>) -> BtResult<serde_json::Value> {
@@ -749,6 +848,9 @@ impl Engine {
         .ok_or_else(|| BtError::new(POSITION_NOT_FOUND, "position not found"))?;
         let is_buy: bool = row.try_get::<String, _>("side").unwrap_or_default().eq_ignore_ascii_case("BUY");
         let symbol: String = row.try_get("symbol").unwrap_or_default();
+        // Adding, changing or removing SL / TP is a client action: it needs an open market and a
+        // live price (also stops an SL / TP being saved unvalidated when no price is available).
+        self.assert_client_action(tenant_id, &symbol).await?;
         let digits: i32 = row.try_get("digits").unwrap_or(5);
         let dummy = SymbolRow {
             id: row.try_get("sid").unwrap_or_default(),
@@ -825,6 +927,19 @@ impl Engine {
     }
 
     pub async fn cancel_order(&self, tenant_id: &str, order_id: &str) -> BtResult<()> {
+        // Cancelling is a client action: it needs an open market and a live price. An order that
+        // does not exist is left for the cancel itself to report.
+        if let Some(r) = sqlx::query(
+            r#"SELECT s.symbol FROM orders o JOIN symbols s ON s.id=o."symbolId" WHERE o.id=$1 AND o."tenantId"=$2"#,
+        )
+        .bind(order_id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await?
+        {
+            let name: String = r.try_get("symbol").unwrap_or_default();
+            self.assert_client_action(tenant_id, &name).await?;
+        }
         let n = sqlx::query(
             r#"UPDATE orders SET status='CANCELLED'::"OrderStatus"
                WHERE id=$1 AND "tenantId"=$2
@@ -866,6 +981,9 @@ impl Engine {
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| BtError::new(ORDER_NOT_FOUND, "order not found"))?;
+        // Editing a pending order is a client action: it needs an open market and a live price.
+        let order_symbol: String = row.try_get("symbol").unwrap_or_default();
+        self.assert_client_action(tenant_id, &order_symbol).await?;
         let cur_price: Option<f64> = row.try_get("price").ok();
         let cur_stop: Option<f64> = row.try_get("stopPrice").ok();
         let next_price = match price {
