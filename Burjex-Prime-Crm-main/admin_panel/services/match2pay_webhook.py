@@ -20,6 +20,8 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 _SIGNATURE_META_KEYS = (
+    # Match2Pay sends its callback signature in a plain "Signature" header.
+    "HTTP_SIGNATURE",
     "HTTP_X_MATCH2PAY_SIGNATURE",
     "HTTP_X_MATCH2PAY_SIG",
     "HTTP_X_SIGNATURE",
@@ -183,6 +185,11 @@ def handle_match2pay_webhook_request(request: HttpRequest) -> JsonResponse:
 
     summary = _summarize_payload(parsed if parsed is not None else {})
     log_msg = f"verify={verify_detail} enabled={settings.enabled} body={summary}"
+    if not ok_verify:
+        # Names only (never values): which headers the provider actually sent, so a rejected callback
+        # can be diagnosed from the integration log.
+        header_names = sorted(k[5:].replace("_", "-").title() for k in request.META if k.startswith("HTTP_"))
+        log_msg = f"verify={verify_detail} headers={','.join(header_names)[:300]} enabled={settings.enabled} body={summary}"
 
     IntegrationConnectionLog.objects.create(
         integration_slug="match2pay_webhook",
