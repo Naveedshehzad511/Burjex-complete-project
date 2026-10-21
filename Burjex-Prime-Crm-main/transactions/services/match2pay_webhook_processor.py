@@ -195,7 +195,9 @@ def credit_match2pay_if_completed(
     try:
         with db_transaction.atomic():
             row = (
-                Match2PayTransaction.objects.select_for_update()
+                # Lock only this payment row (`of=("self",)`): `payment_gateway` is optional, and PostgreSQL
+                # refuses FOR UPDATE on the nullable side of the join that select_related adds for it.
+                Match2PayTransaction.objects.select_for_update(of=("self",))
                 .select_related("user", "payment_gateway")
                 .filter(payment_id=payment_id)
                 .first()
