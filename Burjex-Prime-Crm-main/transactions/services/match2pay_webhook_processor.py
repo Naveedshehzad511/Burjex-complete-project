@@ -224,9 +224,11 @@ def credit_match2pay_if_completed(
                 row.save(update_fields=["status", "txid", "completed_at"])
                 return True, "duplicate_tx_row"
 
-            credit_amt = webhook_amt if webhook_amt is not None else row.amount
-            if credit_amt <= 0:
-                credit_amt = row.amount
+            if webhook_amt is None or webhook_amt <= 0:
+                # Never fall back to the requested amount: the client may have paid less after fees.
+                logger.error("Match2Pay payment_id=%s completed without a usable finalAmount; not credited", payment_id)
+                return False, "missing_final_amount"
+            credit_amt = webhook_amt
             currency = _pick_book_currency(parsed, fallback=row.currency or "USD")
 
             user = User.objects.select_for_update().get(id=row.user_id)
