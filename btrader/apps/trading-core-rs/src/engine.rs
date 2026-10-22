@@ -535,7 +535,8 @@ impl Engine {
             }
         }
         let live_with_costs = apply_markup(&req.side, with_markup, pricing.slippage_points, sym.digits);
-        let fill_price = open_fill_price(rule, &req.side, honour_ref, clamp_worst, live_with_costs, sym.digits);
+        let stop_level = if clamp_worst.is_none() && matches!(apply_kind, "buyStop" | "sellStop") { honour_ref } else { None };
+        let fill_price = open_fill_price(rule, &req.side, honour_ref, clamp_worst, stop_level, live_with_costs, sym.digits);
         if let (Some(bid), Some(ask)) = (
             self.prices.sell_price(tenant_id, &req.symbol),
             self.prices.buy_price(tenant_id, &req.symbol),

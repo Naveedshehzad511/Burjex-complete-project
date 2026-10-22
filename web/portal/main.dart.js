@@ -72063,7 +72063,9 @@ r=J.ar(r==null?B.dw:r)
 while(r.t()){q=r.gK(r)
 if(q.a!==a)s.push(q)}this.saN(0,A.jd(s,t.nH))}}
 A.aDI.prototype={
-$2(a,b){var s=this.a
+$2(a,b){var s
+if(a==b)return
+s=this.a
 s.saN(0,B.te)
 s.kv(0)},
 $S:349}

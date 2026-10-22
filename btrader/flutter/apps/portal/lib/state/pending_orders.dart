@@ -115,7 +115,10 @@ class PendingOrder {
 /// disappears the instant the server says so, with no refresh.
 class PendingOrdersController extends StateNotifier<AsyncValue<List<PendingOrder>>> {
   PendingOrdersController(this._ref) : super(const AsyncValue.loading()) {
-    _ref.listen<String?>(activeAccountIdProvider, (_, __) {
+    _ref.listen<String?>(activeAccountIdProvider, (prev, next) {
+      // A refresh of the accounts rebuilds the provider with an equal id held in a new String object, which is
+      // announced as a change. Only a different account clears the list; the same one must not blank every line.
+      if (prev == next) return;
       // The other account's resting orders must not stay on screen while this account's load: drop
       // them at once (the loading value has none) and fetch.
       state = const AsyncValue.loading();

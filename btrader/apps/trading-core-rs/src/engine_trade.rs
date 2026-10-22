@@ -546,7 +546,12 @@ impl Engine {
                         if total != 0.0 {
                             close_px = apply_markup(close_side, px, total, digits);
                         }
-                        close_px = protective_close_price(&side, close_px, lvl);
+                        close_px = protective_close_price(
+                            &side,
+                            protective_kind.as_deref().is_some_and(|k| k.eq_ignore_ascii_case("tp")),
+                            close_px,
+                            lvl,
+                        );
                     }
                 } else {
                     let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
