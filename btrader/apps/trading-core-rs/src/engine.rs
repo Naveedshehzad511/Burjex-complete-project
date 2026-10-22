@@ -1,7 +1,7 @@
 use crate::books::{BookRow, MemoryClaims, PendingBook, PositionBook};
 use crate::calc::{
-    apply_markup, balance_after_open, compute_aggregates, dealing_commission, execution_applies,
-    group_markup_for_quote, open_funds_required, pending_type_to_apply_kind, required_margin, round_lots, round_price, snap_volume, slippage_bound, SymbolCalcSpec,
+    apply_markup, balance_after_open, compute_aggregates, dealing_commission,
+    group_markup_for_quote, level_rule, open_fill_price, open_funds_required, pending_type_to_apply_kind, LevelRule, required_margin, round_lots, snap_volume, slippage_bound, SymbolCalcSpec,
 };
 use crate::error::{
     BtError, BtResult, INSUFFICIENT_MARGIN, INVALID_PRICE, INVALID_VOLUME, MARKET_CLOSED, NO_PRICE,
@@ -484,7 +484,6 @@ impl Engine {
         } else {
             pending_type_to_apply_kind(&req.order_type, &req.side)
         };
-        let applies = execution_applies(&pricing.execution_apply_to, apply_kind);
         let trigger_mono = plan_in.as_ref().map(|p| p.trigger_mono).unwrap_or_else(Instant::now);
         let trigger_wall = plan_in.as_ref().map(|p| p.trigger_wall).unwrap_or_else(now_ms);
         let plan = plan_in.unwrap_or_else(|| create_plan(&pricing, apply_kind, trigger_mono, trigger_wall));
@@ -518,47 +517,25 @@ impl Engine {
         let total_markup = symbol_book_markup + group_markup + news_markup;
         let with_markup = apply_markup(&req.side, px, total_markup, sym.digits);
         let honour_ref = req.price;
-        // Instant market: honour click. Pending (stop/limit) with apply-to: honour
-        // level even after MARKET delay — same rule as SL/TP closes (no fill through).
-        // Plain MARKET marketBuy/Sell never honour a client price after the delay.
-        let is_market_ot = req.order_type.eq_ignore_ascii_case("MARKET");
-        let honour_level = applies
-            && honour_ref.is_some()
-            && clamp_worst.is_none()
-            && (pricing.execution_mode.eq_ignore_ascii_case("INSTANT") || !is_market_ot);
-
-        let mut fill_price = if honour_level {
-            round_price(honour_ref.unwrap(), sym.digits)
-        } else {
-            if req.one_click.unwrap_or(false) && req.price.is_some() && sym.slippage_points > 0 {
-                let bound = slippage_bound(&req.side, req.price.unwrap(), f64::from(sym.slippage_points), sym.digits);
-                let worse = if req.side.eq_ignore_ascii_case("BUY") {
-                    px > bound
-                } else {
-                    px < bound
-                };
-                if worse {
-                    return Err(BtError::new(INVALID_PRICE, "slippage exceeded"));
-                }
-            }
-            round_price(apply_markup(&req.side, with_markup, pricing.slippage_points, sym.digits), sym.digits)
-        };
-        if let Some(clamp) = clamp_worst {
-            let honour_clamp = applies
-                && (pricing.execution_mode.eq_ignore_ascii_case("INSTANT") || !is_market_ot);
-            fill_price = if honour_clamp {
-                round_price(clamp, sym.digits)
+        // Instant + ticked kind: the client's price (a click, or the pending level) is honoured exactly.
+        // Market + ticked kind (incl. a pending order that has just triggered): the delay was waited above and the
+        // fill is the LIVE quote read after it - the pending level only decided when the order became eligible.
+        // Kind not ticked: immediate live fill, a limit order never worse than its price.
+        let rule = level_rule(&pricing, apply_kind);
+        let honour_level = rule == LevelRule::Honour && honour_ref.is_some() && clamp_worst.is_none();
+        if !honour_level && req.one_click.unwrap_or(false) && req.price.is_some() && sym.slippage_points > 0 {
+            let bound = slippage_bound(&req.side, req.price.unwrap(), f64::from(sym.slippage_points), sym.digits);
+            let worse = if req.side.eq_ignore_ascii_case("BUY") {
+                px > bound
             } else {
-                round_price(
-                    if req.side.eq_ignore_ascii_case("BUY") {
-                        fill_price.min(clamp)
-                    } else {
-                        fill_price.max(clamp)
-                    },
-                    sym.digits,
-                )
+                px < bound
             };
+            if worse {
+                return Err(BtError::new(INVALID_PRICE, "slippage exceeded"));
+            }
         }
+        let live_with_costs = apply_markup(&req.side, with_markup, pricing.slippage_points, sym.digits);
+        let fill_price = open_fill_price(rule, &req.side, honour_ref, clamp_worst, live_with_costs, sym.digits);
         if let (Some(bid), Some(ask)) = (
             self.prices.sell_price(tenant_id, &req.symbol),
             self.prices.buy_price(tenant_id, &req.symbol),
