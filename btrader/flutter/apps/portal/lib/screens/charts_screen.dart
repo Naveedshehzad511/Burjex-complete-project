@@ -1400,6 +1400,13 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                     _setVolume(_volume, spec.isEmpty ? null : spec.first);
                     FocusScope.of(context).unfocus();
                   },
+                  // The number pad has no Done key, and on a phone a tap elsewhere does not close the keyboard by
+                  // itself: a tap anywhere else commits the lot size (as Done does) and closes it.
+                  onTapOutside: (_) {
+                    if (!_volFocus.hasFocus) return;
+                    _setVolume(_volume, spec.isEmpty ? null : spec.first);
+                    _volFocus.unfocus();
+                  },
                 ),
               ),
               _StepIcon(
