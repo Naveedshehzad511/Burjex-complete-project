@@ -14,6 +14,7 @@ import '../state/movers.dart';
 import '../widgets/account_actions.dart';
 import '../widgets/manage_accounts.dart';
 import '../widgets/market_movers.dart';
+import '../widgets/market_news.dart';
 import '../widgets/portal_drawer.dart';
 import '../widgets/portal_ui.dart';
 
@@ -257,9 +258,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 },
               ),
               // Market sections load on their own: a slow or failed dashboard never hides them, and they never
-              // wait for it. (Order: account list, [news], Top Gainers, Top Losers, [stories].)
+              // wait for it. (Order: account list, [calendar], Top Gainers, Top Losers, Market news.)
               const MoversSection(side: MoversSide.gainers),
               const MoversSection(side: MoversSide.losers),
+              const MarketNewsSection(),
             ],
           ),
         ),
