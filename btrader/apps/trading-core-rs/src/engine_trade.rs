@@ -1,7 +1,7 @@
 use crate::books::PendingRow;
 use crate::calc::{
-    apply_markup, compute_aggregates, execution_applies, instant_honours, normalize_volume, point_size, required_margin,
-    round_price, snap_volume, split_position_charges,
+    apply_markup, compute_aggregates, instant_honours, normalize_volume, point_size, protective_close_price,
+    protective_honours_level, required_margin, round_price, snap_volume, split_position_charges,
 };
 use crate::engine::{Engine, ExecResult, PlaceReq};
 use crate::error::{
@@ -9,7 +9,7 @@ use crate::error::{
     POSITION_NOT_FOUND, RATE_LIMITED, STOPS_TOO_CLOSE,
 };
 use crate::models::{account_from_row, now_ms, AccountRow, Snapshot, SymbolRow, ACCOUNT_SELECT};
-use crate::policy::{audit_comment, close_apply_kind, create_plan, wait_for_deadline};
+use crate::policy::{audit_comment, close_apply_kind, close_requires_live_quote, create_plan, wait_for_deadline};
 use crate::sessions::{parse_sessions, session_closes_at};
 use crate::trigger::{pending_fires, PendingAction};
 use chrono::{DateTime, Utc};
@@ -504,6 +504,11 @@ impl Engine {
             wait_for_deadline(plan.as_ref()).await;
         }
 
+        // A client's close (manual close, Close All) re-checks, after its delay, that the quote is still live - the
+        // same rule an open applies. SL / TP, stop-out and a dealer's price are not held up by it.
+        if close_requires_live_quote(protective_kind.as_deref(), floor_balance, override_px.is_some(), crate::guard::is_staff_action()) {
+            self.live_price_gate(&tenant_id, &symbol, true).into_result()?;
+        }
         let px = if let Some(o) = override_px.filter(|v| *v > 0.0) {
             o
         } else if side.eq_ignore_ascii_case("BUY") {
@@ -525,28 +530,23 @@ impl Engine {
                 } else {
                     pricing.slippage_points
                 };
-                let applies_prot = protective_kind
+                // The SL / TP level is the TRIGGER (when the protection fires, decided on the tick). It is the fill
+                // price only for Instant execution on a ticked kind. Under Market execution the close is priced
+                // after the delay from the live quote: slippage works against the client, but a price that moved
+                // back in the client's favour is not paid out (a BUY closes at the lower of live and level).
+                let honour_prot = protective_kind
                     .as_ref()
-                    .is_some_and(|k| execution_applies(&pricing.execution_apply_to, k));
+                    .is_some_and(|k| protective_honours_level(pricing, k));
                 if let Some(lvl) = protective_level.filter(|v| *v > 0.0) {
-                    if applies_prot {
-                        // SL/TP selected in apply-to: honour the trigger level.
-                        // MARKET mode only adds executionDelayMs wait (already done);
-                        // it must NOT fill further through the level after that wait —
-                        // that is what made BUY SL closes print below the SL line.
+                    if honour_prot {
                         close_px = lvl;
                     } else {
-                        // apply-to unchecked: live market, gap may slip through the level.
                         let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
                         let total = group_markup + slip_points;
                         if total != 0.0 {
                             close_px = apply_markup(close_side, px, total, digits);
                         }
-                        close_px = if side.eq_ignore_ascii_case("BUY") {
-                            close_px.min(lvl)
-                        } else {
-                            close_px.max(lvl)
-                        };
+                        close_px = protective_close_price(&side, close_px, lvl);
                     }
                 } else {
                     let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };

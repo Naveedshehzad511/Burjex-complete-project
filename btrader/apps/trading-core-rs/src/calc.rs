@@ -130,6 +130,77 @@ pub fn instant_honours(pricing: &GroupPricing, kind: &str) -> bool {
     pricing.execution_mode.eq_ignore_ascii_case("INSTANT") && execution_applies(&pricing.execution_apply_to, kind)
 }
 
+/// How an open (a market order, or a pending order that has just triggered) is priced once its delay is over.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LevelRule {
+    /// Instant execution on a ticked kind: exactly the client's price / the pending level.
+    Honour,
+    /// Market execution on a ticked kind: the live quote at the moment the delay ends. A pending order's level
+    /// only decides WHEN it becomes eligible to fill; it is never the fill price.
+    Live,
+    /// Kind not ticked: immediate fill at the live quote, never worse than a limit order's price.
+    LiveWithinLimit,
+}
+
+pub fn level_rule(pricing: &GroupPricing, kind: &str) -> LevelRule {
+    if !execution_applies(&pricing.execution_apply_to, kind) {
+        LevelRule::LiveWithinLimit
+    } else if pricing.execution_mode.eq_ignore_ascii_case("INSTANT") {
+        LevelRule::Honour
+    } else {
+        LevelRule::Live
+    }
+}
+
+/// The price an open fills at once any delay is over.
+///
+/// `live_with_costs` is the live quote (read AFTER the delay) with the symbol / group markup and slippage already
+/// on it. `honour_ref` is the client's price (a click, or the pending level); `clamp_worst` is a limit order's
+/// price.
+pub fn open_fill_price(
+    rule: LevelRule,
+    side: &str,
+    honour_ref: Option<f64>,
+    clamp_worst: Option<f64>,
+    live_with_costs: f64,
+    digits: i32,
+) -> f64 {
+    let mut fill = match (rule, honour_ref, clamp_worst) {
+        (LevelRule::Honour, Some(level), None) => round_price(level, digits),
+        _ => round_price(live_with_costs, digits),
+    };
+    if let Some(clamp) = clamp_worst {
+        fill = match rule {
+            LevelRule::Honour => round_price(clamp, digits),
+            // Market execution: the live quote as it is, even when it differs from the limit price.
+            LevelRule::Live => fill,
+            LevelRule::LiveWithinLimit => round_price(
+                if side.eq_ignore_ascii_case("BUY") { fill.min(clamp) } else { fill.max(clamp) },
+                digits,
+            ),
+        };
+    }
+    fill
+}
+
+/// Whether an SL / TP close fills exactly at its level: only Instant execution on a ticked kind. Under Market
+/// execution the level is just the TRIGGER (when the protection fires); the fill is priced after the delay.
+pub fn protective_honours_level(pricing: &GroupPricing, kind: &str) -> bool {
+    instant_honours(pricing, kind)
+}
+
+/// Close price of an SL / TP once its delay is over, from the live closing quote (with the group's markup and
+/// slippage on it) and the SL / TP level that triggered. Slippage works against the client but a price that
+/// moved back in the client's favour is not paid out: a BUY position closes at the lower of the two, a SELL at
+/// the higher.
+pub fn protective_close_price(position_side: &str, live_with_costs: f64, level: f64) -> f64 {
+    if position_side.eq_ignore_ascii_case("BUY") {
+        live_with_costs.min(level)
+    } else {
+        live_with_costs.max(level)
+    }
+}
+
 /// Per-side price adjustment (in points) that makes a group's TOTAL client spread equal what the
 /// admin configured.
 ///
@@ -695,5 +766,133 @@ mod tests {
         assert!(!instant_honours(&p, "sl"));
         let m = GroupPricing { execution_mode: "MARKET".into(), ..p };
         assert!(!instant_honours(&m, "marketBuy"));
+    }
+
+    // ── Market execution: pending orders and SL / TP are priced AFTER the delay ──────────────────────────────
+
+    fn grp(mode: &str, ticked: serde_json::Value) -> GroupPricing {
+        GroupPricing {
+            execution_mode: mode.into(),
+            execution_delay_ms: 300,
+            execution_apply_to: ticked,
+            ..Default::default()
+        }
+    }
+    fn all() -> serde_json::Value {
+        serde_json::json!({})
+    }
+    fn only(kinds: &[&str]) -> serde_json::Value {
+        let mut m = serde_json::Map::new();
+        for k in ["marketBuy", "marketSell", "buyLimit", "sellLimit", "buyStop", "sellStop", "sl", "tp", "manualClose", "closeAll"] {
+            m.insert(k.into(), serde_json::Value::Bool(kinds.contains(&k)));
+        }
+        serde_json::Value::Object(m)
+    }
+
+    #[test]
+    fn level_rule_follows_mode_and_the_ticked_kinds() {
+        assert_eq!(level_rule(&grp("MARKET", all()), "buyLimit"), LevelRule::Live);
+        assert_eq!(level_rule(&grp("MARKET", only(&["buyLimit"])), "buyLimit"), LevelRule::Live);
+        assert_eq!(level_rule(&grp("MARKET", only(&["buyLimit"])), "sellLimit"), LevelRule::LiveWithinLimit);
+        assert_eq!(level_rule(&grp("INSTANT", all()), "buyStop"), LevelRule::Honour);
+        assert_eq!(level_rule(&grp("INSTANT", only(&["sellStop"])), "buyStop"), LevelRule::LiveWithinLimit);
+    }
+
+    // Buy Limit at 100.00. The market reaches it, the delay passes, the market has moved.
+    #[test]
+    fn market_execution_fills_a_triggered_buy_limit_at_the_live_price_whichever_way_it_moved() {
+        for live in [100.30, 99.80, 100.00] {
+            let fill = open_fill_price(LevelRule::Live, "BUY", Some(100.0), Some(100.0), live, 2);
+            assert_eq!(fill, live, "live {live} after the delay");
+        }
+    }
+
+    #[test]
+    fn market_execution_fills_a_triggered_sell_limit_at_the_live_price_whichever_way_it_moved() {
+        for live in [99.70, 100.20, 100.00] {
+            assert_eq!(open_fill_price(LevelRule::Live, "SELL", Some(100.0), Some(100.0), live, 2), live);
+        }
+    }
+
+    #[test]
+    fn market_execution_fills_stop_orders_at_the_live_price_too() {
+        // Buy Stop at 100 (no clamp): the live price after the delay, above or below the stop
+        assert_eq!(open_fill_price(LevelRule::Live, "BUY", Some(100.0), None, 100.45, 2), 100.45);
+        assert_eq!(open_fill_price(LevelRule::Live, "BUY", Some(100.0), None, 99.90, 2), 99.90);
+        assert_eq!(open_fill_price(LevelRule::Live, "SELL", Some(100.0), None, 99.55, 2), 99.55);
+    }
+
+    #[test]
+    fn instant_execution_still_honours_the_pending_level_exactly() {
+        assert_eq!(open_fill_price(LevelRule::Honour, "BUY", Some(100.0), Some(100.0), 100.30, 2), 100.0);
+        assert_eq!(open_fill_price(LevelRule::Honour, "SELL", Some(100.0), None, 99.55, 2), 100.0);
+    }
+
+    #[test]
+    fn an_unticked_limit_kind_keeps_its_old_rule_never_worse_than_the_limit() {
+        assert_eq!(open_fill_price(LevelRule::LiveWithinLimit, "BUY", Some(100.0), Some(100.0), 100.30, 2), 100.0);
+        assert_eq!(open_fill_price(LevelRule::LiveWithinLimit, "BUY", Some(100.0), Some(100.0), 99.80, 2), 99.80);
+        assert_eq!(open_fill_price(LevelRule::LiveWithinLimit, "SELL", Some(100.0), Some(100.0), 99.70, 2), 100.0);
+        assert_eq!(open_fill_price(LevelRule::LiveWithinLimit, "SELL", Some(100.0), Some(100.0), 100.20, 2), 100.20);
+    }
+
+    #[test]
+    fn a_plain_market_order_is_the_live_price_under_market_execution_and_its_click_under_instant() {
+        // Buy / Sell buttons (no clamp): Market -> live, Instant + ticked -> the clicked price. Unchanged behaviour.
+        assert_eq!(open_fill_price(LevelRule::Live, "BUY", Some(4030.1), None, 4030.4, 3), 4030.4);
+        assert_eq!(open_fill_price(LevelRule::Honour, "BUY", Some(4030.1), None, 4030.4, 3), 4030.1);
+        assert_eq!(open_fill_price(LevelRule::LiveWithinLimit, "BUY", Some(4030.1), None, 4030.4, 3), 4030.4);
+    }
+
+    // The client's example: a BUY opened at 4030.200 with SL 4029.200. The tick that reaches 4029.200 TRIGGERS it.
+    #[test]
+    fn buy_sl_closes_at_the_price_after_the_delay_when_it_slipped() {
+        assert_eq!(round_price(protective_close_price("BUY", 4029.100, 4029.200), 3), 4029.100);
+    }
+
+    #[test]
+    fn buy_sl_closes_at_the_sl_level_when_the_price_came_back_above_it() {
+        assert_eq!(round_price(protective_close_price("BUY", 4029.300, 4029.200), 3), 4029.200);
+        assert_eq!(round_price(protective_close_price("BUY", 4029.200, 4029.200), 3), 4029.200);
+    }
+
+    #[test]
+    fn buy_tp_follows_the_same_rule() {
+        // TP 4031.000: price after the delay still above -> the TP level; pulled back below -> the live price
+        assert_eq!(round_price(protective_close_price("BUY", 4031.400, 4031.000), 3), 4031.000);
+        assert_eq!(round_price(protective_close_price("BUY", 4030.800, 4031.000), 3), 4030.800);
+    }
+
+    #[test]
+    fn sell_sl_and_tp_follow_the_mirrored_rule() {
+        // SELL SL 4030.000 (buys back at the ask): worse (higher) -> live; better (lower) -> level
+        assert_eq!(round_price(protective_close_price("SELL", 4030.200, 4030.000), 3), 4030.200);
+        assert_eq!(round_price(protective_close_price("SELL", 4029.900, 4030.000), 3), 4030.000);
+        // SELL TP 4028.000: still at or below -> level; bounced above -> live
+        assert_eq!(round_price(protective_close_price("SELL", 4027.600, 4028.000), 3), 4028.000);
+        assert_eq!(round_price(protective_close_price("SELL", 4028.300, 4028.000), 3), 4028.300);
+    }
+
+    #[test]
+    fn sl_tp_fill_exactly_at_the_level_only_under_instant_execution_on_a_ticked_kind() {
+        assert!(protective_honours_level(&grp("INSTANT", all()), "sl"));
+        assert!(protective_honours_level(&grp("INSTANT", only(&["tp"])), "tp"));
+        assert!(!protective_honours_level(&grp("INSTANT", only(&["tp"])), "sl"));
+        assert!(!protective_honours_level(&grp("MARKET", all()), "sl"));
+        assert!(!protective_honours_level(&grp("MARKET", only(&["sl", "tp"])), "tp"));
+    }
+
+    #[test]
+    fn the_group_delay_applies_to_every_ticked_kind_and_only_those() {
+        let g = grp("MARKET", only(&["buyLimit", "sellStop", "sl", "manualClose"]));
+        for k in ["buyLimit", "sellStop", "sl", "manualClose"] {
+            assert_eq!(market_execution_delay_ms(&g, k), 300, "{k}");
+        }
+        for k in ["marketBuy", "marketSell", "sellLimit", "buyStop", "tp", "closeAll"] {
+            assert_eq!(market_execution_delay_ms(&g, k), 0, "{k}");
+        }
+        for k in ["buyLimit", "sl", "tp", "closeAll"] {
+            assert_eq!(market_execution_delay_ms(&grp("INSTANT", all()), k), 0, "instant never waits: {k}");
+        }
     }
 }

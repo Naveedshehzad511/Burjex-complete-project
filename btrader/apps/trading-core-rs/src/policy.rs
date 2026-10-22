@@ -89,6 +89,13 @@ pub fn close_apply_kind(protective_kind: Option<&str>, close_all: bool, stop_out
     Some("manualClose")
 }
 
+/// Whether a close must re-check that the quote is still live after its delay: client-initiated closes (manual
+/// close, Close All) do, exactly as an open does. SL / TP are automatic, stop-out is forced and a dealer's
+/// manual-price close is the dealer's own call: none of those are held up by it.
+pub fn close_requires_live_quote(protective_kind: Option<&str>, floor_balance: bool, price_override: bool, staff: bool) -> bool {
+    protective_kind.is_none() && !floor_balance && !price_override && !staff
+}
+
 pub fn audit_comment(plan: Option<&ExecutionPlan>, extra: serde_json::Value) -> String {
     let mut body = serde_json::json!({
         "exec": plan.map(|p| p.kind.as_str()).unwrap_or("unknown"),
@@ -160,5 +167,15 @@ mod tests {
     async fn the_delay_is_the_configured_value_not_a_constant() {
         let w = timed_wait(group("MARKET", 50), "marketSell").await;
         assert!((49..110).contains(&(w as i64)), "waited {w}ms for a 50ms rule");
+    }
+
+    #[test]
+    fn only_a_clients_close_re_checks_the_quote_after_its_delay() {
+        assert!(close_requires_live_quote(None, false, false, false), "manual close / Close All");
+        assert!(!close_requires_live_quote(Some("sl"), false, false, false), "SL is automatic");
+        assert!(!close_requires_live_quote(Some("tp"), false, false, false), "TP is automatic");
+        assert!(!close_requires_live_quote(None, true, false, false), "stop-out is forced");
+        assert!(!close_requires_live_quote(None, false, true, false), "the dealer's own price");
+        assert!(!close_requires_live_quote(None, false, false, true), "staff action");
     }
 }
