@@ -27,7 +27,7 @@ const kNewsKeepReadingUrl = 'https://www.tradingview.com/news/#news_top_stories'
 const kNewsBaseUrl = 'https://portal.burjexprime.net/';
 
 /// Height of the widget: its heading and about six stories, so the Home page scrolls (the widget does not).
-const kNewsHeight = 720;
+const kNewsHeight = 1500;
 
 /// The widget's `timeline` settings for [tab] - exactly the options of TradingView's embed code.
 Map<String, Object> newsWidgetConfig(NewsTab tab, {required bool dark, int height = kNewsHeight}) => {

@@ -147,23 +147,25 @@ class _MoverCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = Theme.of(context).extension<TradeColors>()!;
     final up = mover.changePct >= 0;
-    final color = up ? tc.profit : tc.loss;
+    // Gainers green, losers red (the theme's profit colour is blue, which is not what a mover should read as).
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final color = up ? (dark ? const Color(0xFF2ECC71) : const Color(0xFF16A34A)) : tc.loss;
     final hint = Theme.of(context).hintColor;
     final pct = '${up ? '+' : ''}${mover.changePct.toStringAsFixed(2)}%';
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: Color.alphaBlend(color.withValues(alpha: 0.07), Theme.of(context).colorScheme.surface),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).dividerColor),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(color: hint.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(8)),
           child: Tooltip(
             message: _categoryLabel(mover.category),
-            child: Icon(_categoryIcon(mover.category), size: 15 * scale, color: hint, semanticLabel: _categoryLabel(mover.category)),
+            child: Icon(_categoryIcon(mover.category), size: 15 * scale, color: color, semanticLabel: _categoryLabel(mover.category)),
           ),
         ),
         const SizedBox(height: 10),
@@ -187,7 +189,7 @@ class _MoverCard extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(20)),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(20)),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(up ? Icons.trending_up : Icons.trending_down, size: 14 * scale, color: color),
               const SizedBox(width: 4),

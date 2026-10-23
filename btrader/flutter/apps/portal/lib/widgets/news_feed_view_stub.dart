@@ -11,12 +11,18 @@ class NewsFeedView extends StatelessWidget {
     required this.onLoaded,
     required this.onFailed,
     required this.onOpen,
+    this.html,
+    this.height,
   });
   final NewsTab tab;
   final bool dark;
   final VoidCallback onLoaded;
   final VoidCallback onFailed;
   final void Function(String url) onOpen;
+
+  /// A different embed page (the economic calendar) in place of the news list for [tab], and its height.
+  final String? html;
+  final double? height;
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();
