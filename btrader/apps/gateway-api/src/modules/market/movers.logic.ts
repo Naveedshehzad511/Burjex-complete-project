@@ -3,16 +3,16 @@
  * Pure functions (no database, no clock) so the rules can be tested on their own.
  */
 
-/** The four categories the Home screen covers. */
-export type MoverCategory = 'COMMODITIES' | 'CRYPTO' | 'INDICES' | 'STOCKS';
-export const MOVER_CATEGORIES: MoverCategory[] = ['COMMODITIES', 'CRYPTO', 'INDICES', 'STOCKS'];
+/** The categories the Home screen covers. */
+export type MoverCategory = 'COMMODITIES' | 'CRYPTO' | 'INDICES' | 'STOCKS' | 'FOREX';
+export const MOVER_CATEGORIES: MoverCategory[] = ['COMMODITIES', 'CRYPTO', 'INDICES', 'STOCKS', 'FOREX'];
 
 /** Cards in each carousel. */
 export const MOVER_CARDS = 5;
 
 /**
  * The admin-set instrument class -> the category shown on Home. Metals (gold, silver) are commodities.
- * Forex and custom instruments are not part of the movers.
+ * Forex pairs are their own category. Custom instruments are not part of the movers.
  */
 export function moverCategory(instrumentClass: string | null | undefined): MoverCategory | null {
   switch ((instrumentClass ?? '').toUpperCase()) {
@@ -25,6 +25,8 @@ export function moverCategory(instrumentClass: string | null | undefined): Mover
       return 'INDICES';
     case 'STOCKS':
       return 'STOCKS';
+    case 'FOREX':
+      return 'FOREX';
     default:
       return null;
   }
@@ -50,7 +52,7 @@ export function changePercent(price: number, prevClose: number): number | null {
 }
 
 /**
- * The cards of one carousel: the strongest mover of each of the four categories, then the next strongest overall,
+ * The cards of one carousel: the strongest mover of each category, then the next strongest overall,
  * up to [cards], ordered strongest first. A gainer must actually have gained and a loser actually lost, so a quiet
  * market gives fewer cards instead of a "gainer" that is down.
  */

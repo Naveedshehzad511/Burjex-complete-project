@@ -20,6 +20,8 @@ String _categoryLabel(String c) {
       return 'Indices';
     case 'STOCKS':
       return 'Stocks';
+    case 'FOREX':
+      return 'Forex';
     default:
       return c;
   }
@@ -36,13 +38,15 @@ IconData _categoryIcon(String c) {
       return Icons.show_chart;
     case 'STOCKS':
       return Icons.candlestick_chart_outlined;
+    case 'FOREX':
+      return Icons.currency_exchange;
     default:
       return Icons.category_outlined;
   }
 }
 
 /// "Top Gainers" / "Top Losers" on Home: a horizontally swipeable row of up to five cards (the strongest mover of
-/// each of Commodities, Crypto, Indices and Stocks, then the next strongest). It loads on its own, apart from the
+/// each of Commodities, Crypto, Indices, Stocks and Forex, then the next strongest). It loads on its own, apart from the
 /// rest of the screen, and says so when it is loading, stale, empty or cannot be reached.
 class MoversSection extends ConsumerWidget {
   const MoversSection({super.key, required this.side});
