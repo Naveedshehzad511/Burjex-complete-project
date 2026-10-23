@@ -45,12 +45,20 @@ class _NewsFeedViewState extends State<NewsFeedView> {
   /// unlocks the widget for a few seconds (its own list, its links), then it is covered again.
   bool _unlocked = false;
   Timer? _relock;
+  web.HTMLIFrameElement? _frame;
+
+  /// The iframe sits ABOVE Flutter's canvas, so a widget laid over it never receives the pointer: the iframe itself
+  /// is made transparent to the pointer while locked, and only then do the wheel / drags reach the page.
+  void _applyLock() => _frame?.style.pointerEvents = _unlocked ? 'auto' : 'none';
 
   void _unlock() {
     _relock?.cancel();
     setState(() => _unlocked = true);
+    _applyLock();
     _relock = Timer(const Duration(seconds: 8), () {
-      if (mounted) setState(() => _unlocked = false);
+      if (!mounted) return;
+      setState(() => _unlocked = false);
+      _applyLock();
     });
   }
 
@@ -70,6 +78,8 @@ class _NewsFeedViewState extends State<NewsFeedView> {
         ..style.border = 'none'
         ..style.width = '100%'
         ..style.height = '100%';
+      _frame = frame;
+      _applyLock();
       frame.addEventListener('load', ((web.Event _) => widget.onLoaded()).toJS);
       frame.addEventListener('error', ((web.Event _) => widget.onFailed()).toJS);
       return frame;

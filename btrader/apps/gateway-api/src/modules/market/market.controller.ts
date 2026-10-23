@@ -52,7 +52,7 @@ export class MarketController {
   @ApiOperation({
     summary:
       'Top Gainers / Top Losers for the Home screen: up to 5 each, across Commodities, Crypto, Indices and Stocks, ' +
-      '% change against the previous day close, from the instruments the trading group of the account offers.',
+      '% change against the previous day close, from every enabled instrument of the platform (not limited to one trading group).',
   })
   @ApiQuery({ name: 'accountId', required: false })
   async getMovers(@CurrentTenant() t: any, @CurrentUser() u: any, @Query('accountId') accountId?: string) {

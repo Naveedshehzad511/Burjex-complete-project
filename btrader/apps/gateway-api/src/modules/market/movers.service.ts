@@ -44,8 +44,9 @@ function brokerUtcOffsetSec(): number {
 /**
  * Top Gainers / Losers for the client app.
  *
- * - Instruments: the ones the client's trading group offers (the same list the app's Quotes uses), classed
- *   Commodities (incl. metals) / Crypto / Indices / Stocks.
+ * - Instruments: every enabled instrument of the platform - NOT only the ones the client's trading group offers
+ *   (the movers are market information; what an account may trade is decided elsewhere) - classed
+ *   Commodities (incl. metals) / Crypto / Indices / Stocks. A symbol with no valid market data is left out.
  * - Price: the last known bid (live tick; a last candle close for a symbol that has not ticked yet).
  * - Reference: the close of the last bar before the broker's current day began - the previous day's close.
  *   A symbol with no quote today is not a mover (nothing happened today).
@@ -61,17 +62,16 @@ export class MoversService {
   private readonly prevCloses = new Map<string, number | null>();
   private prevCloseDay = 0;
 
-  async movers(tenantId: string, accountId?: string, requireUserId?: string): Promise<MoversDto> {
-    return ttlWrap(`movers:${tenantId}:${accountId ?? ''}:${requireUserId ?? ''}`, MOVERS_CACHE_MS, () =>
-      this.compute(tenantId, accountId, requireUserId),
-    );
+  async movers(tenantId: string, _accountId?: string, _requireUserId?: string): Promise<MoversDto> {
+    // The list no longer depends on the account, so one answer per tenant serves every client.
+    return ttlWrap(`movers:${tenantId}`, MOVERS_CACHE_MS, () => this.compute(tenantId));
   }
 
-  private async compute(tenantId: string, accountId?: string, requireUserId?: string): Promise<MoversDto> {
+  private async compute(tenantId: string): Promise<MoversDto> {
     const now = Date.now();
     const dayStartSec = brokerDayStartSec(now, brokerUtcOffsetSec());
 
-    const rows = (await this.symbols.list(tenantId, true, accountId, requireUserId)) as Array<{
+    const rows = (await this.symbols.list(tenantId, true)) as Array<{
       symbol: string;
       displaySymbol?: string;
       description?: string | null;
