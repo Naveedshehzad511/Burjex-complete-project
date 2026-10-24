@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../crm/crm.dart';
+import '../state/crypto_policy.dart';
 import '../main.dart' show kNavy;
 import '../widgets/portal_ui.dart';
 
@@ -148,19 +149,21 @@ class KycScreen extends ConsumerWidget {
               action: d['bank_can_submit'] == true ? (bank == null ? 'Add bank account' : 'Add another') : null,
               onAction: () => _open(context, ref, _BankSheet(status: d)),
             ),
-            const SizedBox(height: 10),
-            _Section(
-              title: 'Crypto wallet',
-              status: '${d['crypto_status_ui'] ?? 'Not Submitted'}',
-              lines: [
-                if (crypto != null) ...[
-                  if ('${crypto['network'] ?? ''}'.isNotEmpty) '${crypto['network']}',
-                  if ('${crypto['wallet_address'] ?? ''}'.isNotEmpty) '${crypto['wallet_address']}',
+            if (!hideCryptoFunding) ...[
+              const SizedBox(height: 10),
+              _Section(
+                title: 'Crypto wallet',
+                status: '${d['crypto_status_ui'] ?? 'Not Submitted'}',
+                lines: [
+                  if (crypto != null) ...[
+                    if ('${crypto['network'] ?? ''}'.isNotEmpty) '${crypto['network']}',
+                    if ('${crypto['wallet_address'] ?? ''}'.isNotEmpty) '${crypto['wallet_address']}',
+                  ],
                 ],
-              ],
-              action: d['crypto_can_submit'] == true ? (crypto == null ? 'Add crypto wallet' : 'Add another') : null,
-              onAction: () => _open(context, ref, _CryptoSheet(status: d)),
-            ),
+                action: d['crypto_can_submit'] == true ? (crypto == null ? 'Add crypto wallet' : 'Add another') : null,
+                onAction: () => _open(context, ref, _CryptoSheet(status: d)),
+              ),
+            ],
             const SizedBox(height: 16),
             Text(
               'Your documents and details are reviewed by our team. The status above updates here as soon as they are.',

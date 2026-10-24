@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../crm/crm.dart';
+import '../state/crypto_policy.dart';
 import '../main.dart' show kNavy;
 import '../widgets/portal_ui.dart';
 
@@ -157,6 +158,15 @@ class DepositSetup {
   final List<DepositTarget> targets;
   final List<({String network, String label})> networks;
 
+  /// Bank / local-transfer methods only: no provider (Match2Pay) and no crypto method, and no crypto networks.
+  DepositSetup withoutCrypto() => DepositSetup(
+        allowed: allowed,
+        reason: reason,
+        methods: [for (final m in methods) if (m.kind == DepositKind.manual) m],
+        targets: targets,
+        networks: const [],
+      );
+
   factory DepositSetup.fromJson(Map<String, dynamic> d, double wallet) {
     final accounts = [
       for (final a in (d['trading_accounts'] as List? ?? const []))
@@ -200,7 +210,8 @@ final _depositSetupProvider =
     final w = ((await dio.get('/wallet/')).data as Map)['data'] as Map;
     wallet = crmNum(w['available_balance'] ?? w['wallet_balance']);
   } catch (_) {/* the wallet line is informational; the methods still work */}
-  return DepositSetup.fromJson(d, wallet);
+  final setup = DepositSetup.fromJson(d, wallet);
+  return hideCryptoFunding ? setup.withoutCrypto() : setup;
 });
 
 /// Opens the provider's payment page. On the web it replaces this tab (a popup opened after a network

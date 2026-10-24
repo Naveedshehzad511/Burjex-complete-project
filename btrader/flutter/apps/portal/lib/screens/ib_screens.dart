@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../crm/crm.dart';
+import '../state/crypto_policy.dart';
 import '../main.dart' show kNavy;
 import '../widgets/portal_ui.dart';
 
@@ -976,7 +977,7 @@ class _IbWithdrawScreenState extends ConsumerState<IbWithdrawScreen> {
           final methodOptions = <String, String>{
             if (methods['internal'] == true) 'internal': 'Internal transfer',
             if (methods['bank'] == true) 'bank': 'Bank account',
-            if (methods['crypto'] == true) 'crypto': 'Crypto wallet',
+            if (methods['crypto'] == true && !hideCryptoFunding) 'crypto': 'Crypto wallet',
             if (methods['manual'] == true) 'manual': 'Manual request',
           };
           return ListView(

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../crm/crm.dart';
+import '../state/crypto_policy.dart';
 import '../main.dart' show kNavy;
 import '../widgets/portal_ui.dart';
 import '../widgets/state_views.dart';
@@ -104,6 +105,7 @@ final _withdrawProvider = FutureProvider.autoDispose<_Withdrawal>((ref) async {
   final methods = <_Method>[];
   for (final m in (d['methods'] as List? ?? const [])) {
     final j = (m as Map).cast<String, dynamic>();
+    if (hideCryptoFunding && '${j['key']}' != 'bank') continue; // iPhone / iPad: bank transfer only
     methods.add(_Method(
       key: '${j['key']}',
       label: '${j['label'] ?? j['key']}',
@@ -268,7 +270,7 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
   Widget build(BuildContext context) {
     final data = ref.watch(_withdrawProvider);
     final kyc = ref.watch(kycStatusProvider).valueOrNull;
-    final networks = [for (final n in (kyc?['crypto_network_options'] as List? ?? const [])) (n as Map).cast<String, dynamic>()];
+    final networks = [if (!hideCryptoFunding) for (final n in (kyc?['crypto_network_options'] as List? ?? const [])) (n as Map).cast<String, dynamic>()];
     final fieldSettings = {for (final f in (kyc?['bank_field_settings'] as List? ?? const [])) '${(f as Map)['field_key']}': f.cast<String, dynamic>()};
 
     String label(String key, String fallback) => '${fieldSettings[key]?['label'] ?? fallback}';
