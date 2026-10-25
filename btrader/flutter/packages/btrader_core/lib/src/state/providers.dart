@@ -24,6 +24,25 @@ class AuthState {
   const AuthState({this.loading = true, this.authenticated = false, this.role});
 }
 
+/// The text to show for a CRM API error body: its message, or the first field error when the message is the
+/// generic "Validation failed.".
+String crmErrorMessage(dynamic data, String fallback) {
+  if (data is Map) {
+    final msg = data['message'];
+    // "Validation failed." says nothing; the field error (e.g. "This code has expired.") does.
+    if (msg is String && msg.isNotEmpty && msg != 'Validation failed.') return msg;
+    if (msg is List && msg.isNotEmpty) return msg.first.toString();
+    final errors = data['errors'];
+    if (errors is Map && errors.isNotEmpty) {
+      final first = errors.values.first;
+      if (first is List && first.isNotEmpty) return first.first.toString();
+      if (first is String) return first;
+    }
+    if (msg is String && msg.isNotEmpty) return msg;
+  }
+  return fallback;
+}
+
 class AuthController extends StateNotifier<AuthState> {
   AuthController(this._ref) : super(const AuthState(loading: true)) {
     _wire();
@@ -89,20 +108,7 @@ class AuthController extends StateNotifier<AuthState> {
         receiveTimeout: const Duration(seconds: 30),
       ));
 
-  String _crmMessage(dynamic data, String fallback) {
-    if (data is Map) {
-      final msg = data['message'];
-      if (msg is String && msg.isNotEmpty) return msg;
-      if (msg is List && msg.isNotEmpty) return msg.first.toString();
-      final errors = data['errors'];
-      if (errors is Map && errors.isNotEmpty) {
-        final first = errors.values.first;
-        if (first is List && first.isNotEmpty) return first.first.toString();
-        if (first is String) return first;
-      }
-    }
-    return fallback;
-  }
+  String _crmMessage(dynamic data, String fallback) => crmErrorMessage(data, fallback);
 
   /// CRM client forgot-password (email OTP). Independent of B-Trader login.
   Future<String> forgotPassword(String email) async {

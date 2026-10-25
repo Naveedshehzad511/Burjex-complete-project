@@ -253,11 +253,9 @@ class ResetPasswordOtpAPIView(APIView):
             ser.validated_data["new_password"],
         )
         if not result.get("ok"):
-            logger.info(
-                "reset-password-otp failed email=%s errors=%s",
-                ser.validated_data.get("email"),
-                result.get("errors"),
-            )
+            # Warning, not info: the logging config drops info here, so the reason never reached the logs.
+            # The errors hold reason texts only (never the code or the password).
+            logger.warning("reset-password-otp failed errors=%s", result.get("errors"))
             return validation_error_response(result.get("errors") or {})
         return success_response({}, message=result["message"])
 

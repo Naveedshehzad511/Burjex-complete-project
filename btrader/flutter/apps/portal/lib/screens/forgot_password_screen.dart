@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import '../crm/crm.dart';
 import '../widgets/auth_page.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
@@ -76,11 +77,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
             password: _pass.text,
             confirm: _confirm.text,
           );
-      try {
-        await ref.read(authControllerProvider.notifier).login(_email.text.trim(), _pass.text);
-      } catch (_) {
-        if (mounted) context.go('/login');
-      }
+      // The router opens Home on the CRM session (as the login screen does); the gateway login alone leaves the
+      // user here with a spent code.
+      final err = await ref.read(crmSessionProvider.notifier).login(_email.text.trim(), _pass.text);
+      if (err != null && mounted) context.go('/login');
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
