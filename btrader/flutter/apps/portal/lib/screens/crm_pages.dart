@@ -232,6 +232,30 @@ final _transferProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref)
   return (((res.data as Map)['data']) as Map).cast<String, dynamic>();
 });
 
+/// The two sides of a transfer type the CRM offers, e.g. "WALLET_TO_TRADING" -> ["WALLET", "TRADING"].
+List<String> transferSides(String type) {
+  final parts = type.toUpperCase().split('_TO_');
+  return parts.length == 2 ? parts : const [];
+}
+
+String _sideLabel(String side) {
+  switch (side) {
+    case 'WALLET':
+      return 'Wallet';
+    case 'TRADING':
+      return 'Trading account';
+    case 'IB':
+      return 'IB wallet';
+  }
+  return side.split('_').map((w) => w.isEmpty ? w : '${w[0]}${w.substring(1).toLowerCase()}').join(' ');
+}
+
+/// "WALLET_TO_TRADING" -> "Wallet → Trading account" (any type the CRM sends; no type is listed here by name).
+String transferTypeLabel(String type) {
+  final sides = transferSides(type);
+  return sides.length == 2 ? '${_sideLabel(sides[0])} → ${_sideLabel(sides[1])}' : type;
+}
+
 class InternalTransferScreen extends ConsumerStatefulWidget {
   const InternalTransferScreen({super.key});
   @override
@@ -248,31 +272,58 @@ class _InternalTransferScreenState extends ConsumerState<InternalTransferScreen>
   bool _ok = false;
 
   @override
+  void initState() {
+    super.initState();
+    _amount.addListener(() => setState(() {}));
+  }
+
+  @override
   void dispose() {
     _amount.dispose();
     super.dispose();
   }
 
-  Future<void> _submit(Map<String, dynamic> o) async {
+  static String _tv(dynamic x) => '${x is Map ? (x['value'] ?? x['key'] ?? x['id']) : x}';
+
+  /// The accounts a side of the chosen type can be: the wallet, the IB wallet, or the client's trading accounts.
+  List<(String, String)> _choices(String side, Map<String, dynamic> o, List<Map<String, dynamic>> accounts) {
+    switch (side) {
+      case 'WALLET':
+        return [('WALLET', 'Wallet · ${o['wallet_balance'] ?? ''} USD')];
+      case 'IB':
+        return [('IB_WALLET', 'IB wallet · ${o['ib_wallet_balance'] ?? ''} USD')];
+      case 'TRADING':
+        return [
+          for (final a in accounts)
+            ('${a['from_account_key'] ?? 'TRADING:${a['id']}'}', '#${a['account_number'] ?? a['login_id'] ?? a['id']} · ${a['balance'] ?? ''} ${a['currency'] ?? ''}'.trim()),
+        ];
+    }
+    return const [];
+  }
+
+  Future<void> _submit(Map<String, dynamic> o, String type, String from, String to) async {
     setState(() {
       _busy = true;
       _msg = null;
     });
     try {
       final r = await ref.read(crmDioProvider).post('/transfers/internal/', data: {
-        'transfer_type': _type ?? '',
-        'from_account': _from,
-        'to_account': _to,
+        'transfer_type': type,
+        'from_account': from,
+        'to_account': to,
         'amount': _amount.text.trim(),
         'request_uid': o['request_uid'],
       });
       _ok = true;
       _msg = crmMessage(r.data, 'Transfer submitted.');
+      _amount.clear();
       ref.invalidate(crmDashboardProvider);
     } on DioException catch (e) {
       _ok = false;
       _msg = crmMessage(e, 'Transfer failed.');
     }
+    // A new request id and fresh balances for the next try: the CRM accepts each request id once, even after a refusal.
+    ref.invalidate(_transferProvider);
     if (mounted) setState(() => _busy = false);
   }
 
@@ -282,53 +333,81 @@ class _InternalTransferScreenState extends ConsumerState<InternalTransferScreen>
     return PortalPage(
       title: 'Internal Transfer',
       child: t.when(
+        skipLoadingOnRefresh: true,
         loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
         error: (e, _) => Padding(padding: const EdgeInsets.all(16), child: ErrorBox(crmMessage(e))),
         data: (o) {
           if (o['allowed'] == false) {
             return Padding(padding: const EdgeInsets.all(16), child: ErrorBox('${o['block_reason'] ?? 'Transfers are not available right now.'}'));
           }
-          final types = [for (final x in (o['transfer_types'] as List? ?? const [])) x];
+          final types = [for (final x in (o['transfer_types'] as List? ?? const [])) _tv(x)];
           final accounts = [for (final x in (o['trading_accounts'] as List? ?? const [])) (x as Map).cast<String, dynamic>()];
-          final choices = <(String, String)>[
-            ('WALLET', 'Wallet (${o['wallet_balance']})'),
-            for (final a in accounts) ('${a['from_account_key'] ?? a['login_id']}', '#${a['login_id'] ?? a['account_number']} · ${a['balance'] ?? ''}'),
-          ];
-          String? pick(String? v) => choices.any((c) => c.$1 == v) ? v : null;
-          String tv(dynamic x) => '${x is Map ? (x['value'] ?? x['key'] ?? x['id']) : x}';
-          String tl(dynamic x) => '${x is Map ? (x['label'] ?? x['name'] ?? x['value']) : x}';
+          if (types.isEmpty) {
+            return const Padding(padding: EdgeInsets.all(16), child: ErrorBox('No transfer types are available right now.'));
+          }
+          final type = types.contains(_type) ? _type! : types.first;
+          final sides = transferSides(type);
+          final fromChoices = sides.length == 2 ? _choices(sides[0], o, accounts) : const <(String, String)>[];
+          String? pick(String? v, List<(String, String)> list) => list.any((c) => c.$1 == v) ? v : (list.length == 1 ? list.first.$1 : null);
+          final from = pick(_from, fromChoices);
+          // Moving between two trading accounts: the destination cannot be the source.
+          final toChoices = sides.length == 2 ? _choices(sides[1], o, accounts).where((c) => c.$1 != from).toList() : const <(String, String)>[];
+          final to = pick(_to, toChoices);
+          final amount = double.tryParse(_amount.text.trim());
+          final ready = !_busy && from != null && to != null && amount != null && amount > 0;
           return ListView(padding: const EdgeInsets.all(16), children: [
-            if (types.isNotEmpty) ...[
-              DropdownButtonFormField<String>(
-                initialValue: types.any((x) => tv(x) == _type) ? _type : null,
-                decoration: portalField(context, 'Transfer type'),
-                items: [for (final x in types) DropdownMenuItem(value: tv(x), child: Text(tl(x)))],
-                onChanged: (v) => setState(() => _type = v),
-              ),
-              const SizedBox(height: 12),
-            ],
             DropdownButtonFormField<String>(
-              initialValue: pick(_from),
+              key: const ValueKey('transfer-type'),
+              initialValue: type,
+              isExpanded: true,
+              decoration: portalField(context, 'Transfer type'),
+              items: [for (final x in types) DropdownMenuItem(value: x, child: Text(transferTypeLabel(x)))],
+              onChanged: _busy
+                  ? null
+                  : (v) => setState(() {
+                        _type = v;
+                        _from = null;
+                        _to = null;
+                        _msg = null;
+                      }),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              key: ValueKey('from-$type-${fromChoices.length}'),
+              initialValue: from,
+              isExpanded: true,
               decoration: portalField(context, 'From'),
-              items: [for (final c in choices) DropdownMenuItem(value: c.$1, child: Text(c.$2, overflow: TextOverflow.ellipsis))],
-              onChanged: (v) => setState(() => _from = v),
+              items: [for (final c in fromChoices) DropdownMenuItem(value: c.$1, child: Text(c.$2, overflow: TextOverflow.ellipsis))],
+              onChanged: _busy || fromChoices.length < 2 ? null : (v) => setState(() => _from = v),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              initialValue: pick(_to),
+              key: ValueKey('to-$type-${toChoices.length}-$from'),
+              initialValue: to,
+              isExpanded: true,
               decoration: portalField(context, 'To'),
-              items: [for (final c in choices) DropdownMenuItem(value: c.$1, child: Text(c.$2, overflow: TextOverflow.ellipsis))],
-              onChanged: (v) => setState(() => _to = v),
+              items: [for (final c in toChoices) DropdownMenuItem(value: c.$1, child: Text(c.$2, overflow: TextOverflow.ellipsis))],
+              onChanged: _busy || toChoices.length < 2 ? null : (v) => setState(() => _to = v),
             ),
+            if (sides.length == 2 && (fromChoices.isEmpty || toChoices.isEmpty)) ...[
+              const SizedBox(height: 8),
+              Text('You have no account for this transfer yet.', style: TextStyle(fontSize: 12.5, color: Theme.of(context).hintColor)),
+            ],
             const SizedBox(height: 12),
-            TextField(controller: _amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: portalField(context, 'Amount')),
+            TextField(
+              key: const ValueKey('transfer-amount'),
+              controller: _amount,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: portalField(context, 'Amount'),
+            ),
             if (_msg != null) ...[
               const SizedBox(height: 12),
               _ok ? Text(_msg!, style: const TextStyle(color: Color(0xFF1B7A3B), fontWeight: FontWeight.w600)) : ErrorBox(_msg!),
             ],
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: (_busy || _from == null || _to == null) ? null : () => _submit(o),
+              key: const ValueKey('transfer-submit'),
+              onPressed: ready ? () => _submit(o, type, from, to) : null,
               style: navyButton(),
               child: Text(_busy ? 'Submitting…' : 'Transfer'),
             ),
