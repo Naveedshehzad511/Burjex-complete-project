@@ -98,12 +98,18 @@ class TradeSymbol {
 
   /// Apply this group's Symbol Mapping / markup to an LP tick.
   ///
-  /// COMMISSION_ONLY → raw LP quote.
+  /// COMMISSION_ONLY → zero total spread: Bid and Ask are ONE price, the middle of the LP quote (4007.39 / 4007.43
+  /// → 4007.41 / 4007.41). The charge for these groups is the commission. Same rule, same rounding as the matching
+  /// engine (`zero_spread_px` in calc.rs), so the screen shows the price a client is filled at.
   /// SPREAD_ONLY / SPREAD_AND_COMMISSION with min/max → clamp total spread into
   /// the band (both sides move so mid stays put).
   /// Legacy fixed [markupPoints] when no band is configured.
   Tick applyGroupMarkup(Tick raw) {
-    if (pricingMethod == 'COMMISSION_ONLY') return raw;
+    if (pricingMethod == 'COMMISSION_ONLY') {
+      if (!(raw.bid > 0) || !(raw.ask > 0)) return raw;
+      final mid = _round((raw.bid + raw.ask) / 2, digits);
+      return Tick(symbol: raw.symbol, bid: mid, ask: mid, ts: raw.ts);
+    }
 
     final point = _pointSize(digits);
     if (point <= 0) return raw;
@@ -140,7 +146,7 @@ class TradeSymbol {
     );
   }
 
-  /// The group charges commission only: prices are the market's, nothing is added to the spread.
+  /// The group charges commission only: zero total spread (Bid and Ask are the middle of the market quote); the charge is the commission.
   bool get isCommissionOnly => pricingMethod == 'COMMISSION_ONLY';
 
   /// Money for [points] of price movement on 1.00 lot, in the account currency (USD) - null when
@@ -210,6 +216,15 @@ class TradeSymbol {
     final c = commissionText(currency: currency);
     if (c != null) rows.add(('Commission', c));
     return rows;
+  }
+
+  /// Round to `digits` decimals, half away from zero: the engine's `round_price`, step for step.
+  static double _round(double v, int digits) {
+    var f = 1.0;
+    for (var i = 0; i < digits; i++) {
+      f *= 10;
+    }
+    return (v * f).round() / f;
   }
 
   static double _pointSize(int digits) {
