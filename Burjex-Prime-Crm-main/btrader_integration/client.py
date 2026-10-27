@@ -141,6 +141,14 @@ class BTraderClient:
     def balance_op(self, login: str, payload: dict) -> dict:
         return self.request("POST", f"/crm/accounts/{login}/balance", payload)
 
+    def reserve_withdrawal(self, login: str, amount: float, external_ref: str) -> dict:
+        return self.request(
+            "POST", f"/crm/accounts/{login}/withdraw-reservations", {"amount": float(amount), "externalRef": external_ref}
+        )
+
+    def release_withdrawal(self, login: str, external_ref: str) -> dict:
+        return self.request("POST", f"/crm/accounts/{login}/withdraw-reservations/release", {"externalRef": external_ref})
+
     def list_symbols(self) -> list[dict]:
         data = self.request("GET", "/crm/symbols")
         if isinstance(data, list):

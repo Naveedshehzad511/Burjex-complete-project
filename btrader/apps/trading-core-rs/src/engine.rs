@@ -1,7 +1,7 @@
 use crate::books::{BookRow, MemoryClaims, PendingBook, PositionBook};
 use crate::calc::{
     apply_markup, balance_after_open, compute_aggregates, dealing_commission,
-    group_markup_for_quote, level_rule, open_fill_price, open_funds_required, pending_type_to_apply_kind, LevelRule, required_margin, round_lots, snap_volume, slippage_bound, SymbolCalcSpec,
+    group_markup_for_quote, level_rule, free_margin_for_new_trades, open_fill_price, zero_spread_px, open_funds_required, pending_type_to_apply_kind, LevelRule, required_margin, round_lots, snap_volume, slippage_bound, SymbolCalcSpec,
 };
 use crate::error::{
     BtError, BtResult, INSUFFICIENT_MARGIN, INVALID_PRICE, INVALID_VOLUME, MARKET_CLOSED, NO_PRICE,
@@ -515,7 +515,13 @@ impl Engine {
             None => pricing.markup_points,
         };
         let total_markup = symbol_book_markup + group_markup + news_markup;
-        let with_markup = apply_markup(&req.side, px, total_markup, sym.digits);
+        // Commission only = zero total spread: both sides are the middle of the live quote (see zero_spread_px).
+        let base_px = self
+            .prices
+            .get(tenant_id, &req.symbol)
+            .and_then(|t| zero_spread_px(&pricing, t.bid, t.ask, sym.digits))
+            .unwrap_or(px);
+        let with_markup = apply_markup(&req.side, base_px, total_markup, sym.digits);
         let honour_ref = req.price;
         // Instant + ticked kind: the client's price (a click, or the pending level) is honoured exactly.
         // Market + ticked kind (incl. a pending order that has just triggered): the delay was waited above and the
@@ -642,10 +648,12 @@ impl Engine {
         // must be able to carry it on top of the margin. Nothing has been written yet: a refusal
         // here leaves every table untouched.
         let required = open_funds_required(margin, commission);
-        if live.free_margin < required {
+        // Funds held for a pending withdrawal request are not available to a new trade or a triggered pending order.
+        let available = free_margin_for_new_trades(live.free_margin, locked.reserved_withdraw);
+        if available < required {
             return Err(BtError::new(
                 INSUFFICIENT_MARGIN,
-                format!("insufficient free margin: need {required}, available {}", live.free_margin),
+                format!("insufficient free margin: need {required}, available {available}"),
             ));
         }
         let new_balance = balance_after_open(locked.balance, commission);

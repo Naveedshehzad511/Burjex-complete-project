@@ -285,8 +285,17 @@ export class CrmService {
       amount: body.amount,
       comment: body.comment,
       externalRef: body.externalRef,
+      reservationRef: body.reservationRef,
       performedBy: 'crm:service',
     });
+  }
+
+  async reserveWithdrawal(tenantId: string, login: string, body: any) {
+    return this.fin.reserveWithdrawal({ tenantId, login, amount: Number(body?.amount), externalRef: body?.externalRef });
+  }
+
+  async releaseWithdrawal(tenantId: string, login: string, body: any) {
+    return this.fin.releaseWithdrawal({ tenantId, login, externalRef: body?.externalRef });
   }
 
   async updateAccount(tenantId: string, login: string, body: any) {

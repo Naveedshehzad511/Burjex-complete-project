@@ -1,6 +1,6 @@
 use crate::books::PendingRow;
 use crate::calc::{
-    apply_markup, compute_aggregates, instant_honours, normalize_volume, point_size, protective_close_price,
+    apply_markup, compute_aggregates, free_margin_for_new_trades, instant_honours, normalize_volume, point_size, protective_close_price,
     protective_honours_level, required_margin, round_price, snap_volume, split_position_charges,
 };
 use crate::engine::{Engine, ExecResult, PlaceReq};
@@ -169,10 +169,11 @@ impl Engine {
         let est = required_margin(volume, &spec, trigger_price, f64::from(account.leverage), conv);
         let views = self.open_views(tenant_id, &account.id, &account.currency).await?;
         let agg = compute_aggregates(account.balance, account.credit, &views);
-        if agg.free_margin < est {
+        let available = free_margin_for_new_trades(agg.free_margin, account.reserved_withdraw);
+        if available < est {
             return Err(BtError::new(
                 INSUFFICIENT_MARGIN,
-                format!("insufficient free margin for pending order: need ~{est}, available {}", agg.free_margin),
+                format!("insufficient free margin for pending order: need ~{est}, available {available}"),
             ));
         }
         let order_id = Uuid::new_v4().to_string();
@@ -519,6 +520,15 @@ impl Engine {
         let mut close_px = px;
         if override_px.is_none() {
             if let Some(pricing) = pricing.as_ref() {
+                // Commission only = zero total spread: the close is at the middle of the live quote, as the open was.
+                if let Some(mid) = self
+                    .prices
+                    .get(&tenant_id, &symbol)
+                    .and_then(|t| crate::calc::zero_spread_px(pricing, t.bid, t.ask, digits))
+                {
+                    close_px = mid;
+                }
+                let base_px = close_px;
                 // The group's spread rule applied to the quote as it is now.
                 let group_markup = match self.prices.get(&tenant_id, &symbol) {
                     Some(t) => crate::calc::group_markup_for_quote(pricing, t.bid, t.ask, digits),
@@ -544,7 +554,7 @@ impl Engine {
                         let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
                         let total = group_markup + slip_points;
                         if total != 0.0 {
-                            close_px = apply_markup(close_side, px, total, digits);
+                            close_px = apply_markup(close_side, base_px, total, digits);
                         }
                         close_px = protective_close_price(
                             &side,
@@ -557,7 +567,7 @@ impl Engine {
                     let close_side = if side.eq_ignore_ascii_case("BUY") { "SELL" } else { "BUY" };
                     let total = group_markup + slip_points;
                     if total != 0.0 {
-                        close_px = apply_markup(close_side, px, total, digits);
+                        close_px = apply_markup(close_side, base_px, total, digits);
                     }
                 }
             }

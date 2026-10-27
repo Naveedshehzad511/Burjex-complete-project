@@ -5,15 +5,18 @@ in this module is reached and withdrawals stay wallet-only.
 
 Ledger of record for a trading-account withdrawal:
 
-* request   - a PENDING `Transaction` (CLIENT_WITHDRAW) with `trading_account` set. Nothing is
-              debited and the wallet is not touched: `User.pending_withdraw` is wallet-only
-              and is deliberately left alone. Funds are checked against the live account,
-              less the user's other pending requests on the same account.
-* approval  - the BTrader WITHDRAWAL balance operation (`externalRef = crm-withdraw-<tx id>`), then
-              the transaction is marked APPROVED. The engine re-checks the available funds
-              atomically and ignores a repeated `externalRef`, so a retry or a double click cannot
-              debit the account twice.
-* rejection - the request is marked REJECTED; there is nothing to release.
+* request   - a PENDING `Transaction` (CLIENT_WITHDRAW) with `trading_account` set. The wallet is
+              not touched: `User.pending_withdraw` is wallet-only and is deliberately left alone.
+              The amount is RESERVED in the trading engine (`reserve`, reference
+              `crm-withdraw-reserve-<tx id>`) in the same step: the engine then keeps it out of new
+              trades and triggered pending orders until the request is settled. If the reservation
+              is refused no request is created.
+* approval  - the BTrader WITHDRAWAL balance operation (`externalRef = crm-withdraw-<tx id>`) that
+              also finalizes the reservation in the same transaction, so the amount is debited once
+              and never counted twice, then the transaction is marked APPROVED. The engine ignores a
+              repeated `externalRef`, so a retry or a double click cannot debit the account twice.
+* rejection - the reservation is released (exactly once), then the request is marked REJECTED. If the
+              release cannot be done the request stays PENDING and can be rejected again.
 """
 
 from __future__ import annotations
@@ -106,6 +109,44 @@ def pending_requested(account: TradingAccount) -> Decimal:
     return Decimal(str(total or 0))
 
 
+INSUFFICIENT_MESSAGE = (
+    "Insufficient available funds on the selected trading account "
+    "(open positions and pending withdrawal requests reduce what can be withdrawn)."
+)
+
+
+def reservation_ref(tx: Transaction) -> str:
+    """The engine-side reference of this request's reservation (one per request, so every step is idempotent)."""
+    return f"crm-withdraw-reserve-{tx.id}"
+
+
+def reserve(account: TradingAccount, amount: Decimal, ref: str) -> tuple[bool, str]:
+    """Hold `amount` in the trading engine for a new request. (ok, message-for-the-client)."""
+    from btrader_integration.services import reserve_btrader_withdrawal
+
+    try:
+        reserve_btrader_withdrawal(login=account_login(account), amount=float(amount), external_ref=ref)
+    except Exception as exc:
+        if "insufficient" in str(exc).lower():
+            return False, INSUFFICIENT_MESSAGE
+        logger.warning("Withdrawal reservation %s could not be made: %s", ref, exc)
+        return False, "Unable to reserve the funds for this withdrawal right now. Please retry."
+    return True, ""
+
+
+def release(account: TradingAccount, ref: str) -> tuple[Optional[str], str]:
+    """Give a reservation back. (engine state, error): the state is RELEASED / FINALIZED / NONE, or None with the
+    error text when the engine could not be reached (nothing is known then; releasing again is always safe)."""
+    from btrader_integration.services import release_btrader_withdrawal
+
+    try:
+        res = release_btrader_withdrawal(login=account_login(account), external_ref=ref)
+    except Exception as exc:
+        logger.warning("Withdrawal reservation %s could not be released: %s", ref, exc)
+        return None, str(exc)[:300]
+    return str((res or {}).get("status") or "NONE").upper(), ""
+
+
 def account_login(account: TradingAccount) -> str:
     mt5 = account.mt5_account
     return str((mt5.login_id if mt5 else None) or account.account_number)
@@ -167,6 +208,7 @@ def approve(tx: Transaction, admin_user) -> tuple[bool, str]:
             amount=float(amount),
             comment=f"CRM withdrawal #{tx.id}",
             external_ref=f"crm-withdraw-{tx.id}",
+            reservation_ref=reservation_ref(tx),
         )
     except Exception as exc:
         logger.warning("Trading-account withdrawal #%s not debited: %s", tx.id, exc)
@@ -179,10 +221,23 @@ def approve(tx: Transaction, admin_user) -> tuple[bool, str]:
     return True, f"Approved withdraw #{tx.id}; {amount} debited from trading account {account_login(account)}."
 
 
-def reject(tx: Transaction, admin_user, reason: str) -> None:
-    """Reject a trading-account withdrawal. Nothing was reserved or debited, so nothing to release."""
+def reject(tx: Transaction, admin_user, reason: str) -> tuple[bool, str]:
+    """Reject a trading-account withdrawal: release its reservation first, then close the request.
+
+    The release is exactly-once on the engine side, so a retry after any failure is safe. If it cannot be done
+    (the engine is unreachable) the request stays PENDING - the funds are still held and consistent - and the
+    admin can reject again. A request whose payout was already made is not rejected."""
+    account = tx.trading_account
+    if account is not None:
+        state, err = release(account, reservation_ref(tx))
+        if state is None:
+            return False, f"Cannot reject: the reserved funds could not be released ({err}). The request stays pending; please try again."
+        if state == "FINALIZED":
+            return False, "Cannot reject: this withdrawal was already paid out from the trading account. Approve it to complete the record."
     tx.status = Transaction.Status.REJECTED
     tx.reject_reason = reason
     tx.processed_at = timezone.now()
     tx.processed_by = admin_user
     tx.save(update_fields=["status", "reject_reason", "processed_at", "processed_by"])
+    return True, f"Rejected withdraw #{tx.id}."
+

@@ -231,23 +231,36 @@ def deposit_btrader_balance(
     return result
 
 
+def reserve_btrader_withdrawal(*, login: str, amount: float, external_ref: str) -> dict:
+    """Hold `amount` of the account's free funds for a withdrawal request (the trading engine then keeps it out of
+    new trades and triggered pending orders). Idempotent on `external_ref`; raises when the funds are not there."""
+    return _client_from_settings().reserve_withdrawal(login, amount, external_ref)
+
+
+def release_btrader_withdrawal(*, login: str, external_ref: str) -> dict:
+    """Give a reservation back. Exactly once: the reply says whether it was released (`released`) and the state it
+    is in (`status`: RELEASED, FINALIZED when it was already paid out, NONE when there never was one)."""
+    return _client_from_settings().release_withdrawal(login, external_ref)
+
+
 def withdraw_btrader_balance(
     *,
     login: str,
     amount: float,
     comment: str,
     external_ref: str,
+    reservation_ref: str | None = None,
 ) -> dict:
     client = _client_from_settings()
-    result = client.balance_op(
-        login,
-        {
-            "type": "WITHDRAWAL",
-            "amount": float(amount),
-            "comment": comment or "CRM withdrawal",
-            "externalRef": external_ref,
-        },
-    )
+    payload = {
+        "type": "WITHDRAWAL",
+        "amount": float(amount),
+        "comment": comment or "CRM withdrawal",
+        "externalRef": external_ref,
+    }
+    if reservation_ref:
+        payload["reservationRef"] = reservation_ref  # finalized in the same transaction as the debit
+    result = client.balance_op(login, payload)
     try:
         sync_account(str(login))
     except Exception as exc:

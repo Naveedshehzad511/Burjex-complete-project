@@ -15,6 +15,8 @@ pub struct AccountRow {
     pub group_id: Option<String>,
     pub balance: f64,
     pub credit: f64,
+    /// Funds held for pending withdrawal requests: out of reach of new trades and triggered pending orders.
+    pub reserved_withdraw: f64,
     pub margin_call_level: i32,
     pub stop_out_level: i32,
 }
@@ -84,6 +86,7 @@ pub fn account_from_row(row: &sqlx::postgres::PgRow) -> AccountRow {
         group_id: opt_s(row, "groupId"),
         balance: f8(row, "balance"),
         credit: f8(row, "credit"),
+        reserved_withdraw: f8(row, "reservedWithdraw"),
         margin_call_level: i32c(row, "marginCallLevel"),
         stop_out_level: i32c(row, "stopOutLevel"),
     }
@@ -122,6 +125,7 @@ pub const ACCOUNT_SELECT: &str = r#"
 SELECT id, "tenantId", login, status::text AS status, currency, leverage, "isDemo",
        book::text AS book, "groupId",
        balance::float8 AS balance, credit::float8 AS credit,
+       "reservedWithdraw"::float8 AS "reservedWithdraw",
        "marginCallLevel", "stopOutLevel"
 FROM accounts
 "#;

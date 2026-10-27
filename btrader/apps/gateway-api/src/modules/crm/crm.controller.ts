@@ -78,6 +78,20 @@ export class CrmController {
     return this.crm.balanceOp(t.id, login, body);
   }
 
+  @Post('accounts/:login/withdraw-reservations')
+  @CrmAuth('crm.write', 'balance.adjust')
+  @ApiOperation({ summary: 'Hold funds for a withdrawal request (idempotent via externalRef)' })
+  reserveWithdrawal(@CurrentTenant() t: any, @Param('login') login: string, @Body() body: any) {
+    return this.crm.reserveWithdrawal(t.id, login, body);
+  }
+
+  @Post('accounts/:login/withdraw-reservations/release')
+  @CrmAuth('crm.write', 'balance.adjust')
+  @ApiOperation({ summary: 'Release a withdrawal reservation (rejected request); exactly once' })
+  releaseWithdrawal(@CurrentTenant() t: any, @Param('login') login: string, @Body() body: any) {
+    return this.crm.releaseWithdrawal(t.id, login, body);
+  }
+
   @Patch('accounts/:login')
   @CrmAuth('crm.write')
   @ApiOperation({ summary: 'Update leverage / enable-disable trading / status' })

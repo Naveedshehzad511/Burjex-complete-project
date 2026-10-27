@@ -196,6 +196,15 @@ enum SwapType {
   MONEY
 }
 
+// A withdrawal request holds part of an account's free margin until the CRM approves (FINALIZED: the money is
+// debited in the same transaction) or rejects it (RELEASED). One row per CRM request, keyed by its reference,
+// so every step is idempotent and can never be applied twice.
+enum WithdrawReservationStatus {
+  RESERVED
+  RELEASED
+  FINALIZED
+}
+
 enum AdjustmentType {
   DEPOSIT
   WITHDRAWAL
@@ -798,6 +807,9 @@ model Account {
   // Money (authoritative; engine mutates inside transactions)
   balance       Decimal       @default(0) @db.Decimal(28, 8)
   credit        Decimal       @default(0) @db.Decimal(28, 8)  // bonus/credit, non-withdrawable
+  // Sum of this account's RESERVED withdrawal requests (WithdrawReservation). The engine keeps that much of the
+  // free margin out of reach of new trades and triggered pending orders; stop-out is unaffected.
+  reservedWithdraw Decimal    @default(0) @db.Decimal(28, 8)
   // Live aggregates (recomputed by engine each tick; cached here for CRM reads)
   equity        Decimal       @default(0) @db.Decimal(28, 8)
   margin        Decimal       @default(0) @db.Decimal(28, 8)
@@ -819,6 +831,7 @@ model Account {
   positions   Position[]
   deals       Deal[]
   adjustments BalanceAdjustment[]
+  withdrawReservations WithdrawReservation[]
 
   @@unique([tenantId, login])
   @@index([tenantId])
@@ -1205,6 +1218,22 @@ model Deal {
   @@index([type])
   @@index([externalRef])
   @@map("deals")
+}
+
+model WithdrawReservation {
+  id          String                    @id @default(uuid())
+  tenantId    String
+  accountId   String
+  externalRef String                    @unique  // CRM request reference, e.g. "crm-withdraw-123"
+  amount      Decimal                   @db.Decimal(28, 8)
+  status      WithdrawReservationStatus @default(RESERVED)
+  createdAt   DateTime                  @default(now())
+  settledAt   DateTime?
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, status])
+  @@map("withdraw_reservations")
 }
 
 // Manual / CRM-originated money movements (deposit, withdraw, bonus, dividend).

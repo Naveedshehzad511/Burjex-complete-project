@@ -723,15 +723,33 @@ def create_withdraw(request, user, data: dict) -> tuple[bool, dict]:
     }
 
 
+class _ReservationRefused(Exception):
+    """The trading engine would not (or could not) hold the funds for a new request."""
+
+
+def _release_quietly(account, ref) -> None:
+    """Best-effort release of a reservation whose request was not saved. Never raises; an unreachable engine is
+    logged loudly with the reference, because a reservation without a request would hold funds."""
+    if account is None or not ref:
+        return
+    state, err = trading_withdraw_service.release(account, ref)
+    if state is None:
+        logger.critical("WITHDRAWAL RESERVATION NOT RELEASED - release by hand: ref=%s error=%s", ref, err)
+
+
 def _create_trading_withdraw(
     *, user, form, gateway, account_details, amount, request_uid, withdraw_from, live_allowed
 ) -> tuple[bool, dict]:
     """Record a withdrawal request taken from a trading account (direct-withdraw setting on).
 
-    Nothing is debited and the wallet / `pending_withdraw` are not touched: the account is debited
-    only when an administrator approves (see transactions.trading_withdraw). Duplicate requests are
-    blocked by `request_uid` and a short same-amount window, exactly as for wallet withdrawals.
+    The wallet / `pending_withdraw` are not touched and nothing is debited yet: the account is debited
+    only when an administrator approves (see transactions.trading_withdraw). The amount IS reserved in the
+    trading engine in the same step, so it cannot be traded away while the request is pending; if the
+    engine refuses (or cannot be reached) the request is not created. Duplicate requests are blocked by
+    `request_uid` and a short same-amount window, exactly as for wallet withdrawals.
     """
+    reserve_ref = None  # set before the engine is asked: even a reply that never arrived is then cleaned up
+    src_for_release = None
     try:
         with transaction.atomic():
             locked_user = User.objects.select_for_update().get(id=user.id)
@@ -780,8 +798,20 @@ def _create_trading_withdraw(
                 balance_snapshot_wallet=locked_user.wallet_balance,
                 balance_snapshot_pending=locked_user.pending_withdraw,
             )
+            # Last step: hold the funds in the engine. A refusal rolls the request back with everything else.
+            reserve_ref = trading_withdraw_service.reservation_ref(tx)
+            src_for_release = locked_src
+            reserved, reserve_msg = trading_withdraw_service.reserve(locked_src, amount, reserve_ref)
+            if not reserved:
+                raise _ReservationRefused(reserve_msg)
+    except _ReservationRefused as refused:
+        # Nothing was kept: release anyway in case the engine applied a reply we never received (a no-op if not).
+        _release_quietly(src_for_release, reserve_ref)
+        return False, {"message": str(refused)}
     except Exception:
         logger.exception("API trading-account withdrawal create failed", extra={"user_id": user.id})
+        # The request is not saved, so a reservation made for it must not stay (idempotent; a no-op if none).
+        _release_quietly(src_for_release, reserve_ref)
         return False, {"message": "Unable to create withdrawal request. Please retry."}
 
     source = trading_withdraw_service.source_label(tx.trading_account)

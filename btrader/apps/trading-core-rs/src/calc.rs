@@ -262,6 +262,21 @@ pub fn group_markup_for_quote(pricing: &GroupPricing, bid: f64, ask: f64, digits
     spread_markup_from_band(lp, Some(method), pricing.min_spread_points, pricing.max_spread_points, 0.0)
 }
 
+/// `COMMISSION_ONLY` groups quote a ZERO total spread: the client's Bid and Ask are one price, the middle of the live
+/// market quote (feed 4007.39 / 4007.43 -> 4007.41 / 4007.41). This is the same rule as a Min / Max band with total
+/// spread 0 (both sides move half the gap, the middle stays), computed ONCE from the middle and rounded ONCE, so BUY
+/// and SELL are exactly equal even when the gap is an odd number of points (a half-tick middle cannot round two ways).
+/// The charge for these groups stays the commission. `None` for every other pricing method: nothing else changes.
+pub fn zero_spread_px(pricing: &GroupPricing, bid: f64, ask: f64, digits: i32) -> Option<f64> {
+    if pricing.pricing_method.as_deref() != Some("COMMISSION_ONLY") {
+        return None;
+    }
+    if !(bid > 0.0) || !(ask > 0.0) {
+        return None;
+    }
+    Some(round_price((bid + ask) / 2.0, digits))
+}
+
 pub fn apply_markup(side: &str, raw_price: f64, markup_points: f64, digits: i32) -> f64 {
     if markup_points == 0.0 {
         return raw_price;
@@ -295,6 +310,13 @@ pub fn dealing_commission(
 
 /// Free funds a fill needs: the margin it locks plus the commission debited from the balance
 /// at open (`commission` is negative when charged). A positive commission needs nothing extra.
+/// The part of the free margin a NEW trade (or a triggered pending order) may use: what is left after the funds held
+/// for pending withdrawal requests. Only the checks for opening exposure use it; equity, margin level and stop-out
+/// keep the real free margin, so a reservation can never close a position by itself.
+pub fn free_margin_for_new_trades(free_margin: f64, reserved_withdraw: f64) -> f64 {
+    free_margin - reserved_withdraw.max(0.0)
+}
+
 pub fn open_funds_required(margin: f64, commission: f64) -> f64 {
     margin + (-commission).max(0.0)
 }
@@ -676,6 +698,221 @@ mod tests {
         assert!(pending.abs() < 1e-9);
     }
 
+    // ── Commission only = zero total spread (Bid and Ask are the middle of the live quote) ──────────────────────
+
+    fn gold() -> SymbolCalcSpec {
+        SymbolCalcSpec {
+            digits: 2,
+            pip_size: 0.01,
+            contract_size: 100.0,
+            margin_rate: 1.0,
+            margin_percent: None,
+            quote_currency: "USD".into(),
+            base_currency: "XAU".into(),
+        }
+    }
+
+    fn group_pricing_of(method: &str, min: f64, max: f64) -> GroupPricing {
+        GroupPricing {
+            pricing_method: Some(method.into()),
+            min_spread_points: min,
+            max_spread_points: max,
+            ..Default::default()
+        }
+    }
+
+    /// What the engine pays / charges a client who trades at the live quote `bid` / `ask` (open and close use the
+    /// same steps): the group's base price, the group markup, rounded to the symbol's digits.
+    fn client_px(p: &GroupPricing, side: &str, bid: f64, ask: f64, digits: i32) -> f64 {
+        let raw = if side == "BUY" { ask } else { bid };
+        let markup = group_markup_for_quote(p, bid, ask, digits);
+        let base = zero_spread_px(p, bid, ask, digits).unwrap_or(raw);
+        round_price(apply_markup(side, base, markup, digits), digits)
+    }
+
+    #[test]
+    fn commission_only_feed_4007_39_4007_43_gives_4007_41_on_both_sides() {
+        let p = group_pricing_of("COMMISSION_ONLY", 0.0, 0.0);
+        assert_eq!(zero_spread_px(&p, 4007.39, 4007.43, 2), Some(4007.41));
+        assert_eq!(client_px(&p, "BUY", 4007.39, 4007.43, 2), 4007.41, "a BUY opens at the middle");
+        assert_eq!(client_px(&p, "SELL", 4007.39, 4007.43, 2), 4007.41, "a SELL opens at the middle");
+        // Closing is the opposite side of the same quote: also the middle.
+        assert_eq!(client_px(&p, "SELL", 4007.39, 4007.43, 2), client_px(&p, "BUY", 4007.39, 4007.43, 2));
+    }
+
+    #[test]
+    fn commission_only_buy_and_sell_are_exactly_equal_for_every_gap_even_odd_ones() {
+        let p = group_pricing_of("COMMISSION_ONLY", 0.0, 0.0);
+        for bid in [4007.39_f64, 4007.38, 1999.99, 79906.04, 0.58797, 176.156] {
+            for gap in 0..=60 {
+                let digits = if bid < 200.0 { if bid < 1.0 { 5 } else { 3 } } else { 2 };
+                let ask = bid + f64::from(gap) * point_size(digits);
+                let buy = client_px(&p, "BUY", bid, ask, digits);
+                let sell = client_px(&p, "SELL", bid, ask, digits);
+                assert_eq!(buy, sell, "bid {bid} gap {gap}: {buy} vs {sell}");
+                // and it is the middle (within half a tick)
+                assert!((buy - (bid + ask) / 2.0).abs() <= point_size(digits) / 2.0 + 1e-9, "bid {bid} gap {gap}");
+            }
+        }
+    }
+
+    #[test]
+    fn golden_zero_spread_prices() {
+        // The same table is asserted by the app (`zero_spread_quote_test.dart`): screen and engine agree to the digit.
+        let p = group_pricing_of("COMMISSION_ONLY", 0.0, 0.0);
+        let golden: [(f64, f64, i32, f64); 10] = [
+            (4007.39, 4007.43, 2, 4007.41),
+            (4007.39, 4007.42, 2, 4007.41),
+            (4012.33, 4012.39, 2, 4012.36),
+            (1999.99, 2000.02, 2, 2000.01),
+            (176.156, 176.160, 3, 176.158),
+            (0.58797, 0.58800, 5, 0.58799),
+            (79906.04, 79917.98, 2, 79912.01),
+            (1.12182, 1.12183, 5, 1.12183),
+            (4007.38, 4007.43, 2, 4007.41),
+            (53.914, 53.919, 3, 53.917),
+        ];
+        for (bid, ask, digits, want) in golden {
+            assert_eq!(client_px(&p, "BUY", bid, ask, digits), want, "BUY {bid}/{ask}");
+            assert_eq!(client_px(&p, "SELL", bid, ask, digits), want, "SELL {bid}/{ask}");
+        }
+    }
+
+    #[test]
+    fn a_zero_gap_feed_stays_as_it_is() {
+        let p = group_pricing_of("COMMISSION_ONLY", 0.0, 0.0);
+        assert_eq!(client_px(&p, "BUY", 4007.39, 4007.39, 2), 4007.39);
+        assert_eq!(client_px(&p, "SELL", 4007.39, 4007.39, 2), 4007.39);
+    }
+
+    #[test]
+    fn only_commission_only_gets_the_zero_spread_price() {
+        for m in ["SPREAD_ONLY", "SPREAD_AND_COMMISSION"] {
+            assert_eq!(zero_spread_px(&group_pricing_of(m, 0.0, 0.0), 4007.39, 4007.43, 2), None, "{m}");
+        }
+        assert_eq!(zero_spread_px(&GroupPricing::default(), 4007.39, 4007.43, 2), None, "an unmapped symbol");
+        assert_eq!(zero_spread_px(&group_pricing_of("COMMISSION_ONLY", 0.0, 0.0), 0.0, 4007.43, 2), None, "no price, no price");
+    }
+
+    #[test]
+    fn a_configured_50_point_spread_is_still_exactly_50_points_around_the_middle() {
+        // Gold at 4 points, admin: min = max = 50 -> the client gets 50 points, centred on the market's middle.
+        let p = group_pricing_of("SPREAD_ONLY", 50.0, 50.0);
+        let (bid, ask) = (4007.39, 4007.43);
+        let buy = client_px(&p, "BUY", bid, ask, 2);
+        let sell = client_px(&p, "SELL", bid, ask, 2);
+        assert!(((buy - sell) / point_size(2) - 50.0).abs() < 1e-6, "{buy} {sell}");
+        assert!(((buy + sell) / 2.0 - (bid + ask) / 2.0).abs() < 0.006);
+        // Also with commission, same band: unchanged.
+        let both = group_pricing_of("SPREAD_AND_COMMISSION", 50.0, 50.0);
+        assert_eq!(client_px(&both, "BUY", bid, ask, 2), buy);
+        // and a band that is not set (0 / 0) on a spread method keeps the raw feed, exactly as before.
+        let none = group_pricing_of("SPREAD_ONLY", 0.0, 0.0);
+        assert_eq!(client_px(&none, "BUY", bid, ask, 2), ask);
+        assert_eq!(client_px(&none, "SELL", bid, ask, 2), bid);
+        // legacy fixed markup (no mapping): unchanged
+        let legacy = GroupPricing { markup_points: 3.0, ..Default::default() };
+        assert_eq!(client_px(&legacy, "BUY", bid, ask, 2), round_price(ask + 0.03, 2));
+        assert_eq!(client_px(&legacy, "SELL", bid, ask, 2), round_price(bid - 0.03, 2));
+    }
+
+    #[test]
+    fn the_fill_rule_gives_the_middle_for_market_and_never_a_worse_price_for_a_limit() {
+        let p = group_pricing_of("COMMISSION_ONLY", 0.0, 0.0);
+        let live = client_px(&p, "BUY", 4007.39, 4007.43, 2);
+        // Market (Live): the live middle.
+        assert_eq!(open_fill_price(LevelRule::Live, "BUY", None, None, None, live, 2), 4007.41);
+        // A BUY LIMIT at 4007.40 is never filled above its price; at 4007.45 it takes the (better) middle.
+        assert_eq!(open_fill_price(LevelRule::LiveWithinLimit, "BUY", None, Some(4007.40), None, live, 2), 4007.40);
+        assert_eq!(open_fill_price(LevelRule::LiveWithinLimit, "BUY", None, Some(4007.45), None, live, 2), 4007.41);
+        let live_sell = client_px(&p, "SELL", 4007.39, 4007.43, 2);
+        assert_eq!(open_fill_price(LevelRule::LiveWithinLimit, "SELL", None, Some(4007.45), None, live_sell, 2), 4007.45);
+        assert_eq!(open_fill_price(LevelRule::LiveWithinLimit, "SELL", None, Some(4007.40), None, live_sell, 2), 4007.41);
+    }
+
+    #[test]
+    fn a_protective_close_is_at_the_middle_but_never_past_its_level() {
+        let p = group_pricing_of("COMMISSION_ONLY", 0.0, 0.0);
+        // A BUY position's SL (a stop) at 4007.40: the live close is the middle 4007.41 -> at most the level.
+        let close = client_px(&p, "SELL", 4007.39, 4007.43, 2);
+        assert_eq!(protective_close_price("BUY", false, close, 4007.40), 4007.40);
+        // Its TP (a limit) at 4007.40: the middle 4007.41 is better than the level, so it is taken.
+        assert_eq!(protective_close_price("BUY", true, close, 4007.40), 4007.41);
+    }
+
+    #[test]
+    fn floating_profit_is_valued_on_the_raw_feed_as_before_and_the_open_is_half_a_gap_better() {
+        // The engine values an open position on the raw closing side of the feed (bid for a BUY, ask for a SELL):
+        // that code is untouched. What changes is the open price: the middle instead of the far side.
+        let g = gold();
+        let p = group_pricing_of("COMMISSION_ONLY", 0.0, 0.0);
+        let (bid, ask) = (4007.39, 4007.43);
+        let buy_open = client_px(&p, "BUY", bid, ask, 2);
+        let sell_open = client_px(&p, "SELL", bid, ask, 2);
+        let buy_now = position_profit("BUY", 1.0, buy_open, bid, &g, 1.0);
+        let sell_now = position_profit("SELL", 1.0, sell_open, ask, &g, 1.0);
+        assert!((buy_now + 2.0).abs() < 1e-6, "{buy_now}"); // was -4 (bought at the ask, valued at the bid)
+        assert!((sell_now + 2.0).abs() < 1e-6, "{sell_now}"); // was -4 (sold at the bid, valued at the ask)
+        let old_buy = position_profit("BUY", 1.0, ask, bid, &g, 1.0);
+        assert!((old_buy + 4.0).abs() < 1e-6);
+        // Opened and closed at once under the rule: no spread cost at all (the commission is the only charge).
+        let round_trip = position_profit("BUY", 1.0, buy_open, client_px(&p, "SELL", bid, ask, 2), &g, 1.0);
+        assert!(round_trip.abs() < 1e-9, "{round_trip}");
+    }
+
+    #[test]
+    fn margin_follows_the_fill_price_so_it_moves_by_the_tiny_half_gap_only() {
+        let g = gold();
+        let p = group_pricing_of("COMMISSION_ONLY", 0.0, 0.0);
+        let (bid, ask) = (4007.39, 4007.43);
+        let at_ask = required_margin(1.0, &g, ask, 100.0, 1.0);
+        let at_mid = required_margin(1.0, &g, client_px(&p, "BUY", bid, ask, 2), 100.0, 1.0);
+        assert!((at_ask - at_mid - 0.02 * 100.0 / 100.0).abs() < 1e-9, "{at_ask} {at_mid}"); // 0.02 * 100 oz / lev 100
+        assert!(at_mid < at_ask);
+        let sell_mid = required_margin(1.0, &g, client_px(&p, "SELL", bid, ask, 2), 100.0, 1.0);
+        assert_eq!(sell_mid, at_mid, "both sides lock the same margin");
+    }
+
+    #[test]
+    fn commission_charges_are_not_touched_by_the_zero_spread_price() {
+        let g = gold();
+        let mut p = group_pricing_of("COMMISSION_ONLY", 0.0, 0.0);
+        p.commission_type = "PER_LOT".into();
+        p.commission_value = 11.0;
+        assert_eq!(dealing_commission(&p, 2.0, &g, 4007.41, 1.0), -22.0);
+        p.commission_type = "PER_SIDE".into();
+        assert_eq!(dealing_commission(&p, 2.0, &g, 4007.41, 1.0), -44.0);
+    }
+
+    #[test]
+    fn reserved_withdrawal_funds_are_not_available_to_new_trades() {
+        // $500 free, $100 held for a withdrawal request: a trade needing $450 is refused, one needing $400 is allowed.
+        let avail = free_margin_for_new_trades(500.0, 100.0);
+        assert_eq!(avail, 400.0);
+        assert!(avail < open_funds_required(450.0, 0.0));
+        assert!(!(avail < open_funds_required(400.0, 0.0)));
+    }
+
+    #[test]
+    fn releasing_the_reservation_gives_the_funds_back() {
+        assert_eq!(free_margin_for_new_trades(500.0, 0.0), 500.0);
+    }
+
+    #[test]
+    fn a_bad_reservation_value_never_adds_funds() {
+        assert_eq!(free_margin_for_new_trades(500.0, -50.0), 500.0, "negative reserve is ignored");
+        assert_eq!(free_margin_for_new_trades(80.0, 100.0), -20.0, "reserve above free margin leaves nothing, never a positive number");
+    }
+
+    #[test]
+    fn the_reservation_never_changes_equity_free_margin_or_margin_level_themselves() {
+        // Stop-out and margin level read compute_aggregates, which must not know about reservations.
+        let a = compute_aggregates(500.0, 0.0, &[]);
+        assert_eq!(a.free_margin, 500.0);
+        assert_eq!(a.equity, 500.0);
+        assert_eq!(a.margin_level, 0.0);
+    }
+
     #[test]
     fn a_fill_needs_free_margin_for_the_commission_too() {
         assert!((open_funds_required(1100.0, -7.0) - 1107.0).abs() < 1e-9);
@@ -721,7 +958,8 @@ mod tests {
     }
 
     #[test]
-    fn commission_only_and_unconfigured_bands_keep_raw_prices() {
+    fn commission_only_and_unconfigured_bands_add_no_markup() {
+        // No markup on top of the market for Commission only (its zero-spread price is `zero_spread_px`, below).
         assert_eq!(spread_markup_from_band(24.0, Some("COMMISSION_ONLY"), 5.0, 8.0, 3.0), 0.0);
         // min = max = 0 on a spread method: the legacy markup, as before (0 by default).
         assert_eq!(spread_markup_from_band(24.0, Some("SPREAD_ONLY"), 0.0, 0.0, 0.0), 0.0);
