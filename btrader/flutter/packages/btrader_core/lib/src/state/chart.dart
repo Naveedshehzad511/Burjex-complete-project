@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -552,6 +553,9 @@ final candlesProvider = FutureProvider.autoDispose.family<List<Candle>, ChartReq
       cached = disk;
       fromDisk = true;
       ref.read(_candleCacheProvider.notifier).state = {...ref.read(_candleCacheProvider), req: disk};
+      // Saved by an earlier run, it can end long before the market's now: not in step with the server until a
+      // synchronisation has succeeded (see [chartSyncedProvider]).
+      ref.read(chartSyncedProvider(req).notifier).state = false;
     }
   }
   // KeepAlive while this chart series is in use; cache outlives the provider.
@@ -570,28 +574,168 @@ final candlesProvider = FutureProvider.autoDispose.family<List<Candle>, ChartReq
   // happened to rebuild it. Bars that closed while the socket was down were never pushed; the stored (final) ones are what
   // the chart shows for them. A refresh with nothing held yet is skipped: the first download is the one in flight.
   ref.listen(socketEpochProvider, (_, __) {
-    _refreshCandles(ref, req);
+    // Not in step again until a synchronisation has succeeded: a live bar must not be drawn after a hole.
+    ref.read(chartSyncedProvider(req).notifier).state = false;
+    _refreshCandles(ref.container, req);
   });
 
+  // A live bar arrived that does not sit next to the stored ones: the stored bars may still be landing on the server.
+  ref.listen(serverCandlesProvider.select((m) => _newestPushed(m[ServerCandlesNotifier.seriesKey(req.symbol, req.tf.api)])), (_, __) {
+    _checkLiveHole(ref.container, req);
+  });
   // Soft background refresh only when we already have data (don't blank UI).
   if (cached != null && cached.isNotEmpty) {
     ref.listen(_chartTicker, (_, __) {
-      _refreshCandles(ref, req);
+      _refreshCandles(ref.container, req);
     });
-    // Shown from disk: the current bars are fetched right away and replace them.
-    if (fromDisk) Future.microtask(() => _refreshCandles(ref, req));
+    // Shown from disk, or not in step since a reconnect: the current bars are fetched right away and replace them.
+    if (fromDisk || !ref.read(chartSyncedProvider(req))) Future.microtask(() => _refreshCandles(ref.container, req));
     return cached;
   }
 
-  final both = await Future.wait<Object>([_fetchCandles(ref, req), offsetLoaded]);
+  final both = await Future.wait<Object>([_fetchCandlesRetrying(ref.container, req), offsetLoaded]);
   final candles = both[0] as List<Candle>;
   ref.read(_candleCacheProvider.notifier).state = {...ref.read(_candleCacheProvider), req: candles};
-  unawaited(_writeDiskCandles(req, candles));
+  ref.read(chartSyncedProvider(req).notifier).state = true;
+  if (candles.isEmpty) {
+    // An empty first answer is not "loaded": for a series that has history it means the provider failed quietly.
+    // Ask again a few times before believing it; the chart stays on its empty state meanwhile and recovers by itself.
+    _retryEmptyLoad(ref, req);
+  } else {
+    ref.container.read(_syncRegistryProvider).emptyLoads.remove(req);
+    unawaited(_writeDiskCandles(req, candles));
+  }
   return candles;
 });
 
-Future<List<Candle>> _fetchCandles(Ref ref, ChartReq req, {int? before, int? limit}) async {
-  final api = ref.read(apiClientProvider);
+/// Whether this series' stored bars are known to reach what the server has stored. False from the moment the series is
+/// shown from the saved copy or the socket reconnected, until a synchronisation has succeeded: while it is false a live
+/// bar that would sit after a hole is not drawn ([liveCandlesProvider]), so the chart shows the stored bars it has - in
+/// step - instead of a jump to the live bar. It never stays false for good: a synchronisation that keeps failing gives
+/// up hiding after its last attempt (see [_refreshCandles]).
+final chartSyncedProvider = StateProvider.family<bool, ChartReq>((_, __) => true);
+
+/// Waits (ms) before each further attempt to bring the stored bars in step, after a failed or still-trailing
+/// synchronisation. After the last one the regular 30 s ticker keeps trying. Mutable for tests only.
+@visibleForTesting
+List<int> debugSyncRetryMs = const [1500, 3000, 6000, 12000];
+
+/// Waits (ms) between the attempts of the very first download of a series. Mutable for tests only.
+@visibleForTesting
+List<int> debugFirstLoadRetryMs = const [800, 2000];
+
+/// How long to wait before believing an empty page of history (ms). Mutable for tests only.
+@visibleForTesting
+int debugEmptyRecheckMs = 600;
+
+/// A stretch of this many bars or fewer between the stored bars and the live one can be stored bars still landing on the
+/// server (persistence lag); a longer one is a closed market or an outage and is not waited for.
+const int _kLiveHoleMaxBuckets = 20;
+
+/// Per-container bookkeeping of the synchronisation, so timers die with the container and nothing leaks between
+/// containers (tests, a sign-out).
+class _SyncRegistry {
+  final refreshing = <ChartReq>{};
+  final timers = <ChartReq, Timer>{};
+  final attempts = <ChartReq, int>{};
+  final holeTries = <ChartReq, int>{};
+  final emptyLoads = <ChartReq, int>{};
+  bool disposed = false;
+
+  void dispose() {
+    disposed = true;
+    for (final t in timers.values) {
+      t.cancel();
+    }
+    timers.clear();
+  }
+}
+
+final _syncRegistryProvider = Provider<_SyncRegistry>((ref) {
+  final r = _SyncRegistry();
+  ref.onDispose(r.dispose);
+  return r;
+});
+
+int _newestPushed(Map<int, Candle>? m) {
+  if (m == null || m.isEmpty) return 0;
+  var t = 0;
+  for (final k in m.keys) {
+    if (k > t) t = k;
+  }
+  return t;
+}
+
+/// True when the first live bar after [history] is not the very next bucket: some bucket between them is missing.
+bool historyHasHoleBeforeLive(List<Candle> history, Map<int, Candle>? pushed, Timeframe tf, int brokerOffsetSec) {
+  if (history.isEmpty || pushed == null || pushed.isEmpty) return false;
+  final last = history.last.t;
+  int? first;
+  for (final t in pushed.keys) {
+    if (t > last && (first == null || t < first)) first = t;
+  }
+  return first != null && first > tf.nextBucketStart(last, brokerOffsetSec: brokerOffsetSec);
+}
+
+/// The hole before the live bar is short enough to be stored bars still landing (see [_kLiveHoleMaxBuckets]).
+bool _liveHoleMayBeLanding(List<Candle> history, Map<int, Candle>? pushed, Timeframe tf, int brokerOffsetSec) {
+  if (!historyHasHoleBeforeLive(history, pushed, tf, brokerOffsetSec)) return false;
+  final last = history.last.t;
+  var first = 1 << 62;
+  for (final t in pushed!.keys) {
+    if (t > last && t < first) first = t;
+  }
+  return (first - last) ~/ tf.seconds - 1 <= _kLiveHoleMaxBuckets;
+}
+
+/// A live bar appeared after a short hole while the stored bars were thought to be in step: synchronise again, a few
+/// times, to pick up the stored bars as they land. Until that has happened the live bar is held back.
+void _checkLiveHole(ProviderContainer c, ChartReq req) {
+  try {
+    final reg = c.read(_syncRegistryProvider);
+    if (reg.disposed || !c.read(chartSyncedProvider(req))) return; // already out of step: a synchronisation is on its way
+    final held = c.read(_candleCacheProvider)[req];
+    if (held == null || held.isEmpty) return;
+    final pushed = c.read(serverCandlesProvider)[ServerCandlesNotifier.seriesKey(req.symbol, req.tf.api)];
+    final offset = c.read(brokerOffsetSecProvider).valueOrNull ?? 0;
+    if (!_liveHoleMayBeLanding(held, pushed, req.tf, offset)) {
+      reg.holeTries.remove(req);
+      return;
+    }
+    final n = reg.holeTries[req] ?? 0;
+    if (n >= debugSyncRetryMs.length) return; // tried enough: what is left is real (the ticker keeps looking)
+    reg.holeTries[req] = n + 1;
+    c.read(chartSyncedProvider(req).notifier).state = false;
+    unawaited(_refreshCandles(c, req));
+  } catch (_) {/* container gone */}
+}
+
+/// The first download, with a couple of quick retries for a slow or briefly unavailable network: only a failure that
+/// persists reaches the chart as an error.
+Future<List<Candle>> _fetchCandlesRetrying(ProviderContainer c, ChartReq req) async {
+  final waits = debugFirstLoadRetryMs;
+  for (var i = 0;; i++) {
+    try {
+      return await _fetchCandles(c, req);
+    } catch (_) {
+      if (i >= waits.length) rethrow;
+      await Future<void>.delayed(Duration(milliseconds: waits[i]));
+    }
+  }
+}
+
+void _retryEmptyLoad(Ref ref, ChartReq req) {
+  final reg = ref.container.read(_syncRegistryProvider);
+  final n = reg.emptyLoads[req] ?? 0;
+  final waits = debugSyncRetryMs;
+  if (n >= waits.length) return; // asked enough times: this series really is empty
+  reg.emptyLoads[req] = n + 1;
+  final t = Timer(Duration(milliseconds: waits[n]), ref.invalidateSelf);
+  ref.onDispose(t.cancel);
+}
+
+Future<List<Candle>> _fetchCandles(ProviderContainer c, ChartReq req, {int? before, int? limit}) async {
+  final api = c.read(apiClientProvider);
   final data = await api.get('/market/candles', query: {
     'symbol': req.symbol,
     'tf': req.tf.api,
@@ -631,52 +775,112 @@ const int _kGapMaxPages = 12;
 
 /// Fresh bars that do not reach back to [haveLastT] leave a hole between what is held and what just arrived (the app was
 /// closed or in the background for a while). Fetch the missing stretch backwards from the fresh bars with the same `before`
-/// cursor the scroll-back uses, one small page at a time, until it meets the held bars, the server has nothing earlier
-/// (a genuine gap: a closed market, or history the server does not have - kept as it is), or the budget is spent.
+/// cursor the scroll-back uses, one small page at a time, until it meets the held bars or the budget is spent.
+///
+/// An empty page is NOT taken as "there is nothing earlier": the held bars are older than these, so the server did have
+/// earlier bars once, and an empty answer can be a provider failure (an older gateway answered [] on one). It is asked
+/// again after a moment; if it is still empty the stretch cannot be filled now, and the held bars are cut off like when the
+/// budget is spent: the contiguous recent bars stay, the stale ones go (older history is asked for again as the user
+/// scrolls back), and no hole is kept as if it were loaded.
 ///
 /// Returns the bars to merge and whether the held bars are still cut off from them ([cutOff]).
-Future<({List<Candle> bars, bool cutOff})> _bridgeGap(Ref ref, ChartReq req, List<Candle> fresh, int haveLastT) async {
+Future<({List<Candle> bars, bool cutOff})> _bridgeGap(ProviderContainer c, ChartReq req, List<Candle> fresh, int haveLastT) async {
   var bars = fresh;
   for (var page = 0; page < _kGapMaxPages && bars.isNotEmpty && bars.first.t > haveLastT; page++) {
-    final older = await _fetchCandles(ref, req, before: bars.first.t, limit: kFirstLoadBars);
-    final strictlyOlder = older.where((c) => c.t < bars.first.t).toList()..sort((x, y) => x.t.compareTo(y.t));
-    if (strictlyOlder.isEmpty) return (bars: bars, cutOff: false); // the server has nothing earlier: a real gap stays
-    bars = [...strictlyOlder, ...bars];
+    var older = await _fetchCandles(c, req, before: bars.first.t, limit: kFirstLoadBars);
+    var prior = older.where((x) => x.t < bars.first.t).toList()..sort((x, y) => x.t.compareTo(y.t));
+    if (prior.isEmpty) {
+      await Future<void>.delayed(Duration(milliseconds: debugEmptyRecheckMs));
+      older = await _fetchCandles(c, req, before: bars.first.t, limit: kFirstLoadBars);
+      prior = older.where((x) => x.t < bars.first.t).toList()..sort((x, y) => x.t.compareTo(y.t));
+    }
+    if (prior.isEmpty) return (bars: bars, cutOff: true);
+    bars = [...prior, ...bars];
   }
   return (bars: bars, cutOff: bars.isNotEmpty && bars.first.t > haveLastT);
 }
 
-final Set<ChartReq> _refreshing = <ChartReq>{};
-
-Future<void> _refreshCandles(Ref ref, ChartReq req) async {
-  final held = ref.read(_candleCacheProvider)[req];
-  if (held == null || held.isEmpty) return; // the first download is still the one in flight
-  if (!_refreshing.add(req)) return; // one synchronisation per series at a time (ticker, resume and reconnect can overlap)
+/// One synchronisation of the held bars with the server. True when the stored bars are now known to be in step with the live
+/// ones; false when it has to be tried again: the request failed, or the live bar still sits after a short hole (the server
+/// has not stored the bars in between yet).
+Future<bool> _syncOnce(ProviderContainer c, ChartReq req) async {
   try {
-    final have = ref.read(_candleCacheProvider)[req];
+    final have = c.read(_candleCacheProvider)[req];
     final holding = have != null && have.isNotEmpty;
-    var fresh = await _fetchCandles(ref, req, limit: holding ? _kRefreshTail : null);
+    var fresh = await _fetchCandles(c, req, limit: holding ? _kRefreshTail : null);
+    // Holding bars, the newest of the server cannot be an empty list: that is a provider failure, not an answer.
+    if (holding && fresh.isEmpty) return false;
     var dropHeld = false;
     if (holding && fresh.isNotEmpty && fresh.first.t > have.last.t) {
-      final bridged = await _bridgeGap(ref, req, fresh, have.last.t);
+      final bridged = await _bridgeGap(c, req, fresh, have.last.t);
       fresh = bridged.bars;
       dropHeld = bridged.cutOff; // too long to fill now: do not leave a hole, keep the contiguous recent bars
     }
-    final cache = ref.read(_candleCacheProvider);
+    final cache = c.read(_candleCacheProvider);
     final merged = dropHeld ? fresh : _mergeKeepingOlder(cache[req], fresh);
-    ref.read(_candleCacheProvider.notifier).state = {...cache, req: merged};
+    c.read(_candleCacheProvider.notifier).state = {...cache, req: merged};
     if (dropHeld) {
       // The bars before the kept ones were dropped: older history may be asked for again.
-      ref.read(chartHistoryStateProvider(req).notifier).state = const ChartHistoryState();
+      c.read(chartHistoryStateProvider(req).notifier).state = const ChartHistoryState();
     }
     unawaited(_writeDiskCandles(req, merged));
+    final pushed = c.read(serverCandlesProvider)[ServerCandlesNotifier.seriesKey(req.symbol, req.tf.api)];
+    final offset = c.read(brokerOffsetSecProvider).valueOrNull ?? 0;
+    final trailing = merged.isNotEmpty && _liveHoleMayBeLanding(merged, pushed, req.tf, offset);
+    c.read(chartSyncedProvider(req).notifier).state = !trailing;
     // Through the container: the series asks itself to be rebuilt, which the provider's own ref does not allow.
-    ref.container.invalidate(candlesProvider(req));
+    c.invalidate(candlesProvider(req));
+    return !trailing;
   } catch (_) {
-    // Keep serving cache on refresh failure.
-  } finally {
-    _refreshing.remove(req);
+    return false; // keep serving what is held; the caller retries
   }
+}
+
+Future<void> _refreshCandles(ProviderContainer c, ChartReq req, {bool retry = false}) async {
+  final _SyncRegistry reg;
+  try {
+    reg = c.read(_syncRegistryProvider);
+  } catch (_) {
+    return; // the container is gone (teardown)
+  }
+  if (reg.disposed) return;
+  final held = c.read(_candleCacheProvider)[req];
+  if (held == null || held.isEmpty) return; // the first download is still the one in flight
+  if (!retry) {
+    // A fresh trigger (ticker, resume, reconnect, a new live bar) supersedes a retry that is still waiting and starts the
+    // backoff afresh.
+    reg.timers.remove(req)?.cancel();
+    reg.attempts.remove(req);
+  }
+  if (!reg.refreshing.add(req)) return; // one synchronisation per series at a time (ticker, resume and reconnect can overlap)
+  bool inStep;
+  try {
+    inStep = await _syncOnce(c, req);
+  } finally {
+    reg.refreshing.remove(req);
+  }
+  if (reg.disposed) return;
+  if (inStep) {
+    reg.attempts.remove(req);
+    reg.holeTries.remove(req);
+    return;
+  }
+  final n = reg.attempts[req] ?? 0;
+  final waits = debugSyncRetryMs;
+  if (n >= waits.length) {
+    reg.attempts.remove(req);
+    // Out of attempts. Stop holding the live bar back: what is between is real as far as this device can tell (a closed
+    // market, a slow server), and the ticker keeps trying.
+    try {
+      c.read(chartSyncedProvider(req).notifier).state = true;
+    } catch (_) {}
+    return;
+  }
+  reg.attempts[req] = n + 1;
+  reg.timers[req] = Timer(Duration(milliseconds: waits[n]), () {
+    reg.timers.remove(req);
+    unawaited(_refreshCandles(c, req, retry: true));
+  });
 }
 
 /// Fetch and prepend one page of history older than what is currently loaded
@@ -716,7 +920,15 @@ class ChartHistoryLoader {
     try {
       // Timestamp cursor: ask for bars strictly older than the oldest one we hold.
       final oldestT = have.first.t;
-      final older = await _fetchCandles(ref, req, before: oldestT, limit: olderBatchFor(visibleBars, urgent: urgent));
+      final batch = olderBatchFor(visibleBars, urgent: urgent);
+      var older = await _fetchCandles(ref.container, req, before: oldestT, limit: batch);
+      // An empty page is believed only when a second asking confirms it: one can be a provider hiccup (an older gateway
+      // answered [] on a failure), and "exhausted" would stop the chart asking for older bars for good. A failure of the
+      // second asking is a failure like any other (retried later), never "the start of history".
+      if (!older.any((x) => x.t < oldestT)) {
+        await Future<void>.delayed(Duration(milliseconds: debugEmptyRecheckMs));
+        older = await _fetchCandles(ref.container, req, before: oldestT, limit: batch);
+      }
       // Re-read the cache AFTER the await: a soft refresh may have merged newer bars meanwhile,
       // and writing back the pre-request snapshot would silently undo it.
       final current = ref.read(_candleCacheProvider)[req] ?? have;
@@ -739,8 +951,11 @@ class ChartHistoryLoader {
       // screen meanwhile - see liveCandlesProvider - so there is no loading state).
       ref.invalidate(candlesProvider(req));
     } catch (_) {
-      ref.read(chartHistoryStateProvider(req).notifier).state =
-          st.copyWith(loadingOlder: false, retryAtMs: DateTime.now().millisecondsSinceEpoch + 5000);
+      // The chart may have been closed while the (now longer) request or its confirmation was under way.
+      try {
+        ref.read(chartHistoryStateProvider(req).notifier).state =
+            st.copyWith(loadingOlder: false, retryAtMs: DateTime.now().millisecondsSinceEpoch + 5000);
+      } catch (_) {}
     }
   }
 }
@@ -981,6 +1196,9 @@ final liveCandlesProvider = Provider.autoDispose.family<AsyncValue<List<Candle>>
 
   final pushed = ref.watch(serverCandlesProvider.select((m) => m[ServerCandlesNotifier.seriesKey(req.symbol, req.tf.api)]));
   final offset = ref.watch(brokerOffsetSecProvider).valueOrNull ?? 0;
+  // Not in step with the server yet (shown from the saved copy, or just reconnected): only the live bars that sit right
+  // next to the stored ones are drawn, so there is no jump over bars that are still on their way.
+  final synced = ref.watch(chartSyncedProvider(req));
   // Rebuilds only when the bucket changes, not on every tick.
   final current = ref.watch(quotesProvider.select((m) => currentBucketFor(req.tf, m[req.symbol], brokerOffsetSec: offset)));
 
@@ -991,8 +1209,17 @@ final liveCandlesProvider = Provider.autoDispose.family<AsyncValue<List<Candle>>
   final timer = Timer(Duration(seconds: wait), ref.invalidateSelf);
   ref.onDispose(timer.cancel);
 
-  return AsyncValue.data(serverAuthoritativeSeries(history, pushed, currentBucket: current));
+  final usable = synced ? pushed : _pushedNextToHistory(history, pushed, req.tf, offset);
+  return AsyncValue.data(serverAuthoritativeSeries(history, usable, currentBucket: current));
 });
+
+/// The live bars that replace a stored bar or directly follow the stored ones; none beyond a missing bucket.
+Map<int, Candle>? _pushedNextToHistory(List<Candle> history, Map<int, Candle>? pushed, Timeframe tf, int offset) {
+  if (pushed == null || pushed.isEmpty || history.isEmpty) return pushed;
+  final limit = tf.nextBucketStart(history.last.t, brokerOffsetSec: offset);
+  if (pushed.keys.every((t) => t <= limit)) return pushed;
+  return {for (final e in pushed.entries) if (e.key <= limit) e.key: e.value};
+}
 
 Candle? _candleAt(List<Candle> sorted, int t) {
   final i = _indexOfTime(sorted, t);

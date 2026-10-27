@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Candle, CandleQuery, ChartFeedAdapter, Timeframe, TF_SECONDS } from './feed.types';
 import { TwelveDataAdapter, BinanceAdapter, PolygonAdapter, NativeMockAdapter, InternalAdapter } from './feed.adapters';
 import { QuotesService } from './quotes.service';
@@ -9,6 +9,12 @@ import { QuotesService } from './quotes.service';
  * Keys are read from env so they never reach the client. A short in-memory TTL
  * cache protects provider rate limits.
  */
+/**
+ * How old a held copy of the LIVE tail may be and still stand in for a failed provider call: long enough to bridge a
+ * blip, short enough that an outage is never hidden behind an old answer presented as current.
+ */
+export const STALE_TAIL_MS = 30_000;
+
 @Injectable()
 export class CandlesService {
   private readonly logger = new Logger('CandlesService');
@@ -72,10 +78,14 @@ export class CandlesService {
       return data;
     } catch (e) {
       this.logger.warn(`feed error (${this.adapter.name}): ${(e as Error).message}`);
-      if (hit) return hit.data; // serve stale on provider failure
-      // No mock fallback: if the real feed has no data, return empty so the
-      // chart stays blank rather than showing fabricated candles.
-      return [];
+      // A page of past history never changes, so a held copy of it is as right as a fresh one. The newest bars are only
+      // as good as they are young: a blip is bridged with the copy we hold, an outage is not hidden behind it.
+      const usable = hit && (q.before != null || Date.now() - hit.at < STALE_TAIL_MS);
+      if (usable) return hit.data;
+      // Never an empty 200 for a failure: the app reads [] as "there is no history here" and would stop asking for it.
+      // An error tells it the request failed and should be repeated. (No mock fallback either: fabricated candles
+      // are worse than none.)
+      throw new ServiceUnavailableException('candle data temporarily unavailable');
     }
   }
 
