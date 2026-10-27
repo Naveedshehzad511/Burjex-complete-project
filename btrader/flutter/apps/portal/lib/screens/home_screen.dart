@@ -36,6 +36,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _demo = false;
   bool _hidden = false;
   Timer? _poll;
+  Timer? _eventRefresh;
 
   /// The account each category's slider is on (kept while the 12 s refresh rebuilds the page).
   final _selected = <bool, String?>{};
@@ -53,6 +54,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _refreshKycIfPending();
       ref.read(moversProvider.notifier).refresh(); // Top Gainers / Losers ride the same beat
     });
+    // Home is rebuilt every time the user comes back from another tab, and its dashboard is kept from before: what is
+    // shown is as old as the last time Home was on screen. Fetch once on arrival. Silent: the dashboard below keeps
+    // showing the old figures while the new ones load. Skipped on the very first load (a fetch is already running).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final d = ref.read(crmDashboardProvider);
+      if (d.hasValue && !d.isLoading) ref.invalidate(crmDashboardProvider);
+    });
+  }
+
+  /// A trade opened, closed or filled: the balance changed. Fetch the dashboard once, shortly after the last event of a
+  /// burst (Close All is many events), in the background - no loader, the figures simply change when it answers.
+  void _refreshSoon() {
+    _eventRefresh?.cancel();
+    _eventRefresh = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) ref.invalidate(crmDashboardProvider);
+    });
   }
 
   void _refreshKycIfPending() {
@@ -63,6 +81,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void dispose() {
     _poll?.cancel();
+    _eventRefresh?.cancel();
     super.dispose();
   }
 
@@ -86,8 +105,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (ctx) {
-        final groups = [for (final demo in const [false, true]) (demo, all.where((a) => a.isDemo == demo).toList())];
+      builder: (ctx) => Consumer(builder: (ctx, ref, _) {
+        // The balances follow the dashboard while the sheet is open (a trade, the 12 s beat), not the list captured at
+        // the moment it was opened.
+        final current = ref.watch(crmDashboardProvider).valueOrNull?.accounts ?? all;
+        final groups = [for (final demo in const [false, true]) (demo, current.where((a) => a.isDemo == demo).toList())];
         return SafeArea(
           child: ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), children: [
             for (final (demo, list) in groups)
@@ -108,7 +130,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ],
           ]),
         );
-      },
+      }),
     );
     if (picked == null || !mounted) return;
     _selected[picked.isDemo] = picked.login;
@@ -127,6 +149,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final dash = ref.watch(crmDashboardProvider);
+    // Opens, fills, closes (manual, SL / TP, other devices) and partial closes all bump this one counter.
+    ref.listen<int>(tradeEventEpochProvider, (_, __) => _refreshSoon());
     final profile = ref.watch(crmProfileProvider).valueOrNull;
     final dark = Theme.of(context).brightness == Brightness.dark;
 
