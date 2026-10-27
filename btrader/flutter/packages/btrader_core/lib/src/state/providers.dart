@@ -384,7 +384,12 @@ final activeAccountCurrencyProvider = Provider<String?>((ref) {
 final symbolsProvider = FutureProvider<List<TradeSymbol>>((ref) async {
   ref.watch(authControllerProvider);
   ref.watch(sessionEpochProvider);
-  final accountId = ref.watch(activeAccountIdProvider);
+  // Which symbols (and which names, e.g. XAUUSD.e) apply depends on the account's group. Wait for the accounts: asking
+  // before they are known would fetch the UNFILTERED list - every symbol, raw names, no group pricing - and that list
+  // would feed Quotes, the charts and the order screen until the next refresh.
+  final accounts = await ref.watch(accountsProvider.future);
+  var accountId = ref.watch(activeAccountIdProvider);
+  if ((accountId == null || accountId.isEmpty) && accounts.isNotEmpty) accountId = accounts.first.id;
   final api = ref.watch(apiClientProvider);
   final query = <String, dynamic>{'enabled': 'true'};
   if (accountId != null && accountId.isNotEmpty) {
