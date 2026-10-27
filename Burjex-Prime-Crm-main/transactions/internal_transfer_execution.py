@@ -2,9 +2,11 @@
 Shared balance movements for internal transfers (client instant + admin manual approval).
 """
 
+import threading
 from decimal import Decimal
 from typing import Optional
 
+from django.db import transaction
 from django.db.models import Sum
 
 from admin_panel.models import TradingAccount
@@ -93,7 +95,7 @@ def _ib_wallet_balance(user) -> Decimal:
     )
 
 
-def apply_internal_transfer_balances(
+def _apply_balances(
     locked_user,
     *,
     transfer_type: str,
@@ -101,10 +103,11 @@ def apply_internal_transfer_balances(
     to_account: str,
     amount: Decimal,
     request_uid: str,
+    undo: list,
 ) -> Optional[str]:
     """
-    Apply wallet / trading ledger movements for one internal transfer.
-    Returns None on success, or a user-facing error string.
+    The movements themselves. Every time money really moves in BTrader / MT5 (which a database rollback cannot
+    take back) the way to put it back is appended to [undo].
     """
     route_err = validate_internal_transfer_route(transfer_type, from_account, to_account)
     if route_err:
@@ -190,6 +193,7 @@ def apply_internal_transfer_balances(
                     comment=f"CRM Transfer {request_uid[:8]}",
                     external_ref=f"crm-xfer-out-{request_uid}",
                 )
+                undo.append(("credit_back", "btrader", login))
             except Exception as e:
                 logger.error("BTrader withdrawal failed during internal transfer %s: %s", request_uid, e)
                 return "Failed to withdraw funds from BTrader trading account."
@@ -202,6 +206,7 @@ def apply_internal_transfer_balances(
                     float(amount),
                     comment=f"CRM Transfer {request_uid[:8]}",
                 )
+                undo.append(("credit_back", "mt5", login))
             except Exception as e:
                 logger.error("MT5 withdrawal failed during internal transfer %s: %s", request_uid, e)
                 return "Failed to withdraw funds from MT5 trading account."
@@ -259,6 +264,7 @@ def apply_internal_transfer_balances(
                     comment=f"CRM Transfer {request_uid[:8]}",
                     external_ref=f"crm-xfer-in-{request_uid}",
                 )
+                undo.append(("take_back", "btrader", login))
             except Exception as e:
                 logger.error("BTrader deposit failed during internal transfer %s: %s", request_uid, e)
                 return "Failed to deposit funds to BTrader trading account."
@@ -275,6 +281,7 @@ def apply_internal_transfer_balances(
                     float(amount),
                     comment=f"CRM Transfer {request_uid[:8]}",
                 )
+                undo.append(("take_back", "mt5", login))
             except Exception as e:
                 logger.error("MT5 deposit failed during internal transfer %s: %s", request_uid, e)
                 return "Failed to deposit funds to MT5 trading account."
@@ -304,3 +311,98 @@ def apply_internal_transfer_balances(
         return "Invalid destination account."
 
     return None
+
+
+def _undo_external_moves(undo: list, request_uid: str) -> None:
+    """Put back, newest first, the money a failed transfer already moved in BTrader / MT5. Never raises: if a
+    reversal itself fails it is logged loudly (CRITICAL) with everything needed to fix it by hand."""
+    from btrader_integration.services import deposit_btrader_balance, withdraw_btrader_balance
+
+    for kind, platform, login, amount in reversed(undo):
+        comment = f"CRM Transfer undo {request_uid[:8]}"
+        ref = f"crm-xfer-undo-{kind}-{request_uid}"
+        try:
+            if platform == "btrader":
+                if kind == "credit_back":
+                    deposit_btrader_balance(login=login, amount=float(amount), comment=comment, external_ref=ref)
+                else:
+                    withdraw_btrader_balance(login=login, amount=float(amount), comment=comment, external_ref=ref)
+            else:
+                if kind == "credit_back":
+                    mt5_balance_deposit(int(login), float(amount), comment=comment)
+                else:
+                    mt5_balance_withdrawal(int(login), float(amount), comment=comment)
+            logger.warning("Internal transfer %s: reversed %s of %s on %s %s", request_uid, kind, amount, platform, login)
+        except Exception:
+            logger.critical(
+                "INTERNAL TRANSFER REVERSAL FAILED - fix by hand: uid=%s action=%s platform=%s login=%s amount=%s",
+                request_uid, kind, platform, login, amount, exc_info=True,
+            )
+
+
+# Money that has moved for a transfer whose CRM record is not saved yet (its caller still has to create the row).
+_awaiting_record: dict = {}
+_awaiting_lock = threading.Lock()
+
+
+def apply_internal_transfer_balances(
+    locked_user,
+    *,
+    transfer_type: str,
+    from_account: str,
+    to_account: str,
+    amount: Decimal,
+    request_uid: str,
+) -> Optional[str]:
+    """
+    Apply wallet / trading ledger movements for one internal transfer.
+    Returns None on success, or a user-facing error string.
+
+    Call it inside a database transaction. If a step fails after money already left (or entered) a BTrader / MT5
+    account, that money is put back and the transaction is marked for rollback, so nothing is half done.
+    On success the caller must finish with [settle_internal_transfer_moves], or, if saving its own record then
+    fails, [undo_internal_transfer_moves].
+    """
+    undo: list = []
+    amount = Decimal(str(amount))
+    # [undo] entries are (kind, platform, login); the amount is the same for all of them
+    try:
+        err = _apply_balances(
+            locked_user,
+            transfer_type=transfer_type,
+            from_account=from_account,
+            to_account=to_account,
+            amount=amount,
+            request_uid=request_uid,
+            undo=undo,
+        )
+    except Exception:
+        logger.exception("Internal transfer %s failed after money may have moved; reversing", request_uid)
+        _undo_external_moves([(k, p, lg, amount) for k, p, lg in undo], request_uid)
+        raise
+    if err:
+        if undo:
+            logger.error("Internal transfer %s refused after money moved (%s); reversing", request_uid, err)
+        _undo_external_moves([(k, p, lg, amount) for k, p, lg in undo], request_uid)
+        if transaction.get_connection().in_atomic_block:
+            transaction.set_rollback(True)  # the CRM side of a refused transfer must not be saved either
+        return err
+    if undo:
+        with _awaiting_lock:
+            _awaiting_record[request_uid] = [(k, p, lg, amount) for k, p, lg in undo]
+    return None
+
+
+def settle_internal_transfer_moves(request_uid: str) -> None:
+    """The transfer's record is saved: its money movements stand."""
+    with _awaiting_lock:
+        _awaiting_record.pop(request_uid, None)
+
+
+def undo_internal_transfer_moves(request_uid: str) -> None:
+    """The transfer's record could not be saved after the money moved: put the money back."""
+    with _awaiting_lock:
+        moves = _awaiting_record.pop(request_uid, None)
+    if moves:
+        logger.error("Internal transfer %s could not be saved after money moved; reversing", request_uid)
+        _undo_external_moves(moves, request_uid)

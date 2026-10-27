@@ -23,7 +23,11 @@ from accounts.models import Bonus, KYCAddress, KYCIdentity, MT5Account, MT5Group
 from accounts.permissions import role_required
 from enterprise.audit import get_client_ip, log_audit
 from enterprise.models import AuditLogChannel, StaffNotification
-from transactions.internal_transfer_execution import apply_internal_transfer_balances
+from transactions.internal_transfer_execution import (
+    apply_internal_transfer_balances,
+    settle_internal_transfer_moves,
+    undo_internal_transfer_moves,
+)
 from transactions.models import BalanceLedger, InternalTransfer, PaymentGateway, Transaction
 from django.utils import timezone
 from django.urls import reverse
@@ -2419,7 +2423,10 @@ def pending_withdraw(request):
                         except Exception:
                             pass
                     else:
-                        _tw.reject(tx, request.user, reject_reason)
+                        ok_tw, msg_tw = _tw.reject(tx, request.user, reject_reason)
+                        if not ok_tw:
+                            messages.error(request, msg_tw)
+                            return redirect(back_url)
                         messages.success(request, f"Rejected withdraw #{tx.id}.")
                         try:
                             log_audit(
@@ -4642,10 +4649,13 @@ def payment_requests(request):
                         return redirect(f"{reverse('admin-payment-requests')}?type={req_type}")
 
                     if locked_tx.trading_account_id:
-                        # Nothing was reserved or debited for a trading-account request: just close it.
+                        # Release the funds reserved for the request in the trading engine, then close it.
                         from transactions import trading_withdraw as _tw
 
-                        _tw.reject(locked_tx, request.user, reject_reason)
+                        ok_tw, msg_tw = _tw.reject(locked_tx, request.user, reject_reason)
+                        if not ok_tw:
+                            messages.error(request, msg_tw)
+                            return redirect(f"{reverse('admin-payment-requests')}?type={req_type}")
                         log_audit(
                             action="WITHDRAW_REJECT",
                             entity_type="Transaction",
@@ -4951,6 +4961,7 @@ def transfers_admin(request):
                     row_locked.processed_by = request.user
                     row_locked.processed_at = timezone.now()
                     row_locked.save(update_fields=["status", "processed_by", "processed_at"])
+                settle_internal_transfer_moves(request_uid)
                 messages.success(request, "Transfer approved.")
                 log_audit(
                     action="INTERNAL_TRANSFER_APPROVE",
@@ -4963,6 +4974,8 @@ def transfers_admin(request):
                     metadata={"amount": str(row_locked.amount)},
                 )
             except Exception:
+                logger.exception("Internal transfer approval failed")
+                undo_internal_transfer_moves(request_uid)  # money that already moved in BTrader / MT5 goes back
                 messages.error(request, "Transfer approval failed.")
             return redirect("admin-transfers")
 

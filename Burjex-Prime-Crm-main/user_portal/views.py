@@ -49,7 +49,12 @@ from accounts.permissions import role_required
 from accounts.restrictions import restriction_for_user
 from ib.models import IBPlan, IBProfile, IBRequest
 from ib.referral import build_register_referral_url, ensure_profile_referral_url
-from transactions.internal_transfer_execution import apply_internal_transfer_balances, validate_internal_transfer_route
+from transactions.internal_transfer_execution import (
+    apply_internal_transfer_balances,
+    settle_internal_transfer_moves,
+    undo_internal_transfer_moves,
+    validate_internal_transfer_route,
+)
 from transactions.models import BalanceLedger, InternalTransfer, Match2PayTransaction, PaymentGateway, Transaction
 from transactions.services.match2pay_client import (
     ALLOWED_NETWORKS,
@@ -1751,8 +1756,11 @@ def internal_transfer_feature(request):
                 if row.amount <= 0:
                     raise ValueError("Transfer verification failed")
         except Exception:
+            logger.exception("Internal transfer failed (website)")
+            undo_internal_transfer_moves(request_uid)  # money that already moved in BTrader / MT5 goes back
             messages.error(request, "Transfer failed. Please try again.")
             return redirect("user-internal-transfer")
+        settle_internal_transfer_moves(request_uid)
 
         log_audit(
             action="INTERNAL_TRANSFER_COMPLETED",

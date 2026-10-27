@@ -18,7 +18,12 @@ from api.permissions import IsAuthenticatedClient
 from api.responses import error_response, success_response
 from enterprise.audit import get_client_ip, log_audit
 from enterprise.models import AuditLogChannel
-from transactions.internal_transfer_execution import apply_internal_transfer_balances, validate_internal_transfer_route
+from transactions.internal_transfer_execution import (
+    apply_internal_transfer_balances,
+    settle_internal_transfer_moves,
+    undo_internal_transfer_moves,
+    validate_internal_transfer_route,
+)
 from transactions.models import InternalTransfer
 from transactions.real_ledger import filter_real_internal_transfers
 from transactions.utils import ensure_unique_action
@@ -348,7 +353,9 @@ class InternalTransferAPIView(APIView):
                     raise ValueError("Transfer verification failed")
         except Exception:
             logger.exception("Internal transfer auto processing failed")
+            undo_internal_transfer_moves(request_uid)  # money that already moved in BTrader / MT5 goes back
             return error_response("Transfer failed. Please try again.")
+        settle_internal_transfer_moves(request_uid)
 
         log_audit(
             action="INTERNAL_TRANSFER_COMPLETED",
