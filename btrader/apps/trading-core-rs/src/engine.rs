@@ -762,6 +762,7 @@ impl Engine {
             free_margin: after.free_margin,
             margin_level: after.margin_level,
             floating_pl: after.floating_pl,
+            reserved_withdraw: locked.reserved_withdraw,
             ts: now_ms(),
         };
         let opened_at = Utc::now();

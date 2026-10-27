@@ -69,8 +69,11 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
       floatingV += resolvePositionPl(p, livePl: livePL, quotes: quotes, symbols: symbols, snap: liveSnap, accountCurrency: acctCcy);
     }
     final marginV = posList.isEmpty ? 0.0 : (acc?.margin ?? base?.margin ?? 0);
+    // Funds held for pending withdrawal requests: still in the balance, but not available to trade.
+    final reservedV = acc?.reservedWithdraw ?? base?.reservedWithdraw ?? 0;
+    final availableV = balanceV > reservedV ? balanceV - reservedV : 0.0;
     final equityV = balanceV + creditV + floatingV;
-    final freeMarginV = equityV - marginV;
+    final freeMarginV = equityV - marginV - reservedV;
     final marginLevelV = marginV > 0 ? equityV / marginV * 100 : 0.0;
 
     Future<void> refresh() async {
@@ -356,7 +359,8 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(children: [
-                _row('Balance', mt5Money(balanceV)),
+                _row('Balance', mt5Money(availableV)),
+                if (reservedV > 0) _row('Pending withdrawal', mt5Money(reservedV)),
                 _row('Equity', mt5Money(equityV)),
                 if (creditV != 0) _row('Credit', mt5Money(creditV)),
                 _row('Margin', mt5Money(marginV)),

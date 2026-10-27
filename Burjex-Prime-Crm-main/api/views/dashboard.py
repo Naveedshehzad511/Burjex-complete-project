@@ -42,6 +42,8 @@ def _serialize_trading_account(a: TradingAccount) -> dict:
         "equity": str(mt5.equity if mt5 else a.balance),
         "credit": str(a.credit),
         "free_margin": str(mt5.free_margin if mt5 else 0),
+        # Held by the trading engine for pending withdrawal requests: not available to trade or withdraw again.
+        "pending_withdraw": str(mt5.reserved_withdraw if mt5 else 0),
         "unrealized_pnl": str(a.unrealized_pnl),
         "status": a.status,
         "server": a.server,
@@ -138,6 +140,10 @@ class ClientDashboardAPIView(APIView):
         def _tab_block(rows, total_bal, withdraw_metric: str) -> dict:
             free_m = _sum_mt5_decimal(rows, "free_margin")
             credit = _sum_mt5_decimal(rows, "credit")
+            pending_withdraw = sum(
+                (Decimal(str(a.mt5_account.reserved_withdraw or 0)) for a in rows if a.mt5_account),
+                start=Decimal("0"),
+            )
             pnl = _sum_mt5_decimal(rows, "unrealized_pnl")
             # Same margin estimate as user_portal.dashboard (equity - free_margin per row).
             used_margin = Decimal("0")
@@ -151,6 +157,7 @@ class ClientDashboardAPIView(APIView):
                 "total_balance": _fmt_money_2(total_bal),
                 "available_to_withdraw": withdraw_metric,
                 "total_credit": _fmt_money_2(credit),
+                "pending_withdraw": _fmt_money_2(pending_withdraw),
                 "open_pnl": _fmt_money_2(pnl),
                 "total_equity": _fmt_money_2(total_bal + pnl),
                 "free_margin": _fmt_money_2(free_m),

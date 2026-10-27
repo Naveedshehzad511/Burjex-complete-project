@@ -174,6 +174,7 @@ class CrmAccount {
     required this.depositEnabled,
     required this.withdrawEnabled,
     required this.platform,
+    this.pendingWithdraw = 0,
   });
   final String login;
   final String type;
@@ -187,6 +188,9 @@ class CrmAccount {
   final bool depositEnabled;
   final bool withdrawEnabled;
   final String platform;
+
+  /// Held by the trading engine for pending withdrawal requests (still part of [balance]).
+  final double pendingWithdraw;
 
   /// "Real (BTrader) — Standard" -> "Standard".
   String get plan {
@@ -207,12 +211,16 @@ class CrmAccount {
         depositEnabled: j['deposit_enabled'] != false,
         withdrawEnabled: j['withdraw_enabled'] != false,
         platform: (j['platform'] ?? '').toString(),
+        pendingWithdraw: crmNum(j['pending_withdraw']),
       );
 }
 
 class CrmMetrics {
-  const CrmMetrics({this.balance = 0, this.equity = 0, this.openPnl = 0, this.withdrawable = 0, this.margin = 0});
+  const CrmMetrics({this.balance = 0, this.equity = 0, this.openPnl = 0, this.withdrawable = 0, this.margin = 0, this.pendingWithdraw = 0});
   final double balance;
+
+  /// Held by the trading engine for pending withdrawal requests (still part of [balance]).
+  final double pendingWithdraw;
   final double equity;
   final double openPnl;
   final double withdrawable;
@@ -226,6 +234,7 @@ class CrmMetrics {
           equity: crmNum(j['total_equity']),
           openPnl: crmNum(j['open_pnl']),
           withdrawable: crmNum(j['available_to_withdraw']),
+          pendingWithdraw: crmNum(j['pending_withdraw']),
         );
 
   /// Open PnL as a % of balance — the card's performance signal. Null when no balance.

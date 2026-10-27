@@ -14,6 +14,8 @@ export interface AccountSnapshot {
   marginLevel: number; // equity / margin * 100 (%)
   floatingPL: number;
   closedPL: number; // realized P/L lifetime (optional rollup)
+  /** Funds held for pending withdrawal requests: not available to new trades. Absent on an older engine. */
+  reservedWithdraw?: number;
   bonus: number;
   dividend: number;
   ts: number;

@@ -374,6 +374,9 @@ class MT5Account(models.Model):
     equity = models.DecimalField(max_digits=20, decimal_places=2, default=0)
     free_margin = models.DecimalField(max_digits=20, decimal_places=2, default=0)
     unrealized_pnl = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    # Funds the trading engine holds for pending withdrawal requests (BTrader `reservedWithdraw`). Display only:
+    # `balance` stays the ledger balance until the withdrawal is approved.
+    reserved_withdraw = models.DecimalField(max_digits=20, decimal_places=2, default=0)
     last_sync_at = models.DateTimeField(null=True, blank=True)
 
     def set_mt5_password(self, plain_password: str) -> None:

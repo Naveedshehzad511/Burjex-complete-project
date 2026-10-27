@@ -750,6 +750,7 @@ impl Engine {
                 free_margin: after.free_margin,
                 margin_level: after.margin_level,
                 floating_pl: after.floating_pl,
+                reserved_withdraw: acct.reserved_withdraw,
                 ts: now,
             };
             self.emit(tenant_id, json!({"kind":"ACCOUNT_UPDATE","tenantId":tenant_id,"account": snap.json()}))

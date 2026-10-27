@@ -1,10 +1,29 @@
 import { Injectable } from '@nestjs/common';
+import Redis from 'ioredis';
 import { prisma } from '@btrader/db';
-import { BtError, BtErrorCode } from '@btrader/shared';
+import { BtError, BtErrorCode, Channels } from '@btrader/shared';
 
 type OpType = 'DEPOSIT' | 'WITHDRAWAL' | 'BONUS' | 'DIVIDEND' | 'CREDIT' | 'CORRECTION' | 'MANUAL';
 
 const MAX_ADJUST_AMOUNT = 1e12;
+
+let eventPub: Redis | null = null;
+
+/** Publish on the engine's event channel (the socket gateway forwards it to the account's watchers). Best effort. */
+async function publishEngineEvent(tenantId: string, evt: unknown): Promise<void> {
+  try {
+    if (!eventPub) {
+      eventPub = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6380', { maxRetriesPerRequest: 1 });
+      eventPub.on('error', () => {});
+    }
+    await Promise.race([
+      eventPub.publish(`bt:${tenantId}:${Channels.ENGINE_EVT}`, JSON.stringify(evt)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('publish timeout')), 1500)),
+    ]);
+  } catch {
+    // A missed push is repaired by the next account update; never fail a money movement for it.
+  }
+}
 
 /**
  * Authoritative money movements that are NOT trade P/L: deposits, withdrawals,
@@ -176,6 +195,7 @@ export class FinancialService {
           freeMargin: true,
           marginLevel: true,
           floatingPL: true,
+          reservedWithdraw: true,
           currency: true,
           leverage: true,
           status: true,
@@ -195,6 +215,7 @@ export class FinancialService {
               freeMargin: Number(snap.freeMargin),
               marginLevel: Number(snap.marginLevel),
               floatingPL: Number(snap.floatingPL),
+              reservedWithdraw: Number(snap.reservedWithdraw),
               currency: snap.currency,
               leverage: snap.leverage,
               status: snap.status,
@@ -208,7 +229,48 @@ export class FinancialService {
       // Outbox failure must not roll back a successful money movement.
     }
 
+    if (params.reservationRef) void this.pushAccountUpdate(params.tenantId, account.id, false); // not awaited: a slow Redis never delays a payout
     return { ok: true, dealId: result.dealId, balanceAfter: result.balanceAfter, duplicate: false };
+  }
+
+  /**
+   * Tell the account's watchers (app, over the socket) and the CRM what the account holds NOW: a reservation was
+   * made, released or paid out, which changes what is available without any trade happening. The figures are the
+   * stored ones recomputed from the committed rows; `free margin` stays equity - margin (the held funds are shown
+   * separately as `reservedWithdraw`). Best effort: the money movement is already committed.
+   */
+  private async pushAccountUpdate(tenantId: string, accountId: string, toCrm = true): Promise<void> {
+    try {
+      await this.recomputeAggregates(accountId);
+      const a = await prisma.account.findUnique({ where: { id: accountId } });
+      if (!a) return;
+      const account = {
+        accountId: a.id,
+        login: a.login,
+        currency: a.currency,
+        leverage: a.leverage,
+        balance: Number(a.balance),
+        credit: Number(a.credit),
+        equity: Number(a.equity),
+        margin: Number(a.margin),
+        freeMargin: Number(a.freeMargin),
+        marginLevel: Number(a.marginLevel),
+        floatingPL: Number(a.floatingPL),
+        closedPL: 0,
+        bonus: Number(a.credit),
+        dividend: 0,
+        reservedWithdraw: Number(a.reservedWithdraw),
+        ts: Date.now(),
+      };
+      await publishEngineEvent(tenantId, { kind: 'ACCOUNT_UPDATE', tenantId, account });
+      if (toCrm) {
+        await prisma.crmSyncOutbox.create({
+          data: { tenantId, eventType: 'account.snapshot', payload: { ...account, reason: 'withdraw.reservation' } },
+        });
+      }
+    } catch {
+      // see above
+    }
   }
 
   /**
@@ -226,7 +288,7 @@ export class FinancialService {
     }
     const account = await prisma.account.findFirst({ where: { tenantId: params.tenantId, login: params.login } });
     if (!account) throw new BtError(BtErrorCode.VALIDATION, 'account not found');
-    return prisma.$transaction(async (tx) => {
+    const res = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM accounts WHERE id = ${account.id} FOR UPDATE`;
       const acct = await tx.account.findUniqueOrThrow({ where: { id: account.id } });
       const existing = await tx.withdrawReservation.findUnique({ where: { externalRef: params.externalRef } });
@@ -253,6 +315,8 @@ export class FinancialService {
       await tx.account.update({ where: { id: acct.id }, data: { reservedWithdraw: reservedAfter } });
       return { ok: true, duplicate: false, status: 'RESERVED', reserved: reservedAfter };
     });
+    if (!res.duplicate) void this.pushAccountUpdate(params.tenantId, account.id); // not awaited: a slow Redis never delays a request
+    return res;
   }
 
   /**
@@ -265,7 +329,7 @@ export class FinancialService {
     }
     const account = await prisma.account.findFirst({ where: { tenantId: params.tenantId, login: params.login } });
     if (!account) throw new BtError(BtErrorCode.VALIDATION, 'account not found');
-    return prisma.$transaction(async (tx) => {
+    const res = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM accounts WHERE id = ${account.id} FOR UPDATE`;
       const acct = await tx.account.findUniqueOrThrow({ where: { id: account.id } });
       const r = await tx.withdrawReservation.findUnique({ where: { externalRef: params.externalRef } });
@@ -280,6 +344,8 @@ export class FinancialService {
       await tx.account.update({ where: { id: acct.id }, data: { reservedWithdraw: reservedAfter } });
       return { ok: true, released: true, status: 'RELEASED', reserved: reservedAfter };
     });
+    if (res.released) void this.pushAccountUpdate(params.tenantId, account.id); // not awaited: a slow Redis never delays a rejection
+    return res;
   }
 
   /**

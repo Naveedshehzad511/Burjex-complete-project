@@ -154,6 +154,8 @@ pub struct Snapshot {
     pub free_margin: f64,
     pub margin_level: f64,
     pub floating_pl: f64,
+    /// Funds held for pending withdrawal requests (shown as "pending withdrawal"; not available to new trades).
+    pub reserved_withdraw: f64,
     pub ts: i64,
 }
 
@@ -171,6 +173,7 @@ impl Snapshot {
             "freeMargin": self.free_margin,
             "marginLevel": self.margin_level,
             "floatingPL": self.floating_pl,
+            "reservedWithdraw": self.reserved_withdraw,
             "closedPL": 0,
             "bonus": self.credit,
             "dividend": 0,

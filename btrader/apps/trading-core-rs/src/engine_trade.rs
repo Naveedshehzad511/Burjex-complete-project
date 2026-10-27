@@ -724,6 +724,7 @@ impl Engine {
             free_margin: after.free_margin,
             margin_level: after.margin_level,
             floating_pl: after.floating_pl,
+            reserved_withdraw: acct.reserved_withdraw,
             ts: now_ms(),
         };
         let client_symbol = self.client_symbol_for(group_id.as_deref(), &dummy_sym.id, &symbol).await;

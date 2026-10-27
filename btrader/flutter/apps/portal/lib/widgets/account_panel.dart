@@ -41,7 +41,8 @@ class AccountPanel extends ConsumerWidget {
     final f = ref.watch(activeLiveFiguresProvider);
     final floating = f?.floating ?? a.floatingPL;
     final equity = f?.equity ?? (a.balance + a.credit + a.floatingPL);
-    final freeMargin = f?.freeMargin ?? (equity - a.margin);
+    final freeMargin = f?.freeMargin ?? (equity - a.margin - a.reservedWithdraw);
+    final reserved = f?.reserved ?? a.reservedWithdraw;
     final marginLevel = a.margin > 0 ? equity / a.margin * 100 : 0.0;
     final plColor = floating >= 0 ? tc.profit : tc.loss;
 
@@ -57,7 +58,7 @@ class AccountPanel extends ConsumerWidget {
         padding: const EdgeInsets.all(14),
         child: Column(children: [
           Row(children: [
-            cell('Balance', money(a.balance)),
+            cell('Balance', money(f?.available ?? a.availableBalance)),
             cell('Equity', money(equity)),
             cell('Floating P/L', money(floating), color: plColor),
           ]),
@@ -67,6 +68,10 @@ class AccountPanel extends ConsumerWidget {
             cell('Free margin', money(freeMargin)),
             cell('Margin level', '${marginLevel.toStringAsFixed(0)}%'),
           ]),
+          if (reserved > 0) ...[
+            const SizedBox(height: 12),
+            Row(children: [cell('Pending withdrawal', money(reserved)), const Spacer(), const Spacer()]),
+          ],
         ]),
       ),
     );

@@ -583,6 +583,7 @@ impl Engine {
                 "login": snap.login, "balance": snap.balance, "credit": snap.credit,
                 "equity": snap.equity, "margin": snap.margin, "freeMargin": snap.free_margin,
                 "marginLevel": snap.margin_level, "floatingPL": snap.floating_pl,
+                "reservedWithdraw": snap.reserved_withdraw,
                 "positionId": position_id, "profit": profit,
                 "reason": if kind == "opened" { "position.opened" } else { "position.closed" }
             }),

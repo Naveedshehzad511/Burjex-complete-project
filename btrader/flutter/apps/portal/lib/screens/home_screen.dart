@@ -123,7 +123,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: Text('${a.plan} #${a.login}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: a.platform.isEmpty ? null : Text(a.platform),
-                    trailing: Text(_hidden ? '••••' : '${a.balance.toStringAsFixed(2)} ${a.currency}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    trailing: Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Text(_hidden ? '••••' : '${_net(a.balance, _pendingOf(ref, a)).toStringAsFixed(2)} ${a.currency}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      if (!_hidden && _pendingOf(ref, a) > 0)
+                        Text('Pending withdrawal ${_pendingOf(ref, a).toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: Theme.of(ctx).hintColor)),
+                    ]),
                     selected: a.isDemo == _demo && a.login == (_selected[_demo] ?? list.first.login),
                     onTap: () => Navigator.pop(ctx, a),
                   ),
@@ -224,6 +228,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     openPnl: allLive ? known.fold<double>(0, (s, t) => s + t.floatingPL) : base.openPnl,
                     withdrawable: base.withdrawable,
                     margin: known.fold<double>(0, (s, t) => s + t.margin),
+                    pendingWithdraw: allLive ? known.fold<double>(0, (s, t) => s + t.reservedWithdraw) : base.pendingWithdraw,
                   );
                   // The active account's floating P/L moves with the market (as on the Trade tab), not with the
                   // engine's 5 s snapshot: it is folded in by the stats row itself, so only those three figures
@@ -299,6 +304,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 /// The live trading account behind a CRM account (matched by login): the socket-pushed
 /// snapshot when there is one, else the last REST one. Null when the trading side has no
 /// such account.
+/// Held by the engine for pending withdrawal requests: the trading side's live figure when it knows the account, else
+/// the CRM's. Still part of the balance, but not available.
+double _pendingOf(WidgetRef ref, CrmAccount a) => _tradingByLogin(ref, a.login)?.reservedWithdraw ?? a.pendingWithdraw;
+
+/// A balance less what is held for pending withdrawals (never below zero).
+double _net(double balance, double held) => balance > held ? balance - held : 0.0;
+
 Account? _tradingByLogin(WidgetRef ref, String login) {
   final accts = ref.watch(accountsProvider).valueOrNull ?? const <Account>[];
   final live = ref.watch(liveAccountProvider);
@@ -385,12 +397,17 @@ class _PerformanceCard extends StatelessWidget {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Text(_money(metrics.balance), style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, letterSpacing: -0.5, height: 1.1)),
+              child: Text(_money(_net(metrics.balance, metrics.pendingWithdraw)), style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, letterSpacing: -0.5, height: 1.1)),
             ),
           ),
           const SizedBox(width: 8),
           Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('USD', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 15))),
         ]),
+        if (metrics.pendingWithdraw > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text('Pending withdrawal ${_money(metrics.pendingWithdraw)}', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12.5)),
+          ),
         const SizedBox(height: 12),
         // Performance indicator — open PnL as a share of balance, drawn as a green
         // meter. Real data only: it is empty when there is no balance to compare to.
@@ -886,10 +903,15 @@ class _AccountCard extends ConsumerWidget {
           const SizedBox(height: 12),
           // Balance, Equity and Leverage: one row, three equal columns, label above value.
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            statColumn('Balance', v(a.balance)),
+            statColumn('Balance', v(_net(a.balance, _pendingOf(ref, a)))),
             statColumn('Equity', v(_accountEquity(ref, a)), divider: true),
             statColumn('Leverage', '1:${a.leverage}', divider: true),
           ]),
+          if (_pendingOf(ref, a) > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('Pending withdrawal ${v(_pendingOf(ref, a))}', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12)),
+            ),
           const SizedBox(height: 12),
           if (!a.isDemo) ...[
             Row(children: [

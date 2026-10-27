@@ -48,6 +48,8 @@ export interface CrmAccountInfo {
   freeMargin: number;
   marginLevel: number;
   floatingPL: number;
+  /** Funds held for pending withdrawal requests (the engine's own figure). */
+  reservedWithdraw?: number;
   bonus: number;
   dividend: number;
 }

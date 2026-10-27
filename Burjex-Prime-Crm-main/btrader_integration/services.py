@@ -231,16 +231,34 @@ def deposit_btrader_balance(
     return result
 
 
+def _store_reserved(login: str, res) -> None:
+    """The engine's answer carries what it holds for this account now: show it at once (Home, the account list), without
+    waiting for the next snapshot. Display only; a failure here never changes the withdrawal."""
+    try:
+        from accounts.models import MT5Account
+
+        held = (res or {}).get("reserved")
+        if held is None:
+            return
+        MT5Account.objects.filter(login_id=str(login or "").strip()).update(reserved_withdraw=max(Decimal("0"), _dec(held)))
+    except Exception:
+        logger.debug("BTrader reserved amount not stored for %s", login, exc_info=True)
+
+
 def reserve_btrader_withdrawal(*, login: str, amount: float, external_ref: str) -> dict:
     """Hold `amount` of the account's free funds for a withdrawal request (the trading engine then keeps it out of
     new trades and triggered pending orders). Idempotent on `external_ref`; raises when the funds are not there."""
-    return _client_from_settings().reserve_withdrawal(login, amount, external_ref)
+    res = _client_from_settings().reserve_withdrawal(login, amount, external_ref)
+    _store_reserved(login, res)
+    return res
 
 
 def release_btrader_withdrawal(*, login: str, external_ref: str) -> dict:
     """Give a reservation back. Exactly once: the reply says whether it was released (`released`) and the state it
     is in (`status`: RELEASED, FINALIZED when it was already paid out, NONE when there never was one)."""
-    return _client_from_settings().release_withdrawal(login, external_ref)
+    res = _client_from_settings().release_withdrawal(login, external_ref)
+    _store_reserved(login, res)
+    return res
 
 
 def withdraw_btrader_balance(
@@ -321,7 +339,7 @@ def persist_account_snapshot(login: str, data: dict) -> bool:
     credit = _dec(data.get("credit"))
     now = timezone.now()
 
-    updated = MT5Account.objects.filter(login_id=login_s).update(
+    fields = dict(
         balance=balance,
         equity=equity,
         free_margin=free_margin,
@@ -329,6 +347,11 @@ def persist_account_snapshot(login: str, data: dict) -> bool:
         credit=credit,
         last_sync_at=now,
     )
+    # Only when the snapshot carries it (an older engine / outbox event does not): never reset it to 0 by omission.
+    held = data.get("reservedWithdraw")
+    if held is not None:
+        fields["reserved_withdraw"] = max(Decimal("0"), _dec(held))
+    updated = MT5Account.objects.filter(login_id=login_s).update(**fields)
     TradingAccount.objects.filter(account_number=login_s).update(balance=balance, updated_at=now)
     if not updated:
         # Fallback: trading row may point at MT5Account with matching login via OneToOne.
@@ -338,14 +361,7 @@ def persist_account_snapshot(login: str, data: dict) -> bool:
             .first()
         )
         if ta and ta.mt5_account:
-            MT5Account.objects.filter(pk=ta.mt5_account_id).update(
-                balance=balance,
-                equity=equity,
-                free_margin=free_margin,
-                unrealized_pnl=pnl,
-                credit=credit,
-                last_sync_at=now,
-            )
+            MT5Account.objects.filter(pk=ta.mt5_account_id).update(**fields)
             TradingAccount.objects.filter(pk=ta.pk).update(balance=balance, updated_at=now)
             return True
         logger.debug("BTrader persist: no CRM account for login=%s", login_s)

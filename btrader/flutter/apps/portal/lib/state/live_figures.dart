@@ -15,6 +15,7 @@ class LiveFigures {
     required this.floating,
     required this.snapshotFloating,
     required this.margin,
+    this.reserved = 0,
   });
 
   final String accountId;
@@ -27,8 +28,14 @@ class LiveFigures {
   final double snapshotFloating;
   final double margin;
 
+  /// Held by the engine for pending withdrawal requests: not available to trade (see [Account.reservedWithdraw]).
+  final double reserved;
+
   double get equity => balance + credit + floating;
-  double get freeMargin => equity - margin;
+  double get freeMargin => equity - margin - reserved;
+
+  /// The balance less what is held for pending withdrawals (never below zero).
+  double get available => balance > reserved ? balance - reserved : 0.0;
 
   // Compared in cents: a change smaller than what is displayed rebuilds nothing.
   static int _c(double v) => (v * 100).round();
@@ -40,9 +47,10 @@ class LiveFigures {
       _c(o.credit) == _c(credit) &&
       _c(o.floating) == _c(floating) &&
       _c(o.snapshotFloating) == _c(snapshotFloating) &&
-      _c(o.margin) == _c(margin);
+      _c(o.margin) == _c(margin) &&
+      _c(o.reserved) == _c(reserved);
   @override
-  int get hashCode => Object.hash(accountId, _c(balance), _c(credit), _c(floating), _c(snapshotFloating), _c(margin));
+  int get hashCode => Object.hash(accountId, _c(balance), _c(credit), _c(floating), _c(snapshotFloating), _c(margin), _c(reserved));
 }
 
 /// Null until an account is known. Only widgets that watch it rebuild, and only when a displayed cent changes.
@@ -64,5 +72,5 @@ final activeLiveFiguresProvider = Provider.autoDispose<LiveFigures?>((ref) {
       }
     }
   }
-  return LiveFigures(accountId: a.id, balance: a.balance, credit: a.credit, floating: floating, snapshotFloating: a.floatingPL, margin: a.margin);
+  return LiveFigures(accountId: a.id, balance: a.balance, credit: a.credit, floating: floating, snapshotFloating: a.floatingPL, margin: a.margin, reserved: a.reservedWithdraw);
 });

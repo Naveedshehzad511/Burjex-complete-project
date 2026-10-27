@@ -415,6 +415,7 @@ export class CrmService {
       freeMargin: num(a.freeMargin),
       marginLevel: num(a.marginLevel),
       floatingPL: num(a.floatingPL),
+      reservedWithdraw: num(a.reservedWithdraw),
       bonus: num(a.credit),
       dividend: 0,
     };

@@ -12,6 +12,11 @@ class Account {
   final double freeMargin;
   final double marginLevel;
   final double floatingPL;
+
+  /// Funds the trading engine holds for pending withdrawal requests. Still part of [balance] (it is only debited when
+  /// the withdrawal is approved), but not available to trade or to withdraw again.
+  final double reservedWithdraw;
+
   /// 'A' | 'B' | null (null = inherit group default book).
   final String? book;
 
@@ -40,6 +45,7 @@ class Account {
     required this.freeMargin,
     required this.marginLevel,
     required this.floatingPL,
+    this.reservedWithdraw = 0,
     this.book,
     this.symbolSuffix,
     this.ownerName,
@@ -67,6 +73,7 @@ class Account {
         freeMargin: _d(j['freeMargin']),
         marginLevel: _d(j['marginLevel']),
         floatingPL: _d(j['floatingPL']),
+        reservedWithdraw: _d(j['reservedWithdraw']),
         book: j['book'] as String?,
         symbolSuffix: j['symbolSuffix'] as String?,
         ownerName: j['ownerName'] as String?,
@@ -80,6 +87,8 @@ class Account {
         balance: _d(s['balance']), credit: _d(s['credit']), equity: _d(s['equity']),
         margin: _d(s['margin']), freeMargin: _d(s['freeMargin']),
         marginLevel: _d(s['marginLevel']), floatingPL: _d(s['floatingPL']), book: book,
+        // An update without the figure (an older engine) leaves what is held as it was.
+        reservedWithdraw: s.containsKey('reservedWithdraw') ? _d(s['reservedWithdraw']) : reservedWithdraw,
         symbolSuffix: symbolSuffix,
         ownerName: ownerName,
         groupName: groupName,
@@ -91,6 +100,9 @@ class Account {
   // for display we derive it — this shows the correct equity even at rest
   // (no open positions), before the engine has recomputed.
   double get liveEquity => balance + credit + floatingPL;
-  double get liveFreeMargin => liveEquity - margin;
+  double get liveFreeMargin => liveEquity - margin - reservedWithdraw;
+
+  /// The balance less the funds held for pending withdrawal requests (never below zero).
+  double get availableBalance => balance > reservedWithdraw ? balance - reservedWithdraw : 0.0;
   double get liveMarginLevel => margin > 0 ? liveEquity / margin * 100 : 0;
 }
