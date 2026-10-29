@@ -385,6 +385,7 @@ class _CandleChartState extends State<CandleChart> {
             painter: _CandlePainter(
               candles: window,
               winStart: start,
+              totalBars: total,
               trailingGap: trailingGap,
               futureSlots: futureSlots,
               digits: widget.digits,
@@ -532,10 +533,15 @@ _PaneMetrics _computePaneMetrics(double h, int nOsc, double oscFraction, double 
   return _PaneMetrics(padV, priceH, padV + priceH + _oscGap, paneH);
 }
 
+/// Time-axis label size: one step above the price ladder's 9 so "29 Oct 04:22" stays readable on a phone,
+/// and still fits the 18px time strip.
+const double _kTimeFont = 10;
+
 class _CandlePainter extends CustomPainter {
   _CandlePainter({
     required this.candles,
     required this.winStart,
+    required this.totalBars,
     required this.trailingGap,
     required this.futureSlots,
     required this.digits,
@@ -563,6 +569,7 @@ class _CandlePainter extends CustomPainter {
 
   final List<Candle> candles;
   final int winStart; // index in the full series of candles[0]
+  final int totalBars; // length of the full series (labels are anchored to the global bar index)
   final int trailingGap; // empty candle-slots reserved on the right edge
   final int futureSlots; // extra right-side slots for Ichimoku's forward cloud
   final int digits;
@@ -621,14 +628,40 @@ class _CandlePainter extends CustomPainter {
     }
 
     // ── Time scale: labels along the bottom (no vertical gridlines). ──
-    final labelEvery = math.max(1, (70 / slot).ceil()); // ~70px between labels
+    // MT5 style: date + time on server time, spaced by their real width (see layoutTimeAxis). The crosshair
+    // bar (or, without one, the newest bar while it is in view) gets a highlighted tag.
     final axisY = size.height - timeAxisH + 3;
-    for (var i = candles.length - 1; i >= 0; i -= labelEvery) {
-      final cx = slot * i + slot / 2;
-      if (cx < 14) break;
-      tp.text = TextSpan(text: _timeLabel(candles[i], tf), style: TextStyle(color: text, fontSize: 9));
-      tp.layout();
-      tp.paint(canvas, Offset(cx - tp.width / 2, axisY));
+    final plotBottom = size.height - timeAxisH;
+    final newestOffset = totalBars - winStart - candles.length;
+    final crossIdx = cross == null ? null : (cross!.dx.clamp(0, chartW) / slot).floor().clamp(0, candles.length - 1);
+    TextPainter label(String s, Color c) =>
+        TextPainter(textDirection: TextDirection.ltr, text: TextSpan(text: s, style: TextStyle(color: c, fontSize: _kTimeFont)))..layout();
+    for (final l in layoutTimeAxis(
+      count: candles.length,
+      newestOffset: newestOffset,
+      slot: slot,
+      centerX: (i) => slot * i + slot / 2,
+      text: (i) => chartTimeLabel(candles[i].date, tf),
+      measure: (s) => label(s, text).width,
+      width: chartW,
+      tagIndex: crossIdx ?? (newestOffset == 0 ? candles.length - 1 : null),
+    )) {
+      if (l.tag) {
+        final rr = RRect.fromRectAndRadius(Rect.fromLTWH(l.left, plotBottom + 1, l.width, timeAxisH - 2), const Radius.circular(3));
+        if (crossIdx != null) {
+          canvas.drawRRect(rr, Paint()..color = onSurface);
+          label(l.text, surface).paint(canvas, Offset(l.left + 4, axisY));
+        } else {
+          canvas.drawRRect(rr, Paint()..color = surface);
+          canvas.drawRRect(rr, Paint()
+            ..color = text
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.8);
+          label(l.text, onSurface).paint(canvas, Offset(l.left + 4, axisY));
+        }
+      } else {
+        label(l.text, text).paint(canvas, Offset(l.left, axisY));
+      }
     }
 
     // ── Price series (candles / line). Clipped to the price pane. ──
@@ -726,7 +759,7 @@ class _CandlePainter extends CustomPainter {
       _tag(canvas, chartW, cy, priceAt.toStringAsFixed(digits), onSurface);
       final info = 'O ${k.o.toStringAsFixed(digits)}  H ${k.h.toStringAsFixed(digits)}\n'
           'L ${k.l.toStringAsFixed(digits)}  C ${k.c.toStringAsFixed(digits)}\n'
-          '${_timeLabel(k, tf)}';
+          '${chartTimeLabel(k.date, tf)}';
       final ip = TextPainter(
         textDirection: TextDirection.ltr,
         text: TextSpan(text: info, style: TextStyle(color: onSurface, fontSize: 10, height: 1.3)),
@@ -1020,17 +1053,6 @@ class _CandlePainter extends CustomPainter {
     return v.toStringAsFixed(4);
   }
 
-  /// HH:MM for intraday timeframes, D/M for daily/weekly, M/YY for monthly —
-  /// from the bar's open time.
-  String _timeLabel(Candle k, Timeframe tf) {
-    final d = k.date.toLocal();
-    if (tf == Timeframe.mn1) return '${d.month}/${(d.year % 100).toString().padLeft(2, '0')}';
-    if (tf == Timeframe.d1 || tf == Timeframe.w1) return '${d.day}/${d.month}';
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mm = d.minute.toString().padLeft(2, '0');
-    return '$hh:$mm';
-  }
-
   void _hline(Canvas c, double yy, double w, Color color, {bool dashed = false}) {
     final p = Paint()
       ..color = color
@@ -1076,6 +1098,7 @@ class _CandlePainter extends CustomPainter {
   bool shouldRepaint(covariant _CandlePainter old) =>
       old.candles != candles ||
       old.winStart != winStart ||
+      old.totalBars != totalBars ||
       old.trailingGap != trailingGap ||
       old.futureSlots != futureSlots ||
       old.cross != cross ||

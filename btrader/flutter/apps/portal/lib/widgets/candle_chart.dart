@@ -346,6 +346,10 @@ const double _kRightPad = 5;
 /// brought to the middle and a little beyond. [_kRightPad] stays the floor for very small views.
 const double _kMaxHeadroomFraction = 0.6;
 
+/// Time-axis label size: one step above the price ladder's 9 so "29 Oct 04:22" stays readable on a phone,
+/// and still fits the 18px time strip.
+const double _kTimeFont = 10;
+
 /// Laid-out text, reused across frames. The price ladder, time labels and Bid/Ask tags are the same
 /// few strings frame after frame while panning (a label stays glued to its bar; the ladder only
 /// changes when the visible high/low does), yet each was laid out from scratch on every frame -
@@ -1771,17 +1775,39 @@ class _CandlePainter extends CustomPainter {
     }
 
     // ── Time scale: labels along the bottom (no vertical gridlines). ──
-    final labelEvery = math.max(1, (70 / slot).ceil()); // ~70px between labels
+    // MT5 style: date + time on server time, spaced by their real width (see layoutTimeAxis), anchored to the
+    // global bar index so a label stays on its bar while panning. The crosshair bar (or, without one, the
+    // newest bar while it is in view) gets a highlighted tag.
     final axisY = size.height - timeAxisH + 3;
-    for (var i = candles.length - 1; i >= 0; i--) {
-      // Anchored to the global bar index (counted from the newest), so a label stays glued to its bar
-      // while the chart pans instead of hopping to a neighbour.
-      if ((totalBars - 1 - (winStart + i)) % labelEvery != 0) continue;
-      final cx = xShift + slot * i + slot / 2;
-      if (cx < 14) break;
-      if (cx > chartW - 14) continue;
-      final lbl = _TextCache.get(_timeLabel(candles[i], tf), 9, text);
-      lbl.paint(canvas, Offset(cx - lbl.width / 2, axisY));
+    final newestOffset = totalBars - winStart - candles.length;
+    final crossIdx = cross == null ? null : ((cross!.dx.clamp(0, chartW) - xShift) / slot).floor().clamp(0, candles.length - 1);
+    for (final l in layoutTimeAxis(
+      count: candles.length,
+      newestOffset: newestOffset,
+      slot: slot,
+      centerX: (i) => xShift + slot * i + slot / 2,
+      text: (i) => chartTimeLabel(candles[i].date, tf),
+      measure: (s) => _TextCache.width(s, _kTimeFont, FontWeight.normal),
+      width: chartW,
+      tagIndex: crossIdx ?? (newestOffset == 0 ? candles.length - 1 : null),
+    )) {
+      if (l.tag) {
+        final box = Rect.fromLTWH(l.left, plotBottom + 1, l.width, timeAxisH - 2);
+        final rr = RRect.fromRectAndRadius(box, const Radius.circular(3));
+        if (crossIdx != null) {
+          canvas.drawRRect(rr, Paint()..color = onSurface);
+          _TextCache.get(l.text, _kTimeFont, surface).paint(canvas, Offset(l.left + 4, axisY));
+        } else {
+          canvas.drawRRect(rr, Paint()..color = surface);
+          canvas.drawRRect(rr, Paint()
+            ..color = text
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.8);
+          _TextCache.get(l.text, _kTimeFont, onSurface).paint(canvas, Offset(l.left + 4, axisY));
+        }
+      } else {
+        _TextCache.get(l.text, _kTimeFont, text).paint(canvas, Offset(l.left, axisY));
+      }
     }
 
     // ── Price series (candles / line). Clipped to the price pane. ──
@@ -1884,7 +1910,7 @@ class _CandlePainter extends CustomPainter {
       _tag(canvas, chartW, cy, priceAt.toStringAsFixed(digits), onSurface);
       final info = 'O ${k.o.toStringAsFixed(digits)}  H ${k.h.toStringAsFixed(digits)}\n'
           'L ${k.l.toStringAsFixed(digits)}  C ${k.c.toStringAsFixed(digits)}\n'
-          '${_timeLabel(k, tf)}';
+          '${chartTimeLabel(k.date, tf)}';
       final ip = TextPainter(
         textDirection: TextDirection.ltr,
         text: TextSpan(text: info, style: TextStyle(fontFamily: kAppFontFamily, color: onSurface, fontSize: 10, height: 1.3)),
@@ -2224,17 +2250,6 @@ class _CandlePainter extends CustomPainter {
     if (a >= 100) return v.toStringAsFixed(0);
     if (a >= 1) return v.toStringAsFixed(2);
     return v.toStringAsFixed(4);
-  }
-
-  /// HH:MM for intraday timeframes, D/M for daily/weekly, M/YY for monthly —
-  /// from the bar's open time.
-  String _timeLabel(Candle k, Timeframe tf) {
-    final d = k.date.toLocal();
-    if (tf == Timeframe.mn1) return '${d.month}/${(d.year % 100).toString().padLeft(2, '0')}';
-    if (tf == Timeframe.d1 || tf == Timeframe.w1) return '${d.day}/${d.month}';
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mm = d.minute.toString().padLeft(2, '0');
-    return '$hh:$mm';
   }
 
   void _hline(Canvas c, double yy, double w, Color color, {bool dashed = false, double width = 1, double dash = 4, double gap = 3}) {

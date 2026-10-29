@@ -1,5 +1,6 @@
 import * as http from 'http';
 import { LpBridgeAdapter, RawTick } from '@btrader/shared';
+import { BridgeMode } from '../candles/bridge-history';
 
 /** One OHLC bar pushed by the bridge (epoch SECONDS open time). */
 export interface CandleBar {
@@ -52,7 +53,7 @@ export class Mt5IngestAdapter implements LpBridgeAdapter {
   private received = 0;
   private lastTickAt = 0;
   private tickHandler?: (t: RawTick) => void;
-  private candleHandler?: (symbol: string, tf: string, bars: CandleBar[]) => void;
+  private candleHandler?: (symbol: string, tf: string, bars: CandleBar[], mode: BridgeMode) => void;
   private statusHandler?: (s: 'connected' | 'disconnected' | 'error', d?: string) => void;
 
   constructor(private readonly opts: Mt5IngestOptions) {}
@@ -82,8 +83,12 @@ export class Mt5IngestAdapter implements LpBridgeAdapter {
   onTick(h: (t: RawTick) => void): void {
     this.tickHandler = h;
   }
-  /** Register a handler for pushed OHLC history/updates (charts). */
-  onCandles(h: (symbol: string, tf: string, bars: CandleBar[]) => void): void {
+  /**
+   * Register a handler for pushed OHLC history/updates (charts). `mode` comes from the body:
+   * `"authoritative": true` → MT5 owns closed bars; `"gapsOnly": true` → fill empty buckets only;
+   * neither → the era rule (see candles/bridge-history.ts).
+   */
+  onCandles(h: (symbol: string, tf: string, bars: CandleBar[], mode: BridgeMode) => void): void {
     this.candleHandler = h;
   }
   onStatus(h: (s: 'connected' | 'disconnected' | 'error', d?: string) => void): void {
@@ -175,6 +180,8 @@ export class Mt5IngestAdapter implements LpBridgeAdapter {
     let symbol = String(parsed?.symbol ?? '').trim().toUpperCase();
     const tf = String(parsed?.tf ?? '').trim();
     const rawBars: any[] = Array.isArray(parsed?.bars) ? parsed.bars : [];
+    const mode: BridgeMode =
+      parsed?.authoritative === true ? 'authoritative' : parsed?.gapsOnly === true ? 'gapsOnly' : 'era';
     if (!symbol || !tf || rawBars.length === 0) {
       return this.json(res, 400, { error: 'symbol, tf and bars[] required' });
     }
@@ -200,7 +207,7 @@ export class Mt5IngestAdapter implements LpBridgeAdapter {
       }
       if (bars.length === 0) return;
       bars.sort((a, b) => a.t - b.t);
-      this.candleHandler?.(symbol, tf, bars);
+      this.candleHandler?.(symbol, tf, bars, mode);
     });
   }
 

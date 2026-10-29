@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/candle.dart';
 import '../models/position.dart';
 import '../models/tick.dart';
+import '../util/format.dart';
 import 'providers.dart';
 import 'live.dart';
 
@@ -479,6 +480,7 @@ final brokerOffsetSecProvider = FutureProvider<int>((ref) async {
     saved = prefs.getInt(_kOffsetKey);
   } catch (_) {}
   if (saved != null) {
+    serverUtcOffsetSec = saved;
     unawaited(_fetchBrokerOffset(ref).then((fresh) async {
       if (fresh == null || fresh == saved) return;
       try {
@@ -490,6 +492,7 @@ final brokerOffsetSecProvider = FutureProvider<int>((ref) async {
   }
   final fresh = await _fetchBrokerOffset(ref);
   if (fresh != null) unawaited(prefs?.setInt(_kOffsetKey, fresh) ?? Future<void>.value());
+  serverUtcOffsetSec = fresh ?? 0;
   return fresh ?? 0;
 });
 

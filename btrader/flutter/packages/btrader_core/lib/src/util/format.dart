@@ -10,8 +10,16 @@ String money(num v) => _money.format(v);
 String mt5Money(num v) => money(v).replaceAll(',', ' ');
 String price(num v, int digits) => v.toStringAsFixed(digits);
 String pct(num v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(2)}%';
-String dateTime(DateTime d) => _dt.format(d.toLocal());
-String hms(DateTime d) => _hms.format(d.toLocal());
+/// The trade server's UTC offset in seconds (the gateway's `BROKER_UTC_OFFSET_SEC`), set by
+/// `brokerOffsetSecProvider` once known. Every time shown to a user is on this clock, 24-hour, as
+/// MT5 shows it — never the phone's time zone or 12-hour setting, so all users see the same times.
+int serverUtcOffsetSec = 0;
+
+/// [d] as a wall-clock time on the trade server (fields read as server time; the value is UTC-flagged).
+DateTime serverTime(DateTime d) => d.toUtc().add(Duration(seconds: serverUtcOffsetSec));
+
+String dateTime(DateTime d) => _dt.format(serverTime(d));
+String hms(DateTime d) => _hms.format(serverTime(d));
 
 /// MT5 "big figure" price split: the bulk of the number is normal-size, the two
 /// pip digits are enlarged, and (for 3/5-digit fractional-pip symbols) the last

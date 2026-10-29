@@ -104,7 +104,7 @@ class _StaleNote extends StatelessWidget {
   final DateTime asOf;
   @override
   Widget build(BuildContext context) {
-    final t = TimeOfDay.fromDateTime(asOf.toLocal());
+    final t = TimeOfDay.fromDateTime(serverTime(asOf));
     final hh = t.hour.toString().padLeft(2, '0');
     final mm = t.minute.toString().padLeft(2, '0');
     return Row(mainAxisSize: MainAxisSize.min, children: [

@@ -26,6 +26,8 @@ import { Mt5IngestAdapter, FeedSource } from './adapters/mt5-ingest-adapter';
 import { NullAdapter } from './adapters/null-adapter';
 import { CandleEngine, CandleUpdate, CanonicalCandle, DEFAULT_CHART_PRICE, bucketStart } from './candles/engine';
 import { selectFlushRows } from './candles/flush';
+import { FeedGapWatch } from './candles/feed-gap';
+import { BridgeMode, markBridgeRows } from './candles/bridge-history';
 import { TransformEpochs, groupTenants, transformCandle } from './candles/pricing';
 import { referenceTenant } from './candles/reference';
 
@@ -464,6 +466,7 @@ async function persistBridgeCandles(
   tf: string,
   bars: Array<{ t: number; o: number; h: number; l: number; c: number; v?: number }>,
   _books: LiveBidBooks,
+  mode: BridgeMode = 'era',
 ): Promise<void> {
   const tfSec = TF_SECONDS[tf];
   if (!tfSec || !Array.isArray(bars) || bars.length === 0) return;
@@ -492,21 +495,23 @@ async function persistBridgeCandles(
   // original bug) while still letting MT5 repair holes left by a restart —
   // which the previous version could not do, because it discarded those bars
   // and the hole became permanent.
-  const liveFrom = canonicalSince.get(symbol);
-  const accepted = [...byT.values()]
-    .map((b) => (liveFrom !== undefined && b.t >= liveFrom ? { ...b, gapFill: true } : b))
-    .sort((a, b) => a.t - b.t);
+  // How these bars may meet stored ones (era / gaps-only / MT5-authoritative), see candles/bridge-history.ts.
+  const accepted = markBridgeRows([...byT.values()], canonicalSince.get(symbol), mode, Math.floor(Date.now() / 1000), tfSec);
   if (accepted.length === 0) return;
 
-  logMissingMinutes(
-    symbol,
-    tf,
-    accepted.map((b) => b.t),
-  );
+  // Not for the EA's periodic repair pass: its window spans market breaks every few minutes.
+  if (mode === 'era') {
+    logMissingMinutes(
+      symbol,
+      tf,
+      accepted.map((b) => b.t),
+    );
+  }
 
   // Keep in-memory tip aligned to raw ChartRequest so residual tick path cannot drift.
+  // Only for the Manager bridge: for an EA repair push the forming tip belongs to the tick engine.
   const tip = accepted[accepted.length - 1]!;
-  if (tip.t === nowBucket) {
+  if (mode === 'era' && tip.t === nowBucket) {
     const key = `${symbol}|${tf}`;
     agg.set(key, {
       t: tip.t,
@@ -1044,6 +1049,14 @@ async function main() {
   let staleSeen = 0;
   let staleMaxAgeMs = 0;
   let staleLoggedAt = 0;
+  let staleMinAgeMs = Infinity;
+  const staleBySymbol = new Map<string, number>(); // log detail only: which symbols arrive late
+
+  // Log only: pauses in the feed, so a reported chart gap can be matched to the server log (grep feed-gap).
+  const gapWatch = new FeedGapWatch();
+  setInterval(() => {
+    for (const line of gapWatch.check(Date.now())) console.warn(line);
+  }, 15_000).unref();
 
   const lastSeq = new Map<string, number>();
   const handleTickImpl = (raw: RawTick) => {
@@ -1063,17 +1076,28 @@ async function main() {
       if (age > staleMs) {
         staleSeen++;
         if (age > staleMaxAgeMs) staleMaxAgeMs = age;
+        if (age < staleMinAgeMs) staleMinAgeMs = age;
+        staleBySymbol.set(raw.symbol, (staleBySymbol.get(raw.symbol) ?? 0) + 1);
+      } else {
+        for (const line of gapWatch.tick(raw.symbol, raw.ts, now)) console.warn(line);
       }
       reportDrops(now);
       if (staleSeen > 0 && now - staleLoggedAt > 30_000) {
         staleLoggedAt = now;
+        // Which symbols, and the youngest dropped age: every symbol late by a similar amount points at a clock
+        // offset between the sender and this server; a few symbols, or ages all over the place, at slow delivery.
+        const top = [...staleBySymbol.entries()].sort((x, y) => y[1] - x[1]).slice(0, 8)
+          .map(([k, v]) => `${k}=${v}`).join(' ');
         console.warn(
           `[feed-stale] ${staleSeen} tick(s) dropped as too old in the last 30s; ` +
-            `oldest ${(staleMaxAgeMs / 1000).toFixed(1)}s behind (limit ${staleMs / 1000}s). ` +
-            `Upstream is republishing quotes without advancing their timestamp.`,
+            `${(staleMinAgeMs / 1000).toFixed(1)}–${(staleMaxAgeMs / 1000).toFixed(1)}s behind (limit ${staleMs / 1000}s) ` +
+            `in ${staleBySymbol.size} symbol(s): ${top}. ` +
+            `Upstream is delivering quotes late (a sender backlog, a slow link, or a source clock behind).`,
         );
         staleSeen = 0;
         staleMaxAgeMs = 0;
+        staleMinAgeMs = Infinity;
+        staleBySymbol.clear();
       }
     }
     const q: BookQuote = { bid: raw.bid, ask: raw.ask, ts: raw.ts, staleMs };
@@ -1167,8 +1191,8 @@ async function main() {
   // than chart rates (observed on BTCUSD: TickLast≈627xx vs Chart≈625xx).
   if (adapter instanceof Mt5IngestAdapter) {
     mt5CandleIngestWired = true;
-    adapter.onCandles((symbol, tf, bars) => {
-      void persistBridgeCandles(symbol, tf, bars, { defaultBook, allBook });
+    adapter.onCandles((symbol, tf, bars, mode) => {
+      void persistBridgeCandles(symbol, tf, bars, { defaultBook, allBook }, mode);
     });
     console.log('[market-data] MT5 candle history ingest wired (ChartRequest authoritative)');
   }

@@ -36,4 +36,5 @@ export 'src/state/ui.dart';
 export 'src/theme/app_theme.dart';
 export 'src/theme/brand_logo.dart';
 export 'src/util/format.dart';
+export 'src/util/time_axis.dart';
 export 'src/util/responsive.dart';
