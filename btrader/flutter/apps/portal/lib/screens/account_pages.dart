@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../crm/crm.dart';
 import '../main.dart' show kNavy;
+import '../widgets/app_version.dart';
 import '../widgets/portal_ui.dart';
 import 'security_screens.dart';
 
@@ -261,6 +262,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 16),
             FilledButton(onPressed: _busy ? null : _changePassword, style: navyButton(), child: Text(_busy ? 'Updating…' : 'Update Password')),
             const SizedBox(height: 24),
+            const Center(child: AppVersionText()),
+            const SizedBox(height: 8),
           ]);
         },
       ),

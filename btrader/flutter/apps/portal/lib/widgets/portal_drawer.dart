@@ -8,6 +8,7 @@ import '../crm/crm.dart';
 import '../main.dart' show kNavy;
 import '../screens/ib_screens.dart' show IbState, ibStateProvider;
 import '../session/sessions.dart';
+import 'app_version.dart';
 
 /// Side menu — same structure as the existing portal: expandable My Fund, IB
 /// Programme, My Data and Account groups, then the single-page entries, the
@@ -248,6 +249,10 @@ class PortalDrawer extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(12)),
               ),
             ),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Center(child: AppVersionText()),
           ),
         ]),
       ),

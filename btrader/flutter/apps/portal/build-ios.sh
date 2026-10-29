@@ -35,6 +35,7 @@ flutter pub get >/dev/null
 echo "▶ building the IPA $NAME ($NUMBER) against production ..."
 flutter build ipa --release \
   --dart-define-from-file="$CONFIG" \
+  --dart-define=APP_COMMIT="$(git rev-parse --short HEAD)" \
   --build-name="$NAME" \
   --build-number="$NUMBER"
 
