@@ -1359,7 +1359,11 @@ final liveCandlesProvider = Provider.autoDispose.family<AsyncValue<List<Candle>>
 
   final liveSince = _inServerSec(ref.watch(socketLiveSinceProvider));
   final usable = _pushedInStep(history, pushed, req.tf, offset, verifiedAt, liveSinceSec: liveSince);
-  return AsyncValue.data(serverAuthoritativeSeries(history, usable, currentBucket: current));
+  // The forming bar of a history fetched during this very bucket is the server's own (its store, seconds old): it stays
+  // until the live one arrives, so a page refresh / reopened app shows the current candle as soon as the history is in,
+  // not only once the socket has reconnected. A saved copy's forming bar (not fetched this bucket) is still left out.
+  final storedFormingIsFresh = current != null && verifiedAt >= current;
+  return AsyncValue.data(serverAuthoritativeSeries(history, usable, currentBucket: storedFormingIsFresh ? null : current));
 });
 
 Candle? _candleAt(List<Candle> sorted, int t) {

@@ -98,6 +98,33 @@ void main() {
 
   Future<void> settle([int ms = 400]) => Future<void>.delayed(Duration(milliseconds: ms));
 
+  group('a page refresh / the app reopened a moment later', () {
+    test('the current candle is there as soon as the history is, before the socket has reconnected', () async {
+      savedOnDisk(nowB - _step); // saved a minute ago
+      final api = _Gateway(oldest: nowB - 86400, newest: nowB); // the store already holds the forming bar
+      final c = make(api);
+      await c.read(candlesProvider(_req).future);
+      c.read(quotesProvider.notifier).set(Tick(symbol: _sym, bid: 4000, ask: 4000.2, ts: _nowSec()));
+      await settle(); // history fetched; nothing pushed yet
+      expect(shown(c).last.t, nowB, reason: 'the stored forming bar is shown');
+      expectContinuous(shown(c));
+      c.read(serverCandlesProvider.notifier).upsert(_sym, Timeframe.m1.api, _bar(nowB, 4007));
+      expect(shown(c).last.c, 4007, reason: 'then the live one takes over');
+      expect(shown(c).where((k) => k.t == nowB), hasLength(1));
+    });
+
+    test('a forming bar only from the saved copy is not shown as current', () async {
+      final rows = [for (var t = nowB - 9 * _step; t <= nowB; t += _step) [t, 3000.0, 3001.0, 2999.0, 3000.0, 1.0]];
+      SharedPreferences.setMockInitialValues({'bt_candles_v1|$_sym|${Timeframe.m1.api}': jsonEncode(rows)});
+      final api = _Gateway(oldest: nowB - 86400, newest: nowB - _step, delay: const Duration(seconds: 2));
+      final c = make(api);
+      await c.read(candlesProvider(_req).future);
+      c.read(quotesProvider.notifier).set(Tick(symbol: _sym, bid: 4000, ask: 4000.2, ts: _nowSec()));
+      await settle(50); // the fetch is still on its way
+      expect(shown(c).last.t, nowB - _step, reason: 'the saved forming bar is stale: left out');
+    });
+  });
+
   group('reopened from the saved copy after hours away', () {
     test('the live bar is not drawn across the hole; then the whole series appears at once, ending on the live bar', () async {
       final savedLast = nowB - 9 * 3600;
