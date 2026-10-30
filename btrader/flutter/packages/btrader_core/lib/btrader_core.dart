@@ -29,6 +29,7 @@ export 'src/state/providers.dart';
 export 'src/state/live.dart';
 export 'src/state/order_gate.dart';
 export 'src/state/chart.dart';
+export 'src/widgets/chart_updating_badge.dart';
 export 'src/state/indicators.dart';
 export 'src/state/drawings.dart';
 export 'src/state/ui.dart';

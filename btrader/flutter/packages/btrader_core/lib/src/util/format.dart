@@ -15,6 +15,13 @@ String pct(num v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(2)}%';
 /// MT5 shows it — never the phone's time zone or 12-hour setting, so all users see the same times.
 int serverUtcOffsetSec = 0;
 
+/// The server's clock minus this device's clock (ms), measured against the gateway (`/market/clock`); null until measured.
+/// A phone whose clock is wrong must not decide which candles are missing.
+int? serverClockSkewMs;
+
+/// Server time now (epoch ms): this device's clock corrected by [serverClockSkewMs].
+int serverNowMs() => DateTime.now().millisecondsSinceEpoch + (serverClockSkewMs ?? 0);
+
 /// [d] as a wall-clock time on the trade server (fields read as server time; the value is UTC-flagged).
 DateTime serverTime(DateTime d) => d.toUtc().add(Duration(seconds: serverUtcOffsetSec));
 

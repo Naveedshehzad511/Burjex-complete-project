@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config.dart';
@@ -30,6 +31,12 @@ final tradeEventEpochProvider = StateProvider<int>((_) => 0);
 /// Bumped every time the trading socket (re)connects, so views holding server
 /// state can reconcile anything they missed while it was down.
 final socketEpochProvider = StateProvider<int>((_) => 0);
+
+/// Since when every live bar has reached this device (this device's clock, epoch ms - compare it in server time through
+/// [serverClockSkewMs]): set when the socket (re)connects and when the app comes back to the foreground or wakes. A bucket
+/// that began after it and was never pushed really had no trades; one before it may just not have been received. Far in
+/// the future while nothing is live.
+final socketLiveSinceProvider = StateProvider<int>((_) => 1 << 52);
 
 /// A trade event the ENGINE confirmed over the socket (not a button press or a REST reply).
 enum TradeEventKind { opened, closed, modified }
@@ -103,10 +110,47 @@ final marketSocketProvider = Provider<MarketSocket?>((ref) {
     onReconnected: () {
       ref.read(positionsRefreshProvider).request();
       ref.read(accountsRefreshProvider).request();
-      Future.microtask(() => ref.read(socketEpochProvider.notifier).state++);
+      // In a microtask (this runs inside the provider's build): still before any frame of the new connection is handled.
+      Future.microtask(() {
+        ref.read(socketLiveSinceProvider.notifier).state = DateTime.now().millisecondsSinceEpoch;
+        ref.read(socketEpochProvider.notifier).state++;
+      });
     },
   );
   sock.connect();
+
+  // Coming back - the app resumed or the browser tab was shown again after being hidden (not a mere focus change) - or
+  // waking from sleep (timers stopped, so the clock jumps): check the socket is alive and let the open charts fetch what
+  // they missed, at once. Here in the core, so every app (portal, trader; Android, iOS, web) behaves the same.
+  void cameBack() {
+    sock.onAppResumed();
+    ref.read(chartResumeEpochProvider.notifier).state++;
+  }
+
+  var away = false;
+  AppLifecycleListener? lifecycle;
+  try {
+    lifecycle = AppLifecycleListener(
+      onHide: () => away = true,
+      onPause: () => away = true,
+      onResume: () {
+        if (!away) return;
+        away = false;
+        cameBack();
+      },
+    );
+  } catch (_) {/* no widgets binding (plain unit tests) */}
+  var beat = DateTime.now().millisecondsSinceEpoch;
+  final wake = Timer.periodic(const Duration(seconds: 5), (_) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    // A hidden tab's timers are throttled, not asleep: it is handled when it is shown again.
+    if (now - beat > 15000 && !away) cameBack();
+    beat = now;
+  });
+  ref.onDispose(() {
+    lifecycle?.dispose();
+    wake.cancel();
+  });
 
   final tradeEvents = TradeEventDetector();
   void announce(TradeEventKind? kind, String id) {

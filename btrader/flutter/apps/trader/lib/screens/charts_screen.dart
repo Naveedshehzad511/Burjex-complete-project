@@ -425,6 +425,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                           onDeleteDrawing: (id) => ref.read(chartDrawingsProvider.notifier).remove(id),
                           onPriceTap: (p) => _orderAtPrice(p, digits),
                         ),
+                        // Shown only while the chart catches up after the app was away.
+                        Positioned(left: 0, right: 0, bottom: 30, child: Center(child: ChartUpdatingBadge(req))),
                         // Time left on the forming bar (MT5-style).
                         Positioned(top: 6, right: 70, child: _BarCountdown(selectedTf)),
                         // Drawing-placement hint + cancel.

@@ -1522,6 +1522,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                     ),
                     onDuplicate: () => _showChartsMenu(context),
                   ),
+                  // Shown only while the chart catches up after the app was away.
+                  Positioned(left: 0, right: 0, bottom: 30, child: Center(child: ChartUpdatingBadge(req))),
                   // MT5's chart caption: symbol ▾ timeframe / description / market state.
                   Positioned(
                     top: 4,
@@ -1667,6 +1669,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                   ),
                   onDuplicate: () => _showChartsMenu(context),
                 ),
+                Positioned(left: 0, right: 0, bottom: 30, child: Center(child: ChartUpdatingBadge(req2))),
                 Positioned(
                   top: 4,
                   left: 4,
