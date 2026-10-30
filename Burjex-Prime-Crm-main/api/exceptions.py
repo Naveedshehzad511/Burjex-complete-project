@@ -48,6 +48,10 @@ def crm_exception_handler(exc, context) -> Response | None:
     }
     if errors is not None:
         body["errors"] = errors
+    geo = getattr(exc, "geo_code", None)
+    if geo:
+        # The iPhone / iPad app's location check (api.services.geo_access): the app reads the code.
+        body["data"] = {"geo": geo}
 
     response.data = body
     return response

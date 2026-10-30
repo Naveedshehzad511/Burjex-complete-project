@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:btrader_core/btrader_core.dart';
 
 import '../crm/crm.dart';
+import '../security/geo_gate.dart';
 import '../widgets/auth_page.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -18,6 +19,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _busy = false;
   bool _hide = true;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // iPhone / iPad: ask for the location now, so signing in does not wait on it (and the user knows why).
+    WidgetsBinding.instance.addPostFrameCallback((_) => GeoGate.instance.warmUp());
+  }
 
   @override
   void dispose() {

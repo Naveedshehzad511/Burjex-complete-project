@@ -80,7 +80,7 @@ class CrmSession extends StateNotifier<CrmAuthState> {
   /// Returns null on success, otherwise the message to show.
   Future<String?> login(String email, String password) async {
     try {
-      final res = await Dio(BaseOptions(
+      final res = await newCrmDio(BaseOptions(
         baseUrl: BtConfig.crmBase,
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: const Duration(seconds: 30),
@@ -124,7 +124,7 @@ class CrmSession extends StateNotifier<CrmAuthState> {
     if (token != null) {
       unawaited(PushService.instance.unregister(token));
       // Best effort — the local session is already gone.
-      unawaited(Dio(BaseOptions(baseUrl: BtConfig.crmBase, headers: {'Authorization': 'Token $token'}))
+      unawaited(newCrmDio(BaseOptions(baseUrl: BtConfig.crmBase, headers: {'Authorization': 'Token $token'}))
           .post('/auth/logout/')
           .then((_) {}, onError: (_) {}));
     }
@@ -138,7 +138,7 @@ final crmSessionProvider = StateNotifierProvider<CrmSession, CrmAuthState>((ref)
 
 /// Authenticated Dio for the CRM client API. A 401 means the CRM session ended.
 final crmDioProvider = Provider<Dio>((ref) {
-  final dio = Dio(BaseOptions(
+  final dio = newCrmDio(BaseOptions(
     baseUrl: BtConfig.crmBase,
     connectTimeout: const Duration(seconds: 20),
     receiveTimeout: const Duration(seconds: 30),

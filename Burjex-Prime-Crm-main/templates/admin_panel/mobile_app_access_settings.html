@@ -1,0 +1,99 @@
+{% extends "admin_panel/base.html" %}
+{% block title %}Mobile App Access{% endblock %}
+{% block admin_content %}
+<div class="max-w-5xl mx-auto space-y-5">
+  <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+    <h1 class="text-xl font-semibold">Mobile App Access (iPhone / iPad)</h1>
+    <p class="text-sm text-slate-600 mt-1">
+      Where the iPhone / iPad app can be used. Sign-in and registration in the app are allowed only when the device's
+      location and its network are in an allowed country; signed-in sessions confirm their location again on a schedule.
+      Android and the website are not affected.
+    </p>
+  </div>
+
+  <form method="post" class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+    {% csrf_token %}
+    <label class="md:col-span-2 inline-flex items-center gap-2">
+      <input type="checkbox" name="ios_enabled" {% if obj.ios_enabled %}checked{% endif %}>
+      Restrict the iPhone / iPad app to the allowed countries
+    </label>
+
+    <div class="md:col-span-2">
+      <label class="block mb-1 font-medium">Allowed countries</label>
+      <input type="text" name="allowed_countries" value="{{ obj.allowed_countries }}" class="w-full border rounded-lg px-3 py-2" placeholder="PK">
+      <p class="text-xs text-slate-500 mt-1">Two-letter country codes (ISO 3166), separated by commas, e.g. <code>PK</code>.</p>
+    </div>
+
+    <label class="inline-flex items-center gap-2">
+      <input type="checkbox" name="require_ip_country" {% if obj.require_ip_country %}checked{% endif %}>
+      The network must be in an allowed country too (refuses VPN / proxy)
+    </label>
+    <label class="inline-flex items-center gap-2">
+      <input type="checkbox" name="allow_unknown_ip_country" {% if obj.allow_unknown_ip_country %}checked{% endif %}>
+      Allow when the network's country is unknown
+    </label>
+    <label class="md:col-span-2 inline-flex items-center gap-2">
+      <input type="checkbox" name="block_simulated_location" {% if obj.block_simulated_location %}checked{% endif %}>
+      Refuse locations the phone reports as simulated
+    </label>
+
+    <div>
+      <label class="block mb-1 font-medium">Re-check signed-in sessions every (hours)</label>
+      <input type="number" min="1" max="720" name="recheck_hours" value="{{ obj.recheck_hours }}" class="w-full border rounded-lg px-3 py-2">
+    </div>
+    <div>
+      <label class="block mb-1 font-medium">A location check is valid for (minutes)</label>
+      <input type="number" min="1" max="60" name="ticket_minutes" value="{{ obj.ticket_minutes }}" class="w-full border rounded-lg px-3 py-2">
+    </div>
+    <div>
+      <label class="block mb-1 font-medium">Least precise location accepted (metres)</label>
+      <input type="number" min="100" max="200000" name="max_accuracy_m" value="{{ obj.max_accuracy_m }}" class="w-full border rounded-lg px-3 py-2">
+    </div>
+
+    <div class="md:col-span-2">
+      <label class="block mb-1 font-medium">Exempt accounts</label>
+      <textarea name="exempt_accounts" rows="3" class="w-full border rounded-lg px-3 py-2" placeholder="appreview@example.com">{{ obj.exempt_accounts }}</textarea>
+      <p class="text-xs text-slate-500 mt-1">Emails, one per line, never location-checked — e.g. the demo account given to Apple App Review.</p>
+    </div>
+
+    <div class="md:col-span-2">
+      <label class="block mb-1 font-medium">Message: not available in this country</label>
+      <textarea name="blocked_message" rows="2" class="w-full border rounded-lg px-3 py-2">{{ obj.blocked_message }}</textarea>
+    </div>
+    <div class="md:col-span-2">
+      <label class="block mb-1 font-medium">Message: location needed</label>
+      <textarea name="location_required_message" rows="2" class="w-full border rounded-lg px-3 py-2">{{ obj.location_required_message }}</textarea>
+    </div>
+    <div class="md:col-span-2">
+      <label class="block mb-1 font-medium">Message: network does not match (VPN / proxy)</label>
+      <textarea name="network_mismatch_message" rows="2" class="w-full border rounded-lg px-3 py-2">{{ obj.network_mismatch_message }}</textarea>
+    </div>
+
+    <div class="md:col-span-2">
+      <button class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold">Save</button>
+    </div>
+  </form>
+
+  <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-sm">
+    <h2 class="font-semibold mb-3">Recent location checks (iPhone / iPad sessions)</h2>
+    {% if recent %}
+    <table class="w-full text-left">
+      <thead class="text-slate-500"><tr><th class="py-1">When</th><th>Client</th><th>Result</th><th>Device</th><th>Network</th></tr></thead>
+      <tbody>
+        {% for r in recent %}
+        <tr class="border-t border-slate-100">
+          <td class="py-1">{{ r.verified_at|date:"Y-m-d H:i" }}</td>
+          <td>{{ r.user.email }}</td>
+          <td>{% if r.allowed %}Allowed{% else %}Refused{% endif %} <span class="text-slate-500">({{ r.reason }})</span></td>
+          <td>{{ r.gps_country|default:"—" }}</td>
+          <td>{{ r.ip_country|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-slate-500">No checks yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

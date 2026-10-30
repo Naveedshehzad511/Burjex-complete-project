@@ -209,7 +209,8 @@ MIDDLEWARE = [
 # HTML Admin & Client portals remain unchanged; JSON APIs live under /api/v1/.
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        # Token authentication + the iPhone / iPad app's location rule (other clients: unchanged).
+        "api.authentication.AppTokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [

@@ -19,6 +19,7 @@ export 'src/models/candle.dart';
 export 'src/models/drawing.dart';
 
 export 'src/api/api_client.dart';
+export 'src/api/crm_http.dart';
 export 'src/ws/market_socket.dart';
 
 export 'src/indicators/engine.dart';

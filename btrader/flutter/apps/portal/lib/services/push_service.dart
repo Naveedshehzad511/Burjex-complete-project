@@ -40,7 +40,7 @@ class PushService {
     return _ready;
   }
 
-  Dio _dio(String crmToken) => Dio(BaseOptions(
+  Dio _dio(String crmToken) => newCrmDio(BaseOptions(
         baseUrl: BtConfig.crmBase,
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: const Duration(seconds: 30),

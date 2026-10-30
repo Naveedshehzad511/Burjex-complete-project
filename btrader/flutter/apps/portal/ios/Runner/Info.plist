@@ -68,6 +68,8 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Burjex Prime checks your location when you sign in or register, because the service is available only in certain countries.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Burjex Prime uses Face ID to unlock the app and confirm it is you.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

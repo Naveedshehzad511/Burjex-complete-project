@@ -5375,3 +5375,51 @@ def admin_ib_tree(request, ib_id):
         "level2": level2,
         "level3": level3
     })
+
+
+@login_required
+@role_required([User.Roles.ADMIN])
+@require_http_methods(["GET", "POST"])
+def mobile_app_access_settings(request):
+    """Where the iPhone / iPad app may be used (sign-in and registration), for App Store guideline 3.2.2(viii)."""
+    from admin_panel.models import MobileAppAccessPolicy, MobileGeoVerification
+    from api.services import geo_access
+
+    obj = MobileAppAccessPolicy.get_solo()
+    if request.method == "POST":
+        def number(name, default, low, high):
+            try:
+                return min(high, max(low, int(request.POST.get(name) or default)))
+            except (TypeError, ValueError):
+                return default
+
+        countries = sorted(
+            {c.strip().upper() for c in re.split(r"[\s,;]+", request.POST.get("allowed_countries") or "") if c.strip()}
+        )
+        bad = [c for c in countries if len(c) != 2 or not c.isalpha()]
+        if bad:
+            messages.error(request, "Use two-letter country codes (ISO 3166), e.g. PK. Not valid: " + ", ".join(bad))
+            return redirect("admin-mobile-app-access-settings")
+        obj.ios_enabled = request.POST.get("ios_enabled") == "on"
+        obj.allowed_countries = ", ".join(countries)
+        obj.require_ip_country = request.POST.get("require_ip_country") == "on"
+        obj.allow_unknown_ip_country = request.POST.get("allow_unknown_ip_country") == "on"
+        obj.block_simulated_location = request.POST.get("block_simulated_location") == "on"
+        obj.max_accuracy_m = number("max_accuracy_m", 25000, 100, 200000)
+        obj.recheck_hours = number("recheck_hours", 12, 1, 720)
+        obj.ticket_minutes = number("ticket_minutes", 10, 1, 60)
+        obj.exempt_accounts = (request.POST.get("exempt_accounts") or "").strip()
+        for f in ("blocked_message", "location_required_message", "network_mismatch_message"):
+            v = (request.POST.get(f) or "").strip()
+            if v:
+                setattr(obj, f, v)
+        obj.save()
+        geo_access.forget_policy()
+        messages.success(request, "Mobile app access saved.")
+        return redirect("admin-mobile-app-access-settings")
+    recent = MobileGeoVerification.objects.select_related("user").order_by("-verified_at")[:25]
+    return render(
+        request,
+        "admin_panel/mobile_app_access_settings.html",
+        {"title": "Mobile App Access", "obj": obj, "recent": recent},
+    )

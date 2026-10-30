@@ -3298,3 +3298,75 @@ class OnboardingSlide(models.Model):
 
     def __str__(self) -> str:
         return self.title or f"Slide {self.pk}"
+
+
+class MobileAppAccessPolicy(models.Model):
+    """Who may sign in to / register on the iPhone / iPad app, by where they are (App Store guideline 3.2.2(viii):
+    the app is offered only where the service is licensed). The server decides from the device's GPS position and the
+    network's country (Cloudflare); everything here is edited in the admin panel. Android and the website are not
+    affected."""
+
+    ios_enabled = models.BooleanField(default=True)
+    # ISO 3166-1 alpha-2 codes, comma or space separated (e.g. "PK").
+    allowed_countries = models.CharField(max_length=500, blank=True, default="PK")
+    # The network (IP) country must be an allowed country too: a VPN or proxy elsewhere is refused.
+    require_ip_country = models.BooleanField(default=True)
+    # When the network country is unknown (no Cloudflare country): refuse (default) or rely on the GPS alone.
+    allow_unknown_ip_country = models.BooleanField(default=False)
+    # Positions iOS reports as simulated by software are refused.
+    block_simulated_location = models.BooleanField(default=True)
+    # A position less precise than this (metres) is not used.
+    max_accuracy_m = models.PositiveIntegerField(default=25000)
+    # A signed-in iPhone / iPad session confirms its location again after this many hours.
+    recheck_hours = models.PositiveIntegerField(default=12)
+    # A location check is good for a sign-in / registration for this many minutes.
+    ticket_minutes = models.PositiveIntegerField(default=10)
+    # Accounts (emails, one per line) never location-checked - for App Review's demo account.
+    exempt_accounts = models.TextField(blank=True, default="")
+    blocked_message = models.TextField(
+        default="Burjex Prime on iPhone and iPad is currently available only in Pakistan. "
+        "You can't sign in or register from your current location."
+    )
+    location_required_message = models.TextField(
+        default="Burjex Prime needs your location to confirm you are in a country where the service is available. "
+        "Allow location access for Burjex Prime in Settings and try again."
+    )
+    network_mismatch_message = models.TextField(
+        default="Your network location does not match your device location. "
+        "Turn off any VPN or proxy and try again."
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Mobile app access policy"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def allowed_set(self) -> set[str]:
+        import re
+
+        return {c.upper() for c in re.split(r"[\s,;]+", self.allowed_countries or "") if len(c) == 2 and c.isalpha()}
+
+    def exempt_set(self) -> set[str]:
+        import re
+
+        return {e.strip().lower() for e in re.split(r"[\s,;]+", self.exempt_accounts or "") if e.strip()}
+
+
+class MobileGeoVerification(models.Model):
+    """The last location check of an iPhone / iPad session (one row per API token). Only the outcome and the countries
+    are kept, never the coordinates."""
+
+    token_key = models.CharField(max_length=64, unique=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="mobile_geo_checks")
+    allowed = models.BooleanField(default=False)
+    reason = models.CharField(max_length=40, blank=True, default="")
+    gps_country = models.CharField(max_length=2, blank=True, default="")
+    ip_country = models.CharField(max_length=2, blank=True, default="")
+    verified_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Mobile location check"

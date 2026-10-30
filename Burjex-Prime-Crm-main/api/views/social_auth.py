@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 
 from api.responses import error_response, success_response
 from api.serializers.common import UserSerializer
-from api.services import social_auth
+from api.services import geo_access, social_auth
 
 
 def _safe_next(request: HttpRequest, next_url: str) -> str:
@@ -205,6 +205,11 @@ class GoogleTokenAPIView(APIView):
             return error_response(str(exc), status=400)
         except Exception:
             return error_response("Google sign-in failed.", status=400)
+        denied = geo_access.gate_sign_in(request, getattr(user, "email", ""), getattr(user, "username", ""))
+        if denied is not None:
+            return denied
+        if not result.get("totp_required"):
+            geo_access.record_sign_in(request, result.get("token") or "", user)
         if result.get("totp_required"):
             return success_response(
                 {
@@ -246,6 +251,11 @@ class AppleTokenAPIView(APIView):
             return error_response(str(exc), status=400)
         except Exception:
             return error_response("Apple sign-in failed.", status=400)
+        denied = geo_access.gate_sign_in(request, getattr(user, "email", ""), getattr(user, "username", ""))
+        if denied is not None:
+            return denied
+        if not result.get("totp_required"):
+            geo_access.record_sign_in(request, result.get("token") or "", user)
         if result.get("totp_required"):
             return success_response(
                 {

@@ -27,6 +27,7 @@ import 'screens/trade_screen.dart';
 import 'screens/verify_email_screen.dart';
 import 'screens/verify_otp_screen.dart';
 import 'shell.dart';
+import 'state/crypto_policy.dart';
 
 const _authRoutes = {
   '/',
@@ -56,7 +57,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (needsSetup) return loc == '/security-setup' ? null : '/security-setup';
       if (loc == '/security-setup') return '/home';
       if (onAuth) return '/home';
-      return null;
+      return fundingRedirect(loc); // iPhone / iPad: no deposit or withdrawal
     },
     routes: [
       GoRoute(path: '/', builder: (_, __) => const OnboardingScreen()),

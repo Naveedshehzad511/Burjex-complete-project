@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 
 import '../api/api_client.dart';
+import '../api/crm_http.dart';
 import '../config.dart';
 import '../models/auth.dart';
 import '../models/branding.dart';
@@ -102,7 +103,7 @@ class AuthController extends StateNotifier<AuthState> {
     unawaited(_tryCrmLogin(email, password));
   }
 
-  Dio _crmDio() => Dio(BaseOptions(
+  Dio _crmDio() => newCrmDio(BaseOptions(
         baseUrl: BtConfig.crmBase,
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: const Duration(seconds: 30),
@@ -153,7 +154,7 @@ class AuthController extends StateNotifier<AuthState> {
     required String password,
     required String confirm,
   }) async {
-    final dio = Dio(BaseOptions(
+    final dio = newCrmDio(BaseOptions(
       baseUrl: BtConfig.crmBase,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 20),
@@ -218,7 +219,7 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<String> verifyEmailToken(String token) async {
-    final dio = Dio(BaseOptions(
+    final dio = newCrmDio(BaseOptions(
       baseUrl: BtConfig.crmBase,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 20),
@@ -300,7 +301,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> _tryCrmLogin(String email, String password) async {
     try {
-      final dio = Dio(BaseOptions(
+      final dio = newCrmDio(BaseOptions(
         baseUrl: BtConfig.crmBase,
         connectTimeout: const Duration(seconds: 4),
         receiveTimeout: const Duration(seconds: 6),
@@ -412,7 +413,7 @@ final ibReferralProvider = FutureProvider<IbReferralInfo?>((ref) async {
   final token = p.getString('crm_token') ?? '';
   if (token.isEmpty) return null;
   try {
-    final dio = Dio(BaseOptions(
+    final dio = newCrmDio(BaseOptions(
       baseUrl: BtConfig.crmBase,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 20),

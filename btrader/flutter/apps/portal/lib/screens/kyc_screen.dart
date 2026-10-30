@@ -135,20 +135,23 @@ class KycScreen extends ConsumerWidget {
               action: d['identity_can_upload'] == true ? (identity == null ? 'Upload documents' : 'Upload again') : null,
               onAction: () => _open(context, ref, _IdentitySheet(status: d)),
             ),
-            const SizedBox(height: 10),
-            _Section(
-              title: 'Bank account',
-              status: '${d['bank_status_ui'] ?? 'Not Submitted'}',
-              lines: [
-                if (bank != null) ...[
-                  if ('${bank['bank_name'] ?? ''}'.isNotEmpty) '${bank['bank_name']}',
-                  if ('${bank['account_name'] ?? ''}'.isNotEmpty) '${bank['account_name']}',
-                  if ('${bank['account_number'] ?? ''}'.isNotEmpty) '${bank['account_number']}',
+            // iPhone / iPad: payout bank details belong to withdrawals, which the app does not offer.
+            if (!hideFunding) ...[
+              const SizedBox(height: 10),
+              _Section(
+                title: 'Bank account',
+                status: '${d['bank_status_ui'] ?? 'Not Submitted'}',
+                lines: [
+                  if (bank != null) ...[
+                    if ('${bank['bank_name'] ?? ''}'.isNotEmpty) '${bank['bank_name']}',
+                    if ('${bank['account_name'] ?? ''}'.isNotEmpty) '${bank['account_name']}',
+                    if ('${bank['account_number'] ?? ''}'.isNotEmpty) '${bank['account_number']}',
+                  ],
                 ],
-              ],
-              action: d['bank_can_submit'] == true ? (bank == null ? 'Add bank account' : 'Add another') : null,
-              onAction: () => _open(context, ref, _BankSheet(status: d)),
-            ),
+                action: d['bank_can_submit'] == true ? (bank == null ? 'Add bank account' : 'Add another') : null,
+                onAction: () => _open(context, ref, _BankSheet(status: d)),
+              ),
+            ],
             if (!hideCryptoFunding) ...[
               const SizedBox(height: 10),
               _Section(

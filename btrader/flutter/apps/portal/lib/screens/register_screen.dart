@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:btrader_core/btrader_core.dart';
 
 import '../pending_signup.dart';
+import '../security/geo_gate.dart';
 import 'signup_countries.dart';
 
 const _navy = Color(0xFF002D58);
@@ -36,6 +37,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final fromUrl = (q['ref'] ?? q['ib'] ?? '').trim();
     final seed = widget.initialIbId.trim().isNotEmpty ? widget.initialIbId.trim() : fromUrl;
     if (seed.isNotEmpty) _refCode.text = seed;
+    // iPhone / iPad: registration is location-checked; ask for the location when the form opens.
+    WidgetsBinding.instance.addPostFrameCallback((_) => GeoGate.instance.warmUp());
   }
 
   @override

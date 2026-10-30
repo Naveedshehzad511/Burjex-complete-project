@@ -342,6 +342,7 @@ urlpatterns = [
     path("system-management/logo-upload/", views.logo_upload, name="system-management-logo-upload"),
     path("settings/", include("admin_panel.settings.urls")),
     path("settings/compliance/", views.compliance_settings, name="admin-compliance-settings"),
+    path("settings/mobile-app-access/", views.mobile_app_access_settings, name="admin-mobile-app-access-settings"),
     path("settings/treasury/", views.treasury_hub, name="admin-treasury-hub"),
     path("settings/treasury/deposit-methods/", views.payment_gateways, {"treasury_scope": "DEPOSIT"}, name="admin-treasury-deposit-methods"),
     path("settings/treasury/withdrawal-methods/", views.payment_gateways, {"treasury_scope": "WITHDRAW"}, name="admin-treasury-withdraw-methods"),

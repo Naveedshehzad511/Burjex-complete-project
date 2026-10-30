@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'router.dart';
+import 'crm/crm.dart';
 import 'screens/security_screens.dart';
+import 'security/geo_gate.dart';
 import 'services/sound_service.dart';
 import 'session/app_reset.dart';
 import 'widgets/trade_toast.dart';
@@ -14,6 +16,7 @@ void main() {
   // production instead of a LAN address. API_BASE / WS_URL, when given, win.
   BtConfig.releaseFallbackHost = 'portal.burjexprime.net';
   SoundService.instance.warmUp(); // load the trade sounds now, not on the first trade
+  GeoGate.instance.install(); // iPhone / iPad: sign-in and registration only where the service is offered
   runApp(const _AppRoot());
 }
 
@@ -44,6 +47,8 @@ class PortalApp extends ConsumerWidget {
     );
     final router = ref.watch(routerProvider);
     final mode = ref.watch(themeModeProvider);
+    // A signed-in iPhone / iPad session whose location is no longer allowed is signed out.
+    GeoGate.instance.onRefused = () => ref.read(crmSessionProvider.notifier).logout();
     return MaterialApp.router(
       title: brand.appName,
       debugShowCheckedModeBanner: false,
@@ -51,7 +56,8 @@ class PortalApp extends ConsumerWidget {
       darkTheme: AppTheme.dark(brand),
       themeMode: mode,
       routerConfig: router,
-      builder: (context, child) => LockGate(child: ToastHost(child: child ?? const SizedBox.shrink())),
+      builder: (context, child) =>
+          GeoPromptHost(child: LockGate(child: ToastHost(child: child ?? const SizedBox.shrink()))),
     );
   }
 }

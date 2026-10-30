@@ -188,7 +188,8 @@ class IbDashboardScreen extends ConsumerWidget {
                 _QuickLink(icon: Icons.people_outline, label: 'My Clients', path: '/ib/clients'),
                 _QuickLink(icon: Icons.payments_outlined, label: 'My Commission', path: '/ib/commission'),
                 _QuickLink(icon: Icons.account_tree_outlined, label: 'IB Tree', path: '/ib/tree'),
-                _QuickLink(icon: Icons.account_balance_wallet_outlined, label: 'IB Withdraw', path: '/ib/withdraw'),
+                if (!hideFunding) // iPhone / iPad: no payouts in the app
+                  const _QuickLink(icon: Icons.account_balance_wallet_outlined, label: 'IB Withdraw', path: '/ib/withdraw'),
               ]),
             ],
           ),

@@ -19,7 +19,7 @@ from api.serializers.auth import (
     TotpVerifySerializer,
 )
 from api.serializers.common import UserSerializer
-from api.services import auth_service
+from api.services import auth_service, geo_access
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,9 @@ class ClientLoginAPIView(APIView):
         ser = ClientLoginSerializer(data=request.data)
         if not ser.is_valid():
             return validation_error_response(ser.errors)
+        denied = geo_access.gate_sign_in(request, ser.validated_data["username"])
+        if denied is not None:
+            return denied
         ok, result = auth_service.client_login(
             request, ser.validated_data["username"], ser.validated_data["password"]
         )
@@ -57,6 +60,7 @@ class ClientLoginAPIView(APIView):
             )
         user = result["user"]
         token = result["token"]
+        geo_access.record_sign_in(request, token, user)
         data = {
             "totp_required": False,
             "token": token,
@@ -131,7 +135,12 @@ class ClientTotpVerifyAPIView(APIView):
                 errors=result.get("errors"),
                 status=400,
             )
+        u = result["user"]
+        denied = geo_access.gate_sign_in(request, getattr(u, "email", ""), getattr(u, "username", ""))
+        if denied is not None:
+            return denied
         token = result["token"]
+        geo_access.record_sign_in(request, token, u)
         data = {
             "token": token,
             "access": token,
@@ -193,6 +202,9 @@ class ClientSignupAPIView(APIView):
         ser = ClientSignupSerializer(data=request.data)
         if not ser.is_valid():
             return validation_error_response(ser.errors)
+        denied = geo_access.gate_sign_in(request, str(request.data.get("email") or ""))
+        if denied is not None:
+            return denied
         merged = {**dict(request.data), **ser.validated_data}
         ok, result = auth_service.client_signup(request, merged)
         if not ok:
@@ -204,6 +216,7 @@ class ClientSignupAPIView(APIView):
         data = {k: v for k, v in result.items() if k != "user"}
         if result.get("user"):
             data["user"] = _user_payload(request, result["user"])
+            geo_access.record_sign_in(request, str(result.get("token") or ""), result["user"])
         return success_response(data, message=result.get("message", "Account created successfully."), status=201)
 
 
@@ -287,6 +300,9 @@ class VerifyEmailOtpAPIView(APIView):
         ser = EmailOtpSerializer(data=request.data)
         if not ser.is_valid():
             return validation_error_response(ser.errors)
+        denied = geo_access.gate_sign_in(request, ser.validated_data["email"])
+        if denied is not None:
+            return denied
         ok, result = auth_service.verify_email_otp(
             ser.validated_data["email"],
             ser.validated_data["otp"],
@@ -297,6 +313,7 @@ class VerifyEmailOtpAPIView(APIView):
         data = {k: v for k, v in result.items() if k != "user"}
         if result.get("user"):
             data["user"] = _user_payload(request, result["user"])
+            geo_access.record_sign_in(request, str(result.get("token") or ""), result["user"])
         return success_response(data, message=result.get("message", "Email verified."))
 
 

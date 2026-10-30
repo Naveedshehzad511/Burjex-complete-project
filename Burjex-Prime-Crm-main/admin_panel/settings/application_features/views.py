@@ -20,6 +20,7 @@ def application_features_hub(request):
         {"title": "Email Verification", "url_name": "admin-email-verification-settings"},
         {"title": "User Settings", "url_name": "admin-user-settings"},
         {"title": "Compliance Settings", "url_name": "admin-compliance-settings"},
+        {"title": "Mobile App Access (iPhone / iPad)", "url_name": "admin-mobile-app-access-settings"},
     ]
     if request.GET.get("saved"):
         messages.success(request, "Application features updated.")

@@ -65,7 +65,7 @@ final onboardingSlidesProvider = StreamProvider<OnboardingSlides>((ref) async* {
     } catch (_) {/* a corrupt cache is just ignored */}
   }
   try {
-    final res = await Dio(BaseOptions(
+    final res = await newCrmDio(BaseOptions(
       baseUrl: BtConfig.crmBase,
       connectTimeout: const Duration(seconds: 8),
       receiveTimeout: const Duration(seconds: 10),

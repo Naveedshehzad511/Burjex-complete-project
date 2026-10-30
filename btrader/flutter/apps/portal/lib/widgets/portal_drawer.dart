@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../crm/crm.dart';
 import '../main.dart' show kNavy;
+import '../state/crypto_policy.dart';
 import '../screens/ib_screens.dart' show IbState, ibStateProvider;
 import '../session/sessions.dart';
 import 'app_version.dart';
@@ -153,14 +154,19 @@ class PortalDrawer extends ConsumerWidget {
                 ListView(padding: const EdgeInsets.only(bottom: 6), children: [
               item(Icons.home, 'Dashboard', () => Navigator.of(context).pop(),
                   selected: true),
-              group(Icons.account_balance_outlined, 'My Fund', const [
-                ('Deposit', '/deposit'),
-                ('Withdraw', '/withdraw'),
-                ('Internal Transfer', '/transfer'),
-                ('Transactions', '/p/transactions'),
-              ]),
-              item(Icons.account_balance_wallet_outlined, 'My Wallet',
-                  () => go('/wallet')),
+              // iPhone / iPad: no deposit, withdrawal, wallet or transfer (see [hideFunding]); the history stays.
+              if (hideFunding)
+                item(Icons.account_balance_outlined, 'Transactions', () => go('/p/transactions'))
+              else ...[
+                group(Icons.account_balance_outlined, 'My Fund', const [
+                  ('Deposit', '/deposit'),
+                  ('Withdraw', '/withdraw'),
+                  ('Internal Transfer', '/transfer'),
+                  ('Transactions', '/p/transactions'),
+                ]),
+                item(Icons.account_balance_wallet_outlined, 'My Wallet',
+                    () => go('/wallet')),
+              ],
               item(Icons.verified_user_outlined, 'KYC', () => go('/kyc')),
               // The IB menu follows where the client stands. An approved IB has the dashboard (which
               // carries clients, commission, tree, withdraw, team deposits / withdrawals and level

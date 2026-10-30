@@ -24,6 +24,7 @@ from api.views.auth import (
     VerifyEmailAPIView,
     VerifyEmailOtpAPIView,
 )
+from api.views.geo import MobileGeoCheckAPIView
 from api.views.social_auth import (
     AppleTokenAPIView,
     GoogleTokenAPIView,
@@ -87,6 +88,7 @@ app_name = "api"
 urlpatterns = [
     # Auth
     path("auth/login/", ClientLoginAPIView.as_view(), name="client-login"),
+    path("auth/geo-check/", MobileGeoCheckAPIView.as_view(), name="mobile-geo-check"),
     path("auth/social/options/", SocialOptionsAPIView.as_view(), name="social-options"),
     path("auth/google/", GoogleTokenAPIView.as_view(), name="auth-google"),
     path("auth/google/start/", google_start, name="auth-google-start"),

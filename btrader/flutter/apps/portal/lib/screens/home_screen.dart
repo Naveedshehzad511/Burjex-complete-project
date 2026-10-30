@@ -17,6 +17,7 @@ import '../widgets/manage_accounts.dart';
 import '../widgets/market_movers.dart';
 import '../widgets/market_news.dart';
 import '../widgets/portal_drawer.dart';
+import '../state/crypto_policy.dart';
 import '../widgets/portal_ui.dart';
 
 const _kHideBalanceKey = 'bx_hide_balance';
@@ -521,6 +522,17 @@ class _KycNotice extends StatelessWidget {
 
   /// What the CRM's KYC status means for the client (PENDING / REJECTED / EXPIRED; anything else is "pending").
   String get _message {
+    if (hideFunding) {
+      // iPhone / iPad: there are no withdrawals in the app, so they are not what KYC unlocks here.
+      switch (status.toUpperCase()) {
+        case 'REJECTED':
+          return 'KYC was rejected — resubmit your documents.';
+        case 'EXPIRED':
+          return 'KYC has expired — renew it.';
+        default:
+          return 'KYC is pending — complete your verification.';
+      }
+    }
     switch (status.toUpperCase()) {
       case 'REJECTED':
         return 'KYC was rejected — resubmit your documents to unlock withdrawals.';
@@ -913,7 +925,7 @@ class _AccountCard extends ConsumerWidget {
               child: Text('Pending withdrawal ${v(_pendingOf(ref, a))}', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12)),
             ),
           const SizedBox(height: 12),
-          if (!a.isDemo) ...[
+          if (!a.isDemo && !hideFunding) ...[
             Row(children: [
               action('Deposit', Icons.arrow_downward, a.depositEnabled ? () => context.push('/deposit?account=${a.login}') : null, primary: true),
               action('Withdraw', Icons.arrow_upward, a.withdrawEnabled ? () => context.push('/withdraw') : null, primary: false),
