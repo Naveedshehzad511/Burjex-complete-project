@@ -613,11 +613,12 @@ impl Engine {
         };
         let accounts = self.book.accounts_for_symbol(tenant_id, &sym.id);
         let now = now_ms();
-        for account_id in accounts.into_iter().take(4) {
-            let last = self.stop_out_checked.get(&account_id).map(|v| *v).unwrap_or(0);
-            if now - last < 1000 {
-                continue;
-            }
+        let due = crate::policy::stop_out_due(
+            accounts,
+            |a| self.stop_out_checked.get(a).map(|v| *v).unwrap_or(0),
+            now,
+        );
+        for account_id in due {
             self.stop_out_checked.insert(account_id.clone(), now);
             self.enforce_stop_out(tenant_id, &account_id).await;
         }
@@ -634,10 +635,13 @@ impl Engine {
                 return;
             };
             let agg = compute_aggregates(acct.balance, acct.credit, &views);
-            if agg.margin <= 0.0 {
+            if views.is_empty() {
                 return;
             }
-            if agg.margin_level > f64::from(acct.stop_out_level) {
+            if !crate::policy::stop_out_needed(agg.equity, agg.margin, agg.margin_level, f64::from(acct.stop_out_level)) {
+                if agg.margin <= 0.0 {
+                    return;
+                }
                 if agg.margin_level <= f64::from(acct.margin_call_level) {
                     self.emit(
                         tenant_id,

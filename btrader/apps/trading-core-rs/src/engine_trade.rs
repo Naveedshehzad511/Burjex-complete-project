@@ -626,13 +626,10 @@ impl Engine {
         let swap: f64 = fresh.try_get("swap").unwrap_or(0.0);
         let commission: f64 = fresh.try_get("commission").unwrap_or(0.0);
         let charges = split_position_charges(swap, commission, vol, open_vol);
-        let mut realized = crate::calc::position_profit(&side, vol, open_price, close_price, &spec, conv)
+        let realized = crate::calc::position_profit(&side, vol, open_price, close_price, &spec, conv)
             + charges.0
             + charges.1;
-        if floor_balance && acct.balance + realized < 0.0 {
-            realized = -acct.balance;
-        }
-        let new_balance = acct.balance + realized;
+        let mut new_balance = acct.balance + realized;
         let deal_id = Uuid::new_v4().to_string();
         let comment = audit_comment(plan.as_ref(), json!({"fillPrice": close_price, "result": "closed", "partial": partial}));
         sqlx::query(
@@ -684,6 +681,40 @@ impl Engine {
             .await?;
         }
         let views = self.open_views_tx(&mut tx, &tenant_id, &account_id, &acct.currency).await?;
+        // Negative balance protection (see [`crate::policy::negative_balance_correction`]): recorded like an admin
+        // correction - a BALANCE deal and a CORRECTION adjustment - so statements and reports show it.
+        if let Some(fix) = crate::policy::negative_balance_correction(
+            new_balance,
+            !views.is_empty(),
+            crate::policy::negative_balance_protection_enabled(),
+        ) {
+            let fix_deal = Uuid::new_v4().to_string();
+            sqlx::query(
+                r#"INSERT INTO deals (id, "tenantId", "accountId", type, profit, "balanceAfter", comment)
+                   VALUES ($1,$2,$3,'BALANCE'::"DealType",0,0,$4)"#,
+            )
+            .bind(&fix_deal)
+            .bind(&tenant_id)
+            .bind(&account_id)
+            .bind("Negative balance protection")
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(
+                r#"INSERT INTO balance_adjustments (id, "tenantId", "accountId", type, amount, currency, comment, "performedBy", "dealId")
+                   VALUES ($1,$2,$3,'CORRECTION'::"AdjustmentType",$4,$5,$6,'system:negative-balance-protection',$7)"#,
+            )
+            .bind(Uuid::new_v4().to_string())
+            .bind(&tenant_id)
+            .bind(&account_id)
+            .bind(fix)
+            .bind(&acct.currency)
+            .bind(format!("Negative balance protection: {:.2} absorbed after closing position {}", fix, position_id))
+            .bind(&fix_deal)
+            .execute(&mut *tx)
+            .await?;
+            tracing::warn!(account = %account_id, amount = fix, "negative balance protection: balance reset to 0");
+            new_balance = 0.0;
+        }
         let after = compute_aggregates(new_balance, acct.credit, &views);
         sqlx::query(
             r#"UPDATE accounts SET balance=$1, equity=$2, margin=$3, "freeMargin"=$4, "marginLevel"=$5, "floatingPL"=$6 WHERE id=$7"#,

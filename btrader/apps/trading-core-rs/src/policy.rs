@@ -122,10 +122,95 @@ pub fn execution_applies_kind(pricing: &GroupPricing, kind: &str) -> bool {
     execution_applies(&pricing.execution_apply_to, kind)
 }
 
+/// Accounts holding a symbol whose stop-out is checked on this tick: every one not checked within the last
+/// [`STOP_OUT_RECHECK_MS`], up to [`STOP_OUT_PER_TICK`] per tick. An account checked a moment ago does not take a slot,
+/// so the others are reached on the next ticks - none is left out however many clients hold the symbol (it used to be
+/// the first four only, every tick the same four).
+pub const STOP_OUT_RECHECK_MS: i64 = 1000;
+pub const STOP_OUT_PER_TICK: usize = 32;
+
+pub fn stop_out_due(accounts: Vec<String>, last_checked: impl Fn(&str) -> i64, now_ms: i64) -> Vec<String> {
+    accounts
+        .into_iter()
+        .filter(|a| now_ms - last_checked(a) >= STOP_OUT_RECHECK_MS)
+        .take(STOP_OUT_PER_TICK)
+        .collect()
+}
+
+/// Whether an account's positions are stopped out now: its margin level is at or below the stop-out level, or its
+/// equity is below zero whatever the margin (a fully hedged account can hold no margin and still lose: it used to be
+/// skipped, so its equity could fall below zero with every position left open).
+pub fn stop_out_needed(equity: f64, margin: f64, margin_level: f64, stop_out_level: f64) -> bool {
+    equity < 0.0 || (margin > 0.0 && margin_level <= stop_out_level)
+}
+
+/// Negative balance protection: a close that leaves the account with no open position and a balance below zero is
+/// followed by a correction of that amount, so the balance is 0 and the client never owes more than they put in (the
+/// broker absorbs the rest). While positions are still open nothing is corrected - their profit may still cover it.
+/// Returns the correction (positive), or None. Off with `ENGINE_NEGATIVE_BALANCE_PROTECTION=off`.
+pub fn negative_balance_correction(balance_after: f64, positions_left: bool, enabled: bool) -> Option<f64> {
+    if !enabled || positions_left || !(balance_after < -1e-8) {
+        return None;
+    }
+    Some(-balance_after)
+}
+
+pub fn negative_balance_protection_enabled() -> bool {
+    !matches!(
+        std::env::var("ENGINE_NEGATIVE_BALANCE_PROTECTION").map(|v| v.trim().to_ascii_lowercase()).as_deref(),
+        Ok("off") | Ok("0") | Ok("false") | Ok("no")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn stop_out_reaches_every_account_holding_the_symbol() {
+        let accounts: Vec<String> = (0..10).map(|i| format!("a{i}")).collect();
+        // The first four were checked a moment ago: the others are checked now (they used to be skipped every tick).
+        let recent = |a: &str| if ["a0", "a1", "a2", "a3"].contains(&a) { 10_000 } else { 0 };
+        let due = stop_out_due(accounts.clone(), recent, 10_500);
+        assert_eq!(due, vec!["a4", "a5", "a6", "a7", "a8", "a9"]);
+        // A second later all ten are due again.
+        assert_eq!(stop_out_due(accounts, recent, 11_000).len(), 10);
+    }
+
+    #[test]
+    fn stop_out_per_tick_is_bounded_and_rotates() {
+        let accounts: Vec<String> = (0..100).map(|i| format!("a{i}")).collect();
+        let checked = std::collections::HashMap::<String, i64>::new();
+        let first = stop_out_due(accounts.clone(), |a| *checked.get(a).unwrap_or(&0), 5_000);
+        assert_eq!(first.len(), STOP_OUT_PER_TICK);
+        let mut checked = checked;
+        for a in &first {
+            checked.insert(a.clone(), 5_000);
+        }
+        let next = stop_out_due(accounts, |a| *checked.get(a).unwrap_or(&0), 5_010);
+        assert_eq!(next.len(), STOP_OUT_PER_TICK);
+        assert!(next.iter().all(|a| !first.contains(a)), "the next tick reaches the ones not checked yet");
+    }
+
+    #[test]
+    fn stop_out_when_margin_level_falls_or_equity_goes_below_zero() {
+        assert!(stop_out_needed(40.0, 100.0, 40.0, 50.0), "margin level under the stop-out level");
+        assert!(!stop_out_needed(80.0, 100.0, 80.0, 50.0), "above it: kept open");
+        assert!(stop_out_needed(-9.28, 0.0, 0.0, 50.0), "negative equity with no margin (fully hedged)");
+        assert!(stop_out_needed(-9.28, 20.0, -46.4, 50.0), "negative equity");
+        assert!(!stop_out_needed(30.0, 0.0, 0.0, 50.0), "no margin and positive equity: nothing to stop out");
+    }
+
+    #[test]
+    fn negative_balance_is_brought_back_to_zero_when_nothing_is_left_open() {
+        assert_eq!(negative_balance_correction(-62.6034, false, true), Some(62.6034));
+        assert_eq!(negative_balance_correction(-62.6034, true, true), None, "open positions may still cover it");
+        assert_eq!(negative_balance_correction(0.0, false, true), None);
+        assert_eq!(negative_balance_correction(15.0, false, true), None);
+        assert_eq!(negative_balance_correction(-1e-10, false, true), None, "rounding dust is not corrected");
+        assert_eq!(negative_balance_correction(-50.0, false, false), None, "switched off");
+    }
 
     fn group(mode: &str, delay_ms: i32) -> GroupPricing {
         GroupPricing {
