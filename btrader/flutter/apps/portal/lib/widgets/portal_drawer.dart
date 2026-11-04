@@ -154,10 +154,8 @@ class PortalDrawer extends ConsumerWidget {
                 ListView(padding: const EdgeInsets.only(bottom: 6), children: [
               item(Icons.home, 'Dashboard', () => Navigator.of(context).pop(),
                   selected: true),
-              // iPhone / iPad: no deposit, withdrawal, wallet or transfer (see [hideFunding]); the history stays.
-              if (hideFunding)
-                item(Icons.account_balance_outlined, 'Transactions', () => go('/p/transactions'))
-              else ...[
+              // iPhone / iPad: no deposit, withdrawal, wallet, transfer or their history (see [hideFunding]).
+              if (!hideFunding) ...[
                 group(Icons.account_balance_outlined, 'My Fund', const [
                   ('Deposit', '/deposit'),
                   ('Withdraw', '/withdraw'),
@@ -182,10 +180,12 @@ class PortalDrawer extends ConsumerWidget {
                   ('IB Dashboard', '/ib/dashboard'),
                   ('IB Request', '/ib/apply'),
                 ]),
-              group(Icons.bar_chart, 'My Data', const [
-                ('Deposit Report', '/p/report-deposits'),
-                ('Withdraw Report', '/p/report-withdrawals'),
-                ('Internal Transfers', '/p/report-transfers'),
+              group(Icons.bar_chart, 'My Data', [
+                if (!hideFunding) ...const [
+                  ('Deposit Report', '/p/report-deposits'),
+                  ('Withdraw Report', '/p/report-withdrawals'),
+                  ('Internal Transfers', '/p/report-transfers'),
+                ],
                 ('Deal Report', '/p/report-deals'),
                 ('Summary Report', '/p/report-summary'),
               ]),

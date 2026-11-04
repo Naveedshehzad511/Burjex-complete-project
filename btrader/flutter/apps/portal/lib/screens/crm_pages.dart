@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../crm/crm.dart';
 import '../main.dart' show kNavy;
+import '../state/crypto_policy.dart';
 import '../widgets/portal_ui.dart';
 
 /// One menu destination backed by a CRM GET endpoint.
@@ -102,6 +103,7 @@ class CrmDataScreen extends ConsumerWidget {
     final lists = <String, List>{};
     final maps = <String, Map>{};
     for (final e in m.entries) {
+      if (isFundingField(e.key)) continue; // iPhone / iPad: no deposit / withdrawal figures
       if (_scalar(e.value)) {
         rows.add(_row(e.key, _show(e.value)));
       } else if (e.value is List && (e.value as List).isNotEmpty) {
@@ -115,7 +117,7 @@ class CrmDataScreen extends ConsumerWidget {
     for (final e in maps.entries) {
       final inner = [
         for (final x in e.value.entries)
-          if (_scalar(x.value)) _row('${x.key}', _show(x.value)),
+          if (_scalar(x.value) && !isFundingField('${x.key}')) _row('${x.key}', _show(x.value)),
       ];
       if (inner.isEmpty) continue;
       out
@@ -154,7 +156,8 @@ class CrmDataScreen extends ConsumerWidget {
             child: it is Map
                 ? Column(children: [
                     for (final e in it.entries)
-                      if (_scalar(e.value) && '${e.value}'.isNotEmpty) _row('${e.key}', _show(e.value)),
+                      if (_scalar(e.value) && '${e.value}'.isNotEmpty && !isFundingField('${e.key}'))
+                        _row('${e.key}', _show(e.value)),
                   ])
                 : Text(_show(it)),
           ),

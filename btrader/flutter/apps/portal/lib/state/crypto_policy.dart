@@ -25,5 +25,24 @@ bool get hideFunding => kNoFundingOnIos && !kIsWeb && defaultTargetPlatform == T
 /// Routes that move money in or out; on the iPhone / iPad app they lead Home ([hideFunding]).
 const kFundingRoutes = {'/deposit', '/withdraw', '/wallet', '/transfer', '/ib/withdraw'};
 
+/// Pages that only report money moved in or out - the transactions list, the deposit / withdrawal / transfer reports
+/// and the IB team's deposits / withdrawals. On the iPhone / iPad app they lead Home too, so no deposit or withdrawal
+/// wording is left in the app ([hideFunding]).
+const kFundingHistoryRoutes = {
+  '/p/transactions',
+  '/p/report-deposits',
+  '/p/report-withdrawals',
+  '/p/report-transfers',
+  '/ib/team-deposits',
+  '/ib/team-withdrawals',
+};
+
 /// Where [location] leads instead on this platform: Home for a funding route on the iPhone / iPad app, else null.
-String? fundingRedirect(String location) => hideFunding && kFundingRoutes.contains(location) ? '/home' : null;
+String? fundingRedirect(String location) =>
+    hideFunding && (kFundingRoutes.contains(location) || kFundingHistoryRoutes.contains(location)) ? '/home' : null;
+
+/// A CRM report field about deposits, withdrawals, transfers or payouts (e.g. the summary's `total_deposits`): left
+/// out of the reports on the iPhone / iPad app ([hideFunding]).
+bool isFundingField(String key) => hideFunding && _fundingWords.hasMatch(key);
+
+final _fundingWords = RegExp(r'deposit|withdraw|transfer|payout|wallet', caseSensitive: false);

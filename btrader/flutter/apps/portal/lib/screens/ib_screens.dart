@@ -170,13 +170,15 @@ class IbDashboardScreen extends ConsumerWidget {
               const SizedBox(height: 10),
               InfoCard(
                 child: Column(children: [
+                  if (!hideFunding) ...[ // iPhone / iPad: no deposit / withdrawal figures
+                    Row(children: [
+                      _statTile(context, 'Team deposits', '${_money(d['team_deposits'])} USD', valueColor: _kGreen, path: '/ib/team-deposits'),
+                      _statTile(context, 'Team withdrawals', '${_money(d['team_withdrawals'])} USD', path: '/ib/team-withdrawals'),
+                    ]),
+                    const Divider(height: 22),
+                  ],
                   Row(children: [
-                    _statTile(context, 'Team deposits', '${_money(d['team_deposits'])} USD', valueColor: _kGreen, path: '/ib/team-deposits'),
-                    _statTile(context, 'Team withdrawals', '${_money(d['team_withdrawals'])} USD', path: '/ib/team-withdrawals'),
-                  ]),
-                  const Divider(height: 22),
-                  Row(children: [
-                    _statTile(context, 'Team net', '${_money(d['team_net'])} USD'),
+                    if (!hideFunding) _statTile(context, 'Team net', '${_money(d['team_net'])} USD'),
                     _statTile(context, 'Referral registrations', '${d['referral_registrations'] ?? 0}'),
                   ]),
                 ]),
@@ -680,11 +682,13 @@ class IbClientsScreen extends ConsumerWidget {
                       _statTile(context, 'Commission', '${_money(summary['commission'])} USD'),
                       _statTile(context, 'Lots', '${_money(summary['lot'])}'),
                     ]),
-                    const Divider(height: 22),
-                    Row(children: [
-                      _statTile(context, 'Deposits', '${_money(summary['deposit'])} USD', valueColor: _kGreen),
-                      _statTile(context, 'Withdrawals', '${_money(summary['withdraw'])} USD'),
-                    ]),
+                    if (!hideFunding) ...[ // iPhone / iPad: no deposit / withdrawal figures
+                      const Divider(height: 22),
+                      Row(children: [
+                        _statTile(context, 'Deposits', '${_money(summary['deposit'])} USD', valueColor: _kGreen),
+                        _statTile(context, 'Withdrawals', '${_money(summary['withdraw'])} USD'),
+                      ]),
+                    ],
                   ]),
                 ),
                 const SizedBox(height: 16),
@@ -733,11 +737,13 @@ class _ClientCard extends StatelessWidget {
             _statTile(context, 'Commission', '${_money(c['commission'])} USD'),
             _statTile(context, 'Lots', '${_money(c['lots'])}'),
           ]),
-          const SizedBox(height: 8),
-          Row(children: [
-            _statTile(context, 'Deposit', '${_money(c['deposit'])} USD'),
-            _statTile(context, 'Withdraw', '${_money(c['withdraw'])} USD'),
-          ]),
+          if (!hideFunding) ...[ // iPhone / iPad: no deposit / withdrawal figures
+            const SizedBox(height: 8),
+            Row(children: [
+              _statTile(context, 'Deposit', '${_money(c['deposit'])} USD'),
+              _statTile(context, 'Withdraw', '${_money(c['withdraw'])} USD'),
+            ]),
+          ],
         ]),
       ),
     );

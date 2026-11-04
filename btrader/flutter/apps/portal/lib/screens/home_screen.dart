@@ -407,7 +407,7 @@ class _PerformanceCard extends StatelessWidget {
         if (metrics.pendingWithdraw > 0)
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Text('Pending withdrawal ${_money(metrics.pendingWithdraw)}', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12.5)),
+            child: Text('${_pendingLabel()} ${_money(metrics.pendingWithdraw)}', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12.5)),
           ),
         const SizedBox(height: 12),
         // Performance indicator — open PnL as a share of balance, drawn as a green
@@ -922,7 +922,7 @@ class _AccountCard extends ConsumerWidget {
           if (_pendingOf(ref, a) > 0)
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: Text('Pending withdrawal ${v(_pendingOf(ref, a))}', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12)),
+              child: Text('${_pendingLabel()} ${v(_pendingOf(ref, a))}', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12)),
             ),
           const SizedBox(height: 12),
           if (!a.isDemo && !hideFunding) ...[
@@ -941,6 +941,10 @@ class _AccountCard extends ConsumerWidget {
 }
 
 void _noop() {}
+
+/// The amount held for a withdrawal request (made on the website): "On hold" on the iPhone / iPad app, which has no
+/// withdrawals ([hideFunding]).
+String _pendingLabel() => hideFunding ? 'On hold' : 'Pending withdrawal';
 
 /// One action pill of the account card. Same height, shape and type for every action, so they always line up: a
 /// primary action is solid white, a secondary one translucent; a disabled one fades instead of disappearing.

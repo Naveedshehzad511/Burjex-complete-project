@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import '../state/crypto_policy.dart';
 import '../widgets/state_views.dart';
 import '../session/sessions.dart';
 import '../widgets/account_panel.dart';
@@ -216,8 +217,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
               child: Column(children: [
-                _sumRow(context, 'Deposit', mt5Money(deposit), tc.up),
-                _sumRow(context, 'Withdrawal', mt5Money(withdrawal), withdrawal < 0 ? tc.down : null),
+                // iPhone / iPad: no deposit / withdrawal wording ([hideFunding]); the same figures.
+                _sumRow(context, hideFunding ? 'Balance in' : 'Deposit', mt5Money(deposit), tc.up),
+                _sumRow(context, hideFunding ? 'Balance out' : 'Withdrawal', mt5Money(withdrawal), withdrawal < 0 ? tc.down : null),
                 _sumRow(context, 'Profit', mt5Money(profit), profit >= 0 ? tc.up : tc.down),
                 _sumRow(context, 'Swap', mt5Money(swap), null),
                 _sumRow(context, 'Commission', mt5Money(commission), commission < 0 ? tc.down : null),
@@ -319,7 +321,8 @@ class _HistoryRow extends StatelessWidget {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('Balance', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-            Text(d.comment ?? d.type, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, color: faint)),
+            // iPhone / iPad: the comment may name the deposit / withdrawal, so the direction is shown instead.
+            Text(hideFunding ? (amt >= 0 ? 'Balance in' : 'Balance out') : (d.comment ?? d.type), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, color: faint)),
           ]),
         ),
         const SizedBox(width: 8),
