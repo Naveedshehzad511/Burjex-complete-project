@@ -291,7 +291,13 @@ export class CrmService {
   }
 
   async reserveWithdrawal(tenantId: string, login: string, body: any) {
-    return this.fin.reserveWithdrawal({ tenantId, login, amount: Number(body?.amount), externalRef: body?.externalRef });
+    return this.fin.reserveWithdrawal({
+      tenantId,
+      login,
+      amount: Number(body?.amount),
+      externalRef: body?.externalRef,
+      comment: typeof body?.comment === 'string' ? body.comment : undefined,
+    });
   }
 
   async releaseWithdrawal(tenantId: string, login: string, body: any) {

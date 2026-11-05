@@ -551,7 +551,9 @@ def create_withdraw(request, user, data: dict) -> tuple[bool, dict]:
         live_allowed, _snapshot, live_err = trading_withdraw_service.live_allowed(source_account)
         if live_allowed is None:
             return False, {"message": live_err}
-        if amount > live_allowed - trading_withdraw_service.pending_requested(source_account):
+        # Requests made now are already out of the balance; only old held ones are still inside it.
+        live_allowed = max(Decimal("0"), live_allowed - trading_withdraw_service.held_in_balance(_snapshot))
+        if amount > live_allowed:
             return False, {
                 "message": "Insufficient available funds on the selected trading account "
                 "(open positions and pending withdrawal requests reduce what can be withdrawn).",
@@ -776,7 +778,8 @@ def _create_trading_withdraw(
             locked_src = trading_withdraw_service.resolve_source(locked_user, withdraw_from, lock=True)
             if locked_src is None:
                 return False, {"message": "Select a valid live trading account."}
-            if amount > live_allowed - trading_withdraw_service.pending_requested(locked_src):
+            # The engine checks the funds again under its account lock when it takes the amount out (`reserve`).
+            if amount > live_allowed:
                 return False, {
                     "message": "Insufficient available funds on the selected trading account "
                     "(open positions and pending withdrawal requests reduce what can be withdrawn).",
@@ -801,7 +804,9 @@ def _create_trading_withdraw(
             # Last step: hold the funds in the engine. A refusal rolls the request back with everything else.
             reserve_ref = trading_withdraw_service.reservation_ref(tx)
             src_for_release = locked_src
-            reserved, reserve_msg = trading_withdraw_service.reserve(locked_src, amount, reserve_ref)
+            reserved, reserve_msg = trading_withdraw_service.reserve(
+                locked_src, amount, reserve_ref, comment=f"CRM withdrawal #{tx.id}"
+            )
             if not reserved:
                 raise _ReservationRefused(reserve_msg)
     except _ReservationRefused as refused:

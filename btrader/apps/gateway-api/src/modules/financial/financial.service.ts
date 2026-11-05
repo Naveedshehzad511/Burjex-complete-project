@@ -7,6 +7,17 @@ type OpType = 'DEPOSIT' | 'WITHDRAWAL' | 'BONUS' | 'DIVIDEND' | 'CREDIT' | 'CORR
 
 const MAX_ADJUST_AMOUNT = 1e12;
 
+/**
+ * A withdrawal request takes its amount out of the balance when it is made (reservation DEBITED): trading losses,
+ * stop-out and new trades can no longer reach it, approval pays it out without a second debit, rejection gives it
+ * back exactly once. `WITHDRAW_DEBIT_ON_REQUEST=off` returns to the old hold (RESERVED: the amount stays in the
+ * balance and only new trades are kept off it). Requests already made keep the rule they were made under.
+ */
+export function withdrawDebitOnRequest(): boolean {
+  const v = (process.env.WITHDRAW_DEBIT_ON_REQUEST ?? '').trim().toLowerCase();
+  return !['off', '0', 'false', 'no'].includes(v);
+}
+
 let eventPub: Redis | null = null;
 
 /** Publish on the engine's event channel (the socket gateway forwards it to the account's watchers). Best effort. */
@@ -105,6 +116,19 @@ export class FinancialService {
         if (r?.status === 'RELEASED') {
           throw new BtError(BtErrorCode.VALIDATION, 'reservation was released: this withdrawal was rejected');
         }
+        if (r?.status === 'FINALIZED') {
+          // Already paid out (a repeat of this approval): nothing moves again.
+          return { dealId: '', adjId: '', balanceAfter: Number(acct.balance), duplicate: true };
+        }
+        if (r?.status === 'DEBITED') {
+          if (Math.abs(Number(r.amount) - params.amount) > 1e-8) {
+            throw new BtError(BtErrorCode.VALIDATION, `amount ${params.amount} differs from the requested ${Number(r.amount)}`);
+          }
+          // Taken out of the balance when it was requested: approval only marks it paid - the balance does not move.
+          await tx.withdrawReservation.update({ where: { id: r.id }, data: { status: 'FINALIZED', settledAt: new Date() } });
+          const taken = await tx.balanceAdjustment.findUnique({ where: { externalRef: r.externalRef } });
+          return { dealId: taken?.dealId ?? '', adjId: taken?.id ?? '', balanceAfter: Number(acct.balance), duplicate: false, paidAtRequest: true };
+        }
         if (r?.status === 'RESERVED') {
           if (Math.abs(Number(r.amount) - params.amount) > 1e-8) {
             throw new BtError(BtErrorCode.VALIDATION, `amount ${params.amount} differs from the reserved ${Number(r.amount)}`);
@@ -176,6 +200,9 @@ export class FinancialService {
       return { dealId: deal.id, adjId: adj.id, balanceAfter: newValue, duplicate: false };
     });
     if (result.duplicate) return { ok: true, dealId: result.dealId, balanceAfter: result.balanceAfter, duplicate: true };
+    if ('paidAtRequest' in result) {
+      return { ok: true, dealId: result.dealId, balanceAfter: result.balanceAfter, duplicate: false, paidAtRequest: true };
+    }
 
     // Recompute aggregates so equity/free-margin reflect the new balance. Without
     // this a deposit updates `balance` but leaves equity/freeMargin at their stale
@@ -279,7 +306,7 @@ export class FinancialService {
    * checked against what is not already reserved, and the reservation row is written in the same transaction.
    * A repeat of the same reference changes nothing, whatever happened to the reservation since.
    */
-  async reserveWithdrawal(params: { tenantId: string; login: string; amount: number; externalRef: string }) {
+  async reserveWithdrawal(params: { tenantId: string; login: string; amount: number; externalRef: string; comment?: string }) {
     if (!(params.amount > 0) || !Number.isFinite(params.amount) || params.amount > MAX_ADJUST_AMOUNT) {
       throw new BtError(BtErrorCode.VALIDATION, 'amount must be a positive finite number');
     }
@@ -308,6 +335,47 @@ export class FinancialService {
           `insufficient funds to reserve: need ${params.amount}, available ${available} (balance ${balance}, freeMargin ${freeMargin}, reserved ${reserved})`,
         );
       }
+      if (withdrawDebitOnRequest()) {
+        // Out of the balance now, recorded like any withdrawal (a WITHDRAWAL deal and adjustment under the request's
+        // reference), so equity, free margin, margin level and stop-out all work from what is really left.
+        const balanceAfter = balance - params.amount;
+        const comment = params.comment || `Withdrawal request ${params.externalRef}`;
+        const deal = await tx.deal.create({
+          data: {
+            tenantId: params.tenantId,
+            accountId: acct.id,
+            type: 'WITHDRAWAL',
+            profit: 0,
+            balanceAfter,
+            comment,
+            externalRef: params.externalRef,
+          },
+        });
+        await tx.account.update({ where: { id: acct.id }, data: { balance: balanceAfter } });
+        await tx.withdrawReservation.create({
+          data: {
+            tenantId: params.tenantId,
+            accountId: acct.id,
+            externalRef: params.externalRef,
+            amount: params.amount,
+            status: 'DEBITED',
+          },
+        });
+        await tx.balanceAdjustment.create({
+          data: {
+            tenantId: params.tenantId,
+            accountId: acct.id,
+            type: 'WITHDRAWAL',
+            amount: -params.amount,
+            currency: acct.currency,
+            comment,
+            externalRef: params.externalRef,
+            performedBy: 'crm:service',
+            dealId: deal.id,
+          },
+        });
+        return { ok: true, duplicate: false, status: 'DEBITED', reserved, balanceAfter };
+      }
       await tx.withdrawReservation.create({
         data: { tenantId: params.tenantId, accountId: acct.id, externalRef: params.externalRef, amount: params.amount },
       });
@@ -315,6 +383,7 @@ export class FinancialService {
       await tx.account.update({ where: { id: acct.id }, data: { reservedWithdraw: reservedAfter } });
       return { ok: true, duplicate: false, status: 'RESERVED', reserved: reservedAfter };
     });
+    if (!res.duplicate && res.status === 'DEBITED') await this.recomputeAggregates(account.id);
     if (!res.duplicate) void this.pushAccountUpdate(params.tenantId, account.id); // not awaited: a slow Redis never delays a request
     return res;
   }
@@ -336,6 +405,41 @@ export class FinancialService {
       if (!r || r.accountId !== acct.id) {
         return { ok: true, released: false, status: 'NONE', reserved: Number(acct.reservedWithdraw) };
       }
+      if (r.status === 'DEBITED') {
+        // Taken out of the balance when requested: given back. Exactly once - the reservation leaves DEBITED here,
+        // under the account lock, and the refund carries its own unique reference.
+        const balanceAfter = Number(acct.balance) + Number(r.amount);
+        const taken = await tx.balanceAdjustment.findUnique({ where: { externalRef: r.externalRef } });
+        const comment = `${taken?.comment || `Withdrawal request ${r.externalRef}`} - rejected, refunded`;
+        const refundRef = `${r.externalRef}:refund`;
+        const deal = await tx.deal.create({
+          data: {
+            tenantId: params.tenantId,
+            accountId: acct.id,
+            type: 'WITHDRAWAL',
+            profit: 0,
+            balanceAfter,
+            comment,
+            externalRef: refundRef,
+          },
+        });
+        await tx.account.update({ where: { id: acct.id }, data: { balance: balanceAfter } });
+        await tx.withdrawReservation.update({ where: { id: r.id }, data: { status: 'RELEASED', settledAt: new Date() } });
+        await tx.balanceAdjustment.create({
+          data: {
+            tenantId: params.tenantId,
+            accountId: acct.id,
+            type: 'WITHDRAWAL',
+            amount: Number(r.amount),
+            currency: acct.currency,
+            comment,
+            externalRef: refundRef,
+            performedBy: 'crm:service',
+            dealId: deal.id,
+          },
+        });
+        return { ok: true, released: true, status: 'RELEASED', reserved: Number(acct.reservedWithdraw), refunded: Number(r.amount) };
+      }
       if (r.status !== 'RESERVED') {
         return { ok: true, released: false, status: r.status, reserved: Number(acct.reservedWithdraw) };
       }
@@ -344,6 +448,7 @@ export class FinancialService {
       await tx.account.update({ where: { id: acct.id }, data: { reservedWithdraw: reservedAfter } });
       return { ok: true, released: true, status: 'RELEASED', reserved: reservedAfter };
     });
+    if ('refunded' in res) await this.recomputeAggregates(account.id);
     if (res.released) void this.pushAccountUpdate(params.tenantId, account.id); // not awaited: a slow Redis never delays a rejection
     return res;
   }

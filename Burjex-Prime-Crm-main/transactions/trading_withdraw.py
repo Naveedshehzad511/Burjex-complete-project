@@ -7,15 +7,19 @@ Ledger of record for a trading-account withdrawal:
 
 * request   - a PENDING `Transaction` (CLIENT_WITHDRAW) with `trading_account` set. The wallet is
               not touched: `User.pending_withdraw` is wallet-only and is deliberately left alone.
-              The amount is RESERVED in the trading engine (`reserve`, reference
-              `crm-withdraw-reserve-<tx id>`) in the same step: the engine then keeps it out of new
-              trades and triggered pending orders until the request is settled. If the reservation
-              is refused no request is created.
-* approval  - the BTrader WITHDRAWAL balance operation (`externalRef = crm-withdraw-<tx id>`) that
-              also finalizes the reservation in the same transaction, so the amount is debited once
-              and never counted twice, then the transaction is marked APPROVED. The engine ignores a
-              repeated `externalRef`, so a retry or a double click cannot debit the account twice.
-* rejection - the reservation is released (exactly once), then the request is marked REJECTED. If the
+              In the same step the trading engine takes the amount OUT OF THE BALANCE (`reserve`,
+              reference `crm-withdraw-reserve-<tx id>`, engine status DEBITED): trading losses,
+              stop-out and new trades can no longer reach it. If the engine refuses, no request is
+              created. (Requests made before this rule only HOLD the amount - engine status RESERVED -
+              and are settled the old way below.)
+* approval  - the BTrader WITHDRAWAL balance operation (`externalRef = crm-withdraw-<tx id>`) with the
+              reservation reference: for a DEBITED request it only marks the payout (no second debit);
+              for an old RESERVED one it debits now and finalizes the hold in the same transaction. Then
+              the transaction is marked APPROVED. A repeat cannot debit the account twice. An old request
+              the account can no longer cover is rejected at once (see `approve`), never left waiting to
+              be paid out of a later deposit.
+* rejection - the reservation is released exactly once: a DEBITED amount is credited back to the
+              account, an old hold is simply dropped. Then the request is marked REJECTED. If the
               release cannot be done the request stays PENDING and can be rejected again.
 """
 
@@ -25,7 +29,6 @@ import logging
 from decimal import Decimal
 from typing import Optional
 
-from django.db.models import Sum
 from django.utils import timezone
 
 from accounts.models import MT5Account
@@ -99,14 +102,13 @@ def resolve_source(user, withdraw_from: str, *, lock: bool = False) -> Optional[
     return account
 
 
-def pending_requested(account: TradingAccount) -> Decimal:
-    """Total of PENDING withdrawal requests already made against this account."""
-    total = Transaction.objects.filter(
-        trading_account=account,
-        tx_type=Transaction.TxType.CLIENT_WITHDRAW,
-        status=Transaction.Status.PENDING,
-    ).aggregate(s=Sum("amount"))["s"]
-    return Decimal(str(total or 0))
+def held_in_balance(snapshot: dict) -> Decimal:
+    """What pending requests still hold INSIDE the live balance: only requests made under the old hold (the engine's
+    `reservedWithdraw`). A request made now is already out of the balance, so it must not be subtracted again."""
+    try:
+        return max(Decimal("0"), Decimal(str((snapshot or {}).get("reservedWithdraw") or 0)))
+    except Exception:
+        return Decimal("0")
 
 
 INSUFFICIENT_MESSAGE = (
@@ -120,12 +122,12 @@ def reservation_ref(tx: Transaction) -> str:
     return f"crm-withdraw-reserve-{tx.id}"
 
 
-def reserve(account: TradingAccount, amount: Decimal, ref: str) -> tuple[bool, str]:
-    """Hold `amount` in the trading engine for a new request. (ok, message-for-the-client)."""
+def reserve(account: TradingAccount, amount: Decimal, ref: str, comment: str = "") -> tuple[bool, str]:
+    """Take `amount` out of the trading account for a new request. (ok, message-for-the-client)"""
     from btrader_integration.services import reserve_btrader_withdrawal
 
     try:
-        reserve_btrader_withdrawal(login=account_login(account), amount=float(amount), external_ref=ref)
+        reserve_btrader_withdrawal(login=account_login(account), amount=float(amount), external_ref=ref, comment=comment)
     except Exception as exc:
         if "insufficient" in str(exc).lower():
             return False, INSUFFICIENT_MESSAGE
@@ -166,11 +168,11 @@ def live_allowed(account: TradingAccount) -> tuple[Optional[Decimal], dict, str]
 
 
 def available_now(account: TradingAccount) -> tuple[Optional[Decimal], dict, str]:
-    """`live_allowed` less this account's other pending requests; never below zero."""
+    """`live_allowed` less what old pending requests still hold in the balance; never below zero."""
     allowed, snapshot, err = live_allowed(account)
     if allowed is None:
         return None, {}, err
-    return max(Decimal("0"), allowed - pending_requested(account)), snapshot, ""
+    return max(Decimal("0"), allowed - held_in_balance(snapshot)), snapshot, ""
 
 
 def source_label(account: Optional[TradingAccount]) -> str:
@@ -212,6 +214,17 @@ def approve(tx: Transaction, admin_user) -> tuple[bool, str]:
         )
     except Exception as exc:
         logger.warning("Trading-account withdrawal #%s not debited: %s", tx.id, exc)
+        if "insufficient" in str(exc).lower():
+            # Only an old request (held, not taken out when made) can get here: the account no longer covers it.
+            # It is rejected now rather than left pending to be paid out of a later deposit.
+            reason = "Automatically rejected: the trading account no longer had the funds for this withdrawal when it was approved."
+            ok_rej, _ = reject(tx, admin_user, reason)
+            if ok_rej:
+                logger.warning("Trading-account withdrawal #%s auto-rejected (insufficient funds): %s", tx.id, exc)
+                return False, (
+                    f"Withdrawal #{tx.id} was automatically REJECTED: the trading account no longer holds the funds "
+                    f"({str(exc)[:300]}). Nothing was debited; the client can submit a new request."
+                )
         return False, f"Cannot approve: the trading account could not be debited ({str(exc)[:300]}). The request stays pending."
 
     tx.status = Transaction.Status.APPROVED

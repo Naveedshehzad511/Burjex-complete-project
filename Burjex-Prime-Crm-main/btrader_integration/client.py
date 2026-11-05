@@ -141,10 +141,11 @@ class BTraderClient:
     def balance_op(self, login: str, payload: dict) -> dict:
         return self.request("POST", f"/crm/accounts/{login}/balance", payload)
 
-    def reserve_withdrawal(self, login: str, amount: float, external_ref: str) -> dict:
-        return self.request(
-            "POST", f"/crm/accounts/{login}/withdraw-reservations", {"amount": float(amount), "externalRef": external_ref}
-        )
+    def reserve_withdrawal(self, login: str, amount: float, external_ref: str, comment: str = "") -> dict:
+        body = {"amount": float(amount), "externalRef": external_ref}
+        if comment:
+            body["comment"] = comment
+        return self.request("POST", f"/crm/accounts/{login}/withdraw-reservations", body)
 
     def release_withdrawal(self, login: str, external_ref: str) -> dict:
         return self.request("POST", f"/crm/accounts/{login}/withdraw-reservations/release", {"externalRef": external_ref})

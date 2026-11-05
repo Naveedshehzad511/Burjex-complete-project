@@ -200,7 +200,8 @@ enum SwapType {
 // debited in the same transaction) or rejects it (RELEASED). One row per CRM request, keyed by its reference,
 // so every step is idempotent and can never be applied twice.
 enum WithdrawReservationStatus {
-  RESERVED
+  RESERVED   // old hold: the amount stays in the balance and only new trades are kept off it (counted in reservedWithdraw)
+  DEBITED    // the amount was taken out of the balance when requested; approval pays it, rejection gives it back
   RELEASED
   FINALIZED
 }
@@ -807,8 +808,9 @@ model Account {
   // Money (authoritative; engine mutates inside transactions)
   balance       Decimal       @default(0) @db.Decimal(28, 8)
   credit        Decimal       @default(0) @db.Decimal(28, 8)  // bonus/credit, non-withdrawable
-  // Sum of this account's RESERVED withdrawal requests (WithdrawReservation). The engine keeps that much of the
-  // free margin out of reach of new trades and triggered pending orders; stop-out is unaffected.
+  // Sum of this account's RESERVED withdrawal requests (WithdrawReservation, old hold only: a DEBITED request is
+  // already out of the balance and is not counted here). The engine keeps that much of the free margin out of reach
+  // of new trades and triggered pending orders; stop-out is unaffected.
   reservedWithdraw Decimal    @default(0) @db.Decimal(28, 8)
   // Live aggregates (recomputed by engine each tick; cached here for CRM reads)
   equity        Decimal       @default(0) @db.Decimal(28, 8)

@@ -245,11 +245,18 @@ def _store_reserved(login: str, res) -> None:
         logger.debug("BTrader reserved amount not stored for %s", login, exc_info=True)
 
 
-def reserve_btrader_withdrawal(*, login: str, amount: float, external_ref: str) -> dict:
-    """Hold `amount` of the account's free funds for a withdrawal request (the trading engine then keeps it out of
-    new trades and triggered pending orders). Idempotent on `external_ref`; raises when the funds are not there."""
-    res = _client_from_settings().reserve_withdrawal(login, amount, external_ref)
+def reserve_btrader_withdrawal(*, login: str, amount: float, external_ref: str, comment: str = "") -> dict:
+    """Take `amount` out of the account for a withdrawal request: the trading engine debits the balance now (status
+    DEBITED), so trading can no longer reach it; approval pays it, rejection gives it back. (With the engine's old hold
+    switched on the amount is only held - status RESERVED.) Idempotent on `external_ref`; raises when the funds are
+    not there."""
+    res = _client_from_settings().reserve_withdrawal(login, amount, external_ref, comment)
     _store_reserved(login, res)
+    try:
+        if str((res or {}).get("status") or "").upper() == "DEBITED" and not (res or {}).get("duplicate"):
+            sync_account(str(login))  # the balance moved: the CRM's copy follows at once
+    except Exception:
+        logger.debug("BTrader post-request sync failed for %s", login, exc_info=True)
     return res
 
 
@@ -258,6 +265,11 @@ def release_btrader_withdrawal(*, login: str, external_ref: str) -> dict:
     is in (`status`: RELEASED, FINALIZED when it was already paid out, NONE when there never was one)."""
     res = _client_from_settings().release_withdrawal(login, external_ref)
     _store_reserved(login, res)
+    try:
+        if (res or {}).get("refunded"):
+            sync_account(str(login))  # the amount came back into the balance
+    except Exception:
+        logger.debug("BTrader post-refund sync failed for %s", login, exc_info=True)
     return res
 
 
