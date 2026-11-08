@@ -2,9 +2,14 @@
 import 'dart:async';
 
 import 'package:btrader_core/btrader_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../state/chart_colors.dart';
+import '../state/chart_settings.dart';
+import '../state/trade_history.dart';
 import '../widgets/state_views.dart';
 import '../services/sound_service.dart';
 import '../session/sessions.dart';
@@ -51,6 +56,14 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
   String get _symbol => ref.read(chartSymbolProvider);
   set _symbol(String v) => ref.read(chartSymbolProvider.notifier).set(v);
   ChartType _type = ChartType.candles;
+
+  // Apps only: Settings → Line type picks the chart type (candles / line / MT5 bars).
+  static ChartType _typeFor(ChartLineType t) => switch (t) {
+        ChartLineType.candles => ChartType.candles,
+        ChartLineType.line => ChartType.line,
+        ChartLineType.bar => ChartType.bar,
+      };
+
   DrawingType? _activeTool;
   List<DrawingAnchor> _pendingAnchors = [];
 
@@ -98,6 +111,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
   @override
   void initState() {
     super.initState();
+    if (!kIsWeb) _type = _typeFor(ref.read(chartSettingsProvider).lineType);
     final s = widget.symbol;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -806,7 +820,10 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
   String? _lvCur;
   Color? _lvNeutral;
 
-  (String, Color) _entryLabel(Position p, Map<String, double> livePl, Map<String, Tick> quotes, List<TradeSymbol> symbols, TradeColors tc) {
+  (String, Color) _entryLabel(Position p, Map<String, double> livePl, Map<String, Tick> quotes, List<TradeSymbol> symbols, TradeColors tc,
+      {bool showPl = true}) {
+    // Chart Settings > Profit/loss off: the label is just "BUY 0.10" (the position itself is untouched).
+    if (!showPl) return ('${p.side} ${p.volume.toStringAsFixed(2)}', Theme.of(context).colorScheme.onSurface);
     final pl = resolvePositionPl(p,
         livePl: livePl,
         quotes: quotes,
@@ -838,28 +855,45 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     _lvNeutral = Theme.of(context).colorScheme.onSurface;
     final out = <ChartLevel>[];
     final edit = _edit;
+    // Chart Settings (apps): what the chart shows. A line being edited is always shown, so SL / TP editing and the
+    // order card keep working whatever the switches say; the trades themselves are never affected.
+    final cfg = kIsWeb ? null : ref.read(chartSettingsProvider);
+    final showPositions = cfg?.tradePositions ?? true;
+    final showOrders = cfg?.tradeOrders ?? true;
+    final showSlTp = cfg?.slTpLevels ?? true;
+    final showPl = cfg?.profitLoss ?? true;
+    // Chart Settings > Colors: a colour the user chose for a line / its text; unset keeps the theme's (today's) colour.
+    final pal = kIsWeb ? ChartPalette.empty : ref.read(chartColorsProvider).palette;
+    Color lineOf(bool buy, ChartColorKey buyK, ChartColorKey sellK) => pal[buy ? buyK : sellK] ?? (buy ? tc.buy : tc.sell);
+    Color? textOf(bool buy) => pal[buy ? ChartColorKey.buyText : ChartColorKey.sellText];
+    final slColor = pal[ChartColorKey.slLine] ?? tc.loss, tpColor = pal[ChartColorKey.tpLine] ?? tc.profit;
+    final slText = pal[ChartColorKey.slText], tpText = pal[ChartColorKey.tpText];
     for (final p in positions.where((p) => p.symbol == sym)) {
       final editing = edit != null && edit.isPosition && edit.id == p.id;
-      // MT5 inline label: "BUY 0.68, +1.50 USD" — P/L from the same live source
-      // as the Trade tab (engine push first, else the live quote).
-      final (entryLabel, plColor) = _entryLabel(p, livePl, quotes, symbols, tc);
-      out.add(ChartLevel(p.openPrice, p.side == 'BUY' ? tc.buy : tc.sell, entryLabel,
-          id: p.id, kind: LevelKind.entry, tappable: !readonly, boxed: false, plColor: plColor));
-      final sl = editing ? edit.sl : p.slPrice;
-      final tp = editing ? edit.tp : p.tpPrice;
+      if (showPositions || editing) {
+        // MT5 inline label: "BUY 0.68, +1.50 USD" — P/L from the same live source
+        // as the Trade tab (engine push first, else the live quote).
+        final (entryLabel, plColor) = _entryLabel(p, livePl, quotes, symbols, tc, showPl: showPl);
+        out.add(ChartLevel(p.openPrice, lineOf(p.side == 'BUY', ChartColorKey.buyLine, ChartColorKey.sellLine), entryLabel,
+            id: p.id, kind: LevelKind.entry, tappable: !readonly, boxed: false, plColor: showPl ? plColor : null, textColor: textOf(p.side == 'BUY')));
+      }
+      final sl = (showSlTp || editing) ? (editing ? edit.sl : p.slPrice) : null;
+      final tp = (showSlTp || editing) ? (editing ? edit.tp : p.tpPrice) : null;
       if (sl != null)
-        out.add(ChartLevel(sl, tc.loss,
+        out.add(ChartLevel(sl, slColor,
             _protLabel('SL', p.side, p.volume, p.openPrice, sl, sym, symbols),
             id: p.id,
             kind: LevelKind.sl,
+            textColor: slText,
             draggable: !readonly && editing,
             tappable: !readonly,
             labelFor: (px) => _protLabel('SL', p.side, p.volume, p.openPrice, px, sym, symbols)));
       if (tp != null)
-        out.add(ChartLevel(tp, tc.profit,
+        out.add(ChartLevel(tp, tpColor,
             _protLabel('TP', p.side, p.volume, p.openPrice, tp, sym, symbols),
             id: p.id,
             kind: LevelKind.tp,
+            textColor: tpText,
             draggable: !readonly && editing,
             tappable: !readonly,
             labelFor: (px) => _protLabel('TP', p.side, p.volume, p.openPrice, px, sym, symbols)));
@@ -869,74 +903,84 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       // get the drag handle (draggable) and the edit panel.
       final editing = edit != null && edit.isOrder && edit.id == o.id;
       final entry = editing ? (edit.entry ?? o.entry) : o.entry;
-      final sl = editing ? edit.sl : o.sl;
-      final tp = editing ? edit.tp : o.tp;
+      final sl = (showSlTp || editing) ? (editing ? edit.sl : o.sl) : null;
+      final tp = (showSlTp || editing) ? (editing ? edit.tp : o.tp) : null;
       final label = (editing
               ? '${edit.typeLabel} ${(edit.volume ?? o.volume).toStringAsFixed(2)}'
               : o.label)
           .toUpperCase();
-      out.add(ChartLevel(entry, o.side == 'BUY' ? tc.buy : tc.sell,
-          o.isStopLimit ? '$label · Stop' : label,
-          id: o.id,
-          kind: LevelKind.pending,
-          draggable: !readonly && editing,
-          tappable: !readonly));
-      final limit = editing ? edit.limit : o.limit;
-      if (o.isStopLimit && limit != null) {
-        out.add(ChartLevel(limit, o.side == 'BUY' ? tc.buy : tc.sell, 'Limit',
+      // Chart Settings > Trade orders off hides the order's own lines (not its SL / TP, which follow SL/TP levels).
+      if (showOrders || editing) {
+        out.add(ChartLevel(entry, lineOf(o.side == 'BUY', ChartColorKey.buyLine, ChartColorKey.sellLine),
+            o.isStopLimit ? '$label · Stop' : label,
             id: o.id,
-            kind: LevelKind.limit,
+            kind: LevelKind.pending,
+            textColor: textOf(o.side == 'BUY'),
             draggable: !readonly && editing,
             tappable: !readonly));
+        final limit = editing ? edit.limit : o.limit;
+        if (o.isStopLimit && limit != null) {
+          out.add(ChartLevel(limit, pal[ChartColorKey.stopLimitLine] ?? (o.side == 'BUY' ? tc.buy : tc.sell), 'Limit',
+              id: o.id,
+              kind: LevelKind.limit,
+              textColor: pal[ChartColorKey.stopLimitText],
+              draggable: !readonly && editing,
+              tappable: !readonly));
+        }
       }
       // SL / TP are judged from where the order would fill: the limit for a Stop
       // Limit, otherwise its entry price.
       final fillRef = (o.isStopLimit ? (editing ? edit.limit : o.limit) : null) ?? entry;
       final oVol = editing ? (edit.volume ?? o.volume) : o.volume;
       if (sl != null)
-        out.add(ChartLevel(sl, tc.loss,
+        out.add(ChartLevel(sl, slColor,
             _protLabel('SL', o.side, oVol, fillRef, sl, sym, symbols),
             id: o.id,
             kind: LevelKind.sl,
+            textColor: slText,
             draggable: !readonly && editing,
             tappable: !readonly,
             labelFor: (px) => _protLabel('SL', o.side, oVol, fillRef, px, sym, symbols)));
       if (tp != null)
-        out.add(ChartLevel(tp, tc.profit,
+        out.add(ChartLevel(tp, tpColor,
             _protLabel('TP', o.side, oVol, fillRef, tp, sym, symbols),
             id: o.id,
             kind: LevelKind.tp,
+            textColor: tpText,
             draggable: !readonly && editing,
             tappable: !readonly,
             labelFor: (px) => _protLabel('TP', o.side, oVol, fillRef, px, sym, symbols)));
     }
     if (includeDraft && edit != null && edit.isDraft) {
       if (!edit.isMarket) {
-        out.add(ChartLevel(edit.entry ?? 0, edit.isBuy ? tc.buy : tc.sell,
+        out.add(ChartLevel(edit.entry ?? 0, lineOf(edit.isBuy, ChartColorKey.buyLine, ChartColorKey.sellLine),
             '${edit.typeLabel} ${(edit.volume ?? _volume).toStringAsFixed(2)}${edit.isStopLimit ? ' · Stop' : ''}'.toUpperCase(),
             id: 'draft',
             kind: LevelKind.draft,
+            textColor: textOf(edit.isBuy),
             draggable: true,
             dashed: false));
       }
       if (edit.isStopLimit && edit.limit != null) {
-        out.add(ChartLevel(edit.limit!, edit.isBuy ? tc.buy : tc.sell, 'Limit',
-            id: 'draft', kind: LevelKind.limit, draggable: true));
+        out.add(ChartLevel(edit.limit!, pal[ChartColorKey.stopLimitLine] ?? (edit.isBuy ? tc.buy : tc.sell), 'Limit',
+            id: 'draft', kind: LevelKind.limit, draggable: true, textColor: pal[ChartColorKey.stopLimitText]));
       }
       final dRef = edit.protectiveRef;
       final dVol = edit.volume ?? _volume;
       if (edit.sl != null)
-        out.add(ChartLevel(edit.sl!, tc.loss,
+        out.add(ChartLevel(edit.sl!, slColor,
             dRef == null ? 'SL' : _protLabel('SL', edit.side, dVol, dRef, edit.sl!, sym, symbols),
             id: 'draft',
             kind: LevelKind.sl,
+            textColor: slText,
             draggable: true,
             labelFor: dRef == null ? null : (px) => _protLabel('SL', edit.side, dVol, dRef, px, sym, symbols)));
       if (edit.tp != null)
-        out.add(ChartLevel(edit.tp!, tc.profit,
+        out.add(ChartLevel(edit.tp!, tpColor,
             dRef == null ? 'TP' : _protLabel('TP', edit.side, dVol, dRef, edit.tp!, sym, symbols),
             id: 'draft',
             kind: LevelKind.tp,
+            textColor: tpText,
             draggable: true,
             labelFor: dRef == null ? null : (px) => _protLabel('TP', edit.side, dVol, dRef, px, sym, symbols)));
     }
@@ -1235,6 +1279,32 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     // or changed from the order panel) — never while the user is typing in it.
     ref.listen<double>(
         chartTradeProvider.select((s) => s.volume), (_, v) => _syncVolField(v));
+    // Apps only (the website is unchanged): the two Chart Settings options that act on this screen.
+    final periodSeparators = !kIsWeb && ref.watch(chartSettingsProvider.select((s) => s.periodSeparators));
+    // Chart Settings > Trading panel at the bottom (apps): the SELL / BUY panel goes under the chart, directly above the
+    // bottom navigation, instead of under the toolbar. The website keeps its own layout. Whether the panel shows at
+    // all is the toolbar's Buy / Sell toggle, as ever.
+    final bottomPanel = !kIsWeb && ref.watch(chartSettingsProvider.select((s) => s.tradingPanelAtBottom));
+    // Free chart movement and the chart colours (apps; the website keeps its own look and always drags both ways).
+    final freeMove = kIsWeb || ref.watch(chartSettingsProvider.select((s) => s.freeChartMovement));
+    final palette = kIsWeb ? ChartPalette.empty : ref.watch(chartColorsProvider.select((s) => s.palette));
+    // The chart's show/hide switches: only their change needs a rebuild here (the values are read in _levels()).
+    if (!kIsWeb) {
+      ref.watch(chartSettingsProvider.select((s) => (s.tradePositions, s.tradeOrders, s.slTpLevels, s.profitLoss, s.tradeHistory)));
+      // Trade history: fetch again when a trade is opened / closed, and when the option is switched on.
+      ref.listen<int>(tradeEventEpochProvider, (_, __) {
+        if (ref.read(chartSettingsProvider).tradeHistory) ref.read(tradeHistoryProvider.notifier).refresh();
+      });
+      ref.listen<bool>(chartSettingsProvider.select((s) => s.tradeHistory), (_, on) {
+        if (on) ref.read(tradeHistoryProvider.notifier).refresh();
+      });
+    }
+    if (!kIsWeb) {
+      ref.listen<ChartLineType>(chartSettingsProvider.select((s) => s.lineType), (_, t) {
+        final next = _typeFor(t);
+        if (next != _type) setState(() => _type = next);
+      });
+    }
     final cs = Theme.of(context).colorScheme;
     final tradable = _tradableNow(spec.isEmpty ? null : spec.first);
     // SELL / BUY also grey out once THIS symbol's feed has been silent for kFeedGrace.
@@ -1298,7 +1368,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                       // Chart type (Candlesticks / Line chart). The drawing tools live on the round menu
                       // (tap the chart), so they are no longer offered from here.
                       tool(Icons.timeline, 'Chart type', () => _showChartSettings(context),
-                          active: _type == ChartType.line),
+                          active: _type != ChartType.candles),
                       TextButton(
                         key: const ValueKey('tf-current'),
                         onPressed: () => setState(() => _tfStripOpen = true),
@@ -1468,6 +1538,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                 _computeIndicatorsMemoized(candles, indicatorCfgs);
             final overlays = indicators.overlays;
             final oscillators = indicators.oscillators;
+            final trades = _tradesFor(ref, candles);
             return Padding(
               // Edge to edge like MT5: the frame lines run right to the screen edges.
               padding: EdgeInsets.zero,
@@ -1484,6 +1555,12 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                     livePrice: livePrice,
                     askPrice: quote?.ask,
                     type: _type,
+                    periodSeparators: periodSeparators,
+                    closedFrame: bottomPanel,
+                    palette: palette,
+                    freeMovement: freeMove,
+                    trades: trades,
+                    onTradeTap: trades.isEmpty ? null : _showTradeDetails,
                     levels: levels,
                     overlays: overlays,
                     oscillators: oscillators,
@@ -1634,6 +1711,10 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                   livePrice: livePrice2,
                   askPrice: quote2?.ask,
                   type: _type,
+                    periodSeparators: periodSeparators,
+                    closedFrame: bottomPanel,
+                    palette: palette,
+                    freeMovement: freeMove,
                   levels: levels2,
                   overlays: overlays2,
                   oscillators: oscillators2,
@@ -1730,7 +1811,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           // Space reserved for the floating toolbar (40 * uiK) + its 1 px rule.
           SizedBox(height: 40 * uiK + 1),
           const ActiveAccountBar(compact: true, onlyWhenSpecial: true),
-          if (trade.panelVisible) tradePanel,
+          if (trade.panelVisible && !bottomPanel) tradePanel,
           Expanded(
             child: _extraWindows.isEmpty
                 ? primaryChartPane()
@@ -1793,6 +1874,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                 onCancelOrder: _cancelPendingOrder,
               )),
             ),
+          // "Trading panel at the bottom": the same panel, directly above the bottom navigation.
+          if (trade.panelVisible && bottomPanel) tradePanel,
           ]),
           Positioned(
             top: 0,
@@ -1806,7 +1889,12 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                 header,
                 // MT5 rule under the toolbar. The rule under the SELL / BUY panel is the
                 // chart's own top frame line (see the painter), so none is added here.
-                Divider(height: 1, thickness: 1, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.25)),
+                // Panel at the bottom: the chart's own top frame line is the only rule (it stops at the price axis,
+                // MT5's closed box), so the toolbar's full-width one is dropped; same 1 px of height.
+                if (bottomPanel)
+                  const SizedBox(height: 1)
+                else
+                  Divider(height: 1, thickness: 1, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.25)),
               ]),
             ),
           ),
@@ -1815,7 +1903,78 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     );
   }
 
+  // ── Trade history on the chart (Chart Settings > Trade history, apps only) ──
+
+  List<ChartTrade>? _tradesSrc;
+  String? _tradesSym;
+  List<ChartTrade> _tradesOut = const [];
+
+  /// The closed trades of the selected symbol and account to mark on [candles]. Asks for the history from the oldest
+  /// loaded candle (in whole weeks, so swiping back refetches only now and then); the filtered list is reused while
+  /// nothing changed, so the chart's repaint check stays an identity comparison.
+  List<ChartTrade> _tradesFor(WidgetRef r, List<Candle> candles) {
+    if (kIsWeb || !r.read(chartSettingsProvider).tradeHistory || candles.isEmpty) return const [];
+    final acct = r.read(activeAccountIdProvider);
+    final h = r.watch(tradeHistoryProvider);
+    final ctl = r.read(tradeHistoryProvider.notifier);
+    final first = candles.first.t;
+    final from = first - first % 604800;
+    if (ctl.needs(acct, from)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ctl.ensure(acct, from);
+      });
+    }
+    if (h.account != acct) return const [];
+    if (identical(h.trades, _tradesSrc) && _tradesSym == _symbol) return _tradesOut;
+    _tradesSrc = h.trades;
+    _tradesSym = _symbol;
+    return _tradesOut = [for (final t in h.trades) if (t.symbol == _symbol) t];
+  }
+
+  void _showTradeDetails(ChartTrade t, bool exit) {
+    final tc = Theme.of(context).extension<TradeColors>()!;
+    final cur = _accountCurrency() ?? 'USD';
+    String when(int sec) => dateTime(DateTime.fromMillisecondsSinceEpoch(sec * 1000, isUtc: true));
+    final plColor = t.profit > 0 ? tc.profit : (t.profit < 0 ? tc.loss : null);
+    Widget row(String k, String v, {Color? color}) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(children: [
+            SizedBox(width: 110, child: Text(k, style: TextStyle(color: Theme.of(context).hintColor))),
+            Expanded(child: Text(v, style: TextStyle(fontWeight: FontWeight.w600, color: color))),
+          ]),
+        );
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          key: const ValueKey('trade-details'),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${exit ? 'Exit' : 'Entry'} · ${t.isBuy ? 'Buy' : 'Sell'} ${t.volume.toStringAsFixed(2)} ${t.symbol}',
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            row('Direction', t.isBuy ? 'Buy' : 'Sell', color: t.isBuy ? tc.buy : tc.sell),
+            row('Symbol', t.symbol),
+            row('Volume', t.volume.toStringAsFixed(2)),
+            row('Entry price', price(t.openPrice, t.digits)),
+            row('Entry time', when(t.openTime)),
+            row('Exit price', price(t.closePrice, t.digits)),
+            row('Exit time', when(t.closeTime)),
+            row('Profit / loss', '${t.profit >= 0 ? '+' : '-'}${t.profit.abs().toStringAsFixed(2)} $cur', color: plColor),
+            if (t.ticket != null) row('Ticket', '#${t.ticket!.length > 8 ? t.ticket!.substring(0, 8) : t.ticket}'),
+          ]),
+        ),
+      ),
+    );
+  }
+
   void _showChartSettings(BuildContext context) {
+    // Android / iOS apps: the dedicated MT5-style Settings screen. The website keeps the sheet below.
+    if (!kIsWeb) {
+      GoRouter.of(context).push('/chart-settings');
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -1825,7 +1984,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
               padding: EdgeInsets.only(bottom: 4),
               child: Text('Chart',
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-          for (final t in ChartType.values)
+          // Website sheet: candles + line only (the Bar chart option lives on the Settings screen of the apps).
+          for (final t in const [ChartType.candles, ChartType.line])
             ListTile(
               leading: Icon(t == ChartType.candles
                   ? Icons.candlestick_chart
@@ -1989,10 +2149,17 @@ class _SymbolCaption extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Consumer(builder: (context, ref, _) {
+        // Chart Settings > Colors > Foreground (apps): the caption sits on the chart, so it must stay readable on
+        // whatever background the user picked.
+        final fg = kIsWeb ? null : ref.watch(chartColorsProvider.select((s) => s.palette[ChartColorKey.foreground]));
+        return _build(context, fg);
+      });
+
+  Widget _build(BuildContext context, Color? fg) {
     final cs = Theme.of(context).colorScheme;
     final sub =
-        TextStyle(fontSize: 11.5, height: 1.2, color: cs.onSurface.withValues(alpha: 0.85));
+        TextStyle(fontSize: 11.5, height: 1.2, color: (fg ?? cs.onSurface).withValues(alpha: 0.85));
     return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -2014,7 +2181,7 @@ class _SymbolCaption extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: cs.onSurface)),
+                        color: fg ?? cs.onSurface)),
               ]),
             ),
           ),

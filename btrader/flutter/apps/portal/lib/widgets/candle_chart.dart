@@ -6,9 +6,35 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import '../state/chart_colors.dart';
+import '../state/trade_history.dart';
 import 'radial_chart_menu.dart';
 
-enum ChartType { candles, line }
+/// [bar] is the MT5 OHLC bar chart (only offered by the Chart Settings screen on the apps).
+enum ChartType { candles, line, bar }
+
+/// Which higher period a bar belongs to, for MT5's "Show period separators" (a separator is drawn where this
+/// changes between two neighbouring bars). MT5's fixed mapping: M1–H1 → days, H4 → weeks (Monday start),
+/// D1 → months, W1 and MN → years. Uses the trade server's clock, like the time-axis labels, so a line sits on the date change they show.
+@visibleForTesting
+int periodSeparatorKey(DateTime d, Timeframe tf) {
+  switch (tf) {
+    case Timeframe.m1:
+    case Timeframe.m5:
+    case Timeframe.m15:
+    case Timeframe.m30:
+    case Timeframe.h1:
+      return d.year * 10000 + d.month * 100 + d.day;
+    case Timeframe.h4:
+      final monday = DateTime(d.year, d.month, d.day - (d.weekday - DateTime.monday));
+      return monday.year * 10000 + monday.month * 100 + monday.day;
+    case Timeframe.d1:
+      return d.year * 100 + d.month;
+    case Timeframe.w1:
+    case Timeframe.mn1:
+      return d.year;
+  }
+}
 
 /// What a chart level represents. Drives colour, dragging and what a tap does.
 /// [LevelKind.limit] is a Stop Limit order's limit (fill) price; its stop trigger
@@ -45,6 +71,10 @@ class ChartLevel {
   /// Colour for the P&L part of the label (the text after the last ", "), e.g. blue profit /
   /// red loss on an open position's `BUY 0.10, -2.90 USD`. Null = the whole label is [color].
   final Color? plColor;
+
+  /// Colour of the label text when it differs from the line's [color] (Chart Settings > Colors: "... line text").
+  /// Null = the text takes the line's colour, as always.
+  final Color? textColor;
   const ChartLevel(
     this.price,
     this.color,
@@ -57,6 +87,7 @@ class ChartLevel {
     this.boxed = false,
     this.labelFor,
     this.plColor,
+    this.textColor,
   });
 }
 
@@ -111,6 +142,28 @@ double xForTimeInWindow(List<Candle> w, int t, double slot) {
     }
   }
   return slot * (n - 1) + slot / 2;
+}
+
+/// The x of a trade marker at time [t]: the centre of the bar the time falls in (so an entry sits on its candle, not
+/// between two), and, outside the loaded bars, the same continuation [xForTimeInWindow] gives. Shared by the painter
+/// and the tap hit-test, like every other time-to-pixel mapping here.
+double xForTradeTime(List<Candle> w, int t, double slot) {
+  final n = w.length;
+  if (n == 0) return 0;
+  final span = n > 1 ? w[n - 1].t - w[n - 2].t : 60;
+  if (t >= w.first.t && t < w.last.t + span) {
+    var lo = 0, hi = n - 1;
+    while (lo < hi) {
+      final mid = (lo + hi + 1) >> 1;
+      if (w[mid].t <= t) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return slot * lo + slot / 2;
+  }
+  return xForTimeInWindow(w, t, slot);
 }
 
 /// The chart time under pixel [dx] for placing a drawing point: snapped to the bar whose slot it falls in, and
@@ -191,6 +244,12 @@ class CandleChart extends StatefulWidget {
     this.livePrice,
     this.askPrice,
     this.type = ChartType.candles,
+    this.periodSeparators = false,
+    this.closedFrame = false,
+    this.trades = const [],
+    this.onTradeTap,
+    this.palette = ChartPalette.empty,
+    this.freeMovement = true,
     this.levels = const [],
     this.overlays = const [],
     this.oscillators = const [],
@@ -233,6 +292,25 @@ class CandleChart extends StatefulWidget {
   /// until a live quote exists for the symbol.
   final double? askPrice;
   final ChartType type;
+
+  /// MT5 "Show period separators": dashed vertical lines at the higher-timeframe borders (see [periodSeparatorKey]).
+  final bool periodSeparators;
+
+  /// MT5 box: the top frame line stops at the price axis (┐), like the bottom one (┘), instead of running on
+  /// across the price labels. Used when the toolbar is directly above the chart (trading panel at the bottom).
+  final bool closedFrame;
+
+  /// Closed trades to mark (Chart Settings > Trade history): an arrow at each entry and exit, joined by a dashed line.
+  /// Tapping one calls [onTradeTap] with the trade and whether its exit marker was hit.
+  final List<ChartTrade> trades;
+  final void Function(ChartTrade trade, bool exit)? onTradeTap;
+
+  /// Chart Settings > Colors: the colours the user chose; an element it does not name keeps the theme's colour.
+  final ChartPalette palette;
+
+  /// Chart Settings > Free chart movement. Off = Auto-scale: the chart moves horizontally only and the price
+  /// scale always fits the visible bars (no vertical drag).
+  final bool freeMovement;
   final List<ChartLevel> levels;
 
   /// Indicator overlays (SMA/EMA/WMA/Bollinger), full-length aligned to
@@ -599,6 +677,8 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
   @override
   void didUpdateWidget(covariant CandleChart old) {
     super.didUpdateWidget(old);
+    // Auto-scale: any vertical shift made while Free chart movement was on is dropped, the scale fits the bars again.
+    if (!widget.freeMovement && _vShift != 0) _vShift = 0;
     if (old.tf != widget.tf || old.viewKey != widget.viewKey) {
       _rightOffset = 0;
       _vShift = 0;
@@ -879,10 +959,45 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
         return best;
       }
 
+      // A tap on a trade-history marker (Chart Settings > Trade history): the entry or the exit arrow of a closed trade.
+      // Uses the same time / price mapping as the painter, so what is tapped is what is drawn.
+      (ChartTrade, bool)? tradeAt(Offset p) {
+        if (widget.trades.isEmpty || widget.onTradeTap == null || !inPricePane(p)) return null;
+        ChartTrade? best;
+        var bestExit = false;
+        var bestD = 24.0;
+        final seenEntry = <String>{};
+        for (final t in widget.trades) {
+          final ex = xForTradeTime(window, t.openTime, slotB) + xShift;
+          final xx = xForTradeTime(window, t.closeTime, slotB) + xShift;
+          if (seenEntry.add(t.positionId)) {
+            // The arrow body sits ~8 px away from the price it points at (below a BUY arrow, above a SELL one).
+            final dEntry = (p - Offset(ex, pyForPrice(t.openPrice) + (t.isBuy ? 8 : -8))).distance;
+            if (dEntry < bestD) {
+              bestD = dEntry;
+              best = t;
+              bestExit = false;
+            }
+          }
+          final dExit = (p - Offset(xx, pyForPrice(t.closePrice) + (t.isBuy ? -8 : 8))).distance;
+          if (dExit < bestD) {
+            bestD = dExit;
+            best = t;
+            bestExit = true;
+          }
+        }
+        return best == null ? null : (best, bestExit);
+      }
+
       void handleSelectOrTrade(Offset pos) {
         final lv = levelAt(pos, drag: false);
         if (lv != null && lv.tappable) {
           widget.onLevelTap?.call(lv);
+          return;
+        }
+        final th = tradeAt(pos);
+        if (th != null) {
+          widget.onTradeTap!(th.$1, th.$2);
           return;
         }
         if (pos.dx >= _chartW) {
@@ -1153,7 +1268,7 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
               _rightOffset = _clampOffset(_rightOffset + dx / _slotPx);
               // Free vertical movement too (single-finger drag), bounded so the
               // candles can never be pushed completely out of view.
-              if (d.pointerCount == 1 && metrics.priceH > 0) {
+              if (widget.freeMovement && d.pointerCount == 1 && metrics.priceH > 0) {
                 _vShift = (_vShift + dy / metrics.priceH).clamp(-1.5, 1.5);
               }
               if (_cross != null) _cross = _cross!.translate(d.focalPointDelta.dx, d.focalPointDelta.dy);
@@ -1247,6 +1362,10 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
               livePrice: widget.livePrice,
               askPrice: widget.askPrice,
               type: widget.type,
+              periodSeparators: widget.periodSeparators,
+              closedFrame: widget.closedFrame,
+              trades: widget.trades,
+              prevT: start > 0 ? widget.candles[start - 1].t : null,
               levels: widget.levels,
               overlays: widget.overlays,
               oscillators: oscs,
@@ -1263,15 +1382,20 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
               priceZoom: _priceZoom,
               dragLevelKey: _dragLevelKey,
               dragLevelPrice: _dragLevelPrice,
-              up: tc.up,
-              down: tc.down,
-              bid: tc.sell,
-              ask: tc.buy,
-              grid: Theme.of(context).dividerColor,
-              text: Theme.of(context).hintColor,
-              line: Theme.of(context).colorScheme.primary,
-              surface: Theme.of(context).colorScheme.surface,
-              onSurface: Theme.of(context).colorScheme.onSurface,
+              up: widget.palette[ChartColorKey.bullCandle] ?? tc.up,
+              down: widget.palette[ChartColorKey.bearCandle] ?? tc.down,
+              barUp: widget.palette[ChartColorKey.barUp] ?? tc.up,
+              barDown: widget.palette[ChartColorKey.barDown] ?? tc.down,
+              bid: widget.palette[ChartColorKey.bidLine] ?? tc.sell,
+              ask: widget.palette[ChartColorKey.askLine] ?? tc.buy,
+              grid: widget.palette[ChartColorKey.grid] ?? Theme.of(context).dividerColor,
+              drawGrid: widget.palette[ChartColorKey.grid] != null,
+              text: widget.palette[ChartColorKey.foreground] ?? Theme.of(context).hintColor,
+              line: widget.palette[ChartColorKey.chartLine] ?? Theme.of(context).colorScheme.primary,
+              surface: widget.palette[ChartColorKey.background] ?? Theme.of(context).colorScheme.surface,
+              background: widget.palette[ChartColorKey.background],
+              volumeColor: widget.palette[ChartColorKey.volumes],
+              onSurface: widget.palette[ChartColorKey.foreground] ?? Theme.of(context).colorScheme.onSurface,
               axisW: axisW,
             ),
           )),
@@ -1429,7 +1553,7 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
     if (identical(lv, _keyedLevels)) return _keyedHash;
     var h = lv.length;
     for (final l in lv) {
-      h = Object.hash(h, l.price, l.color.toARGB32(), l.label, l.kind, l.boxed, l.draggable, l.dashed, l.plColor?.toARGB32(), l.id);
+      h = Object.hash(h, l.price, l.color.toARGB32(), l.label, l.kind, l.boxed, l.draggable, l.dashed, l.plColor?.toARGB32(), l.textColor?.toARGB32(), l.id);
     }
     _keyedLevels = lv;
     return _keyedHash = h;
@@ -1587,10 +1711,10 @@ class _LevelsPainter extends CustomPainter {
       } else if (labels.tryTake(yy - labelH - 1, yy)) {
         // Inline MT5 label: coloured text sitting just above its own line, no box. A soft halo in the
         // chart background keeps the text readable over candles.
-        final labelStyle = TextStyle(fontFamily: kAppFontFamily, color: lv.color, fontSize: 11, fontWeight: FontWeight.w600, shadows: [Shadow(color: surface, blurRadius: 3), Shadow(color: surface, blurRadius: 3)]);
+        final labelStyle = TextStyle(fontFamily: kAppFontFamily, color: lv.textColor ?? lv.color, fontSize: 11, fontWeight: FontWeight.w600, shadows: [Shadow(color: surface, blurRadius: 3), Shadow(color: surface, blurRadius: 3)]);
         final split = lv.plColor == null ? -1 : labelText.lastIndexOf(', ');
         final it = _TextCache.rich(
-          'i|${lv.color.toARGB32()}|${surface.toARGB32()}|${lv.plColor?.toARGB32()}|$split|$labelText',
+          'i|${lv.color.toARGB32()}|${lv.textColor?.toARGB32()}|${surface.toARGB32()}|${lv.plColor?.toARGB32()}|$split|$labelText',
           () => split < 0
               ? TextSpan(text: labelText, style: labelStyle)
               : TextSpan(style: labelStyle, children: [
@@ -1663,6 +1787,10 @@ class _CandlePainter extends CustomPainter {
     required this.livePrice,
     required this.askPrice,
     required this.type,
+    this.periodSeparators = false,
+    this.closedFrame = false,
+    this.trades = const [],
+    this.prevT,
     required this.levels,
     required this.overlays,
     required this.oscillators,
@@ -1681,6 +1809,11 @@ class _CandlePainter extends CustomPainter {
     required this.dragLevelPrice,
     required this.up,
     required this.down,
+    required this.barUp,
+    required this.barDown,
+    this.background,
+    this.drawGrid = false,
+    this.volumeColor,
     required this.bid,
     required this.ask,
     required this.grid,
@@ -1703,6 +1836,16 @@ class _CandlePainter extends CustomPainter {
   final double? livePrice;
   final double? askPrice;
   final ChartType type;
+
+  /// MT5 "Show period separators": dashed vertical lines at the higher-timeframe borders (see [periodSeparatorKey]).
+  final bool periodSeparators;
+
+  /// MT5 box: the top frame line stops at the price axis (┐), like the bottom one (┘), instead of running on
+  /// across the price labels. Used when the toolbar is directly above the chart (trading panel at the bottom).
+  final bool closedFrame;
+  final List<ChartTrade> trades;
+  /// Open time (epoch s) of the bar just before [candles] — so the first visible bar knows whether it starts a new period.
+  final int? prevT;
   final List<ChartLevel> levels;
   final List<ComputedIndicator> overlays;
   final List<ComputedIndicator> oscillators;
@@ -1725,6 +1868,12 @@ class _CandlePainter extends CustomPainter {
   final Color up, down, grid, text, line, surface, onSurface;
   final Color bid, ask;
 
+  /// Colour of the OHLC bars (separate from the candles'), the chart background, the single colour of volume bars,
+  /// and whether to draw grid lines (only once a scheme or the user chose a grid colour: today's chart has none).
+  final Color barUp, barDown;
+  final Color? background, volumeColor;
+  final bool drawGrid;
+
   /// Right price-ladder width — measured from the actual label text each
   /// build (see [_CandleChartState._computeAxisWidth]) so a symbol with fewer
   /// price digits doesn't carry the same fixed margin as one with more.
@@ -1736,6 +1885,8 @@ class _CandlePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (candles.isEmpty) return;
+    // Chart Settings > Colors > Background (otherwise the page's own background shows through, as always).
+    if (background != null) canvas.drawRect(Offset.zero & size, Paint()..color = background!);
     final chartW = size.width - axisW;
     final m = _computePaneMetrics(size.height, oscillators.length, oscFraction, padV, timeAxisH);
     final priceTop = m.priceTop, chartH = m.priceH;
@@ -1756,16 +1907,23 @@ class _CandlePainter extends CustomPainter {
       ..color = text.withValues(alpha: 0.55)
       ..strokeWidth = 1;
     final plotBottom = size.height - timeAxisH;
-    canvas.drawLine(const Offset(0, 0.5), Offset(size.width, 0.5), framePaint);
+    canvas.drawLine(const Offset(0, 0.5), Offset(closedFrame ? chartW : size.width, 0.5), framePaint);
     canvas.drawLine(Offset(chartW, 0), Offset(chartW, plotBottom), framePaint);
     // Ends at the price-axis line (┘), it does not run on under the price numbers.
     canvas.drawLine(Offset(0, plotBottom), Offset(chartW, plotBottom), framePaint);
     final tickPaint = Paint()
       ..color = text
       ..strokeWidth = 0.8;
+    final gridPath = drawGrid ? Path() : null;
     for (var i = 0; i <= priceRows; i++) {
       final p = hi - range * i / priceRows;
       final yy = y(p);
+      if (gridPath != null && yy > 2 && yy < plotBottom - 2) {
+        for (double gx = 0; gx < chartW; gx += 6) {
+          gridPath.moveTo(gx, yy);
+          gridPath.lineTo(math.min(gx + 3, chartW), yy);
+        }
+      }
       // No tick where the price lands on the frame's top / bottom edge — it would poke out
       // past the corner (the frame line itself already marks that position).
       if (yy > 2 && yy < plotBottom - 2) canvas.drawLine(Offset(chartW, yy), Offset(chartW + 4, yy), tickPaint);
@@ -1807,8 +1965,28 @@ class _CandlePainter extends CustomPainter {
         }
       } else {
         _TextCache.get(l.text, _kTimeFont, text).paint(canvas, Offset(l.left, axisY));
+        if (gridPath != null) {
+          final gx = xShift + slot * l.index + slot / 2;
+          if (gx > 0 && gx < chartW) {
+            for (double gy = padV; gy < plotBottom; gy += 6) {
+              gridPath.moveTo(gx, gy);
+              gridPath.lineTo(gx, math.min(gy + 3, plotBottom));
+            }
+          }
+        }
       }
     }
+    if (gridPath != null) {
+      canvas.drawPath(
+          gridPath,
+          Paint()
+            ..color = grid
+            ..strokeWidth = 0.7
+            ..style = PaintingStyle.stroke);
+    }
+
+    // ── Period separators (MT5): dashed vertical lines at the higher-timeframe borders, under the candles. ──
+    if (periodSeparators) _paintPeriodSeparators(canvas, chartW, plotBottom, slot);
 
     // ── Price series (candles / line). Clipped to the price pane. ──
     canvas.save();
@@ -1827,6 +2005,30 @@ class _CandlePainter extends CustomPainter {
             ..color = line
             ..strokeWidth = 1.6
             ..style = PaintingStyle.stroke);
+    } else if (type == ChartType.bar) {
+      // MT5 bar chart: a vertical high–low stroke, a tick to the LEFT at the open and one to the RIGHT at the
+      // close. Up bars (close >= open) and down bars each go into one path, so it is two draw calls.
+      final tick = (slot * 0.35).clamp(1.0, 6.0);
+      final upPath = Path();
+      final downPath = Path();
+      for (var i = 0; i < candles.length; i++) {
+        final k = candles[i];
+        final cx = slot * i + slot / 2;
+        final p = k.c >= k.o ? upPath : downPath;
+        p.moveTo(cx, y(k.h));
+        p.lineTo(cx, y(k.l));
+        final yo = y(k.o);
+        final yc = y(k.c);
+        p.moveTo(cx - tick, yo);
+        p.lineTo(cx, yo);
+        p.moveTo(cx, yc);
+        p.lineTo(cx + tick, yc);
+      }
+      final barPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = (slot * 0.18).clamp(1.0, 1.6);
+      canvas.drawPath(upPath, barPaint..color = barUp);
+      canvas.drawPath(downPath, barPaint..color = barDown);
     } else {
       final bodyW = (slot * 0.7).clamp(1.0, 11.0);
       final wickPaint = Paint()..strokeWidth = kWickStroke;
@@ -1857,6 +2059,7 @@ class _CandlePainter extends CustomPainter {
         _paintSeriesLine(canvas, ln, slot, y);
       }
     }
+    if (trades.isNotEmpty) _paintTrades(canvas, chartW, slot, y);
     canvas.restore();
 
     // ── Live Bid / Ask price lines (MT5-style) ──
@@ -2216,7 +2419,7 @@ class _CandlePainter extends CustomPainter {
         final v = vals[winStart + i];
         if (v == null) continue;
         final cx = slot * i + slot / 2;
-        final c = candles[i].c >= candles[i].o ? up : down;
+        final c = volumeColor ?? (candles[i].c >= candles[i].o ? up : down);
         canvas.drawRect(Rect.fromLTRB(cx - bw / 2, yy(v), cx + bw / 2, zeroY),
             Paint()..color = c.withValues(alpha: 0.5));
       }
@@ -2250,6 +2453,96 @@ class _CandlePainter extends CustomPainter {
     if (a >= 100) return v.toStringAsFixed(0);
     if (a >= 1) return v.toStringAsFixed(2);
     return v.toStringAsFixed(4);
+  }
+
+  /// MT5 trade history on the chart: an arrow at each trade's entry and at its exit (the opposite deal), joined by a
+  /// dashed line, in the BUY / SELL panel colours. Runs inside the series' translate + clip, so x is relative to the
+  /// first visible bar. A position closed in several steps shows its entry once.
+  void _paintTrades(Canvas canvas, double chartW, double slot, double Function(double) y) {
+    final seenEntry = <String>{};
+    final line = Paint()
+      ..strokeWidth = 0.9
+      ..style = PaintingStyle.stroke;
+    final fill = Paint()..style = PaintingStyle.fill;
+    final edge = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8
+      ..color = surface.withValues(alpha: 0.9);
+    void arrow(Offset tip, bool up, Color color) {
+      const w = 5.0, h = 7.0, stem = 4.0;
+      final d = up ? 1.0 : -1.0; // the body extends away from the price: below an up arrow, above a down one
+      final p = Path()
+        ..moveTo(tip.dx, tip.dy)
+        ..lineTo(tip.dx - w, tip.dy + d * h)
+        ..lineTo(tip.dx - w / 2, tip.dy + d * h)
+        ..lineTo(tip.dx - w / 2, tip.dy + d * (h + stem))
+        ..lineTo(tip.dx + w / 2, tip.dy + d * (h + stem))
+        ..lineTo(tip.dx + w / 2, tip.dy + d * h)
+        ..lineTo(tip.dx + w, tip.dy + d * h)
+        ..close();
+      canvas.drawPath(p, fill..color = color);
+      canvas.drawPath(p, edge);
+    }
+
+    for (final t in trades) {
+      final x0 = xForTradeTime(candles, t.openTime, slot);
+      final x1 = xForTradeTime(candles, t.closeTime, slot);
+      // Visible x range in this (translated) space; a trade wholly outside it costs nothing.
+      final xl = -xShift - 20, xr = chartW - xShift + 20;
+      if (math.max(x0, x1) < xl || math.min(x0, x1) > xr) continue;
+      final y0 = y(t.openPrice), y1 = y(t.closePrice);
+      final side = t.isBuy ? ask : bid; // BUY panel colour / SELL panel colour
+      final exitSide = t.isBuy ? bid : ask;
+      _dashClipped(canvas, Offset(x0, y0), Offset(x1, y1), line..color = side.withValues(alpha: 0.75), xl, xr);
+      if (seenEntry.add(t.positionId) && x0 >= xl && x0 <= xr) arrow(Offset(x0, y0), t.isBuy, side);
+      if (x1 >= xl && x1 <= xr) arrow(Offset(x1, y1), !t.isBuy, exitSide);
+    }
+  }
+
+  /// [_dash] limited to x in [xl, xr], with the dash pattern anchored at [a] so it does not shimmer as the chart
+  /// pans (and a line that starts far off-screen costs only its visible part).
+  void _dashClipped(Canvas c, Offset a, Offset b, Paint p, double xl, double xr) {
+    final total = (b - a).distance;
+    if (total == 0) return;
+    final dir = (b - a) / total;
+    var d0 = 0.0, d1 = total;
+    if (dir.dx.abs() < 1e-9) {
+      if (a.dx < xl || a.dx > xr) return;
+    } else {
+      final e1 = (xl - a.dx) / dir.dx, e2 = (xr - a.dx) / dir.dx;
+      d0 = math.max(d0, math.min(e1, e2));
+      d1 = math.min(d1, math.max(e1, e2));
+      if (d0 >= d1) return;
+    }
+    for (var d = (d0 / 6).floor() * 6.0; d < d1; d += 6) {
+      c.drawLine(a + dir * d, a + dir * math.min(d + 3, total), p);
+    }
+  }
+
+  void _paintPeriodSeparators(Canvas canvas, double chartW, double plotBottom, double slot) {
+    var prev = prevT == null ? null : periodSeparatorKey(serverTime(DateTime.fromMillisecondsSinceEpoch(prevT! * 1000)), tf);
+    final path = Path();
+    const dash = 3.0, gap = 3.0;
+    for (var i = 0; i < candles.length; i++) {
+      final key = periodSeparatorKey(serverTime(candles[i].date), tf);
+      if (prev != null && key != prev) {
+        // The left edge of the first bar of the new period: clear of that bar's body.
+        final x = xShift + slot * i;
+        if (x >= 0 && x <= chartW) {
+          for (double yy = padV; yy < plotBottom; yy += dash + gap) {
+            path.moveTo(x, yy);
+            path.lineTo(x, math.min(yy + dash, plotBottom));
+          }
+        }
+      }
+      prev = key;
+    }
+    canvas.drawPath(
+        path,
+        Paint()
+          ..color = onSurface.withValues(alpha: 0.30)
+          ..strokeWidth = 0.8
+          ..style = PaintingStyle.stroke);
   }
 
   void _hline(Canvas c, double yy, double w, Color color, {bool dashed = false, double width = 1, double dash = 4, double gap = 3}) {
@@ -2304,6 +2597,24 @@ class _CandlePainter extends CustomPainter {
       old.futureSlots != futureSlots ||
       old.cross != cross ||
       old.type != type ||
+      old.periodSeparators != periodSeparators ||
+      old.closedFrame != closedFrame ||
+      old.trades != trades ||
+      old.up != up ||
+      old.down != down ||
+      old.barUp != barUp ||
+      old.barDown != barDown ||
+      old.bid != bid ||
+      old.ask != ask ||
+      old.grid != grid ||
+      old.drawGrid != drawGrid ||
+      old.text != text ||
+      old.line != line ||
+      old.surface != surface ||
+      old.onSurface != onSurface ||
+      old.background != background ||
+      old.volumeColor != volumeColor ||
+      old.prevT != prevT ||
       old.levels != levels ||
       old.overlays != overlays ||
       old.oscillators != oscillators ||

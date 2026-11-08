@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'crm/crm.dart';
 import 'screens/account_pages.dart';
 import 'screens/crm_pages.dart';
+import 'screens/chart_settings_screen.dart';
 import 'screens/charts_screen.dart';
 import 'screens/content_screens.dart';
 import 'screens/forgot_password_screen.dart';
@@ -89,6 +90,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/withdraw', builder: (_, __) => const WithdrawScreen()),
       GoRoute(path: '/open-account', builder: (_, state) => OpenAccountScreen(demo: state.uri.queryParameters['type'] == 'demo')),
       GoRoute(path: '/security-setup', builder: (_, __) => const SecuritySetupScreen()),
+      GoRoute(path: '/chart-settings', builder: (_, __) => const ChartSettingsScreen()),
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
       GoRoute(path: '/kyc', builder: (_, __) => const KycScreen()),
       GoRoute(path: '/wallet', builder: (_, __) => const WalletScreen()),
