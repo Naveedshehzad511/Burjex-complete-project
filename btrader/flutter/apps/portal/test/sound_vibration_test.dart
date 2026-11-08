@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:btrader_core/btrader_core.dart' show TradeEventKind;
 import 'package:burjex_portal/services/sound_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -20,15 +21,28 @@ void main() {
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'), (call) async => Directory.systemTemp.path);
   final sound = SoundService.instance;
+  var clickBase = 0; // event clicks already counted when a test cleared the audio log
+  int clicks() => sound.eventClicks - clickBase;
   final calls = <List<int>>[];
   var platformHaptics = 0;
+  var nativeClicks = 0; // clicks the native SoundPool (MainActivity.kt) was asked to play
+  var nativeReady = true; // what the native side answers: false = sound not loaded, Dart must fall back
 
   setUp(() {
+    // This mock plugin never reports that a play started, so a play() would otherwise wait out the full
+    // production timeout and delay every later event of the test.
+    SoundService.callTimeout = const Duration(milliseconds: 5);
     calls.clear();
     platformHaptics = 0;
+    nativeClicks = 0;
+    nativeReady = true;
     sound.resetForTest();
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(SoundService.haptics, (call) async {
+      if (call.method == 'click') {
+        nativeClicks++;
+        return nativeReady;
+      }
       calls.add([for (final n in (call.arguments as Map)['pattern'] as List) n as int]);
       return true;
     });
@@ -49,6 +63,106 @@ void main() {
   // Event sounds share one voice: the next event starts once the previous click has had its gap.
   Future<void> nextEvent() => Future<void>.delayed(const Duration(milliseconds: 220));
 
+
+  group('one vibration per real trade event, whichever source reports it', () {
+    int buzzes() => calls.length;
+
+    test('OPEN: REST reply then the socket event for the same trade -> one vibration', () async {
+      sound.orderPlaced('o-1', 'pos-1'); // market fill confirmed by the REST reply
+      await nextEvent();
+      sound.onTradeEvent(TradeEventKind.opened); // the engine's `opened` push for it
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('OPEN: socket event first, REST reply after -> still one vibration', () async {
+      sound.onTradeEvent(TradeEventKind.opened);
+      await nextEvent();
+      sound.orderPlaced('o-2', 'pos-2');
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('OPEN: a pending order that FILLS (socket only) vibrates, and so did placing it', () async {
+      sound.orderPlaced('o-3'); // resting order placed: no position yet, no credit taken
+      await nextEvent();
+      sound.onTradeEvent(TradeEventKind.opened); // later it fills
+      await nextEvent();
+      expect(buzzes(), 2);
+    });
+
+    test('CLOSE: a trade closed by its SL / TP (socket only) vibrates', () async {
+      sound.onTradeEvent(TradeEventKind.closed);
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('CLOSE: REST close then the socket event -> one; socket then REST -> one', () async {
+      await sound.tradeClose();
+      await nextEvent();
+      sound.onTradeEvent(TradeEventKind.closed);
+      await nextEvent();
+      expect(buzzes(), 1);
+      calls.clear();
+      sound.onTradeEvent(TradeEventKind.closed);
+      await nextEvent();
+      await sound.tradeClose();
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('CLOSE ALL of 3 (REST says 3, the socket delivers 3 at once): exactly 3 clicks, never 6', () async {
+      await sound.tradeClose(count: 3);
+      for (var i = 0; i < 3; i++) {
+        sound.onTradeEvent(TradeEventKind.closed);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(clicks(), 3, reason: 'the REST total and the socket events are the same three closes');
+    });
+
+    test('CLOSE ALL where the socket events come first (3, then REST says 3): still 3, the REST total adds nothing', () async {
+      for (var i = 0; i < 3; i++) {
+        sound.onTradeEvent(TradeEventKind.closed);
+      }
+      await sound.tradeClose(count: 3);
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(clicks(), 3);
+    });
+
+    test('MODIFY: REST Apply on a position then the socket modified event -> one vibration', () async {
+      await sound.orderModified(position: true);
+      await nextEvent();
+      sound.onTradeEvent(TradeEventKind.modified);
+      await nextEvent();
+      expect(buzzes(), 1);
+      expect(calls.single, [0, 80, 70, 80]);
+    });
+
+    test('MODIFY: a change made from another device (socket only) vibrates', () async {
+      sound.onTradeEvent(TradeEventKind.modified);
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('MODIFY: the SL/TP "+" toggle stays silent - its socket confirmation is swallowed', () async {
+      sound.expectPositionChange(); // "+" saved at once
+      sound.onTradeEvent(TradeEventKind.modified); // the engine confirms it
+      await nextEvent();
+      expect(buzzes(), 0);
+      await sound.orderModified(position: true); // the user then presses Apply
+      await nextEvent();
+      expect(buzzes(), 1);
+    });
+
+    test('a pending ORDER change has no socket twin, so it never leaves a credit that hides a later position change', () async {
+      await sound.orderModified(); // pending order modified
+      await nextEvent();
+      sound.onTradeEvent(TradeEventKind.modified); // an unrelated position change
+      await nextEvent();
+      expect(buzzes(), 2);
+    });
+  });
+
   test('every trade event vibrates for real on Android, each with its own pattern', () async {
     sound.orderPlaced('o1'); // market buy / sell, pending placed
     await nextEvent();
@@ -64,26 +178,39 @@ void main() {
     await nextEvent();
 
     expect(calls.length, 6, reason: 'one vibration per event');
-    expect(calls[0], [0, 55]);
-    expect(calls[1], [0, 55]);
-    expect(calls[2], [0, 55]);
-    expect(calls[3], [0, 40]);
-    expect(calls[4], [0, 40]);
-    expect(calls[5], [0, 80, 70, 80], reason: 'an error is a double pulse, distinct from success');
+    expect(calls[0], [0, 80, 70, 80]);
+    expect(calls[1], [0, 80, 70, 80]);
+    expect(calls[2], [0, 80, 70, 80]);
+    expect(calls[3], [0, 80, 70, 80]);
+    expect(calls[4], [0, 80, 70, 80]);
+    expect(calls[5], [0, 80, 70, 80], reason: 'the same double pulse as every trade event');
     expect(platformHaptics, 0, reason: 'the weak touch tick is not used when the real vibrator answered');
   });
 
-  test('EVERY event stops the low-latency player before playing, so it is not just the first one that sounds', () async {
-    await settle(); // preload finished
+  test('Android: every event is a native click (all of them, none cut), the audio plugin is not involved', () async {
+    await settle();
     audio.clear();
+    clickBase = sound.eventClicks;
     for (var i = 0; i < 4; i++) {
-      await sound.tradeClose();
+      sound.orderPlaced('n$i');
+      await nextEvent();
+    }
+    expect(nativeClicks, 4, reason: 'four events, four native clicks');
+    expect(audio.where((c) => c.startsWith('bt_event')), isEmpty, reason: 'no plugin playback when the native click answered');
+  });
+
+  test('if the native sound is not ready, EVERY event falls back to the plugin player (stop() first, so it is not just the first one)', () async {
+    nativeReady = false;
+    await settle();
+    audio.clear();
+    clickBase = sound.eventClicks;
+    for (var i = 0; i < 4; i++) {
+      sound.orderPlaced('f$i');
       await nextEvent();
     }
     final mine = audio.where((c) => c.startsWith('bt_event:')).toList();
     // Android's SoundPool never reports "finished", so after the first sound the player still counts as
-    // playing and every later play() is ignored - unless stop() ran first. (This mock cannot emulate the
-    // real plugin's play path; that the sound is actually heard each time is confirmed on the phone.)
+    // playing and every later play() is ignored - unless stop() ran first.
     expect(mine.where((c) => c == 'bt_event:stop').length, 4, reason: 'a stop() per event: $mine');
     expect(mine.first, 'bt_event:stop', reason: 'stop() is the first call of an event: $mine');
     // The error sound has its own player, stopped the same way.
@@ -96,81 +223,125 @@ void main() {
   test('order placed: sound and vibration start in the same tick, once per order', () async {
     await settle();
     audio.clear();
+    clickBase = sound.eventClicks;
     sound.orderPlaced('same-tick');
     // Both reach the platform within the same few milliseconds (the plugin hops a microtask or two).
     await Future<void>.delayed(const Duration(milliseconds: 5));
-    final soundFirst = audio.where((c) => c.startsWith('bt_event:')).length;
-    expect(soundFirst, greaterThanOrEqualTo(1));
+    expect(nativeClicks, 1, reason: 'the click starts in the same tick as the vibration');
     expect(calls.length, 1);
     sound.orderPlaced('same-tick'); // REST + socket for the same order
     await nextEvent();
     expect(calls.length, 1, reason: 'no duplicate vibration');
-    expect(audio.where((c) => c == 'bt_event:stop').length, 1, reason: 'no duplicate sound');
+    expect(clicks(), 1, reason: 'no duplicate sound');
   });
 
   test('several orders placed back to back: every one sounds and vibrates', () async {
     await settle();
     audio.clear();
+    clickBase = sound.eventClicks;
     for (var i = 0; i < 5; i++) {
       sound.orderPlaced('b$i');
     }
     await Future<void>.delayed(const Duration(milliseconds: 900));
-    expect(audio.where((c) => c == 'bt_event:stop').length, 5, reason: 'five orders, five sounds');
+    expect(clicks(), 5, reason: 'five orders, five sounds');
     expect(calls.length, 5, reason: 'gaps of 120 ms: each order keeps its own vibration');
   });
 
   test('closing one position plays one full sound immediately', () async {
     await settle();
     audio.clear();
+    clickBase = sound.eventClicks;
     final t0 = DateTime.now();
     await sound.tradeClose();
     await Future<void>.delayed(const Duration(milliseconds: 5));
-    expect(audio.where((c) => c == 'bt_event:stop').length, 1);
+    expect(clicks(), 1);
     expect(DateTime.now().difference(t0).inMilliseconds, lessThan(100), reason: 'no delay on a single event');
     await nextEvent();
-    expect(audio.where((c) => c == 'bt_event:stop').length, 1);
+    expect(clicks(), 1);
     expect(calls.length, 1);
   });
 
-  test('closing 40 positions plays 40 sounds in about 2 s, none dropped, vibration does not block', () async {
+  test('a close-all of 9 delivered in one batch (all within a few ms): several clicks, the last one right after', () async {
     await settle();
-    await nextEvent();
-    audio.clear();
-    final times = <int>[];
+    clickBase = sound.eventClicks;
     final t0 = DateTime.now();
-    final prev = audio.length;
-    expect(prev, 0);
-    await sound.tradeClose(count: 40);
-    // Sample the plugin's stop() (first call of each sound) as it happens.
-    var seen = 0;
-    while (DateTime.now().difference(t0).inMilliseconds < 3500) {
-      final n = audio.where((c) => c == 'bt_event:stop').length;
-      while (seen < n) {
-        times.add(DateTime.now().difference(t0).inMilliseconds);
-        seen++;
-      }
-      if (n >= 40) break;
-      await Future<void>.delayed(const Duration(milliseconds: 5));
+    for (var i = 0; i < 9; i++) {
+      sound.onTradeEvent(TradeEventKind.closed);
     }
-    expect(seen, 40, reason: 'every close has its sound');
-    // ignore: avoid_print
-    print('40 closes: first ${times.first} ms, last ${times.last} ms');
-    expect(times.last, inInclusiveRange(1700, 2600), reason: '40 sounds spread over about two seconds: ${times.last} ms');
-    await nextEvent();
-    expect(audio.where((c) => c == 'bt_event:stop').length, 40, reason: 'exactly 40, no duplicates');
-    expect(calls.length, lessThanOrEqualTo(25), reason: 'vibration is thinned out in a burst, not one per click');
-    expect(calls.length, greaterThanOrEqualTo(10));
+    expect(clicks(), 1, reason: 'the first click is at once');
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    expect(clicks(), SoundService.closeMaxClicks, reason: 'a short series, capped');
+    final took = DateTime.now().difference(t0).inMilliseconds;
+    expect(took, lessThan(1000));
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    expect(clicks(), SoundService.closeMaxClicks, reason: 'nothing plays after the series');
   });
 
-  test('a burst followed by another event: queued behind it, nothing lost', () async {
+  test('a close-all of 40 delivered at once is the same capped series, not 40 clicks', () async {
+    clickBase = sound.eventClicks;
+    for (var i = 0; i < 40; i++) {
+      sound.onTradeEvent(TradeEventKind.closed);
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    expect(clicks(), SoundService.closeMaxClicks);
+  });
+
+  test('a longer close-all (a close every 100 ms for a second) gets a click for each', () async {
+    clickBase = sound.eventClicks;
+    for (var i = 0; i < 10; i++) {
+      sound.onTradeEvent(TradeEventKind.closed);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    expect(clicks(), 10);
+  });
+
+  test('closes seconds apart (one by one, SL / TP hits) each sound, immediately', () async {
+    clickBase = sound.eventClicks;
+    final t0 = DateTime.now();
+    sound.onTradeEvent(TradeEventKind.closed);
+    expect(clicks(), 1);
+    expect(DateTime.now().difference(t0).inMilliseconds, lessThan(50), reason: 'at once, not queued');
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    sound.onTradeEvent(TradeEventKind.closed);
+    expect(clicks(), 2);
+  });
+
+  test('only the server total is known (no socket events): the same short series', () async {
+    await settle();
+    clickBase = sound.eventClicks;
+    await sound.tradeClose(count: 40);
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    expect(clicks(), SoundService.closeMaxClicks);
+    await Future<void>.delayed(const Duration(milliseconds: 1000));
+    expect(clicks(), SoundService.closeMaxClicks, reason: 'nothing after the series');
+  });
+
+  test('cancelling many pending orders: the same short series', () async {
+    clickBase = sound.eventClicks;
+    await sound.orderCancelled(count: 12);
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    expect(clicks(), SoundService.closeMaxClicks);
+  });
+
+  test('opens are NOT merged: five quick opens give five clicks', () async {
+    clickBase = sound.eventClicks;
+    for (var i = 0; i < 5; i++) {
+      sound.orderPlaced('o$i');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    expect(clicks(), 5);
+  });
+
+  test('a close total, then an open and another close: all of them sound', () async {
     await settle();
     await nextEvent();
     audio.clear();
     sound.tradeClose(count: 3);
     sound.orderPlaced('late');
     sound.tradeClose();
-    await Future<void>.delayed(const Duration(milliseconds: 1300));
-    expect(audio.where((c) => c == 'bt_event:stop').length, 5);
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    // 3 closes -> 3 clicks, the open sounds, the close right after it sounds: nothing lost, nothing endless
+    expect(clicks(), inInclusiveRange(4, 6));
   });
 
   test('the same order confirmed twice (REST + socket) vibrates once', () async {

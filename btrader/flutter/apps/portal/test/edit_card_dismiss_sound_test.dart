@@ -176,8 +176,11 @@ Map<String, dynamic> _order(String name, {bool withSl = true, bool withTp = true
 
 /// Success sound = the "modified" pulse; failure = the error pulse. Counted through the haptic bridge.
 final _pulses = <List<int>>[];
-int get _modified => _pulses.where((p) => p.length == 2 && p[1] == 40).length;
-int get _errors => _pulses.where((p) => p.length == 4).length;
+// Trade events and errors now share one vibration pattern; a trade event is the one that also plays
+// the native event click (an error plays its own sound through the audio plugin).
+var _clicks = 0;
+int get _modified => _clicks;
+int get _errors => _pulses.length - _clicks;
 
 Map<String, dynamic> _pos({double? sl}) => {
       'id': 'p1', 'accountId': 'A1', 'symbol': 'EURUSD', 'side': 'BUY', 'status': 'OPEN', 'volume': 0.1,
@@ -213,9 +216,14 @@ void main() {
 
   setUp(() {
     _pulses.clear();
+    _clicks = 0;
     SoundService.instance.resetForTest();
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     m.setMockMethodCallHandler(SoundService.haptics, (call) async {
+      if (call.method == 'click') {
+        _clicks++;
+        return true;
+      }
       _pulses.add([for (final n in (call.arguments as Map)['pattern'] as List) n as int]);
       return true;
     });
@@ -261,15 +269,61 @@ void main() {
     await _unmount(t);
   });
 
-  testWidgets('tapping empty chart closes a position card without saving, and the round menu opens', (t) async {
+  testWidgets('first tap on the chart closes a position card (no menu, nothing saved); the NEXT tap opens the round menu', (t) async {
     final api = await _pump(t, size, seed: (a) => a.positions = [_pos(sl: 1.0900)]);
     await _settle(t);
     await _openPos(t);
     await _tapEmptyChart(t);
     expect(find.byType(PendingPanel), findsNothing, reason: 'the card closes at once');
-    expect(find.byType(RadialChartMenu), findsOneWidget, reason: 'the round menu appears without pressing Apply');
+    expect(find.byType(RadialChartMenu), findsNothing, reason: 'that tap was used up closing the card');
     expect(api.patches, isEmpty, reason: 'dismissing sends nothing');
     expect(_pulses, isEmpty);
+    await _tapEmptyChart(t);
+    expect(find.byType(RadialChartMenu), findsOneWidget, reason: 'the next tap opens the round menu as usual');
+    await _unmount(t);
+  });
+
+  testWidgets('with no card open a tap opens the round menu at once (unchanged)', (t) async {
+    await _pump(t, size, seed: (a) => a.positions = [_pos(sl: 1.0900)]);
+    await _settle(t);
+    await _tapEmptyChart(t);
+    expect(find.byType(RadialChartMenu), findsOneWidget);
+    await _unmount(t);
+  });
+
+  testWidgets('a tap on the candles themselves behaves the same as on empty space', (t) async {
+    await _pump(t, size, seed: (a) => a.positions = [_pos(sl: 1.0900)]);
+    await _settle(t);
+    await _openPos(t);
+    final r = t.getRect(find.byType(CandleChart));
+    // the right-hand part of the pane is where the newest candles are drawn
+    await t.tapAt(Offset(r.left + r.width * 0.6, r.top + r.height * 0.3));
+    await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    expect(find.byType(PendingPanel), findsNothing);
+    expect(find.byType(RadialChartMenu), findsNothing);
+    await _unmount(t);
+  });
+
+  testWidgets('the NEW-ORDER panel (collapsed or expanded) is a card too: first chart tap closes it, no menu; the next tap opens the menu', (t) async {
+    await _pump(t, size);
+    await _settle(t);
+    for (final expand in [false, true]) {
+      await t.tap(find.byIcon(Icons.pending_actions_outlined).first);
+      await t.pump();
+      expect(find.byType(PendingPanel), findsOneWidget);
+      if (expand) {
+        await t.tap(find.byKey(const ValueKey('panel-toggle')).first);
+        await t.pump();
+        expect(t.widget<PendingPanel>(find.byType(PendingPanel)).expanded, isTrue);
+      }
+      await _tapEmptyChart(t);
+      expect(find.byType(PendingPanel), findsNothing, reason: 'the panel closed (expanded: $expand)');
+      expect(find.byType(RadialChartMenu), findsNothing, reason: 'that tap only closed the card (expanded: $expand)');
+      await _tapEmptyChart(t);
+      expect(find.byType(RadialChartMenu), findsOneWidget, reason: 'the next tap opens the menu (expanded: $expand)');
+      await t.tap(find.byType(RadialChartMenu)); // close the menu again
+      await t.pump();
+    }
     await _unmount(t);
   });
 
@@ -293,8 +347,10 @@ void main() {
     await _openOrder(t, 'o-BUY_LIMIT');
     await _tapEmptyChart(t);
     expect(find.byType(PendingPanel), findsNothing);
-    expect(find.byType(RadialChartMenu), findsOneWidget);
+    expect(find.byType(RadialChartMenu), findsNothing, reason: 'the first tap only closes the card');
     expect(api2.patches, isEmpty);
+    await _tapEmptyChart(t);
+    expect(find.byType(RadialChartMenu), findsOneWidget);
     await _unmount(t);
   });
 }

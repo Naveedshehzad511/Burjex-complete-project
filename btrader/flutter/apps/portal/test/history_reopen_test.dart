@@ -135,6 +135,7 @@ void main() {
     await t.pumpWidget(_app(c, const HistoryScreen()));
     failing.completeError(Exception('boom'));
     await _settle(t);
-    expect(find.textContaining('boom'), findsOneWidget, reason: 'a genuine failure is shown, not hidden');
+    expect(find.textContaining('Something went wrong'), findsOneWidget, reason: 'a genuine failure is shown (in plain words, with a retry), not hidden');
+    expect(find.text('Retry'), findsOneWidget);
   });
 }
