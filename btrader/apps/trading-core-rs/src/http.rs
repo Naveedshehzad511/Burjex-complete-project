@@ -150,7 +150,37 @@ struct CloseAllBody {
 
 async fn close_all(State(st): State<AppState>, headers: HeaderMap, Json(b): Json<CloseAllBody>) -> Result<Json<Value>, BtError> {
     auth(&headers, &st.token)?;
-    let res = crate::guard::run_as(b.by_staff, st.engine.close_all(&b.tenant_id, &b.account_id)).await?;
+    let res = crate::guard::run_as(
+        b.by_staff,
+        st.engine.close_all(&b.tenant_id, &b.account_id, crate::engine_trade::CloseScope::All),
+    )
+    .await?;
+    Ok(Json(res.json()))
+}
+
+#[derive(Deserialize)]
+struct CloseScopedBody {
+    #[serde(rename = "tenantId")]
+    tenant_id: String,
+    #[serde(rename = "accountId")]
+    account_id: String,
+    #[serde(rename = "byStaff", default)]
+    by_staff: bool,
+    /// "profitable" or "losing" (required: Close All has its own route and never narrows).
+    scope: String,
+}
+
+/// MT5's "Close all profitable / losing positions": the very same close-all as `/v1/close-all` (same group `closeAll`
+/// delay, same market / live-price checks, same closing code), only over the positions in the requested category.
+/// It is a separate route on purpose: an engine without it answers 404, so a newer gateway can never have a scope
+/// silently ignored (which would close every position).
+async fn close_scoped(State(st): State<AppState>, headers: HeaderMap, Json(b): Json<CloseScopedBody>) -> Result<Json<Value>, BtError> {
+    auth(&headers, &st.token)?;
+    let scope = crate::engine_trade::CloseScope::parse(Some(b.scope.as_str()))?;
+    if scope == crate::engine_trade::CloseScope::All {
+        return Err(BtError::new(crate::error::VALIDATION, "scope must be 'profitable' or 'losing'"));
+    }
+    let res = crate::guard::run_as(b.by_staff, st.engine.close_all(&b.tenant_id, &b.account_id, scope)).await?;
     Ok(Json(res.json()))
 }
 
@@ -265,6 +295,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/place", post(place))
         .route("/v1/positions/{id}/close", post(close))
         .route("/v1/close-all", post(close_all))
+        .route("/v1/close-scoped", post(close_scoped))
         .route("/v1/positions/{id}", patch(modify_pos))
         .route("/v1/positions/{id}/open-price", patch(set_open))
         .route("/v1/positions/{id}/cover-more", post(cover_more))

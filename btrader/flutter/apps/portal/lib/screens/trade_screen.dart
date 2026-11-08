@@ -6,6 +6,7 @@ import 'package:btrader_core/btrader_core.dart';
 import '../widgets/state_views.dart';
 import '../nav.dart';
 import '../services/sound_service.dart';
+import '../state/bulk_close.dart';
 import '../state/pending_orders.dart';
 import '../session/sessions.dart';
 import '../widgets/account_panel.dart';
@@ -26,6 +27,8 @@ class TradeScreen extends ConsumerStatefulWidget {
 
 class _TradeScreenState extends ConsumerState<TradeScreen> {
   _Sort _sort = _Sort.newest;
+  /// A bulk close (Close all / profitable / losing) is running: a second tap is ignored until it answers.
+  bool _bulkBusy = false;
 
   @override
   Widget build(BuildContext context) {
@@ -387,11 +390,30 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                         tooltip: 'Positions menu',
                         icon: Icon(Icons.more_horiz, color: Theme.of(context).hintColor),
                         onSelected: (v) async {
-                          if (v == 'closeAll' && id != null) {
+                          final scope = switch (v) {
+                            'closeAll' => BulkClose.all,
+                            'closeProfitable' => BulkClose.profitable,
+                            'closeLosing' => BulkClose.losing,
+                            _ => null,
+                          };
+                          if (scope != null && id != null && !_bulkBusy) {
                             final messenger = ScaffoldMessenger.of(context);
                             // Nothing to close right now (every symbol is blocked): do not send it. A
                             // mix is sent; the server closes the open ones and reports the rest.
-                            final held = positions.valueOrNull ?? const <Position>[];
+                            final all = positions.valueOrNull ?? const <Position>[];
+                            // Close all profitable / losing: only the positions in that category right now (the live P/L
+                            // shown on their rows). The server decides again from its own P/L; this keeps the checks
+                            // below to the positions the request is about.
+                            final held = scope == BulkClose.all
+                                ? all
+                                : [
+                                    for (final hp in all)
+                                      if (inBulkScope(scope, resolvePositionPl(hp, livePl: livePL, quotes: quotes, symbols: symbols, snap: liveSnap, accountCurrency: acctCcy))) hp,
+                                  ];
+                            if (scope != BulkClose.all && held.isEmpty) {
+                              messenger.showSnackBar(SnackBar(content: Text(scope.nothingToClose)));
+                              return;
+                            }
                             String? firstBlock;
                             var allBlocked = held.isNotEmpty;
                             for (final hp in held) {
@@ -408,13 +430,18 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                               return;
                             }
                             final Object? res;
+                            // One bulk close at a time: a second tap while the first is still running (the group's
+                            // configured delay can make it take a while) is ignored, never a second request.
+                            _bulkBusy = true;
                             try {
-                              res = await api.post('/accounts/$id/close-all', {});
+                              res = await api.post(scope.path(id), scope.body);
                             } catch (e) {
                               SoundService.instance.error();
                               messenger.showSnackBar(SnackBar(content: Text(apiErrorMessage(e, fallback: 'Close all failed'))));
                               ref.read(positionsRefreshProvider).request();
                               return;
+                            } finally {
+                              _bulkBusy = false;
                             }
                             // Some positions were skipped (blocked symbol or a failed close): say exactly so.
                             final skipped = res is Map ? res['skipped'] : null;
@@ -426,15 +453,35 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                             // already left the list on its own confirmed close push; this reload only
                             // reconciles (coalesced with the ones those pushes asked for).
                             final closed = res is Map ? res['closed'] : null;
+                            if (scope != BulkClose.all && closed is num && closed == 0) {
+                              // The server found nothing in that category (the P/L moved): say so, close nothing.
+                              if (summary is String && summary.isNotEmpty && !(skipped is num && skipped > 0)) {
+                                messenger.showSnackBar(SnackBar(content: Text(summary)));
+                              }
+                              ref.read(positionsRefreshProvider).request();
+                              return;
+                            }
                             SoundService.instance.tradeClose(count: closed is num ? closed.toInt() : 1);
                             ref.read(positionsRefreshProvider).request();
                             ref.read(accountsRefreshProvider).request();
                             ref.read(tradeEventEpochProvider.notifier).state++;
                           }
                         },
-                        itemBuilder: (_) => [
-                          PopupMenuItem(value: 'closeAll', child: Text('Close all positions', style: TextStyle(color: tc.loss, fontWeight: FontWeight.w600))),
-                        ],
+                        itemBuilder: (_) {
+                          // The categories come from the live P/L of the open positions at the moment the menu opens
+                          // (the same figures as the rows below): a category shows only if a position is in it.
+                          final o = bulkCloseOptions([
+                            for (final hp in positions.valueOrNull ?? const <Position>[])
+                              resolvePositionPl(hp, livePl: livePL, quotes: quotes, symbols: symbols, snap: liveSnap, accountCurrency: acctCcy),
+                          ]);
+                          PopupMenuItem<String> item(String value, BulkClose b) =>
+                              PopupMenuItem(value: value, child: Text(b.menuLabel, style: TextStyle(color: tc.loss, fontWeight: FontWeight.w600)));
+                          return [
+                            item('closeAll', BulkClose.all),
+                            if (o.profitable) item('closeProfitable', BulkClose.profitable),
+                            if (o.losing) item('closeLosing', BulkClose.losing),
+                          ];
+                        },
                       );
               }),
             ]),

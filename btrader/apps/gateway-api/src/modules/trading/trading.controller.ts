@@ -17,7 +17,7 @@ import { JwtAuthGuard } from '../../common/jwt.guard';
 import { CurrentTenant, CurrentUser, Roles, ForbidReadOnly } from '../../common/decorators';
 import { EngineProvider } from './engine.provider';
 import { AuditService } from '../audit/audit.service';
-import { PlaceOrderDto, ModifyPositionDto, ModifyOrderDto, ClosePositionDto } from './dto';
+import { PlaceOrderDto, ModifyPositionDto, ModifyOrderDto, ClosePositionDto, CloseScopedDto } from './dto';
 import { PORTAL_READ_CACHE_MS, ttlDelPrefix, ttlWrap } from '../../common/ttl-cache';
 import { withTotalCommission } from '../../common/position-commission';
 
@@ -240,6 +240,25 @@ export class TradingController {
       meta: { closed: res.closed, skipped: res.skipped },
     });
     // `closed` keeps its old meaning; `skipped` / `message` report what was not closed and why.
+    return res;
+  }
+
+  /**
+   * MT5's "Close all profitable / losing positions". The very same Close All in the engine (the account's group
+   * `closeAll` delay, the market / live-price checks, the closing code); it only covers the positions in the requested
+   * category, judged by the engine's live floating P/L. A route of its own, so Close All above is untouched.
+   */
+  @Post('accounts/:accountId/close-scoped')
+  @ForbidReadOnly()
+  @ApiOperation({ summary: 'Close all PROFITABLE or all LOSING open positions on an account (body scope)' })
+  async closeScoped(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('accountId') accountId: string, @Body() dto: CloseScopedDto) {
+    await this.assertAccountAccess(t.id, u, accountId);
+    const res = await this.eng.engine.closeScoped(t.id, accountId, dto.scope, STAFF_ROLES.has(u?.role));
+    ttlDelPrefix(`pos:${t.id}:${accountId}`);
+    ttlDelPrefix(`orders:${t.id}:${accountId}`);
+    void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'account', accountId, {
+      meta: { closed: res.closed, skipped: res.skipped, scope: dto.scope },
+    });
     return res;
   }
 

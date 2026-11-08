@@ -24,6 +24,50 @@ use uuid::Uuid;
 pub struct CloseAllResult {
     pub closed: i64,
     pub skipped: Vec<(String, BtError)>,
+    /// Which positions the request covered (everything, unless the client asked for the profitable / losing ones).
+    pub scope: CloseScope,
+}
+
+/// Which of an account's open positions a client's Close All covers. [All] is the original behaviour; the other two
+/// are MT5's "Close Profitable / Losing Positions" bulk operations. They run through the very same routine: the same
+/// group `closeAll` delay (once for the whole action), the same market / live-price checks and the same closing code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CloseScope {
+    All,
+    Profitable,
+    Losing,
+}
+
+impl CloseScope {
+    /// `None`, "" and "all" are the original Close All; anything else that is not a known scope is refused.
+    pub fn parse(s: Option<&str>) -> BtResult<Self> {
+        match s.map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+            None | Some("") | Some("all") => Ok(Self::All),
+            Some("profitable") => Ok(Self::Profitable),
+            Some("losing") => Ok(Self::Losing),
+            Some(other) => Err(BtError::new(crate::error::VALIDATION, format!("unknown close scope '{other}'"))),
+        }
+    }
+
+    /// Whether a position with this live floating profit / loss (account currency, swap and commission included, as
+    /// in equity) is covered. It is judged on the cents a client sees, so a position at exactly 0.00 is neither
+    /// profitable nor losing.
+    pub fn includes(self, floating: f64) -> bool {
+        let cents = (floating * 100.0).round();
+        match self {
+            Self::All => true,
+            Self::Profitable => cents > 0.0,
+            Self::Losing => cents < 0.0,
+        }
+    }
+
+    fn word(self) -> &'static str {
+        match self {
+            Self::All => "open",
+            Self::Profitable => "profitable",
+            Self::Losing => "losing",
+        }
+    }
 }
 
 impl CloseAllResult {
@@ -32,6 +76,9 @@ impl CloseAllResult {
     pub fn message(&self) -> String {
         let n = |v: i64| if v == 1 { "position".to_string() } else { "positions".to_string() };
         let skipped = self.skipped.len() as i64;
+        if self.scope != CloseScope::All && self.closed == 0 && skipped == 0 {
+            return format!("No {} positions to close.", self.scope.word());
+        }
         if skipped == 0 {
             return format!("{} {} closed.", self.closed, n(self.closed));
         }
@@ -55,6 +102,11 @@ impl CloseAllResult {
                 "symbol": sym, "code": e.code, "message": e.message,
             })).collect::<Vec<_>>(),
             "message": self.message(),
+            "scope": match self.scope {
+                CloseScope::All => "all",
+                CloseScope::Profitable => "profitable",
+                CloseScope::Losing => "losing",
+            },
         })
     }
 }
@@ -816,8 +868,8 @@ impl Engine {
     /// or that fail to close are SKIPPED and reported with their reason; the rest are closed. When
     /// nothing at all can be closed the whole request is refused, so a rejected action is never
     /// reported as a success.
-    pub async fn close_all(&self, tenant_id: &str, account_id: &str) -> BtResult<CloseAllResult> {
-        let rows = sqlx::query(
+    pub async fn close_all(&self, tenant_id: &str, account_id: &str, scope: CloseScope) -> BtResult<CloseAllResult> {
+        let mut rows = sqlx::query(
             r#"SELECT p.id, s.symbol FROM positions p JOIN symbols s ON s.id=p."symbolId"
                WHERE p."tenantId"=$1 AND p."accountId"=$2 AND p.status='OPEN'"#,
         )
@@ -825,6 +877,23 @@ impl Engine {
         .bind(account_id)
         .fetch_all(&self.pool)
         .await?;
+        // Profitable / losing: keep only the positions whose live floating P/L (the same figure equity and stop-out use) is
+        // in the requested category, decided now, exactly as the market / price check below is.
+        if scope != CloseScope::All && !rows.is_empty() {
+            let Some(acct) = self.load_account(tenant_id, account_id).await? else {
+                return Ok(CloseAllResult { closed: 0, skipped: Vec::new(), scope });
+            };
+            let pl: std::collections::HashMap<String, f64> = self
+                .open_views(tenant_id, account_id, &acct.currency)
+                .await?
+                .iter()
+                .map(|v| (v.id.clone(), crate::calc::position_floating(v)))
+                .collect();
+            rows.retain(|r| {
+                let id: String = r.try_get("id").unwrap_or_default();
+                pl.get(&id).map(|f| scope.includes(*f)).unwrap_or(false)
+            });
+        }
         let mut allowed: Vec<(String, String)> = Vec::new();
         let mut skipped: Vec<(String, BtError)> = Vec::new();
         for r in rows {
@@ -841,7 +910,7 @@ impl Engine {
                     first.code,
                     format!("{} — {} position(s) not closed", first.message, skipped.len()),
                 )),
-                None => Ok(CloseAllResult { closed: 0, skipped }),
+                None => Ok(CloseAllResult { closed: 0, skipped, scope }),
             };
         }
         let aid = account_id.to_string();
@@ -854,7 +923,7 @@ impl Engine {
             .with_account(&aid, || self.close_all_exclusive(tenant.clone(), aid.clone(), allowed.clone()))
             .await?;
         skipped.extend(failed);
-        Ok(CloseAllResult { closed, skipped })
+        Ok(CloseAllResult { closed, skipped, scope })
     }
 
     /// Closes the given positions; the ones that fail are returned with their error, never hidden.
@@ -1214,5 +1283,52 @@ mod pending_protective_tests {
     fn non_positive_levels_are_rejected() {
         assert!(!ok("BUY_LIMIT", "BUY", 100.0, Some(0.0), None));
         assert!(!ok("BUY_LIMIT", "BUY", 100.0, None, Some(-1.0)));
+    }
+}
+
+#[cfg(test)]
+mod close_scope_tests {
+    use super::*;
+
+    #[test]
+    fn parse_accepts_the_three_scopes_and_refuses_anything_else() {
+        assert_eq!(CloseScope::parse(None).unwrap(), CloseScope::All);
+        assert_eq!(CloseScope::parse(Some("")).unwrap(), CloseScope::All);
+        assert_eq!(CloseScope::parse(Some("ALL")).unwrap(), CloseScope::All);
+        assert_eq!(CloseScope::parse(Some(" Profitable ")).unwrap(), CloseScope::Profitable);
+        assert_eq!(CloseScope::parse(Some("losing")).unwrap(), CloseScope::Losing);
+        assert!(CloseScope::parse(Some("everything")).is_err());
+    }
+
+    #[test]
+    fn profitable_and_losing_split_on_the_cents_shown_and_zero_is_neither() {
+        for pl in [12.5, 0.01, 0.006] {
+            assert!(CloseScope::All.includes(pl));
+            assert!(CloseScope::Profitable.includes(pl), "{pl}");
+            assert!(!CloseScope::Losing.includes(pl), "{pl}");
+        }
+        for pl in [-12.5, -0.01, -0.006] {
+            assert!(CloseScope::All.includes(pl));
+            assert!(!CloseScope::Profitable.includes(pl), "{pl}");
+            assert!(CloseScope::Losing.includes(pl), "{pl}");
+        }
+        // Exactly zero, and anything that rounds to 0.00, is neither profitable nor losing (Close All still covers it).
+        for pl in [0.0, -0.0, 0.004, -0.004] {
+            assert!(CloseScope::All.includes(pl));
+            assert!(!CloseScope::Profitable.includes(pl), "{pl}");
+            assert!(!CloseScope::Losing.includes(pl), "{pl}");
+        }
+    }
+
+    #[test]
+    fn nothing_matching_says_so_and_close_all_keeps_its_message() {
+        let none = |scope| CloseAllResult { closed: 0, skipped: Vec::new(), scope };
+        assert_eq!(none(CloseScope::Profitable).message(), "No profitable positions to close.");
+        assert_eq!(none(CloseScope::Losing).message(), "No losing positions to close.");
+        assert_eq!(none(CloseScope::All).message(), "0 positions closed.");
+        let some = CloseAllResult { closed: 2, skipped: Vec::new(), scope: CloseScope::Losing };
+        assert_eq!(some.message(), "2 positions closed.");
+        assert_eq!(some.json()["scope"], "losing");
+        assert_eq!(CloseAllResult { closed: 1, skipped: Vec::new(), scope: CloseScope::All }.json()["scope"], "all");
     }
 }

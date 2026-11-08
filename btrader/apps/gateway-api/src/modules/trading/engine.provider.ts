@@ -86,6 +86,27 @@ class RustMatchingClient {
     };
   }
 
+  /**
+   * Close all PROFITABLE / LOSING positions: the same close-all in the engine (same group delay and checks), over the
+   * positions in that category by the engine's live P/L. A separate engine route: an engine without it answers 404, so a
+   * scope can never be ignored (which would close everything).
+   */
+  async closeScoped(
+    tenantId: string,
+    accountId: string,
+    scope: 'profitable' | 'losing',
+    byStaff = false,
+  ): Promise<{ closed: number; skipped: number; skippedDetails: unknown[]; message: string; scope: string }> {
+    const r = await this.rpc('POST', '/v1/close-scoped', { tenantId, accountId, byStaff, scope });
+    return {
+      scope: String(r.scope ?? scope),
+      closed: Number(r.closed ?? 0),
+      skipped: Number(r.skipped ?? 0),
+      skippedDetails: Array.isArray(r.skippedDetails) ? r.skippedDetails : [],
+      message: String(r.message ?? ''),
+    };
+  }
+
   coverMore(tenantId: string, id: string, lots: number) {
     return this.rpc('POST', `/v1/positions/${id}/cover-more`, { tenantId, lots });
   }

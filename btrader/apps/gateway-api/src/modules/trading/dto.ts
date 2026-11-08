@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsISO8601,
   IsNumber,
   IsOptional,
@@ -42,6 +43,14 @@ export class ModifyOrderDto {
   @IsOptional() @IsNumber() tpPrice?: number | null;
   /** New lot size for a working order; the engine applies the symbol's min / max / step. */
   @IsOptional() @IsNumber() @Min(0) volume?: number;
+}
+
+/** MT5 bulk operations: close only the profitable / only the losing positions of an account. */
+export const CLOSE_SCOPES = ['profitable', 'losing'] as const;
+export type CloseScope = (typeof CLOSE_SCOPES)[number];
+
+export class CloseScopedDto {
+  @IsIn(CLOSE_SCOPES as unknown as string[]) scope!: CloseScope;
 }
 
 export class ClosePositionDto {
