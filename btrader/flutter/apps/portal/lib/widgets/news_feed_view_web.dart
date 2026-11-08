@@ -113,3 +113,6 @@ class _NewsFeedViewState extends State<NewsFeedView> {
         ]),
       );
 }
+
+/// Whether a recent copy of this page is already loaded and will be shown at once (phone apps only; false elsewhere).
+bool newsViewCached(String html) => false;

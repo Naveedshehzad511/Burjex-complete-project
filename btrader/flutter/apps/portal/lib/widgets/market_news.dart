@@ -50,7 +50,7 @@ class MarketNewsSection extends ConsumerStatefulWidget {
   ConsumerState<MarketNewsSection> createState() => _MarketNewsSectionState();
 }
 
-class _MarketNewsSectionState extends ConsumerState<MarketNewsSection> {
+class _MarketNewsSectionState extends ConsumerState<MarketNewsSection> with AutomaticKeepAliveClientMixin<MarketNewsSection> {
   NewsTab _tab = NewsTab.all;
   int _epoch = 0; // a new value rebuilds the view, which loads the list again
   bool _loading = true;
@@ -63,6 +63,18 @@ class _MarketNewsSectionState extends ConsumerState<MarketNewsSection> {
     super.initState();
     _armTimeout();
     _refresh = Timer.periodic(widget.refreshEvery, (_) => _reload(quiet: true));
+  }
+
+  bool _checkedCache = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Back on Home with a recent copy already loaded: it shows at once, so no loader on this first frame.
+    if (_checkedCache) return;
+    _checkedCache = true;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    if (newsViewCached(newsWidgetHtml(_tab, dark: dark))) _loading = false;
   }
 
   @override
@@ -121,8 +133,14 @@ class _MarketNewsSectionState extends ConsumerState<MarketNewsSection> {
     });
   }
 
+  /// Home is a lazy list: without this a section scrolled far away is disposed and its web view reloads from
+  /// TradingView when it comes back. Kept alive, it keeps what it loaded (the timers below still refresh it).
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final hint = Theme.of(context).hintColor;
     final build = ref.watch(newsFeedViewBuilderProvider);

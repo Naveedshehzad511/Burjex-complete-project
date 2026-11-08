@@ -82,3 +82,25 @@ bool newsLinkOpenable(String url) {
   final u = Uri.tryParse(url.trim());
   return u != null && (u.scheme == 'https' || u.scheme == 'http') && u.host.isNotEmpty;
 }
+
+/// A page already loaded in a web view, offered again when the user comes back to Home (phone apps).
+enum NewsViewReuse {
+  /// Recent: show it as it is, load nothing.
+  fresh,
+
+  /// Not so recent: show it at once and load a new copy out of sight, swapping it in when ready.
+  refreshQuietly,
+
+  /// Old: load it afresh, as for a first visit.
+  reload,
+}
+
+const Duration kNewsFreshFor = Duration(minutes: 2);
+const Duration kNewsReuseFor = Duration(minutes: 10);
+
+/// What to do with a page loaded [age] ago.
+NewsViewReuse newsViewReuse(Duration age) {
+  if (age < kNewsFreshFor) return NewsViewReuse.fresh;
+  if (age < kNewsReuseFor) return NewsViewReuse.refreshQuietly;
+  return NewsViewReuse.reload;
+}

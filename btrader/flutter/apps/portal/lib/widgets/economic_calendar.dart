@@ -44,7 +44,7 @@ class EconomicCalendarSection extends ConsumerStatefulWidget {
   ConsumerState<EconomicCalendarSection> createState() => _EconomicCalendarSectionState();
 }
 
-class _EconomicCalendarSectionState extends ConsumerState<EconomicCalendarSection> {
+class _EconomicCalendarSectionState extends ConsumerState<EconomicCalendarSection> with AutomaticKeepAliveClientMixin<EconomicCalendarSection> {
   int _epoch = 0; // a new value rebuilds the view, which loads the calendar again
   bool _loading = true;
   bool _failed = false;
@@ -56,6 +56,18 @@ class _EconomicCalendarSectionState extends ConsumerState<EconomicCalendarSectio
     super.initState();
     _armTimeout();
     _refresh = Timer.periodic(widget.refreshEvery, (_) => _reload(quiet: true));
+  }
+
+  bool _checkedCache = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Back on Home with a recent copy already loaded: it shows at once, so no loader on this first frame.
+    if (_checkedCache) return;
+    _checkedCache = true;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    if (newsViewCached(calendarWidgetHtml(dark: dark))) _loading = false;
   }
 
   @override
@@ -102,8 +114,14 @@ class _EconomicCalendarSectionState extends ConsumerState<EconomicCalendarSectio
     });
   }
 
+  /// Home is a lazy list: without this a section scrolled far away is disposed and its web view reloads from
+  /// TradingView when it comes back. Kept alive, it keeps what it loaded (the timers below still refresh it).
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final hint = Theme.of(context).hintColor;
     final build = ref.watch(calendarViewBuilderProvider);
