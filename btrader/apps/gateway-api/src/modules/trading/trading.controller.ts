@@ -25,10 +25,27 @@ import { clientIp } from '../../common/client-ip';
 
 const STAFF_ROLES = new Set(['SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_STAFF', 'SERVICE']);
 
+/** A private / Docker / loopback address: the proxy's, never a client's public IP. */
+export function isPrivateIp(ip: string): boolean {
+  return /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1$|f[cd][0-9a-f]{2}:|fe80:)/i.test(ip);
+}
+
+/**
+ * The client's public IP for the trade record. Production sits behind Cloudflare, which puts the
+ * visitor's address in CF-Connecting-IP; the socket and X-Real-IP there are only the Docker
+ * gateway. Falls back to the usual headers off Cloudflare. A private address is not recorded.
+ */
+export function tradeClientIp(req: any): string | null {
+  const h = req?.headers ?? {};
+  const cf = typeof h['cf-connecting-ip'] === 'string' ? h['cf-connecting-ip'].trim() : '';
+  const ip = (cf || clientIp(req)).replace(/^::ffff:/, '');
+  return ip && ip !== 'anonymous' && !isPrivateIp(ip) ? ip : null;
+}
+
 /** Writes the client's IP for a trade open / close. Never blocks or fails the trade itself. */
 function recordTradeIp(rows: { tenantId: string; accountId: string; kind: 'OPEN' | 'CLOSE'; orderId?: string | null; positionId?: string | null }[], req: any) {
-  const ip = clientIp(req);
-  if (!rows.length || !ip || ip === 'anonymous') return;
+  const ip = tradeClientIp(req);
+  if (!rows.length || !ip) return;
   void prisma.tradeIp
     .createMany({ data: rows.map((r) => ({ ...r, orderId: r.orderId ?? null, positionId: r.positionId ?? null, ip })) })
     .catch(() => undefined);
@@ -100,7 +117,7 @@ export class TradingController {
     );
     ttlDelPrefix(`orders:${t.id}:${(dto as any).accountId}`);
     ttlDelPrefix(`pos:${t.id}:${(dto as any).accountId}`);
-    void this.audit.log(t.id, u.id, 'ORDER_PLACE', 'order', res.orderId, { after: res, ip: clientIp(req) });
+    void this.audit.log(t.id, u.id, 'ORDER_PLACE', 'order', res.orderId, { after: res, ip: tradeClientIp(req) ?? clientIp(req) });
     if (res?.accepted && res.orderId) {
       recordTradeIp([{ tenantId: t.id, accountId: (dto as any).accountId, kind: 'OPEN', orderId: res.orderId, positionId: res.positionId }], req);
     }
@@ -235,7 +252,7 @@ export class TradingController {
     });
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     ttlDelPrefix(`orders:${t.id}:${accountId}`);
-    void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'position', id, { after: res, ip: clientIp(req) });
+    void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'position', id, { after: res, ip: tradeClientIp(req) ?? clientIp(req) });
     recordTradeIp([{ tenantId: t.id, accountId, kind: 'CLOSE', positionId: id }], req);
     return res;
   }
@@ -303,11 +320,13 @@ export class TradingController {
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_STAFF')
   @ApiOperation({ summary: 'Admin: the client IP recorded at each trade open / close for an account' })
   async tradeIps(@CurrentTenant() t: any, @Query('accountId') accountId: string) {
-    const rows = await prisma.tradeIp.findMany({
-      where: { tenantId: t.id, accountId },
-      orderBy: { createdAt: 'desc' },
-      take: 2000,
-    });
+    const rows = (
+      await prisma.tradeIp.findMany({
+        where: { tenantId: t.id, accountId },
+        orderBy: { createdAt: 'desc' },
+        take: 2000,
+      })
+    ).filter((r) => !isPrivateIp(r.ip)); // proxy addresses saved before the Cloudflare fix are not client IPs
     // A pending order's position appears later: find it through the order.
     const orderIds = rows.filter((r) => r.kind === 'OPEN' && !r.positionId && r.orderId).map((r) => r.orderId as string);
     const orders = orderIds.length
