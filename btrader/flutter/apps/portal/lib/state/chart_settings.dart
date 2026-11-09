@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// MT5 "Line type" choices, mapped one-to-one onto `ChartType` in candle_chart.dart.
 enum ChartLineType { bar, candles, line }
 
-/// Chart Settings screen state (Android / iOS apps; the website ignores it). Defaults follow the MT5 reference.
+/// Chart Settings screen state. Defaults follow the MT5 reference.
 class ChartSettingsState {
   const ChartSettingsState({
     this.lineType = ChartLineType.candles,

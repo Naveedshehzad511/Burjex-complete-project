@@ -2,7 +2,6 @@
 import 'dart:async';
 
 import 'package:btrader_core/btrader_core.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -111,7 +110,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb) _type = _typeFor(ref.read(chartSettingsProvider).lineType);
+    _type = _typeFor(ref.read(chartSettingsProvider).lineType);
     final s = widget.symbol;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -855,15 +854,15 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     _lvNeutral = Theme.of(context).colorScheme.onSurface;
     final out = <ChartLevel>[];
     final edit = _edit;
-    // Chart Settings (apps): what the chart shows. A line being edited is always shown, so SL / TP editing and the
+    // Chart Settings: what the chart shows. A line being edited is always shown, so SL / TP editing and the
     // order card keep working whatever the switches say; the trades themselves are never affected.
-    final cfg = kIsWeb ? null : ref.read(chartSettingsProvider);
-    final showPositions = cfg?.tradePositions ?? true;
-    final showOrders = cfg?.tradeOrders ?? true;
-    final showSlTp = cfg?.slTpLevels ?? true;
-    final showPl = cfg?.profitLoss ?? true;
+    final cfg = ref.read(chartSettingsProvider);
+    final showPositions = cfg.tradePositions;
+    final showOrders = cfg.tradeOrders;
+    final showSlTp = cfg.slTpLevels;
+    final showPl = cfg.profitLoss;
     // Chart Settings > Colors: a colour the user chose for a line / its text; unset keeps the theme's (today's) colour.
-    final pal = kIsWeb ? ChartPalette.empty : ref.read(chartColorsProvider).palette;
+    final pal = ref.read(chartColorsProvider).palette;
     Color lineOf(bool buy, ChartColorKey buyK, ChartColorKey sellK) => pal[buy ? buyK : sellK] ?? (buy ? tc.buy : tc.sell);
     Color? textOf(bool buy) => pal[buy ? ChartColorKey.buyText : ChartColorKey.sellText];
     final slColor = pal[ChartColorKey.slLine] ?? tc.loss, tpColor = pal[ChartColorKey.tpLine] ?? tc.profit;
@@ -1279,32 +1278,28 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     // or changed from the order panel) — never while the user is typing in it.
     ref.listen<double>(
         chartTradeProvider.select((s) => s.volume), (_, v) => _syncVolField(v));
-    // Apps only (the website is unchanged): the two Chart Settings options that act on this screen.
-    final periodSeparators = !kIsWeb && ref.watch(chartSettingsProvider.select((s) => s.periodSeparators));
-    // Chart Settings > Trading panel at the bottom (apps): the SELL / BUY panel goes under the chart, directly above the
-    // bottom navigation, instead of under the toolbar. The website keeps its own layout. Whether the panel shows at
-    // all is the toolbar's Buy / Sell toggle, as ever.
-    final bottomPanel = !kIsWeb && ref.watch(chartSettingsProvider.select((s) => s.tradingPanelAtBottom));
-    // Free chart movement and the chart colours (apps; the website keeps its own look and always drags both ways).
-    final freeMove = kIsWeb || ref.watch(chartSettingsProvider.select((s) => s.freeChartMovement));
-    final palette = kIsWeb ? ChartPalette.empty : ref.watch(chartColorsProvider.select((s) => s.palette));
+    // The two Chart Settings options that act on this screen.
+    final periodSeparators = ref.watch(chartSettingsProvider.select((s) => s.periodSeparators));
+    // Chart Settings > Trading panel at the bottom: the SELL / BUY panel goes under the chart, directly above the
+    // bottom navigation, instead of under the toolbar. Whether the panel shows at all is the toolbar's Buy / Sell
+    // toggle, as ever.
+    final bottomPanel = ref.watch(chartSettingsProvider.select((s) => s.tradingPanelAtBottom));
+    // Free chart movement and the chart colours.
+    final freeMove = ref.watch(chartSettingsProvider.select((s) => s.freeChartMovement));
+    final palette = ref.watch(chartColorsProvider.select((s) => s.palette));
     // The chart's show/hide switches: only their change needs a rebuild here (the values are read in _levels()).
-    if (!kIsWeb) {
-      ref.watch(chartSettingsProvider.select((s) => (s.tradePositions, s.tradeOrders, s.slTpLevels, s.profitLoss, s.tradeHistory)));
-      // Trade history: fetch again when a trade is opened / closed, and when the option is switched on.
-      ref.listen<int>(tradeEventEpochProvider, (_, __) {
-        if (ref.read(chartSettingsProvider).tradeHistory) ref.read(tradeHistoryProvider.notifier).refresh();
-      });
-      ref.listen<bool>(chartSettingsProvider.select((s) => s.tradeHistory), (_, on) {
-        if (on) ref.read(tradeHistoryProvider.notifier).refresh();
-      });
-    }
-    if (!kIsWeb) {
-      ref.listen<ChartLineType>(chartSettingsProvider.select((s) => s.lineType), (_, t) {
-        final next = _typeFor(t);
-        if (next != _type) setState(() => _type = next);
-      });
-    }
+    ref.watch(chartSettingsProvider.select((s) => (s.tradePositions, s.tradeOrders, s.slTpLevels, s.profitLoss, s.tradeHistory)));
+    // Trade history: fetch again when a trade is opened / closed, and when the option is switched on.
+    ref.listen<int>(tradeEventEpochProvider, (_, __) {
+      if (ref.read(chartSettingsProvider).tradeHistory) ref.read(tradeHistoryProvider.notifier).refresh();
+    });
+    ref.listen<bool>(chartSettingsProvider.select((s) => s.tradeHistory), (_, on) {
+      if (on) ref.read(tradeHistoryProvider.notifier).refresh();
+    });
+    ref.listen<ChartLineType>(chartSettingsProvider.select((s) => s.lineType), (_, t) {
+      final next = _typeFor(t);
+      if (next != _type) setState(() => _type = next);
+    });
     final cs = Theme.of(context).colorScheme;
     final tradable = _tradableNow(spec.isEmpty ? null : spec.first);
     // SELL / BUY also grey out once THIS symbol's feed has been silent for kFeedGrace.
@@ -1903,7 +1898,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     );
   }
 
-  // ── Trade history on the chart (Chart Settings > Trade history, apps only) ──
+  // ── Trade history on the chart (Chart Settings > Trade history) ──
 
   List<ChartTrade>? _tradesSrc;
   String? _tradesSym;
@@ -1913,7 +1908,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
   /// loaded candle (in whole weeks, so swiping back refetches only now and then); the filtered list is reused while
   /// nothing changed, so the chart's repaint check stays an identity comparison.
   List<ChartTrade> _tradesFor(WidgetRef r, List<Candle> candles) {
-    if (kIsWeb || !r.read(chartSettingsProvider).tradeHistory || candles.isEmpty) return const [];
+    if (!r.read(chartSettingsProvider).tradeHistory || candles.isEmpty) return const [];
     final acct = r.read(activeAccountIdProvider);
     final h = r.watch(tradeHistoryProvider);
     final ctl = r.read(tradeHistoryProvider.notifier);
@@ -1969,42 +1964,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     );
   }
 
-  void _showChartSettings(BuildContext context) {
-    // Android / iOS apps: the dedicated MT5-style Settings screen. The website keeps the sheet below.
-    if (!kIsWeb) {
-      GoRouter.of(context).push('/chart-settings');
-      return;
-    }
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Padding(
-              padding: EdgeInsets.only(bottom: 4),
-              child: Text('Chart',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-          // Website sheet: candles + line only (the Bar chart option lives on the Settings screen of the apps).
-          for (final t in const [ChartType.candles, ChartType.line])
-            ListTile(
-              leading: Icon(t == ChartType.candles
-                  ? Icons.candlestick_chart
-                  : Icons.show_chart),
-              title:
-                  Text(t == ChartType.candles ? 'Candlesticks' : 'Line chart'),
-              trailing: _type == t
-                  ? Icon(Icons.check, color: Theme.of(ctx).colorScheme.primary)
-                  : null,
-              onTap: () {
-                setState(() => _type = t);
-                Navigator.pop(ctx);
-              },
-            ),
-          const SizedBox(height: 8),
-        ]),
-      ),
-    );
-  }
+  void _showChartSettings(BuildContext context) => GoRouter.of(context).push('/chart-settings');
 
   void _pickSymbol(BuildContext context, List<TradeSymbol> symbols) {
     if (symbols.isEmpty) return;
@@ -2150,9 +2110,9 @@ class _SymbolCaption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Consumer(builder: (context, ref, _) {
-        // Chart Settings > Colors > Foreground (apps): the caption sits on the chart, so it must stay readable on
+        // Chart Settings > Colors > Foreground: the caption sits on the chart, so it must stay readable on
         // whatever background the user picked.
-        final fg = kIsWeb ? null : ref.watch(chartColorsProvider.select((s) => s.palette[ChartColorKey.foreground]));
+        final fg = ref.watch(chartColorsProvider.select((s) => s.palette[ChartColorKey.foreground]));
         return _build(context, fg);
       });
 
