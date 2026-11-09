@@ -505,6 +505,13 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
   bool _prefetchQueued = false;
   bool _panCarryPending = false;
   int _lastPointerCount = 0;
+
+  /// Fingers currently on the chart, and whether a two-finger pinch is under way. When one finger of a pinch
+  /// lifts, Flutter ends the pinch and starts a NEW one-finger gesture with the finger that is left: treating
+  /// that as a pan slid the chart (and could start a fling) after the zoom. Until every finger is up, that
+  /// left-over finger is ignored.
+  int _pointers = 0;
+  bool _pinchHold = false;
   double _flingTarget = 0;
 
   // Finger travel before a scale gesture is recognised is not reported (Flutter hands over only the
@@ -1066,6 +1073,10 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
             _createAnchors = null;
             _moveAnchors = null;
             _moveId = null;
+            if (_pinchHold && d.pointerCount < 2) {
+              _panCarryPending = false;
+              return; // the finger left over after a pinch: not a pan, not a grab
+            }
             // MT5-style creation: with a multi-point tool armed, ONE touch-drag-release draws it. The
             // gesture starts where the finger first touched; the drag is never a pan. One-point tools
             // (H-Line / V-Line) keep their tap, and a two-finger gesture still pinches / zooms.
@@ -1162,6 +1173,11 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
             }
           },
           onScaleUpdate: (d) {
+            if (d.pointerCount >= 2) {
+              _pinchHold = true;
+            } else if (_pinchHold) {
+              return; // the finger left over after a pinch: the zoom is done, nothing moves
+            }
             if (_createAnchors != null) {
               final a = anchorAtPx(d.localFocalPoint);
               if (a != null) {
@@ -1232,7 +1248,15 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
               final s = d.scale / _lastScale;
               _lastScale = d.scale;
               if ((s - 1).abs() > 0.001) {
+                final perBefore = _perScreen.clamp(minPer, total.toDouble());
                 _perScreen = (_perScreen / s).clamp(minPer, total.toDouble());
+                if (d.pointerCount >= 2) {
+                  // Keep the candle under the fingers under the fingers: only the bars to the RIGHT of the
+                  // focal point may change, in proportion to their share of the plot. (A focal point at the right
+                  // edge leaves the offset alone, which is the old newest-bar-anchored zoom.)
+                  final fx = (d.localFocalPoint.dx / _chartW).clamp(0.0, 1.0);
+                  _rightOffset += (perBefore - _perScreen) * (1 - fx);
+                }
                 _gestureZoomed = true;
               }
               _panning = true;
@@ -1275,6 +1299,7 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
             });
           },
           onScaleEnd: (e) {
+            if (e.pointerCount == 0) _pinchHold = false;
             final wasPan = _panning;
             final zoomed = _gestureZoomed;
             _panning = false;
@@ -1341,12 +1366,22 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
           child: Listener(
             behavior: HitTestBehavior.translucent,
             onPointerDown: (e) {
+              _pointers++;
+              if (_pointers == 1) _pinchHold = false;
               _downPos = e.localPosition;
               // A touch while the chart is coasting stops it (and is not a tap).
               _tapStoppedFling = _motion.isAnimating && _flinging;
               _stopMotion();
             },
-            onPointerUp: (_) => _settleSoon(),
+            onPointerUp: (_) {
+              _pointers = math.max(0, _pointers - 1);
+              if (_pointers == 0) _pinchHold = false;
+              _settleSoon();
+            },
+            onPointerCancel: (_) {
+              _pointers = math.max(0, _pointers - 1);
+              if (_pointers == 0) _pinchHold = false;
+            },
             child: CustomPaint(
             size: Size.infinite,
             painter: _CandlePainter(
