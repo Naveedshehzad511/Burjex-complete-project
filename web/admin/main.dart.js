@@ -9699,7 +9699,7 @@ for(s=J.aA(a),r=b!=null;s.q();){q=s.gI(s)
 p=J.a1(q)
 if(J.c(p.h(q,"kind"),"OPEN")&&J.c(p.h(q,"positionId"),b)&&r)return A.h(p.h(q,"ip"))}return"Not available"},
 brg(a,b,c){var s,r,q,p,o,n,m,l,k,j,i=A.kN(A.h(c==null?"":c))
-for(s=J.aA(a),r=i!=null,q=null,p=0;s.q();){o=s.gI(s)
+for(s=J.aA(a),r=i!=null,q=null,p=null;s.q();){o=s.gI(s)
 n=J.a1(o)
 if(!J.c(n.h(o,"kind"),"CLOSE")||!J.c(n.h(o,"positionId"),b)||b==null)continue
 m=n.h(o,"at")
@@ -9707,8 +9707,10 @@ l=A.kN(A.h(m==null?"":m))
 if(!r||l==null)k=0
 else{m=l.a
 j=i.a
-k=Math.abs(B.f.ev(l.b-i.b+1000*(m-j),1000))}if(k<p){q=A.h(n.h(o,"ip"))
-p=k}}return q!=null&&p<=6e4?q:"Not available"},
+k=Math.abs(B.f.ev(l.b-i.b+1000*(m-j),1000))}if(p==null||k<p){q=A.h(n.h(o,"ip"))
+p=k}}if(q!=null){p.toString
+s=p<=6e4}else s=!1
+return s?q:"Not available"},
 blg(a){return B.b.ja(A.bl(a,10,!1,t.S),1,new A.aor())},
 b1R(a){var s=A.kN(A.h(a==null?"":a))
 return s==null?"\u2014":$.bgP().cP(s.QZ())},
