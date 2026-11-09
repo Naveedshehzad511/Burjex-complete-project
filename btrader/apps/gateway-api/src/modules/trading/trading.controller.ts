@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -20,8 +21,24 @@ import { AuditService } from '../audit/audit.service';
 import { PlaceOrderDto, ModifyPositionDto, ModifyOrderDto, ClosePositionDto, CloseScopedDto } from './dto';
 import { PORTAL_READ_CACHE_MS, ttlDelPrefix, ttlWrap } from '../../common/ttl-cache';
 import { withTotalCommission } from '../../common/position-commission';
+import { clientIp } from '../../common/client-ip';
 
 const STAFF_ROLES = new Set(['SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_STAFF', 'SERVICE']);
+
+/** Writes the client's IP for a trade open / close. Never blocks or fails the trade itself. */
+function recordTradeIp(rows: { tenantId: string; accountId: string; kind: 'OPEN' | 'CLOSE'; orderId?: string | null; positionId?: string | null }[], req: any) {
+  const ip = clientIp(req);
+  if (!rows.length || !ip || ip === 'anonymous') return;
+  void prisma.tradeIp
+    .createMany({ data: rows.map((r) => ({ ...r, orderId: r.orderId ?? null, positionId: r.positionId ?? null, ip })) })
+    .catch(() => undefined);
+}
+
+/** Open positions of an account, so a Close All can tell which ones it closed. */
+async function openIds(tenantId: string, accountId: string): Promise<Set<string>> {
+  const rows = await prisma.position.findMany({ where: { tenantId, accountId, status: 'OPEN' }, select: { id: true } });
+  return new Set(rows.map((r) => r.id));
+}
 
 @ApiTags('trading')
 @ApiBearerAuth()
@@ -73,7 +90,7 @@ export class TradingController {
   @Post('orders')
   @ForbidReadOnly()
   @ApiOperation({ summary: 'Place an order (market or pending). One-click supported.' })
-  async place(@CurrentTenant() t: any, @CurrentUser() u: any, @Body() dto: PlaceOrderDto) {
+  async place(@CurrentTenant() t: any, @CurrentUser() u: any, @Body() dto: PlaceOrderDto, @Req() req: any) {
     await this.assertAccountAccess(t.id, u, (dto as any).accountId);
     // Per-group client symbol suffix is display-only — strip it back to the
     // canonical symbol if the app ever sends the suffixed name (e.g. "EURUSD.s").
@@ -83,7 +100,10 @@ export class TradingController {
     );
     ttlDelPrefix(`orders:${t.id}:${(dto as any).accountId}`);
     ttlDelPrefix(`pos:${t.id}:${(dto as any).accountId}`);
-    void this.audit.log(t.id, u.id, 'ORDER_PLACE', 'order', res.orderId, { after: res });
+    void this.audit.log(t.id, u.id, 'ORDER_PLACE', 'order', res.orderId, { after: res, ip: clientIp(req) });
+    if (res?.accepted && res.orderId) {
+      recordTradeIp([{ tenantId: t.id, accountId: (dto as any).accountId, kind: 'OPEN', orderId: res.orderId, positionId: res.positionId }], req);
+    }
     return res;
   }
 
@@ -201,7 +221,7 @@ export class TradingController {
   @Post('positions/:id/close')
   @ForbidReadOnly()
   @ApiOperation({ summary: 'Close a position (full or partial via volume)' })
-  async close(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string, @Body() dto: ClosePositionDto) {
+  async close(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('id') id: string, @Body() dto: ClosePositionDto, @Req() req: any) {
     let accountId: string;
     if (u.acct) {
       accountId = u.acct;
@@ -215,7 +235,8 @@ export class TradingController {
     });
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     ttlDelPrefix(`orders:${t.id}:${accountId}`);
-    void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'position', id, { after: res });
+    void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'position', id, { after: res, ip: clientIp(req) });
+    recordTradeIp([{ tenantId: t.id, accountId, kind: 'CLOSE', positionId: id }], req);
     return res;
   }
 
@@ -231,9 +252,11 @@ export class TradingController {
   @Post('accounts/:accountId/close-all')
   @ForbidReadOnly()
   @ApiOperation({ summary: 'Close all open positions on an account' })
-  async closeAll(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('accountId') accountId: string) {
+  async closeAll(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('accountId') accountId: string, @Req() req: any) {
     await this.assertAccountAccess(t.id, u, accountId);
+    const before = await openIds(t.id, accountId);
     const res = await this.eng.engine.closeAll(t.id, accountId, STAFF_ROLES.has(u?.role));
+    void this.recordClosedSince(t.id, accountId, before, req);
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     ttlDelPrefix(`orders:${t.id}:${accountId}`);
     void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'account', accountId, {
@@ -251,9 +274,11 @@ export class TradingController {
   @Post('accounts/:accountId/close-scoped')
   @ForbidReadOnly()
   @ApiOperation({ summary: 'Close all PROFITABLE or all LOSING open positions on an account (body scope)' })
-  async closeScoped(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('accountId') accountId: string, @Body() dto: CloseScopedDto) {
+  async closeScoped(@CurrentTenant() t: any, @CurrentUser() u: any, @Param('accountId') accountId: string, @Body() dto: CloseScopedDto, @Req() req: any) {
     await this.assertAccountAccess(t.id, u, accountId);
+    const before = await openIds(t.id, accountId);
     const res = await this.eng.engine.closeScoped(t.id, accountId, dto.scope, STAFF_ROLES.has(u?.role));
+    void this.recordClosedSince(t.id, accountId, before, req);
     ttlDelPrefix(`pos:${t.id}:${accountId}`);
     ttlDelPrefix(`orders:${t.id}:${accountId}`);
     void this.audit.log(t.id, u.id, 'POSITION_CLOSE', 'account', accountId, {
@@ -262,7 +287,42 @@ export class TradingController {
     return res;
   }
 
+  /** A Close All closes in the engine; the positions open before and not after are the ones it closed. */
+  private async recordClosedSince(tenantId: string, accountId: string, before: Set<string>, req: any) {
+    try {
+      const after = await openIds(tenantId, accountId);
+      const closed = [...before].filter((id) => !after.has(id));
+      recordTradeIp(closed.map((positionId) => ({ tenantId, accountId, kind: 'CLOSE' as const, positionId })), req);
+    } catch {
+      /* the IP record never affects the close */
+    }
+  }
+
   // ── History ───────────────────────────────────────────────────────────────
+  @Get('history/trade-ips')
+  @Roles('SUPER_ADMIN', 'TENANT_ADMIN', 'TENANT_STAFF')
+  @ApiOperation({ summary: 'Admin: the client IP recorded at each trade open / close for an account' })
+  async tradeIps(@CurrentTenant() t: any, @Query('accountId') accountId: string) {
+    const rows = await prisma.tradeIp.findMany({
+      where: { tenantId: t.id, accountId },
+      orderBy: { createdAt: 'desc' },
+      take: 2000,
+    });
+    // A pending order's position appears later: find it through the order.
+    const orderIds = rows.filter((r) => r.kind === 'OPEN' && !r.positionId && r.orderId).map((r) => r.orderId as string);
+    const orders = orderIds.length
+      ? await prisma.order.findMany({ where: { tenantId: t.id, id: { in: orderIds } }, select: { id: true, positionId: true } })
+      : [];
+    const posOf = new Map(orders.map((o) => [o.id, o.positionId]));
+    return rows.map((r) => ({
+      kind: r.kind,
+      positionId: r.positionId ?? (r.orderId ? posOf.get(r.orderId) ?? null : null),
+      orderId: r.orderId,
+      ip: r.ip,
+      at: r.createdAt,
+    }));
+  }
+
   @Get('history/deals')
   @ApiOperation({ summary: 'Trade/deal history for an account (MT5-style, enriched)' })
   async deals(

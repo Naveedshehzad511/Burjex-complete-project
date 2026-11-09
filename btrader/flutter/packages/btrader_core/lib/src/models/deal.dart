@@ -105,3 +105,33 @@ double totalCommission(Iterable<Deal> deals) {
   }
   return sum;
 }
+
+/// Deal types that move the balance outside trading (Deposit / Withdrawal in the History summary).
+const historyBalanceTypes = {'DEPOSIT', 'WITHDRAWAL', 'BONUS', 'DIVIDEND', 'CREDIT', 'BALANCE'};
+
+typedef HistoryTotals = ({double deposit, double withdrawal, double profit, double swap, double commission, double balance});
+
+/// The History summary (Deposit, Withdrawal, Profit, Swap, Commission, Balance) from an account's
+/// deals, newest first as `/history/deals` returns them. The app's History tab and the admin Trade
+/// Journal both use this, so they always agree. Balance is the newest deal's balance after it.
+HistoryTotals historyTotals(List<Deal> deals) {
+  double deposit = 0, withdrawal = 0, profit = 0, swap = 0;
+  for (final d in deals) {
+    if (d.isTrade) {
+      profit += d.profit;
+      swap += d.swap;
+    } else if (d.type == 'WITHDRAWAL') {
+      withdrawal += d.amount;
+    } else if (historyBalanceTypes.contains(d.type)) {
+      deposit += d.amount;
+    }
+  }
+  return (
+    deposit: deposit,
+    withdrawal: withdrawal,
+    profit: profit,
+    swap: swap,
+    commission: totalCommission(deals),
+    balance: deals.isNotEmpty ? deals.first.balanceAfter : 0.0,
+  );
+}

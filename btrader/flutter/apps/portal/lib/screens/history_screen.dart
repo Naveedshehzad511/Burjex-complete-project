@@ -81,7 +81,7 @@ final historyProvider = FutureProvider.autoDispose<AccountDeals>((ref) async {
   return (account: id, deals: deals);
 });
 
-const _balanceTypes = {'DEPOSIT', 'WITHDRAWAL', 'BONUS', 'DIVIDEND', 'CREDIT', 'BALANCE'};
+const _balanceTypes = historyBalanceTypes;
 
 class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
@@ -180,21 +180,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     style: TextStyle(color: Theme.of(context).hintColor)));
           }
 
-          double deposit = 0, withdrawal = 0, profit = 0, swap = 0, commission = 0;
-          for (final d in all) {
-            if (d.isTrade) {
-              profit += d.profit;
-              swap += d.swap;
-            } else if (d.type == 'WITHDRAWAL') {
-              withdrawal += d.amount;
-            } else if (_balanceTypes.contains(d.type)) {
-              deposit += d.amount;
-            }
-          }
-          // Commission is debited when a trade is executed, so it sits on the OPEN deals (which
-          // are not rows of their own here); positions opened earlier still carry it on their close.
-          commission = totalCommission(all);
-          final balance = all.isNotEmpty ? all.first.balanceAfter : 0;
+          // Shared with the admin Trade Journal (btrader_core), so both show the same totals.
+          final (:deposit, :withdrawal, :profit, :swap, :commission, :balance) = historyTotals(all);
 
           final suffix = ref.watch(clientSuffixProvider);
           return ListView(children: [

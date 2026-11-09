@@ -161,7 +161,7 @@ class SymbolMappingEditor extends StatelessWidget {
                           decoration: const InputDecoration(
                             labelText: 'Max spread (points)',
                             isDense: true,
-                            helperText: '0 = no cap. 1 pt = one price step (XAUUSD: $1 per lot)',
+                            helperText: '0 = no cap. 1 pt = one price step (XAUUSD: \$1 per lot)',
                           ),
                         ),
                       ),

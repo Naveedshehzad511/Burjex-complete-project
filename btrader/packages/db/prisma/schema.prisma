@@ -1347,3 +1347,21 @@ model HqServer {
 
   @@map("hq_servers")
 }
+
+// The client's public IP at a trade's open and close, written by the gateway at the request
+// itself (never copied from a later login). One row per event: OPEN carries the order (and
+// the position once it exists), CLOSE the position. The engine never reads or writes it.
+model TradeIp {
+  id         String   @id @default(uuid())
+  tenantId   String
+  accountId  String
+  kind       String   // OPEN | CLOSE
+  orderId    String?
+  positionId String?
+  ip         String
+  createdAt  DateTime @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([positionId])
+  @@index([orderId])
+}
