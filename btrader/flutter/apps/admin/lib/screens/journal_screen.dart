@@ -43,15 +43,15 @@ String _openIp(List<dynamic> ips, dynamic positionId) {
 String _closeIp(List<dynamic> ips, dynamic positionId, dynamic dealAt) {
   final t = DateTime.tryParse('${dealAt ?? ''}');
   String? best;
-  int bestGap = 1 << 62;
+  int? bestGap; // no `1 << 62` start: on the web a shift is 32-bit and that is 0
   for (final r in ips) {
     if (r['kind'] != 'CLOSE' || r['positionId'] != positionId || positionId == null) continue;
     final at = DateTime.tryParse('${r['at'] ?? ''}');
     final gap = (t == null || at == null) ? 0 : at.difference(t).inMilliseconds.abs();
-    if (gap < bestGap) { bestGap = gap; best = '${r['ip']}'; }
+    if (bestGap == null || gap < bestGap) { bestGap = gap; best = '${r['ip']}'; }
   }
   // More than a minute apart is a different close (e.g. a later SL/TP): not this one.
-  return best != null && bestGap <= 60000 ? best : _na;
+  return best != null && bestGap! <= 60000 ? best : _na;
 }
 
 class JournalScreen extends ConsumerWidget {
