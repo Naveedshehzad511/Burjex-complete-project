@@ -165,13 +165,97 @@ class JournalScreen extends ConsumerWidget {
                 )),
         ),
         const SizedBox(height: 24),
+        _sectionTitle(context, 'HISTORY SUMMARY'),
+        deals.when(
+          loading: () => const SizedBox.shrink(),
+          error: (e, _) => _err(context, e),
+          data: (rows) {
+            // Same deals and the same rule as the app's History tab (historyTotals in btrader_core).
+            final t = historyTotals([for (final r in rows) Deal.fromJson(Map<String, dynamic>.from(r as Map))]);
+            Widget row(String k, double v, Color? color, {bool bold = false}) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text(k, style: TextStyle(fontWeight: bold ? FontWeight.w700 : FontWeight.w500)),
+                    Text(money(v), style: TextStyle(color: color, fontWeight: bold ? FontWeight.w700 : FontWeight.w600)),
+                  ]),
+                );
+            Color? sign(double v) => v > 0 ? tc.profit : (v < 0 ? tc.loss : null);
+            return Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: _wrap(Column(children: [
+                  row('Deposit', t.deposit, sign(t.deposit)),
+                  row('Withdrawal', t.withdrawal, sign(t.withdrawal)),
+                  row('Profit', t.profit, sign(t.profit)),
+                  row('Swap', t.swap, sign(t.swap)),
+                  row('Commission', t.commission, sign(t.commission)),
+                  const Divider(height: 8),
+                  row('Balance', t.balance, null, bold: true),
+                ])),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 24),
+        _sectionTitle(context, 'CLOSED TRADES — realised P&L'),
+        deals.when(
+          loading: () => const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
+          error: (e, _) => _err(context, e),
+          data: (rows) {
+            final closed = rows.where((r) => (r as Map)['type'] == 'CLOSE' || r['type'] == 'PARTIAL_CLOSE').toList();
+            return closed.isEmpty
+                ? _empty(context, 'No closed trades yet.')
+                : _box(SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      columnSpacing: 22,
+                      headingRowHeight: 34,
+                      dataRowMinHeight: 30,
+                      dataRowMaxHeight: 34,
+                      columns: const [
+                        DataColumn(label: Text('TIME')),
+                        DataColumn(label: Text('SYMBOL')),
+                        DataColumn(label: Text('SIDE')),
+                        DataColumn(label: Text('VOL'), numeric: true),
+                        DataColumn(label: Text('ENTRY'), numeric: true),
+                        DataColumn(label: Text('EXIT'), numeric: true),
+                        DataColumn(label: Text('P/L'), numeric: true),
+                        DataColumn(label: Text('OPEN IP')),
+                        DataColumn(label: Text('CLOSE IP')),
+                      ],
+                      rows: [
+                        for (final r in closed)
+                          () {
+                            final m = r as Map;
+                            final digits = (m['digits'] ?? 5) as int;
+                            final pl = d(m['profit']) ?? 0;
+                            final side = '${m['side']}';
+                            return DataRow(cells: [
+                              DataCell(Text(_fmt(m['createdAt']))),
+                              DataCell(Text('${m['symbol'] ?? '—'}')),
+                              DataCell(Text(side, style: TextStyle(color: side == 'BUY' ? tc.buy : tc.sell, fontWeight: FontWeight.w600))),
+                              DataCell(Text((d(m['volume']) ?? 0).toStringAsFixed(2))),
+                              DataCell(Text(px(m['openPrice'], digits))),
+                              DataCell(Text(px(m['price'], digits))),
+                              DataCell(Text(money(pl), style: TextStyle(color: pl >= 0 ? tc.profit : tc.loss, fontWeight: FontWeight.w600))),
+                              DataCell(_ip(context, _openIp(ips, m['positionId']))),
+                              DataCell(_ip(context, _closeIp(ips, m['positionId'], m['createdAt']))),
+                            ]);
+                          }(),
+                      ],
+                    ),
+                  ));
+          },
+        ),
+        const SizedBox(height: 24),
         _sectionTitle(context, 'ORDERS — requested vs executed'),
         orders.when(
           loading: () => const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
           error: (e, _) => _err(context, e),
           data: (rows) => rows.isEmpty
               ? _empty(context, 'No orders for this account.')
-              : _wrap(SingleChildScrollView(
+              : _box(SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
                     columnSpacing: 22,
@@ -221,90 +305,6 @@ class JournalScreen extends ConsumerWidget {
                 )),
         ),
         const SizedBox(height: 24),
-        _sectionTitle(context, 'CLOSED TRADES — realised P&L'),
-        deals.when(
-          loading: () => const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
-          error: (e, _) => _err(context, e),
-          data: (rows) {
-            final closed = rows.where((r) => (r as Map)['type'] == 'CLOSE' || r['type'] == 'PARTIAL_CLOSE').toList();
-            return closed.isEmpty
-                ? _empty(context, 'No closed trades yet.')
-                : _wrap(SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      columnSpacing: 22,
-                      headingRowHeight: 34,
-                      dataRowMinHeight: 30,
-                      dataRowMaxHeight: 34,
-                      columns: const [
-                        DataColumn(label: Text('TIME')),
-                        DataColumn(label: Text('SYMBOL')),
-                        DataColumn(label: Text('SIDE')),
-                        DataColumn(label: Text('VOL'), numeric: true),
-                        DataColumn(label: Text('ENTRY'), numeric: true),
-                        DataColumn(label: Text('EXIT'), numeric: true),
-                        DataColumn(label: Text('P/L'), numeric: true),
-                        DataColumn(label: Text('OPEN IP')),
-                        DataColumn(label: Text('CLOSE IP')),
-                      ],
-                      rows: [
-                        for (final r in closed)
-                          () {
-                            final m = r as Map;
-                            final digits = (m['digits'] ?? 5) as int;
-                            final pl = d(m['profit']) ?? 0;
-                            final side = '${m['side']}';
-                            return DataRow(cells: [
-                              DataCell(Text(_fmt(m['createdAt']))),
-                              DataCell(Text('${m['symbol'] ?? '—'}')),
-                              DataCell(Text(side, style: TextStyle(color: side == 'BUY' ? tc.buy : tc.sell, fontWeight: FontWeight.w600))),
-                              DataCell(Text((d(m['volume']) ?? 0).toStringAsFixed(2))),
-                              DataCell(Text(px(m['openPrice'], digits))),
-                              DataCell(Text(px(m['price'], digits))),
-                              DataCell(Text(money(pl), style: TextStyle(color: pl >= 0 ? tc.profit : tc.loss, fontWeight: FontWeight.w600))),
-                              DataCell(_ip(context, _openIp(ips, m['positionId']))),
-                              DataCell(_ip(context, _closeIp(ips, m['positionId'], m['createdAt']))),
-                            ]);
-                          }(),
-                      ],
-                    ),
-                  ));
-          },
-        ),
-        const SizedBox(height: 24),
-        _sectionTitle(context, 'HISTORY SUMMARY'),
-        deals.when(
-          loading: () => const SizedBox.shrink(),
-          error: (e, _) => _err(context, e),
-          data: (rows) {
-            // Same deals and the same rule as the app's History tab (historyTotals in btrader_core).
-            final t = historyTotals([for (final r in rows) Deal.fromJson(Map<String, dynamic>.from(r as Map))]);
-            Widget row(String k, double v, Color? color, {bool bold = false}) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text(k, style: TextStyle(fontWeight: bold ? FontWeight.w700 : FontWeight.w500)),
-                    Text(money(v), style: TextStyle(color: color, fontWeight: bold ? FontWeight.w700 : FontWeight.w600)),
-                  ]),
-                );
-            Color? sign(double v) => v > 0 ? tc.profit : (v < 0 ? tc.loss : null);
-            return Align(
-              alignment: Alignment.centerLeft,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: _wrap(Column(children: [
-                  row('Deposit', t.deposit, sign(t.deposit)),
-                  row('Withdrawal', t.withdrawal, sign(t.withdrawal)),
-                  row('Profit', t.profit, sign(t.profit)),
-                  row('Swap', t.swap, sign(t.swap)),
-                  row('Commission', t.commission, sign(t.commission)),
-                  const Divider(height: 8),
-                  row('Balance', t.balance, null, bold: true),
-                ])),
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 24),
       ]),
     );
   }
@@ -323,6 +323,12 @@ class JournalScreen extends ConsumerWidget {
   Widget _ip(BuildContext c, String s) => s == _na || s == 'Pending'
       ? Text(s, style: TextStyle(fontSize: 12, color: Theme.of(c).hintColor))
       : SelectableText(s, style: const TextStyle(fontSize: 12, fontFamily: 'monospace'));
+
+  /// A long list in a box of about 12 rows; the rest scrolls inside it, not the whole page.
+  Widget _box(Widget child) => _wrap(ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 34.0 + 12 * 34 + 8),
+        child: SingleChildScrollView(primary: false, child: child),
+      ));
 
   Widget _wrap(Widget child) => Card(margin: EdgeInsets.zero, child: Padding(padding: const EdgeInsets.all(4), child: child));
 
