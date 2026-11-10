@@ -1434,7 +1434,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                           Icons.pending_actions_outlined,
                           draftOpen ? 'Close order panel' : 'New order',
                           _toggleOrderPanel,
-                          active: draftOpen,
+                          // No highlight behind it, as on MT5.
                           child: Mt5OrderIcon(key: const ValueKey('mt5-order-icon'), size: toolIcon + 2, sell: tc.sell, buy: tc.buy)),
                       tool(
                           trade.panelVisible
@@ -1446,8 +1446,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                           () => ref
                               .read(chartTradeProvider.notifier)
                               .togglePanel(),
-                          active: trade.panelVisible,
-                          // MT5's red | blue Buy / Sell panel switch (Android / web).
+                          // MT5's red | blue Buy / Sell panel switch (Android / web): no highlight, the icon
+                          // is dimmed while the panel is hidden.
                           child: Mt5TradePanelIcon(
                               key: const ValueKey('mt5-panel-icon'),
                               size: toolIcon + 2,
