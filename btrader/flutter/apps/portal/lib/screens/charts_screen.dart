@@ -19,6 +19,7 @@ import '../widgets/candle_chart.dart';
 import '../widgets/drawings_sheet.dart';
 import '../widgets/indicators_sheet.dart';
 import '../widgets/manage_accounts.dart';
+import '../widgets/ios_glass.dart';
 import '../widgets/pending_panel.dart';
 import '../widgets/portal_drawer.dart';
 import '../widgets/trade_toast.dart';
@@ -1342,7 +1343,57 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
 
     // MT5 chart toolbar: ☰ ✛ ƒ ✎  M1  ◔ ▭ — the order-mode and Buy/Sell toggles on the
     // right. Tapping the timeframe swaps the row for the full timeframe strip.
-    final header = SizedBox(
+    final Widget crosshairBtn = tool(Icons.add, 'Crosshair', () => setState(() => _crosshair = !_crosshair), active: _crosshair);
+    final Widget indicatorsBtn = tool(Icons.functions, 'Indicators', () => showIndicatorsSheet(context),
+        child: Badge(isLabelVisible: activeIndicators > 0, label: Text('$activeIndicators'), child: const Icon(Icons.functions)));
+    final Widget chartTypeBtn =
+        tool(Icons.timeline, 'Chart type', () => _showChartSettings(context), active: _type != ChartType.candles);
+    final Widget tfBtn = TextButton(
+      key: const ValueKey('tf-current'),
+      onPressed: () => setState(() => _tfStripOpen = true),
+      style: TextButton.styleFrom(
+          minimumSize: Size(40, 36 * uiK),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const EdgeInsets.symmetric(horizontal: 6)),
+      child: Text(selectedTf.mt5Label, style: TextStyle(fontSize: 15 * uiK, fontWeight: FontWeight.w800, color: cs.onSurface)),
+    );
+    final Widget orderBtn = tool(Icons.pending_actions_outlined, draftOpen ? 'Close order panel' : 'New order', _toggleOrderPanel,
+        active: draftOpen);
+    final Widget panelBtn = tool(trade.panelVisible ? Icons.toggle_on : Icons.toggle_off_outlined,
+        trade.panelVisible ? 'Hide Buy / Sell' : 'Show Buy / Sell', () => ref.read(chartTradeProvider.notifier).togglePanel(),
+        active: trade.panelVisible);
+
+    // iPhone: MT5 iOS arrangement on a glass bar - timeframe left, chart tools centred, order
+    // controls right. Same buttons and actions as below; Android and web keep their row.
+    final iosHeader = Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 2),
+      child: GlassSurface(
+        radius: GlassTheme.buttonRadius,
+        shadow: false,
+        child: SizedBox(
+          key: const ValueKey('ios-chart-toolbar'),
+          height: 40 * uiK,
+          child: _tfStripOpen
+              ? tfStrip
+              : Row(children: [
+                  const SizedBox(width: 4),
+                  tfBtn,
+                  const Spacer(),
+                  crosshairBtn,
+                  const SizedBox(width: 6),
+                  indicatorsBtn,
+                  const SizedBox(width: 6),
+                  chartTypeBtn,
+                  const Spacer(),
+                  orderBtn,
+                  panelBtn,
+                  const SizedBox(width: 4),
+                ]),
+        ),
+      ),
+    );
+
+    final header = iosGlass ? iosHeader : SizedBox(
       height: 40 * uiK,
       child: _tfStripOpen
           ? tfStrip
@@ -1593,6 +1644,22 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                       }),
                     ),
                     onDuplicate: () => _showChartsMenu(context),
+                    // iPhone: MT5's Indicators / Objects / Settings / Cancel popup instead of the round menu.
+                    onOpenChartMenu: iosGlass
+                        ? () => _iosChartMenu(
+                              context,
+                              title: _menuTitle(spec.isEmpty ? _symbol : spec.first.displaySymbol, spec.isEmpty ? null : spec.first.description),
+                              onObjects: () => showDrawingsSheet(
+                                context,
+                                symbol: _symbol,
+                                digits: digits,
+                                onSelectTool: (t) => setState(() {
+                                  _activeTool = t;
+                                  _pendingAnchors = [];
+                                }),
+                              ),
+                            )
+                        : null,
                   ),
                   // Shown only while the chart catches up after the app was away.
                   Positioned(left: 0, right: 0, bottom: 30, child: Center(child: ChartUpdatingBadge(req))),
@@ -1744,6 +1811,21 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                     }),
                   ),
                   onDuplicate: () => _showChartsMenu(context),
+                  onOpenChartMenu: iosGlass
+                      ? () => _iosChartMenu(
+                            context,
+                            title: _menuTitle(spec2.isEmpty ? win.symbol : spec2.first.displaySymbol, spec2.isEmpty ? null : spec2.first.description),
+                            onObjects: () => showDrawingsSheet(
+                              context,
+                              symbol: win.symbol,
+                              digits: digits2,
+                              onSelectTool: (t) => setState(() {
+                                _activeTool2 = t;
+                                _pendingAnchors2 = [];
+                              }),
+                            ),
+                          )
+                      : null,
                 ),
                 Positioned(left: 0, right: 0, bottom: 30, child: Center(child: ChartUpdatingBadge(req2))),
                 Positioned(
@@ -1965,6 +2047,21 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
   }
 
   void _showChartSettings(BuildContext context) => GoRouter.of(context).push('/chart-settings');
+
+  static String _menuTitle(String symbol, String? description) =>
+      description == null || description.trim().isEmpty ? symbol : '$symbol: $description';
+
+  /// iPhone only ([iosGlass]): MT5's chart popup. Each choice opens the same sheet / screen the
+  /// round menu and the gear open everywhere else - nothing new behind it.
+  void _iosChartMenu(BuildContext context, {required String title, required VoidCallback onObjects}) => showGlassMenu(
+        context,
+        title: title,
+        actions: [
+          GlassMenuAction('Indicators', () => showIndicatorsSheet(context), key: const ValueKey('chart-menu-indicators')),
+          GlassMenuAction('Objects', onObjects, key: const ValueKey('chart-menu-objects')),
+          GlassMenuAction('Settings', () => _showChartSettings(context), key: const ValueKey('chart-menu-settings')),
+        ],
+      );
 
   void _pickSymbol(BuildContext context, List<TradeSymbol> symbols) {
     if (symbols.isEmpty) return;

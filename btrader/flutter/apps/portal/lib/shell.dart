@@ -10,6 +10,7 @@ import 'screens/history_screen.dart' show historyProvider;
 import 'screens/ib_screens.dart' show refreshIbState;
 import 'services/sound_service.dart';
 import 'session/sessions.dart';
+import 'widgets/ios_glass.dart';
 
 /// Responsive shell. On phones it's a bottom NavigationBar; on tablet/desktop it
 /// switches to a side NavigationRail and centres wide content for readability.
@@ -167,6 +168,18 @@ class _PortalShellState extends ConsumerState<PortalShell> with WidgetsBindingOb
             ),
           ),
         ]),
+      );
+    }
+
+    // iPhone: the same tabs in a floating glass bar (MT5 / iOS 26 look). Android and web keep NavigationBar.
+    if (iosGlass) {
+      return Scaffold(
+        body: widget.child,
+        bottomNavigationBar: GlassTabBar(
+          items: [for (final d in dest) (d.icon, d.selected, d.label)],
+          selectedIndex: index,
+          onSelect: go,
+        ),
       );
     }
 

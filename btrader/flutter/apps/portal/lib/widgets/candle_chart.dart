@@ -275,6 +275,7 @@ class CandleChart extends StatefulWidget {
     this.viewKey,
     this.onSelectTool,
     this.onOpenIndicators,
+    this.onOpenChartMenu,
     this.onOpenObjects,
     this.onDuplicate,
   });
@@ -402,6 +403,10 @@ class CandleChart extends StatefulWidget {
 
   /// Round menu's "Objects" wedge — opens the app's real drawing-tools sheet.
   final VoidCallback? onOpenObjects;
+
+  /// When set (the iPhone app), a tap on empty chart calls this instead of opening the round menu,
+  /// so the caller can show its own menu. Null on Android and web: the round menu, as before.
+  final VoidCallback? onOpenChartMenu;
 
   /// Round menu's "Duplicate" wedge — opens MT5-style chart-window management
   /// (new window / tile / remove).
@@ -1029,6 +1034,10 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
           return;
         }
         if (widget.onEmptyTap?.call() == true) return; // this tap only closed the order card
+        if (widget.onOpenChartMenu != null) {
+          widget.onOpenChartMenu!();
+          return;
+        }
         setState(() => _radialOpen = true);
       }
 

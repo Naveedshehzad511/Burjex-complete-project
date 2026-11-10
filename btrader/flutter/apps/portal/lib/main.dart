@@ -8,6 +8,7 @@ import 'screens/security_screens.dart';
 import 'security/geo_gate.dart';
 import 'services/sound_service.dart';
 import 'session/app_reset.dart';
+import 'widgets/ios_glass.dart';
 import 'widgets/trade_toast.dart';
 
 void main() {
@@ -52,8 +53,9 @@ class PortalApp extends ConsumerWidget {
     return MaterialApp.router(
       title: brand.appName,
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(brand),
-      darkTheme: AppTheme.dark(brand),
+      // iPhone: glass sheets / menus / alerts on top of the normal theme (unchanged on Android and web).
+      theme: withIosGlass(AppTheme.light(brand)),
+      darkTheme: withIosGlass(AppTheme.dark(brand)),
       themeMode: mode,
       routerConfig: router,
       builder: (context, child) =>

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:btrader_core/btrader_core.dart';
 
+import '../widgets/ios_glass.dart';
 import '../widgets/state_views.dart';
 import '../nav.dart';
 import '../services/sound_service.dart';
@@ -386,10 +387,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
               Builder(builder: (_) {
                 final l = positions.valueOrNull;
                 if (l == null || l.isEmpty || readonly) return const SizedBox.shrink();
-                return PopupMenuButton<String>(
-                        tooltip: 'Positions menu',
-                        icon: Icon(Icons.more_horiz, color: Theme.of(context).hintColor),
-                        onSelected: (v) async {
+                Future<void> onBulk(String v) async {
                           final scope = switch (v) {
                             'closeAll' => BulkClose.all,
                             'closeProfitable' => BulkClose.profitable,
@@ -466,22 +464,48 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
                             ref.read(accountsRefreshProvider).request();
                             ref.read(tradeEventEpochProvider.notifier).state++;
                           }
-                        },
-                        itemBuilder: (_) {
-                          // The categories come from the live P/L of the open positions at the moment the menu opens
-                          // (the same figures as the rows below): a category shows only if a position is in it.
-                          final o = bulkCloseOptions([
-                            for (final hp in positions.valueOrNull ?? const <Position>[])
-                              resolvePositionPl(hp, livePl: livePL, quotes: quotes, symbols: symbols, snap: liveSnap, accountCurrency: acctCcy),
-                          ]);
-                          PopupMenuItem<String> item(String value, BulkClose b) =>
-                              PopupMenuItem(value: value, child: Text(b.menuLabel, style: TextStyle(color: tc.loss, fontWeight: FontWeight.w600)));
-                          return [
-                            item('closeAll', BulkClose.all),
-                            if (o.profitable) item('closeProfitable', BulkClose.profitable),
-                            if (o.losing) item('closeLosing', BulkClose.losing),
-                          ];
-                        },
+                }
+
+                // The categories come from the live P/L of the open positions at the moment the menu opens
+                // (the same figures as the rows below): a category shows only if a position is in it.
+                List<(String, BulkClose)> bulkOptions() {
+                  final o = bulkCloseOptions([
+                    for (final hp in positions.valueOrNull ?? const <Position>[])
+                      resolvePositionPl(hp, livePl: livePL, quotes: quotes, symbols: symbols, snap: liveSnap, accountCurrency: acctCcy),
+                  ]);
+                  return [
+                    ('closeAll', BulkClose.all),
+                    if (o.profitable) ('closeProfitable', BulkClose.profitable),
+                    if (o.losing) ('closeLosing', BulkClose.losing),
+                  ];
+                }
+
+                // iPhone: MT5's "Bulk Operations" glass popup. Same choices and the same close code.
+                if (iosGlass) {
+                  return IconButton(
+                    tooltip: 'Positions menu',
+                    icon: Icon(Icons.more_horiz, color: Theme.of(context).hintColor),
+                    onPressed: () => showGlassMenu(
+                      context,
+                      title: 'Bulk Operations',
+                      cancel: false,
+                      destructiveColor: tc.loss,
+                      actions: [
+                        for (final (v, b) in bulkOptions())
+                          GlassMenuAction(b.menuLabel, () => onBulk(v), destructive: true, key: ValueKey('bulk-$v')),
+                      ],
+                    ),
+                  );
+                }
+
+                return PopupMenuButton<String>(
+                        tooltip: 'Positions menu',
+                        icon: Icon(Icons.more_horiz, color: Theme.of(context).hintColor),
+                        onSelected: onBulk,
+                        itemBuilder: (_) => [
+                          for (final (v, b) in bulkOptions())
+                            PopupMenuItem(value: v, child: Text(b.menuLabel, style: TextStyle(color: tc.loss, fontWeight: FontWeight.w600))),
+                        ],
                       );
               }),
             ]),
