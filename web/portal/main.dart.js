@@ -65671,124 +65671,123 @@ s.v(new A.aVI(s))},
 asx(){return this.v(new A.aVj(this))},
 a7k(a){A.jn(new A.aWf(this),a,!0,!0,!1,!1,t.H)},
 S0(a,b,c){return A.uP(new A.aWm(a,b,c))},
-E(e3){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,d0,d1,d2,d3=this,d4=null,d5="Crosshair",d6="Indicators",d7="Chart type",d8="Close order panel",d9="New order",e0="Hide Buy / Sell",e1="Show Buy / Sell",e2=d3.gar()
-e2.S($.Zc(),t.fu)
-e2.S($.bqM(),t.H)
+E(e2){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,d0,d1,d2=this,d3=null,d4="Crosshair",d5="Indicators",d6="Chart type",d7="Close order panel",d8="New order",d9="Hide Buy / Sell",e0="Show Buy / Sell",e1=d2.gar()
+e1.S($.Zc(),t.fu)
+e1.S($.bqM(),t.H)
 s=$.eZ()
 r=t.N
-e2.S(s,r)
-if(e2.S($.amd(),t.c6)===B.jM)return B.a86
-e2.dZ(s,new A.aWN(d3))
+e1.S(s,r)
+if(e1.S($.amd(),t.c6)===B.jM)return B.a86
+e1.dZ(s,new A.aWN(d2))
 q=$.kW()
-e2.dZ(q,new A.aWO(d3,e3))
-e2.dZ($.lz(),new A.aWP(d3))
+e1.dZ(q,new A.aWO(d2,e2))
+e1.dZ($.lz(),new A.aWP(d2))
 p=$.fB()
 o=t.y
-n=e2.S(new A.cc(p,new A.aX_(),p.$ti.i("cc<d3.0,u>")),o)
-m=e2.S($.Z9(),t.nQ)
-l=A.bx(e2.S($.jX(),t.cO))
+n=e1.S(new A.cc(p,new A.aX_(),p.$ti.i("cc<d3.0,u>")),o)
+m=e1.S($.Z9(),t.nQ)
+l=A.bx(e1.S($.jX(),t.cO))
 if(l==null)l=B.cS
-k=J.e4(l,new A.aXa(d3))
+k=J.e4(l,new A.aXa(d2))
 j=!k.gaa(0).t()?5:k.gO(0).f
 i=!k.gaa(0).t()?0.01:k.gO(0).x
-p=e2.J(0,s,r)
-h=e2.S($.bqH(),t.RL)
+p=e1.J(0,s,r)
+h=e1.S($.bqH(),t.RL)
 g=J.e4(h,new A.aXj()).gD(0)
-f=J.e4(e2.S($.mw(),t.JF),new A.aXk(d3))
+f=J.e4(e1.S($.mw(),t.JF),new A.aXk(d2))
 e=A.Y(f,f.$ti.i("C.E"))
 f=$.Cg()
-d=e2.S(new A.oP(f,new A.aXl(),f.$ti.i("oP<da.0,y<cM>?>")),t.th)
+d=e1.S(new A.oP(f,new A.aXl(),f.$ti.i("oP<da.0,y<cM>?>")),t.th)
 if(d==null)d=B.d7
-c=A.bx(e2.S(q,t.r4))
+c=A.bx(e1.S(q,t.r4))
 if(c==null)c=B.dE
-q=t.wa.a(A.m(e3).c.h(0,A.bK(t.e)))
+q=t.wa.a(A.m(e2).c.h(0,A.bK(t.e)))
 q.toString
-f=new A.aYa(d3,k)
+f=new A.aYa(d2,k)
 b=$.jW()
-a=e2.S(b,t.LZ)
-e2.dZ(new A.cc(b,new A.aXm(),b.$ti.i("cc<d3.0,H>")),new A.aXn(d3))
+a=e1.S(b,t.LZ)
+e1.dZ(new A.cc(b,new A.aXm(),b.$ti.i("cc<d3.0,H>")),new A.aXn(d2))
 b=$.Jf()
 a0=b.$ti
 a1=a0.i("cc<d3.0,u>")
-a2=e2.S(new A.cc(b,new A.aXo(),a1),o)
-a3=e2.S(new A.cc(b,new A.aWQ(),a1),o)
-a4=e2.S(new A.cc(b,new A.aWR(),a1),o)
+a2=e1.S(new A.cc(b,new A.aXo(),a1),o)
+a3=e1.S(new A.cc(b,new A.aWQ(),a1),o)
+a4=e1.S(new A.cc(b,new A.aWR(),a1),o)
 a5=$.Je()
-a6=e2.S(new A.cc(a5,new A.aWS(),a5.$ti.i("cc<d3.0,qN>")),t.Ew)
-e2.S(new A.cc(b,new A.aWT(),a0.i("cc<d3.0,+(u,u,u,u,u)>")),t.kk)
-e2.dZ($.Ji(),new A.aWU(d3))
-e2.dZ(new A.cc(b,new A.aWV(),a1),new A.aWW(d3))
-e2.dZ(new A.cc(b,new A.aWX(),a0.i("cc<d3.0,iu>")),new A.aWY(d3))
-a7=A.m(e3).ax
-a8=d3.S5(!k.gaa(0).t()?d4:k.gO(0))
-a9=e2.S($.Zf().$1(e2.J(0,s,r)),o)
+a6=e1.S(new A.cc(a5,new A.aWS(),a5.$ti.i("cc<d3.0,qN>")),t.Ew)
+e1.S(new A.cc(b,new A.aWT(),a0.i("cc<d3.0,+(u,u,u,u,u)>")),t.kk)
+e1.dZ($.Ji(),new A.aWU(d2))
+e1.dZ(new A.cc(b,new A.aWV(),a1),new A.aWW(d2))
+e1.dZ(new A.cc(b,new A.aWX(),a0.i("cc<d3.0,iu>")),new A.aWY(d2))
+a7=A.m(e2).ax
+a8=d2.S5(!k.gaa(0).t()?d3:k.gO(0))
+a9=e1.S($.Zf().$1(e1.J(0,s,r)),o)
 b0=a8&&a9
-o=d3.dx
-b1=(o==null?d4:o.a===B.aX)===!0
-b2=B.d.b3(A.ar(e3,B.dk,t.w).w.a.a/420,0.9,1.15)
+o=d2.dx
+b1=(o==null?d3:o.a===B.aX)===!0
+b2=B.d.b3(A.ar(e2,B.dk,t.w).w.a.a/420,0.9,1.15)
 b3=20*b2
 o=new A.aYb(b3,b2,a7)
-b4=new A.a7H(m,new A.aXp(d3),new A.aWZ(d3,e3),d4)
-b5=o.$4$active(B.ff,d5,new A.aX0(d3),d3.cx)
+b4=new A.a7H(m,new A.aXp(d2),new A.aWZ(d2,e2),d3)
+b5=o.$4$active(B.ff,d4,new A.aX0(d2),d2.cx)
 b=g>0
 a0=""+g
-b6=o.$4$child(B.pI,d6,new A.aX1(e3),A.bxn(B.xS,b,A.w(a0,d4,d4,d4,d4,d4,d4,d4,d4,d4)))
-b7=o.$4$active(B.xE,d7,new A.aX2(d3,e3),d3.w!==B.kc)
+b6=o.$4$child(B.pI,d5,new A.aX1(e2),A.bxn(B.xS,b,A.w(a0,d3,d3,d3,d3,d3,d3,d3,d3,d3)))
+b7=o.$4$active(B.xE,d6,new A.aX2(d2,e2),d2.w!==B.kc)
 a1=36*b2
-a5=A.q6(d4,d4,d4,d4,d4,d4,d4,d4,d4,d4,d4,new A.J(40,a1),B.oW,d4,d4,d4,d4,B.fo,d4,d4)
+a5=A.q6(d3,d3,d3,d3,d3,d3,d3,d3,d3,d3,d3,new A.J(40,a1),B.oW,d3,d3,d3,d3,B.fo,d3,d3)
 b8=15*b2
 b9=a7.k3
-c0=A.dN(A.w(A.QE(m),d4,d4,d4,d4,d4,A.a7(d4,d4,b9,d4,d4,d4,d4,d4,d4,d4,d4,b8,d4,d4,B.X,d4,d4,!0,d4,d4,d4,d4,d4,d4,d4,d4),d4,d4,d4),d4,B.L2,new A.aX3(d3),a5)
-a5=b1?d8:d9
-c1=d3.gaLu()
+c0=A.dN(A.w(A.QE(m),d3,d3,d3,d3,d3,A.a7(d3,d3,b9,d3,d3,d3,d3,d3,d3,d3,d3,b8,d3,d3,B.X,d3,d3,!0,d3,d3,d3,d3,d3,d3,d3,d3),d3,d3,d3),d3,B.L2,new A.aX3(d2),a5)
+a5=b1?d7:d8
+c1=d2.gaLu()
 c2=o.$4$active(B.xN,a5,c1,b1)
 a5=a.a
 c3=a5?B.xF:B.xO
-c4=a5?e0:e1
-c5=o.$4$active(c3,c4,new A.aX4(d3),a5)
-if(!d3.cy)A.ai(A.b([B.fE,c0,B.bi,b5,B.dM,b6,B.dM,b7,B.bi,c2,c5,B.fE],t.p),B.j,B.e,B.i,0,d4,d4)
+c4=a5?d9:e0
+c5=o.$4$active(c3,c4,new A.aX4(d2),a5)
+if(!d2.cy)A.ai(A.b([B.fE,c0,B.bi,b5,B.dM,b6,B.dM,b7,B.bi,c2,c5,B.fE],t.p),B.j,B.e,B.i,0,d3,d3)
 c3=40*b2
-if(d3.cy)o=b4
-else{c4=o.$4$active(B.ff,d5,new A.aX5(d3),d3.cx)
-a0=o.$4$child(B.pI,d6,new A.aX6(e3),A.bxn(B.xS,b,A.w(a0,d4,d4,d4,d4,d4,d4,d4,d4,d4)))
-b=o.$4$active(B.xE,d7,new A.aX7(d3,e3),d3.w!==B.kc)
-c6=A.q6(d4,d4,d4,d4,d4,d4,d4,d4,d4,d4,d4,new A.J(40,a1),B.oW,d4,d4,d4,d4,B.fo,d4,d4)
-c6=A.dN(A.w(A.QE(m),d4,d4,d4,d4,d4,A.a7(d4,d4,b9,d4,d4,d4,d4,d4,d4,d4,d4,b8,d4,d4,B.X,d4,d4,!0,d4,d4,d4,d4,d4,d4,d4,d4),d4,d4,d4),d4,B.L2,new A.aX8(d3),c6)
-b8=b1?d8:d9
-c7=b3+2
-c8=q.b
-c9=q.a
-c1=o.$4$child(B.xN,b8,c1,new A.a3q(c7,c8,c9,B.amk))
+if(d2.cy)o=b4
+else{c4=o.$4$active(B.ff,d4,new A.aX5(d2),d2.cx)
+a0=o.$4$child(B.pI,d5,new A.aX6(e2),A.bxn(B.xS,b,A.w(a0,d3,d3,d3,d3,d3,d3,d3,d3,d3)))
+b=o.$4$active(B.xE,d6,new A.aX7(d2,e2),d2.w!==B.kc)
+c6=A.q6(d3,d3,d3,d3,d3,d3,d3,d3,d3,d3,d3,new A.J(40,a1),B.oW,d3,d3,d3,d3,B.fo,d3,d3)
+c6=A.dN(A.w(A.QE(m),d3,d3,d3,d3,d3,A.a7(d3,d3,b9,d3,d3,d3,d3,d3,d3,d3,d3,b8,d3,d3,B.X,d3,d3,!0,d3,d3,d3,d3,d3,d3,d3,d3),d3,d3,d3),d3,B.L2,new A.aX8(d2),c6)
+b8=b1?d7:d8
+c7=q.b
+c8=q.a
+c1=o.$4$child(B.xN,b8,c1,new A.a3q(b3*0.82,c7,c8,B.amk))
 b8=a5?B.xF:B.xO
-d0=a5?e0:e1
-d1=t.p
-d1=A.ai(A.b([A.b0(A.ai(A.b([c4,a0,b,c6,c1,o.$4$child(b8,d0,new A.aX9(d3),new A.a3r(c7,c8,c9,a5,B.amj))],d1),B.j,B.qx,B.i,0,d4,d4),1)],d1),B.j,B.e,B.i,0,d4,d4)
-o=d1}b=e2.J(0,s,r)
-a0=!k.gaa(0).t()?d4:k.gO(0)
-a0=A.b0(d3.S0(b,a0,new A.aXb(d3,j,q,n,b0)),5)
+c9=a5?d9:e0
+d0=t.p
+d0=A.ai(A.b([A.b0(A.ai(A.b([c4,a0,b,c6,c1,o.$4$child(b8,c9,new A.aX9(d2),new A.a3r(b3*0.92,c7,c8,a5,B.amj))],d0),B.j,B.qx,B.i,0,d3,d3),1)],d0),B.j,B.e,B.i,0,d3,d3)
+o=d0}b=e1.J(0,s,r)
+a0=!k.gaa(0).t()?d3:k.gO(0)
+a0=A.b0(d2.S0(b,a0,new A.aXb(d2,j,q,n,b0)),5)
 b=t.p
-f=A.b0(A.y2(A.ai(A.b([new A.Wp(B.xt,new A.aXc(f,i),"Decrease volume",d4),A.b0(A.ck(d4,B.S,!1,d4,!0,B.o,d4,A.cq(),d3.gO9(),d4,d4,d4,d4,d4,2,B.XL,B.w,!0,d4,!0,d4,!1,d3.ch,B.V,d4,d4,d4,B.alN,d4,B.cj,d4,d4,d4,1,d4,d4,!1,"\u2022",d4,new A.aXd(d3),new A.aXe(d3,k,e3),d4,d4,!1,new A.aXf(d3,k),d4,!1,d4,!0,d4,B.W,d4,d4,d4,d4,d4,d4,d4,d4,d4,d4,d4,A.a7(d4,d4,b9,d4,d4,d4,d4,d4,d4,d4,B.b9,14*b2,d4,d4,B.aB,d4,d4,!0,d4,d4,d4,d4,d4,d4,d4,d4),!0,B.aq,B.jG,B.a6,d4,d4,d4,d4),1),new A.Wp(B.Vb,new A.aXg(f,i),"Increase volume",d4)],b),B.j,B.e,B.i,0,d4,d4),a7.k2,!0),7)
-b9=e2.J(0,s,r)
-b8=!k.gaa(0).t()?d4:k.gO(0)
-d2=new A.ax(d4,a1,A.ai(A.b([a0,f,A.b0(d3.S0(b9,b8,new A.aXh(d3,j,q,n,b0)),5)],b),B.aL,B.e,B.i,0,d4,d4),B.alZ)
-p=new A.aXr(d3,new A.el(p,m),k,d,c,q,n,h,j,m,a2,a3,a6,a4,e,a8,l,a7)
-q=new A.aXN(d3,l,q,n,h,a2,a3,a6,a4,a7)
+f=A.b0(A.y2(A.ai(A.b([new A.Wp(B.xt,new A.aXc(f,i),"Decrease volume",d3),A.b0(A.ck(d3,B.S,!1,d3,!0,B.o,d3,A.cq(),d2.gO9(),d3,d3,d3,d3,d3,2,B.XL,B.w,!0,d3,!0,d3,!1,d2.ch,B.V,d3,d3,d3,B.alN,d3,B.cj,d3,d3,d3,1,d3,d3,!1,"\u2022",d3,new A.aXd(d2),new A.aXe(d2,k,e2),d3,d3,!1,new A.aXf(d2,k),d3,!1,d3,!0,d3,B.W,d3,d3,d3,d3,d3,d3,d3,d3,d3,d3,d3,A.a7(d3,d3,b9,d3,d3,d3,d3,d3,d3,d3,B.b9,14*b2,d3,d3,B.aB,d3,d3,!0,d3,d3,d3,d3,d3,d3,d3,d3),!0,B.aq,B.jG,B.a6,d3,d3,d3,d3),1),new A.Wp(B.Vb,new A.aXg(f,i),"Increase volume",d3)],b),B.j,B.e,B.i,0,d3,d3),a7.k2,!0),7)
+b9=e1.J(0,s,r)
+b8=!k.gaa(0).t()?d3:k.gO(0)
+d1=new A.ax(d3,a1,A.ai(A.b([a0,f,A.b0(d2.S0(b9,b8,new A.aXh(d2,j,q,n,b0)),5)],b),B.aL,B.e,B.i,0,d3,d3),B.alZ)
+p=new A.aXr(d2,new A.el(p,m),k,d,c,q,n,h,j,m,a2,a3,a6,a4,e,a8,l,a7)
+q=new A.aXN(d2,l,q,n,h,a2,a3,a6,a4,a7)
 b8=B.r.aR(0.45)
-b9=A.b([new A.ax(d4,c3+1,d4,d4),B.LL],b)
-if(a5&&!a3)b9.push(d2)
-f=d3.z
+b9=A.b([new A.ax(d3,c3+1,d3,d3),B.LL],b)
+if(a5&&!a3)b9.push(d1)
+f=d2.z
 if(f.length===0)q=p.$0()
-else q=d3.Q===B.B?A.ai(A.b([A.b0(p.$0(),1),A.bCq(A.m(e3).ch,1),A.b0(q.$1(B.b.gO(f)),1)],b),B.j,B.e,B.i,0,d4,d4):A.am(A.b([A.b0(p.$0(),1),A.Li(A.m(e3).ch,1,d4),A.b0(q.$1(B.b.gO(f)),1)],b),B.j,B.e,B.i,0,B.m)
+else q=d2.Q===B.B?A.ai(A.b([A.b0(p.$0(),1),A.bCq(A.m(e2).ch,1),A.b0(q.$1(B.b.gO(f)),1)],b),B.j,B.e,B.i,0,d3,d3):A.am(A.b([A.b0(p.$0(),1),A.Li(A.m(e2).ch,1,d3),A.b0(q.$1(B.b.gO(f)),1)],b),B.j,B.e,B.i,0,B.m)
 b9.push(A.b0(q,1))
-if(d3.dx!=null){e2=e2.J(0,s,r)
-s=!k.gaa(0).t()?d4:k.gO(0)
-b9.push(A.ek(!0,d3.S0(e2,s,new A.aXi(d3,k,j,b0,n)),!0,!1,B.Q,!0,!1))}if(a5&&a3)b9.push(d2)
-e2=A.am(b9,B.j,B.e,B.i,0,B.m)
-s=A.m(e3)
-o=A.b([new A.ax(d4,c3,o,d4)],b)
+if(d2.dx!=null){e1=e1.J(0,s,r)
+s=!k.gaa(0).t()?d3:k.gO(0)
+b9.push(A.ek(!0,d2.S0(e1,s,new A.aXi(d2,k,j,b0,n)),!0,!1,B.Q,!0,!1))}if(a5&&a3)b9.push(d1)
+e1=A.am(b9,B.j,B.e,B.i,0,B.m)
+s=A.m(e2)
+o=A.b([new A.ax(d3,c3,o,d3)],b)
 if(a3)o.push(B.ac4)
-else o.push(A.Li(A.m(e3).ax.k3.aR(0.25),1,1))
-return A.fI(d4,d4,A.ek(!1,A.et(B.b0,A.b([e2,A.hf(d4,A.dx(!1,B.C,!0,d4,A.am(o,B.j,B.e,B.G,0,B.m),B.p,s.fx,0,d4,d4,d4,B.y,d4,B.aO),d4,d4,0,0,0,d4)],b),B.o,B.aE,d4),!0,!1,B.Q,!0,!0),d4,B.Ik,b8,d3.CW)},
+else o.push(A.Li(A.m(e2).ax.k3.aR(0.25),1,1))
+return A.fI(d3,d3,A.ek(!1,A.et(B.b0,A.b([e1,A.hf(d3,A.dx(!1,B.C,!0,d3,A.am(o,B.j,B.e,B.G,0,B.m),B.p,s.fx,0,d3,d3,d3,B.y,d3,B.aO),d3,d3,0,0,0,d3)],b),B.o,B.aE,d3),!0,!1,B.Q,!0,!0),d3,B.Ik,b8,d2.CW)},
 aLA(a,b){var s,r,q,p,o,n,m,l,k,j,i,h,g=this
 if(!a.J(0,$.Jf(),t.lM).w||J.cF(b))return B.j2
 s=a.J(0,$.fA(),t.T)
@@ -74723,7 +74722,7 @@ if(n==null)return B.al
 s=n.c
 r=n.d
 q=r.length===0||r===s?"":" ("+r+")"
-p="Version "+s+q+" \xb7 4a70c8e"
+p="Version "+s+q+" \xb7 9483179"
 return A.cD(!1,A.b7(6),!0,new A.U(B.oX,A.w(p,o,o,o,o,o,A.a7(o,o,this.a,o,o,o,o,o,o,o,o,12,o,o,o,o,o,!0,o,o,o,o,o,o,o,o),B.aq,o,o),o),o,!0,o,o,o,o,o,o,o,o,o,o,new A.an8(p,a),o,o,o,o,o,o,o)},
 $S:519}
 A.an8.prototype={
