@@ -1435,7 +1435,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                           draftOpen ? 'Close order panel' : 'New order',
                           _toggleOrderPanel,
                           // No highlight behind it, as on MT5.
-                          child: Mt5OrderIcon(key: const ValueKey('mt5-order-icon'), size: toolIcon + 2, sell: tc.sell, buy: tc.buy)),
+                          child: Mt5OrderIcon(key: const ValueKey('mt5-order-icon'), size: toolIcon * 0.82, sell: tc.sell, buy: tc.buy)),
                       tool(
                           trade.panelVisible
                               ? Icons.toggle_on
@@ -1450,7 +1450,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                           // is dimmed while the panel is hidden.
                           child: Mt5TradePanelIcon(
                               key: const ValueKey('mt5-panel-icon'),
-                              size: toolIcon + 2,
+                              size: toolIcon * 0.92,
                               sell: tc.sell,
                               buy: tc.buy,
                               on: trade.panelVisible)),
