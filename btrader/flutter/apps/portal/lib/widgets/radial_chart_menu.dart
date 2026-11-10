@@ -27,6 +27,7 @@ class RadialChartMenu extends StatelessWidget {
     required this.onObjects,
     required this.onIndicators,
     required this.onDismiss,
+    this.onSettings,
   });
 
   final Offset center;
@@ -41,6 +42,10 @@ class RadialChartMenu extends StatelessWidget {
   final VoidCallback onObjects;
   final VoidCallback onIndicators;
   final VoidCallback onDismiss;
+
+  /// MT5's Settings (sliders) segment, last on the outer ring after the tools: opens Chart Settings.
+  /// Hidden when null.
+  final VoidCallback? onSettings;
 
   // Inner-ring tool wedges, in "up = 0°, clockwise" degrees — stacked down the
   // left side of the ring, matching the MT5 reference layout.
@@ -70,6 +75,7 @@ class RadialChartMenu extends StatelessWidget {
           highlight: cs.primary,
           onSurface: cs.onSurface,
           divider: Theme.of(context).dividerColor,
+          showSettings: onSettings != null,
         ),
       ),
     );
@@ -88,10 +94,14 @@ class RadialChartMenu extends StatelessWidget {
     final upDeg = (((canvasAngle + math.pi / 2) % (2 * math.pi)) * 180 / math.pi);
 
     if (dist >= innerRadius) {
-      final n = tools.length;
+      final n = tools.length + (onSettings != null ? 1 : 0);
       final seg = 360.0 / n;
       final idx = (upDeg / seg).floor().clamp(0, n - 1);
-      onSelectTool(tools[idx]);
+      if (idx == tools.length) {
+        onSettings!();
+      } else {
+        onSelectTool(tools[idx]);
+      }
       return;
     }
     if (dist < innerRadius * _centerHoleFrac) {
@@ -147,8 +157,10 @@ class _RadialMenuPainter extends CustomPainter {
     required this.highlight,
     required this.onSurface,
     required this.divider,
+    this.showSettings = false,
   });
 
+  final bool showSettings;
   final Offset center;
   final double outerRadius, innerRadius;
   final List<DrawingType> tools;
@@ -182,16 +194,17 @@ class _RadialMenuPainter extends CustomPainter {
     // A soft backdrop so the ring clearly floats above the candles.
     canvas.drawRect(Offset.zero & size, Paint()..color = Colors.black.withValues(alpha: 0.30));
 
-    final n = tools.length;
+    final n = tools.length + (showSettings ? 1 : 0);
     final seg = 360.0 / n;
 
     // Outer ring background.
     canvas.drawCircle(center, outerRadius, Paint()..color = ringColor.withValues(alpha: 0.97));
 
     for (var i = 0; i < n; i++) {
-      final tool = tools[i];
+      final isSettings = i == tools.length; // the Settings segment after the tools
+      final tool = isSettings ? null : tools[i];
       final startDeg = i * seg, endDeg = (i + 1) * seg;
-      final isSel = tool == active;
+      final isSel = tool != null && tool == active;
       if (isSel) {
         _wedgePath(canvas, innerRadius, outerRadius, startDeg, endDeg, Paint()..color = highlight);
       }
@@ -209,10 +222,10 @@ class _RadialMenuPainter extends CustomPainter {
       final fg = isSel ? Colors.white : onSurface;
       // Icon, with a short name underneath when the ring is thick enough to fit it.
       final roomy = (outerRadius - innerRadius) > 52;
-      _paintIcon(canvas, radialToolIcon(tool), pos - Offset(0, roomy ? 8 : 0), roomy ? 22 : 20, fg);
+      _paintIcon(canvas, tool == null ? Icons.tune : radialToolIcon(tool), pos - Offset(0, roomy ? 8 : 0), roomy ? 22 : 20, fg);
       if (roomy) {
         final tp = TextPainter(textDirection: TextDirection.ltr, textAlign: TextAlign.center);
-        tp.text = TextSpan(text: tool.shortLabel, style: TextStyle(fontFamily: kAppFontFamily, fontSize: 9.5, fontWeight: isSel ? FontWeight.w800 : FontWeight.w600, color: fg));
+        tp.text = TextSpan(text: tool?.shortLabel ?? 'Settings', style: TextStyle(fontFamily: kAppFontFamily, fontSize: 9.5, fontWeight: isSel ? FontWeight.w800 : FontWeight.w600, color: fg));
         tp.layout();
         tp.paint(canvas, pos + Offset(-tp.width / 2, 8));
       }
@@ -256,5 +269,6 @@ class _RadialMenuPainter extends CustomPainter {
       old.active != active ||
       old.center != center ||
       old.outerRadius != outerRadius ||
-      old.innerRadius != innerRadius;
+      old.innerRadius != innerRadius ||
+      old.showSettings != showSettings;
 }

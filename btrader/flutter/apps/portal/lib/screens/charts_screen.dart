@@ -20,6 +20,7 @@ import '../widgets/drawings_sheet.dart';
 import '../widgets/indicators_sheet.dart';
 import '../widgets/manage_accounts.dart';
 import '../widgets/ios_glass.dart';
+import '../widgets/mt5_toolbar_icons.dart';
 import '../widgets/pending_panel.dart';
 import '../widgets/portal_drawer.dart';
 import '../widgets/trade_toast.dart';
@@ -1428,11 +1429,13 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                                 fontWeight: FontWeight.w800,
                                 color: cs.onSurface)),
                       ),
+                      // MT5's red / blue order mark (Android / web). Same action as before.
                       tool(
                           Icons.pending_actions_outlined,
                           draftOpen ? 'Close order panel' : 'New order',
                           _toggleOrderPanel,
-                          active: draftOpen),
+                          active: draftOpen,
+                          child: Mt5OrderIcon(key: const ValueKey('mt5-order-icon'), size: toolIcon + 2, sell: tc.sell, buy: tc.buy)),
                       tool(
                           trade.panelVisible
                               ? Icons.toggle_on
@@ -1443,7 +1446,14 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                           () => ref
                               .read(chartTradeProvider.notifier)
                               .togglePanel(),
-                          active: trade.panelVisible),
+                          active: trade.panelVisible,
+                          // MT5's red | blue Buy / Sell panel switch (Android / web).
+                          child: Mt5TradePanelIcon(
+                              key: const ValueKey('mt5-panel-icon'),
+                              size: toolIcon + 2,
+                              sell: tc.sell,
+                              buy: tc.buy,
+                              on: trade.panelVisible)),
                     ]),
               ),
             ]),
@@ -1644,6 +1654,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                       }),
                     ),
                     onDuplicate: () => _showChartsMenu(context),
+                    // Android / web: Settings on the round menu (MT5). The gear keeps opening it too.
+                    onOpenSettings: () => _showChartSettings(context),
                     // iPhone: MT5's Indicators / Objects / Settings / Cancel popup instead of the round menu.
                     onOpenChartMenu: iosGlass
                         ? () => _iosChartMenu(
@@ -1811,6 +1823,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                     }),
                   ),
                   onDuplicate: () => _showChartsMenu(context),
+                  onOpenSettings: () => _showChartSettings(context),
                   onOpenChartMenu: iosGlass
                       ? () => _iosChartMenu(
                             context,
