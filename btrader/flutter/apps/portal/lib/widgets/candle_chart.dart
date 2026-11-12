@@ -1934,7 +1934,9 @@ class _CandlePainter extends CustomPainter {
   final double axisW;
   static const double padV = 2; // top padding (reduced empty space above candles)
   static const double timeAxisH = 18; // bottom time-axis height
-  static const int priceRows = 8; // price-ladder rows
+  /// MT5 spacing: one price label (and grid row) about every 34 px, so a tall chart gets more
+  /// prices and smaller grid boxes instead of a fixed 8 rows.
+  static const double priceRowPx = 34;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1969,6 +1971,7 @@ class _CandlePainter extends CustomPainter {
       ..color = text
       ..strokeWidth = 0.8;
     final gridPath = drawGrid ? Path() : null;
+    final priceRows = (chartH / priceRowPx).floor().clamp(4, 30);
     for (var i = 0; i <= priceRows; i++) {
       final p = hi - range * i / priceRows;
       final yy = y(p);
@@ -1993,6 +1996,7 @@ class _CandlePainter extends CustomPainter {
     final axisY = size.height - timeAxisH + 3;
     final newestOffset = totalBars - winStart - candles.length;
     final crossIdx = cross == null ? null : ((cross!.dx.clamp(0, chartW) - xShift) / slot).floor().clamp(0, candles.length - 1);
+    double? prevGridX;
     for (final l in layoutTimeAxis(
       count: candles.length,
       newestOffset: newestOffset,
@@ -2021,12 +2025,17 @@ class _CandlePainter extends CustomPainter {
         _TextCache.get(l.text, _kTimeFont, text).paint(canvas, Offset(l.left, axisY));
         if (gridPath != null) {
           final gx = xShift + slot * l.index + slot / 2;
-          if (gx > 0 && gx < chartW) {
+          void vLine(double x) {
+            if (x <= 0 || x >= chartW) return;
             for (double gy = padV; gy < plotBottom; gy += 6) {
-              gridPath.moveTo(gx, gy);
-              gridPath.lineTo(gx, math.min(gy + 3, plotBottom));
+              gridPath.moveTo(x, gy);
+              gridPath.lineTo(x, math.min(gy + 3, plotBottom));
             }
           }
+          vLine(gx);
+          // MT5 also draws a line halfway between two time labels, so the boxes stay small.
+          if (prevGridX != null) vLine((prevGridX + gx) / 2);
+          prevGridX = gx;
         }
       }
     }
