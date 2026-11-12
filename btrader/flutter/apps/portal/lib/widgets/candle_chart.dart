@@ -1996,7 +1996,22 @@ class _CandlePainter extends CustomPainter {
     final axisY = size.height - timeAxisH + 3;
     final newestOffset = totalBars - winStart - candles.length;
     final crossIdx = cross == null ? null : ((cross!.dx.clamp(0, chartW) - xShift) / slot).floor().clamp(0, candles.length - 1);
-    double? prevGridX;
+    // MT5 vertical grid: square boxes - a line every k bars, k chosen so the column width is about the
+    // price-row height; anchored to the global bar index so lines move with the bars while panning.
+    if (gridPath != null && slot > 0) {
+      final rowH = chartH / priceRows;
+      final k = math.max(1, (rowH / slot).round());
+      // Runs past the newest bar into the empty space up to the price scale, as MT5 does.
+      for (var i = 0; xShift + slot * i + slot / 2 < chartW; i++) {
+        if ((winStart + i) % k != 0) continue;
+        final gx = xShift + slot * i + slot / 2;
+        if (gx <= 0) continue;
+        for (double gy = padV; gy < plotBottom; gy += 6) {
+          gridPath.moveTo(gx, gy);
+          gridPath.lineTo(gx, math.min(gy + 3, plotBottom));
+        }
+      }
+    }
     for (final l in layoutTimeAxis(
       count: candles.length,
       newestOffset: newestOffset,
@@ -2024,18 +2039,6 @@ class _CandlePainter extends CustomPainter {
       } else {
         _TextCache.get(l.text, _kTimeFont, text).paint(canvas, Offset(l.left, axisY));
         if (gridPath != null) {
-          final gx = xShift + slot * l.index + slot / 2;
-          void vLine(double x) {
-            if (x <= 0 || x >= chartW) return;
-            for (double gy = padV; gy < plotBottom; gy += 6) {
-              gridPath.moveTo(x, gy);
-              gridPath.lineTo(x, math.min(gy + 3, plotBottom));
-            }
-          }
-          vLine(gx);
-          // MT5 also draws a line halfway between two time labels, so the boxes stay small.
-          if (prevGridX != null) vLine((prevGridX + gx) / 2);
-          prevGridX = gx;
         }
       }
     }
