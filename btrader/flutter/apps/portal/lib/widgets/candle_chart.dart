@@ -1436,8 +1436,9 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
               barDown: widget.palette[ChartColorKey.barDown] ?? tc.down,
               bid: widget.palette[ChartColorKey.bidLine] ?? tc.sell,
               ask: widget.palette[ChartColorKey.askLine] ?? tc.buy,
-              grid: widget.palette[ChartColorKey.grid] ?? Theme.of(context).dividerColor,
-              drawGrid: widget.palette[ChartColorKey.grid] != null,
+              grid: widget.palette[ChartColorKey.grid] ??
+                  (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF363A45) : Theme.of(context).dividerColor),
+              drawGrid: true, // MT5: the grid is on by default; a scheme / the user only changes its colour
               text: widget.palette[ChartColorKey.foreground] ?? Theme.of(context).hintColor,
               line: widget.palette[ChartColorKey.chartLine] ?? Theme.of(context).colorScheme.primary,
               surface: widget.palette[ChartColorKey.background] ?? Theme.of(context).colorScheme.surface,
