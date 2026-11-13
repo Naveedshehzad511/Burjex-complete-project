@@ -8,6 +8,7 @@ import 'package:btrader_core/btrader_core.dart';
 
 import '../state/chart_colors.dart';
 import '../state/trade_history.dart';
+import 'drawing_style.dart';
 import 'radial_chart_menu.dart';
 
 /// [bar] is the MT5 OHLC bar chart (only offered by the Chart Settings screen on the apps).
@@ -261,6 +262,8 @@ class CandleChart extends StatefulWidget {
     this.onCreateDrawing,
     this.onMoveDrawing,
     this.onDeleteDrawing,
+    this.onDrawingActions,
+    this.onUpdateDrawing,
     this.onPriceTap,
     this.onLevelDragEnd,
     this.onLevelTap,
@@ -345,6 +348,14 @@ class CandleChart extends StatefulWidget {
 
   /// Fired when the on-chart delete button is tapped for the selected drawing.
   final void Function(String id)? onDeleteDrawing;
+
+  /// Long-press (or right-click) on a drawing: the caller shows Delete / Copy / Properties / Cancel.
+  /// [copyAnchors] is the drawing shifted a little on screen, where a Copy should be placed.
+  /// [openStyle] shows the bottom style bar for this drawing (the popup's Style choice).
+  final void Function(DrawingObject d, List<DrawingAnchor> copyAnchors, VoidCallback openStyle)? onDrawingActions;
+
+  /// The bottom style bar changed the selected drawing (colour, width, line style).
+  final void Function(DrawingObject d)? onUpdateDrawing;
 
   /// Called with the price the user tapped on the right price ladder (MT5-style
   /// trade-from-chart).
@@ -601,6 +612,15 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
   // release, avoiding a full screen rebuild (indicator recompute) per frame.
   String? _selectedDrawingId;
   int? _dragAnchorIndex;
+
+  /// A drawing is being placed: select it as soon as it arrives, so its style bar shows (MT5).
+  bool _selectNewDrawing = false;
+
+  /// This long-press landed on a drawing (opened its actions), so it is not a crosshair.
+  bool _longPressOnDrawing = false;
+
+  /// The drawing whose style bar is open: only after the long-press popup's Style (MT5), never on its own.
+  String? _styleBarId;
   DrawingAnchor? _dragAnchor;
 
   /// The true touch-down point. A scale gesture only reports its start after the finger has moved past
@@ -727,6 +747,21 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
       }
       if (added > 0) _rightOffset += added;
     }
+    if (_selectNewDrawing && widget.drawings.length > old.drawings.length) {
+      final before = {for (final d in old.drawings) d.id};
+      for (final d in widget.drawings) {
+        if (!before.contains(d.id)) {
+          _selectedDrawingId = d.id;
+          _styleBarId = d.id; // a just-placed drawing opens its style bar once (MT5)
+          _selectNewDrawing = false;
+          break;
+        }
+      }
+    }
+    if (widget.activeTool != null && old.activeTool != widget.activeTool) _selectNewDrawing = true;
+    if (_selectedDrawingId != null && !widget.drawings.any((d) => d.id == _selectedDrawingId)) {
+      _selectedDrawingId = null; // deleted, or hidden on this timeframe
+    }
     if (old.crosshairMode != widget.crosshairMode) {
       // On: start in the middle of the price pane (MT5); off: remove it.
       _cross = widget.crosshairMode ? Offset(_chartW / 2, _chartH / 2) : null;
@@ -768,7 +803,6 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
-    final tc = Theme.of(context).extension<TradeColors>()!;
     final total = widget.candles.length;
     if (total == 0) return const SizedBox.shrink();
 
@@ -956,6 +990,37 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
         return null;
       }
 
+      // Long-press / right-click on a drawing: select it and ask the caller for its actions popup.
+      // The Copy position is the drawing moved 3 bars right and 24 px down, so the copy is easy to see.
+      bool drawingActionsAt(Offset p) {
+        if (widget.onDrawingActions == null || widget.activeTool != null) return false;
+        DrawingObject? hit;
+        for (final dr in widget.drawings.reversed) {
+          if (hitDrawing(dr, p)) {
+            hit = dr;
+            break;
+          }
+        }
+        if (hit == null) return false;
+        final h = hit;
+        final copy = [
+          for (final a in h.anchors)
+            DrawingAnchor(
+              h.type == DrawingType.horizontalLine ? a.t : timeAtXFree(pxForTime(a.t) + slotB * 3),
+              h.type == DrawingType.verticalLine ? a.price : priceAtYFree(pyForPrice(a.price) + 24),
+            ),
+        ];
+        setState(() {
+          _selectedDrawingId = h.id;
+          _styleBarId = null;
+          _cross = widget.crosshairMode ? _cross : null;
+        });
+        widget.onDrawingActions!(h, copy, () {
+          if (mounted) setState(() => _styleBarId = h.id);
+        });
+        return true;
+      }
+
       // Nearest interactive level under the touch. The visible line is thin; the
       // touch target is [kHitSlop] each side so it is easy to catch on a phone.
       ChartLevel? levelAt(Offset p, {required bool drag}) {
@@ -1030,13 +1095,21 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
           }
         }
         if (hit != null) {
-          if (hit != _selectedDrawingId) setState(() => _selectedDrawingId = hit);
+          if (hit != _selectedDrawingId) {
+            setState(() {
+              _selectedDrawingId = hit;
+              _styleBarId = null;
+            });
+          }
           return;
         }
         if (_selectedDrawingId != null) {
           // First tap off a selected drawing just deselects it (MT5-style);
           // the round menu opens on the next, now-empty tap.
-          setState(() => _selectedDrawingId = null);
+          setState(() {
+            _selectedDrawingId = null;
+            _styleBarId = null;
+          });
           return;
         }
         if (widget.onEmptyTap?.call() == true) return; // this tap only closed the order card
@@ -1372,11 +1445,27 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
               });
             }
           },
-          onLongPressStart: (d) => setState(() => _cross = d.localPosition),
-          onLongPressMoveUpdate: (d) => setState(() => _cross = d.localPosition),
+          onLongPressStart: (d) {
+            if (drawingActionsAt(d.localPosition)) {
+              _longPressOnDrawing = true;
+              return;
+            }
+            _longPressOnDrawing = false;
+            setState(() => _cross = d.localPosition);
+          },
+          onLongPressMoveUpdate: (d) {
+            if (_longPressOnDrawing) return;
+            setState(() => _cross = d.localPosition);
+          },
           onLongPressEnd: (_) {
+            if (_longPressOnDrawing) {
+              _longPressOnDrawing = false;
+              return;
+            }
             if (!widget.crosshairMode) setState(() => _cross = null);
           },
+          // Web / desktop: a right-click on a drawing opens the same actions.
+          onSecondaryTapUp: (d) => drawingActionsAt(d.localPosition),
           // iOS (the glass chart menu): no double-tap Auto fit, so a tap opens the menu at once instead of
           // waiting ~300 ms to rule out a second tap. Android / web keep it.
           onDoubleTap: widget.onOpenChartMenu != null ? null : _resetView,
@@ -1526,43 +1615,20 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
               );
             }),
           ),
-        // Selected-drawing toolbar: drag a handle to move, or delete/deselect.
-        if (widget.activeTool == null && selected() != null)
+        // MT5: the selected drawing's style bar at the bottom of the chart - colour, width, line style.
+        if (widget.activeTool == null &&
+            widget.onUpdateDrawing != null &&
+            selected() != null &&
+            _styleBarId == _selectedDrawingId)
           Positioned(
-            top: 6,
-            left: 0,
-            right: 0,
+            left: 8,
+            right: 8,
+            bottom: _CandlePainter.timeAxisH + 6,
             child: Center(
-              child: Material(
-                color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.94),
-                shape: StadiumBorder(side: BorderSide(color: Theme.of(context).dividerColor)),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 6, 4),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Text('Drag a handle to move', style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor)),
-                    const SizedBox(width: 6),
-                    InkWell(
-                      onTap: () {
-                        final id = _selectedDrawingId;
-                        setState(() => _selectedDrawingId = null);
-                        if (id != null) widget.onDeleteDrawing?.call(id);
-                      },
-                      customBorder: const CircleBorder(),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(Icons.delete_outline, size: 18, color: tc.loss),
-                      ),
-                    ),
-                    InkWell(
-                      onTap: () => setState(() => _selectedDrawingId = null),
-                      customBorder: const CircleBorder(),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(Icons.close, size: 18, color: Theme.of(context).colorScheme.onSurface),
-                      ),
-                    ),
-                  ]),
-                ),
+              child: DrawingStyleBar(
+                key: const ValueKey('drawing-style-bar'),
+                drawing: selected()!,
+                onChanged: widget.onUpdateDrawing!,
               ),
             ),
           ),
@@ -2065,6 +2131,9 @@ class _CandlePainter extends CustomPainter {
     // ── Period separators (MT5): dashed vertical lines at the higher-timeframe borders, under the candles. ──
     if (periodSeparators) _paintPeriodSeparators(canvas, chartW, plotBottom, slot);
 
+    // ── Drawings set to "Draw as background" (MT5): under the candles. ──
+    _paintDrawings(canvas, chartW, priceTop, chartH, slot, y, background: true);
+
     // ── Price series (candles / line). Clipped to the price pane. ──
     canvas.save();
     canvas.clipRect(Rect.fromLTRB(0, 0, chartW, priceTop + chartH));
@@ -2166,7 +2235,7 @@ class _CandlePainter extends CustomPainter {
     // layer above this one, so panning the candles does not repaint every trade line each frame.
 
     // ── User drawings (horizontal line / trendline / Fibonacci). ──
-    _paintDrawings(canvas, chartW, priceTop, chartH, slot, y);
+    _paintDrawings(canvas, chartW, priceTop, chartH, slot, y, background: false);
 
     // ── Oscillator sub-panes (stacked below the price pane). ──
     for (var pi = 0; pi < oscillators.length; pi++) {
@@ -2271,18 +2340,21 @@ class _CandlePainter extends CustomPainter {
 
   double _xForTime(int t, double slot) => xForTimeInWindow(candles, t, slot) + xShift;
 
-  void _paintDrawings(Canvas canvas, double chartW, double priceTop, double chartH, double slot, double Function(double) y) {
-    if (drawings.isEmpty && pendingAnchors.isEmpty) return;
+  void _paintDrawings(Canvas canvas, double chartW, double priceTop, double chartH, double slot, double Function(double) y,
+      {required bool background}) {
+    if (drawings.isEmpty && (background || pendingAnchors.isEmpty)) return;
     canvas.save();
     canvas.clipRect(Rect.fromLTRB(0, priceTop, chartW, priceTop + chartH));
     for (final d in drawings) {
+      if (d.background != background) continue;
       // Apply the live drag override to the selected drawing while it's moving.
       var anchors = d.anchors;
       if (d.id == selectedId && dragIndex != null && dragAnchor != null) {
         anchors = d.withAnchor(dragIndex!, dragAnchor!).anchors;
       }
       if (d.id == selectedId && moveAnchors != null) anchors = moveAnchors!;
-      _paintOneDrawing(canvas, d.type, anchors, Color(d.colorArgb), chartW, slot, y);
+      _paintOneDrawing(canvas, d.type, anchors, Color(d.colorArgb), chartW, slot, y,
+          style: d.lineStyle, width: d.width, fill: d.fill);
       // Selection handles.
       if (d.id == selectedId) {
         final fill = Paint()..color = Color(d.colorArgb);
@@ -2298,7 +2370,7 @@ class _CandlePainter extends CustomPainter {
       }
     }
     // Placement preview: the anchors tapped so far as small rings.
-    if (pendingAnchors.isNotEmpty) {
+    if (!background && pendingAnchors.isNotEmpty) {
       final c = Color(previewType?.defaultColor ?? (pendingAnchors.length < 2 ? 0xFFFFB74D : 0xFF42A5F5));
       _paintOneDrawing(canvas, previewType ?? DrawingType.trendline, pendingAnchors, c, chartW, slot, y);
       for (final a in pendingAnchors) {
@@ -2309,28 +2381,34 @@ class _CandlePainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _paintOneDrawing(Canvas canvas, DrawingType type, List<DrawingAnchor> anchors, Color color, double chartW, double slot, double Function(double) y) {
+  void _paintOneDrawing(Canvas canvas, DrawingType type, List<DrawingAnchor> anchors, Color color, double chartW, double slot, double Function(double) y,
+      {DrawingLineStyle style = DrawingLineStyle.solid, int width = 1, bool fill = true}) {
     if (anchors.isEmpty) return;
     final stroke = Paint()
       ..color = color
-      ..strokeWidth = 1.4
+      // Width 1 keeps the old 1.4 px look; each step adds 1 px (MT5 width 1..5).
+      ..strokeWidth = 1.4 + (width.clamp(1, 5) - 1) * 1.0
       ..style = PaintingStyle.stroke;
+    // A line in the drawing's style (solid / dashed / dotted).
+    void line(Offset a, Offset b) => style == DrawingLineStyle.solid
+        ? canvas.drawLine(a, b, stroke)
+        : canvas.drawPath(_dashPath(Path()..moveTo(a.dx, a.dy)..lineTo(b.dx, b.dy), style, stroke.strokeWidth), stroke);
+    void path(Path p) => canvas.drawPath(style == DrawingLineStyle.solid ? p : _dashPath(p, style, stroke.strokeWidth), stroke);
     switch (type) {
       case DrawingType.horizontalLine:
         final yy = y(anchors.first.price);
-        canvas.drawLine(Offset(0, yy), Offset(chartW, yy), stroke);
+        line(Offset(0, yy), Offset(chartW, yy));
         _drawTag(canvas, chartW, yy, anchors.first.price.toStringAsFixed(digits), color);
         break;
       case DrawingType.verticalLine:
         final xv = _xForTime(anchors.first.t, slot);
-        canvas.drawLine(Offset(xv, 0), Offset(xv, 4000), stroke);
+        line(Offset(xv, 0), Offset(xv, 4000));
         break;
       case DrawingType.trendline:
         if (anchors.length < 2) break;
-        canvas.drawLine(
+        line(
           Offset(_xForTime(anchors[0].t, slot), y(anchors[0].price)),
           Offset(_xForTime(anchors[1].t, slot), y(anchors[1].price)),
-          stroke,
         );
         break;
       case DrawingType.ray:
@@ -2339,13 +2417,13 @@ class _CandlePainter extends CustomPainter {
         final rb = Offset(_xForTime(anchors[1].t, slot), y(anchors[1].price));
         final rd = rb - ra;
         // Runs from the first point through the second, off the edge of the plot.
-        canvas.drawLine(ra, rd.distance == 0 ? rb : ra + rd / rd.distance * 4000, stroke);
+        line(ra, rd.distance == 0 ? rb : ra + rd / rd.distance * 4000);
         break;
       case DrawingType.arrow:
         if (anchors.length < 2) break;
         final aa = Offset(_xForTime(anchors[0].t, slot), y(anchors[0].price));
         final ab = Offset(_xForTime(anchors[1].t, slot), y(anchors[1].price));
-        canvas.drawLine(aa, ab, stroke);
+        line(aa, ab);
         final ad = ab - aa;
         if (ad.distance > 0) {
           final u = ad / ad.distance;
@@ -2365,13 +2443,13 @@ class _CandlePainter extends CustomPainter {
           Offset(_xForTime(anchors[0].t, slot), y(anchors[0].price)),
           Offset(_xForTime(anchors[1].t, slot), y(anchors[1].price)),
         );
-        final fill = Paint()..color = color.withValues(alpha: 0.14);
+        final fillPaint = Paint()..color = color.withValues(alpha: 0.14);
         if (type == DrawingType.rectangle) {
-          canvas.drawRect(box, fill);
-          canvas.drawRect(box, stroke);
+          if (fill) canvas.drawRect(box, fillPaint);
+          path(Path()..addRect(box));
         } else {
-          canvas.drawOval(box, fill);
-          canvas.drawOval(box, stroke);
+          if (fill) canvas.drawOval(box, fillPaint);
+          path(Path()..addOval(box));
         }
         break;
       case DrawingType.fibRetracement:
@@ -2383,8 +2461,12 @@ class _CandlePainter extends CustomPainter {
         for (final lv in kFibLevels) {
           final p = a.price + lv * (b.price - a.price);
           final yy = y(p);
-          canvas.drawLine(Offset(left, yy), Offset(chartW, yy),
-              Paint()..color = color.withValues(alpha: lv == 0 || lv == 1 ? 0.9 : 0.55)..strokeWidth = 1);
+          final lp = Paint()
+            ..color = color.withValues(alpha: lv == 0 || lv == 1 ? 0.9 : 0.55)
+            ..strokeWidth = 1.0 + (width.clamp(1, 5) - 1) * 1.0
+            ..style = PaintingStyle.stroke;
+          final lpath = Path()..moveTo(left, yy)..lineTo(chartW, yy);
+          canvas.drawPath(style == DrawingLineStyle.solid ? lpath : _dashPath(lpath, style, lp.strokeWidth), lp);
           tpF.text = TextSpan(
             text: '${(lv * 100).toStringAsFixed(1)}  ${p.toStringAsFixed(digits)}',
             style: TextStyle(fontFamily: kAppFontFamily, color: color, fontSize: 8.5),
@@ -2397,6 +2479,23 @@ class _CandlePainter extends CustomPainter {
             Paint()..color = color.withValues(alpha: 0.5)..strokeWidth = 1);
         break;
     }
+  }
+
+  /// [p] cut into dashes (MT5 "dash") or dots (MT5 "dot"), scaled with the line width.
+  static Path _dashPath(Path p, DrawingLineStyle style, double w) {
+    final on = style == DrawingLineStyle.dashed ? 7.0 + w * 2 : math.max(1.2, w);
+    final off = style == DrawingLineStyle.dashed ? 4.0 + w : 2.0 + w;
+    final out = Path();
+    for (final m in p.computeMetrics()) {
+      var d = 0.0;
+      // A 4000 px off-screen line would be thousands of dashes; the plot is never that wide, so stop at 3000.
+      final len = math.min(m.length, 3000.0);
+      while (d < len) {
+        out.addPath(m.extractPath(d, math.min(d + on, len)), Offset.zero);
+        d += on + off;
+      }
+    }
+    return out;
   }
 
   /// Right-axis price tag for a drawing (mirrors the position-level tag).

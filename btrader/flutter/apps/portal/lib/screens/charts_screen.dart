@@ -16,6 +16,7 @@ import '../state/chart_trade.dart';
 import '../state/pending_orders.dart';
 import '../widgets/big_figure_price.dart';
 import '../widgets/candle_chart.dart';
+import '../widgets/drawing_style.dart';
 import '../widgets/drawings_sheet.dart';
 import '../widgets/indicators_sheet.dart';
 import '../widgets/manage_accounts.dart';
@@ -1265,7 +1266,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     final activeIndicators = indicatorCfgs.where((c) => c.enabled).length;
     final drawings = ref
         .watch(chartDrawingsProvider)
-        .where((d) => d.symbol == _symbol)
+        .where((d) => d.symbol == _symbol && d.visibleOn(selectedTf.name))
         .toList();
     // Select the list itself: the loading-only transitions of a refetch (value unchanged) must not
     // rebuild the whole chart screen.
@@ -1634,6 +1635,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                         .updateAnchor(id, i, a),
                     onDeleteDrawing: (id) =>
                         ref.read(chartDrawingsProvider.notifier).remove(id),
+                    onDrawingActions: (d, copy, openStyle) => _drawingActions(context, d, copy, openStyle, digits: digits, iosGlass: iosGlass),
+                    onUpdateDrawing: (d) => ref.read(chartDrawingsProvider.notifier).replace(d),
                     onLevelDragEnd: _onLevelDragEnd,
                     onLevelTap: _onLevelTap,
                     onEmptyTap: _tapClosesCard,
@@ -1664,6 +1667,10 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                         ? () => _iosChartMenu(
                               context,
                               title: _menuTitle(spec.isEmpty ? _symbol : spec.first.displaySymbol, spec.isEmpty ? null : spec.first.description),
+                              // MT5 iOS: Trade opens the chart's own order panel (the same as the order button).
+                              onTrade: () {
+                                if (_edit?.isDraft != true) _toggleOrderPanel();
+                              },
                               onObjects: () => showDrawingsSheet(
                                 context,
                                 symbol: _symbol,
@@ -1736,7 +1743,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
       final series2 = ref.watch(liveCandlesProvider(req2));
       final drawings2 = ref
           .watch(chartDrawingsProvider)
-          .where((d) => d.symbol == win.symbol)
+          .where((d) => d.symbol == win.symbol && d.visibleOn(win.tf.name))
           .toList();
       final rawQuote2 = ref.watch(quotesProvider.select((m) => m[win.symbol]));
       final quote2 = rawQuote2 == null
@@ -1806,6 +1813,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                       .updateAnchor(id, i, a),
                   onDeleteDrawing: (id) =>
                       ref.read(chartDrawingsProvider.notifier).remove(id),
+                  onDrawingActions: (d, copy, openStyle) => _drawingActions(context, d, copy, openStyle, digits: digits2, iosGlass: iosGlass),
+                  onUpdateDrawing: (d) => ref.read(chartDrawingsProvider.notifier).replace(d),
                   onNeedOlder: (n, urgent) => ref
                       .read(chartHistoryLoaderProvider(req2))
                       .loadOlder(visibleBars: n, urgent: urgent),
@@ -2070,15 +2079,68 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
 
   /// iPhone only ([iosGlass]): MT5's chart popup. Each choice opens the same sheet / screen the
   /// round menu and the gear open everywhere else - nothing new behind it.
-  void _iosChartMenu(BuildContext context, {required String title, required VoidCallback onObjects}) => showGlassMenu(
+  void _iosChartMenu(BuildContext context, {required String title, required VoidCallback onObjects, VoidCallback? onTrade}) =>
+      showGlassMenu(
         context,
         title: title,
         actions: [
+          if (onTrade != null)
+            GlassMenuAction('Trade', onTrade, destructive: true, key: const ValueKey('chart-menu-trade')),
           GlassMenuAction('Indicators', () => showIndicatorsSheet(context), key: const ValueKey('chart-menu-indicators')),
           GlassMenuAction('Objects', onObjects, key: const ValueKey('chart-menu-objects')),
           GlassMenuAction('Settings', () => _showChartSettings(context), key: const ValueKey('chart-menu-settings')),
         ],
       );
+
+  /// MT5: long-press on a drawing - Delete / Copy / Style / Properties / Cancel. Style opens the bottom style bar. iPhone gets the glass popup,
+  /// Android and web the normal dialog.
+  void _drawingActions(BuildContext context, DrawingObject d, List<DrawingAnchor> copyAnchors, VoidCallback openStyle,
+      {required int digits, required bool iosGlass}) {
+    final ctrl = ref.read(chartDrawingsProvider.notifier);
+    Future<void> properties() async {
+      final edited = await showDrawingProperties(context, d, digits: digits);
+      if (edited != null) ctrl.replace(edited);
+    }
+
+    final actions = <(String, VoidCallback, bool, Key)>[
+      ('Delete', () => ctrl.remove(d.id), true, const ValueKey('drawing-delete')),
+      ('Copy', () => ctrl.duplicate(d.id, copyAnchors), false, const ValueKey('drawing-copy')),
+      ('Style', openStyle, false, const ValueKey('drawing-style')),
+      ('Properties', properties, false, const ValueKey('drawing-properties')),
+    ];
+    if (iosGlass) {
+      showGlassMenu(context, title: d.displayName, actions: [
+        for (final a in actions) GlassMenuAction(a.$1, a.$2, destructive: a.$3, key: a.$4),
+      ]);
+      return;
+    }
+    final loss = Theme.of(context).extension<TradeColors>()!.loss;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(d.displayName, textAlign: TextAlign.center),
+        children: [
+          for (final a in actions)
+            SimpleDialogOption(
+              key: a.$4,
+              onPressed: () {
+                Navigator.pop(ctx);
+                a.$2();
+              },
+              child: Center(
+                child: Text(a.$1,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: a.$3 ? loss : null)),
+              ),
+            ),
+          SimpleDialogOption(
+            key: const ValueKey('drawing-cancel'),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Center(child: Text('Cancel', style: TextStyle(fontSize: 16))),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _pickSymbol(BuildContext context, List<TradeSymbol> symbols) {
     if (symbols.isEmpty) return;

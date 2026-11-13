@@ -100,6 +100,23 @@ class ChartDrawingsController extends StateNotifier<List<DrawingObject>> {
     _persist();
   }
 
+  /// Replace one drawing with an edited copy (style bar, Properties screen). Same id, same place in the list.
+  void replace(DrawingObject d) {
+    state = [for (final x in state) x.id == d.id ? d : x];
+    _persist();
+  }
+
+  /// Duplicate a drawing (MT5 Copy): every property kept, its own new id, placed at [anchors] (shifted a little by
+  /// the chart so it can be told apart). Returns the copy's id.
+  String duplicate(String id, List<DrawingAnchor> anchors) {
+    final src = state.where((d) => d.id == id).firstOrNull;
+    if (src == null) return id;
+    final newId = '${src.type.name}-${DateTime.now().microsecondsSinceEpoch}';
+    final n = src.name?.trim();
+    add(src.copyWith(id: newId, anchors: anchors, name: (n == null || n.isEmpty) ? null : '$n copy'));
+    return newId;
+  }
+
   void updateColor(String id, int colorArgb) {
     state = [for (final d in state) d.id == id ? d.copyWith(colorArgb: colorArgb) : d];
     _persist();
