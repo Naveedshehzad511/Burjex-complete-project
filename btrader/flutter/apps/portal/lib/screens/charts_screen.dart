@@ -1359,11 +1359,13 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 6)),
       child: Text(selectedTf.mt5Label, style: TextStyle(fontSize: 15 * uiK, fontWeight: FontWeight.w800, color: cs.onSurface)),
     );
+    // iPhone: the same MT5 red / blue order mark and Buy / Sell panel switch as Android / web (no highlight).
     final Widget orderBtn = tool(Icons.pending_actions_outlined, draftOpen ? 'Close order panel' : 'New order', _toggleOrderPanel,
-        active: draftOpen);
+        child: Mt5OrderIcon(key: const ValueKey('mt5-order-icon'), size: toolIcon * 0.82, sell: tc.sell, buy: tc.buy));
     final Widget panelBtn = tool(trade.panelVisible ? Icons.toggle_on : Icons.toggle_off_outlined,
         trade.panelVisible ? 'Hide Buy / Sell' : 'Show Buy / Sell', () => ref.read(chartTradeProvider.notifier).togglePanel(),
-        active: trade.panelVisible);
+        child: Mt5TradePanelIcon(
+            key: const ValueKey('mt5-panel-icon'), size: toolIcon * 0.92, sell: tc.sell, buy: tc.buy, on: trade.panelVisible));
 
     // iPhone: MT5 iOS arrangement on a glass bar - timeframe left, chart tools centred, order
     // controls right. Same buttons and actions as below; Android and web keep their row.
@@ -1899,8 +1901,9 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
         // drop shadow paints over the SELL / BUY panel and chart below it.
         child: Stack(children: [
           Column(children: [
-          // Space reserved for the floating toolbar (40 * uiK) + its 1 px rule.
-          SizedBox(height: 40 * uiK + 1),
+          // Space reserved for the floating toolbar (40 * uiK) + its 1 px rule; the iPhone glass bar also has its
+          // 4 + 2 px margin (see iosHeader), so the SELL / BUY panel below is never covered.
+          SizedBox(height: 40 * uiK + 1 + (iosGlass ? 6 : 0)),
           const ActiveAccountBar(compact: true, onlyWhenSpecial: true),
           if (trade.panelVisible && !bottomPanel) tradePanel,
           Expanded(

@@ -1377,7 +1377,9 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
           onLongPressEnd: (_) {
             if (!widget.crosshairMode) setState(() => _cross = null);
           },
-          onDoubleTap: _resetView,
+          // iOS (the glass chart menu): no double-tap Auto fit, so a tap opens the menu at once instead of
+          // waiting ~300 ms to rule out a second tap. Android / web keep it.
+          onDoubleTap: widget.onOpenChartMenu != null ? null : _resetView,
           child: Listener(
             behavior: HitTestBehavior.translucent,
             onPointerDown: (e) {
