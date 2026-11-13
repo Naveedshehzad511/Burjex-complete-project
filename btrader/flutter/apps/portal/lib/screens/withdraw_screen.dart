@@ -8,6 +8,7 @@ import '../state/crypto_policy.dart';
 import '../main.dart' show kNavy;
 import '../widgets/portal_ui.dart';
 import '../widgets/state_views.dart';
+import 'deposit_screen.dart' show portalMoney;
 import 'kyc_screen.dart' show kycStatusProvider;
 
 // ── Validation (pure, so it is the same everywhere and testable) ─────────────────────────────────
@@ -67,6 +68,7 @@ class _Method {
     required this.enabled,
     required this.accounts,
     required this.emptyHint,
+    this.exchangeRate = 1,
   });
   final String key; // bank | crypto
   final String label;
@@ -76,6 +78,16 @@ class _Method {
   final bool enabled;
   final List<_Account> accounts;
   final String emptyHint;
+
+  /// The admin's rate for this method's currency (CRM gateway `exchange_rate`): 1 USD = [exchangeRate] [currency].
+  final double exchangeRate;
+
+  /// What the client receives in the method's currency for [usd] taken from the wallet, or null when the method
+  /// pays in dollars (or has no usable rate) and there is nothing to convert. Same rule as the deposit screen.
+  double? localAmount(double usd) {
+    if (currency.toUpperCase() == 'USD' || exchangeRate <= 0 || exchangeRate == 1) return null;
+    return usd * exchangeRate;
+  }
 }
 
 class _Withdrawal {
@@ -103,6 +115,11 @@ final _withdrawProvider = FutureProvider.autoDispose<_Withdrawal>((ref) async {
   final d = ((res.data as Map)['data'] as Map).cast<String, dynamic>();
   final wallet = ((await dio.get('/wallet/')).data as Map)['data'] as Map;
   final methods = <_Method>[];
+  // Each method's gateway carries the admin's exchange rate (the same serializer as the deposit methods).
+  final rates = <int, double>{
+    for (final g in (d['gateways'] as List? ?? const []))
+      if (int.tryParse('${(g as Map)['id']}') != null) int.parse('${g['id']}'): double.tryParse('${g['exchange_rate']}') ?? 1,
+  };
   for (final m in (d['methods'] as List? ?? const [])) {
     final j = (m as Map).cast<String, dynamic>();
     if (hideCryptoFunding && '${j['key']}' != 'bank') continue; // iPhone / iPad: bank transfer only
@@ -119,6 +136,7 @@ final _withdrawProvider = FutureProvider.autoDispose<_Withdrawal>((ref) async {
           _Account(int.tryParse('${(a as Map)['id']}') ?? 0, '${a['label'] ?? ''}', '${a['details'] ?? ''}'),
       ],
       emptyHint: '${j['empty_hint'] ?? ''}',
+      exchangeRate: rates[int.tryParse('${j['gateway']}')] ?? 1,
     ));
   }
   final accounts = <_TradingSource>[
@@ -380,6 +398,24 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                       [if (m.min > 0) 'Min ${m.min.toStringAsFixed(2)}', if (m.max > 0) 'Max ${m.max.toStringAsFixed(2)}'].join(' · '),
                       style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
                 ),
+              // Converted amount, as on the deposit screen: rebuilt as the amount is typed.
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _amount,
+                builder: (context, v, _) {
+                  final local = m.localAmount(double.tryParse(v.text.trim()) ?? 0);
+                  if (local == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8, left: 4),
+                    child: Text.rich(TextSpan(children: [
+                      const TextSpan(text: 'You will receive '),
+                      TextSpan(text: '${portalMoney(local)} ${m.currency}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                      TextSpan(
+                          text: '\nRate: 1 USD = ${portalMoney(m.exchangeRate)} ${m.currency}',
+                          style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
+                    ])),
+                  );
+                },
+              ),
               const SizedBox(height: 12),
               if (m.accounts.isNotEmpty)
                 DropdownButtonFormField<int>(

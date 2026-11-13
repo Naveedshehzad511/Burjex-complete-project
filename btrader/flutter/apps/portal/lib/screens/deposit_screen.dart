@@ -497,11 +497,11 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                   child: Text.rich(TextSpan(children: [
                     const TextSpan(text: 'You will send '),
                     TextSpan(
-                        text: '${_money(m.localAmount(amt)!)} ${m.currency}',
+                        text: '${portalMoney(m.localAmount(amt)!)} ${m.currency}',
                         style: const TextStyle(fontWeight: FontWeight.w800)),
                     TextSpan(
                         text:
-                            '\nRate: 1 USD = ${_money(m.exchangeRate)} ${m.currency}',
+                            '\nRate: 1 USD = ${portalMoney(m.exchangeRate)} ${m.currency}',
                         style: TextStyle(
                             fontSize: 12, color: Theme.of(context).hintColor)),
                   ])),
@@ -560,7 +560,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   }
 }
 
-String _money(double v) {
+String portalMoney(double v) {
   final fixed = v.toStringAsFixed(2);
   final parts = fixed.split('.');
   final whole =
