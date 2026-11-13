@@ -56,6 +56,27 @@ enum ChartScheme {
   final String label;
 }
 
+/// The client's default chart colours (Default scheme, nothing picked). Foreground and grid are for a light
+/// chart; on a dark chart those two keep the theme's own (see [chartDefaultColor]).
+const kDefaultChartColors = <ChartColorKey, Color>{
+  ChartColorKey.foreground: Color(0xFF50535E),
+  ChartColorKey.grid: Color(0xFFEFF3F7),
+  ChartColorKey.barUp: Color(0xFF26A69A),
+  ChartColorKey.barDown: Color(0xFFEF5350),
+  ChartColorKey.bullCandle: Color(0xFF25A599),
+  ChartColorKey.bearCandle: Color(0xFFEF5350),
+  ChartColorKey.bidLine: Color(0xFF26A69A),
+  ChartColorKey.askLine: Color(0xFFEF5350),
+  ChartColorKey.slLine: Color(0xFFC7362E),
+  ChartColorKey.tpLine: Color(0xFFC7362E),
+};
+
+/// The default colour of [k], or null where the theme's own colour stays the default.
+Color? chartDefaultColor(ChartColorKey k, Brightness b) {
+  if (b == Brightness.dark && (k == ChartColorKey.foreground || k == ChartColorKey.grid)) return null;
+  return kDefaultChartColors[k];
+}
+
 const _teal = Color(0xFF26A69A), _red = Color(0xFFEF5350);
 
 /// Full palettes of the predefined schemes (the Default scheme has none: it leaves the theme in charge).

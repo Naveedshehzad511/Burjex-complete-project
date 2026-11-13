@@ -867,7 +867,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     final pal = ref.read(chartColorsProvider).palette;
     Color lineOf(bool buy, ChartColorKey buyK, ChartColorKey sellK) => pal[buy ? buyK : sellK] ?? (buy ? tc.buy : tc.sell);
     Color? textOf(bool buy) => pal[buy ? ChartColorKey.buyText : ChartColorKey.sellText];
-    final slColor = pal[ChartColorKey.slLine] ?? tc.loss, tpColor = pal[ChartColorKey.tpLine] ?? tc.profit;
+    final slColor = pal[ChartColorKey.slLine] ?? kDefaultChartColors[ChartColorKey.slLine]!,
+        tpColor = pal[ChartColorKey.tpLine] ?? kDefaultChartColors[ChartColorKey.tpLine]!;
     final slText = pal[ChartColorKey.slText], tpText = pal[ChartColorKey.tpText];
     for (final p in positions.where((p) => p.symbol == sym)) {
       final editing = edit != null && edit.isPosition && edit.id == p.id;

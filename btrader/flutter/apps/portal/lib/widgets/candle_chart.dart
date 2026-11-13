@@ -96,7 +96,7 @@ const double kHitSlop = 22;
 
 /// Visible stroke of order lines (entry / SL / TP / pending) — slightly thinner
 /// than before; the hit area above is unchanged.
-const double kLevelStroke = 0.8;
+const double kLevelStroke = 0.5; // MT5-thin order / SL / TP lines (was 0.8)
 
 /// Visible stroke of candle wicks — thinner and cleaner; bodies are untouched.
 const double kWickStroke = 0.7;
@@ -435,7 +435,9 @@ const double _kMaxHeadroomFraction = 0.6;
 
 /// Time-axis label size: one step above the price ladder's 9 so "29 Oct 04:22" stays readable on a phone,
 /// and still fits the 18px time strip.
-const double _kTimeFont = 10;
+const double _kTimeFont = 12; // MT5 size (was 10)
+/// Price-scale labels and the price tags on it, MT5 size (was 9 / 9.5).
+const double _kPriceFont = 12;
 
 /// Laid-out text, reused across frames. The price ladder, time labels and Bid/Ask tags are the same
 /// few strings frame after frame while panning (a label stays glued to its bar; the ladder only
@@ -751,17 +753,17 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
 
     var ladder = 0.0;
     for (final p in [hi, lo]) {
-      ladder = math.max(ladder, widthFor(p.toStringAsFixed(digits), 9, FontWeight.normal));
+      ladder = math.max(ladder, widthFor(p.toStringAsFixed(digits), _kPriceFont, FontWeight.normal));
     }
     var tag = 0.0;
     for (final p in [bid, ask]) {
       if (p == null) continue;
-      tag = math.max(tag, widthFor(p.toStringAsFixed(digits), 9.5, FontWeight.w800));
+      tag = math.max(tag, widthFor(p.toStringAsFixed(digits), _kPriceFont, FontWeight.w800));
     }
     // Ladder labels sit past an 8px gap from the axis line; tags sit in a
     // rounded pill with ~5px of padding each side — see the painter's `_tag`
     // and the ladder-label loop below.
-    return math.max(ladder + 12, tag + 10).clamp(40.0, 90.0);
+    return math.max(ladder + 12, tag + 10).clamp(40.0, 110.0);
   }
 
   @override
@@ -1430,16 +1432,20 @@ class _CandleChartState extends State<CandleChart> with SingleTickerProviderStat
               priceZoom: _priceZoom,
               dragLevelKey: _dragLevelKey,
               dragLevelPrice: _dragLevelPrice,
-              up: widget.palette[ChartColorKey.bullCandle] ?? tc.up,
-              down: widget.palette[ChartColorKey.bearCandle] ?? tc.down,
-              barUp: widget.palette[ChartColorKey.barUp] ?? tc.up,
-              barDown: widget.palette[ChartColorKey.barDown] ?? tc.down,
-              bid: widget.palette[ChartColorKey.bidLine] ?? tc.sell,
-              ask: widget.palette[ChartColorKey.askLine] ?? tc.buy,
+              up: widget.palette[ChartColorKey.bullCandle] ?? kDefaultChartColors[ChartColorKey.bullCandle]!,
+              down: widget.palette[ChartColorKey.bearCandle] ?? kDefaultChartColors[ChartColorKey.bearCandle]!,
+              barUp: widget.palette[ChartColorKey.barUp] ?? kDefaultChartColors[ChartColorKey.barUp]!,
+              barDown: widget.palette[ChartColorKey.barDown] ?? kDefaultChartColors[ChartColorKey.barDown]!,
+              bid: widget.palette[ChartColorKey.bidLine] ?? kDefaultChartColors[ChartColorKey.bidLine]!,
+              ask: widget.palette[ChartColorKey.askLine] ?? kDefaultChartColors[ChartColorKey.askLine]!,
               grid: widget.palette[ChartColorKey.grid] ??
-                  (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF363A45) : Theme.of(context).dividerColor),
+                  chartDefaultColor(ChartColorKey.grid, Theme.of(context).brightness) ??
+                  const Color(0xFF363A45), // dark chart
               drawGrid: true, // MT5: the grid is on by default; a scheme / the user only changes its colour
-              text: widget.palette[ChartColorKey.foreground] ?? Theme.of(context).hintColor,
+              // Default foreground (client colour) on a light chart; a dark chart keeps the hint grey.
+              text: widget.palette[ChartColorKey.foreground] ??
+                  chartDefaultColor(ChartColorKey.foreground, Theme.of(context).brightness) ??
+                  Theme.of(context).hintColor, // dark chart
               line: widget.palette[ChartColorKey.chartLine] ?? Theme.of(context).colorScheme.primary,
               surface: widget.palette[ChartColorKey.background] ?? Theme.of(context).colorScheme.surface,
               background: widget.palette[ChartColorKey.background],
@@ -1793,10 +1799,11 @@ class _LevelsPainter extends CustomPainter {
   }
 
   void _tag(Canvas c, double chartW, double yy, String txt, Color color) {
-    final t = _TextCache.get(txt, 9.5, Colors.white, FontWeight.w700);
-    final rect = Rect.fromLTWH(chartW + 1, yy - 8, axisW - 2, 16);
+    final t = _TextCache.get(txt, _kPriceFont, Colors.white, FontWeight.w700);
+    // The pill fits the text (+2 px each side), centred on the price.
+    final rect = Rect.fromLTWH(chartW + 1, yy - t.height / 2 - 2, axisW - 2, t.height + 4);
     c.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), Paint()..color = color);
-    t.paint(c, Offset(chartW + 5, yy - 6));
+    t.paint(c, Offset(chartW + 5, yy - t.height / 2));
   }
 
   @override
@@ -1934,7 +1941,7 @@ class _CandlePainter extends CustomPainter {
   /// price digits doesn't carry the same fixed margin as one with more.
   final double axisW;
   static const double padV = 2; // top padding (reduced empty space above candles)
-  static const double timeAxisH = 18; // bottom time-axis height
+  static const double timeAxisH = 21; // bottom time-axis height (fits the 12 px MT5-size labels; was 18)
   /// MT5 spacing: one price label (and grid row) about every 34 px, so a tall chart gets more
   /// prices and smaller grid boxes instead of a fixed 8 rows.
   static const double priceRowPx = 34;
@@ -1987,7 +1994,8 @@ class _CandlePainter extends CustomPainter {
       if (yy > 2 && yy < plotBottom - 2) canvas.drawLine(Offset(chartW, yy), Offset(chartW + 4, yy), tickPaint);
       // Keep the first / last ladder price fully inside the frame instead of letting the
       // top / bottom rule strike through it.
-      _TextCache.get(p.toStringAsFixed(digits), 9, text).paint(canvas, Offset(chartW + 8, (yy - 5).clamp(3.0, plotBottom - 13.0)));
+      final lp = _TextCache.get(p.toStringAsFixed(digits), _kPriceFont, text);
+      lp.paint(canvas, Offset(chartW + 8, (yy - lp.height / 2).clamp(3.0, plotBottom - lp.height - 1)));
     }
 
     // ── Time scale: labels along the bottom (no vertical gridlines). ──
@@ -2140,14 +2148,14 @@ class _CandlePainter extends CustomPainter {
     final bidPx = livePrice ?? candles.last.c;
     final bidY = y(bidPx);
     if (bidY >= priceTop && bidY <= priceTop + chartH) {
-      _hline(canvas, bidY, chartW, bid, dashed: true);
+      _hline(canvas, bidY, chartW, bid, dashed: true, width: 0.5); // MT5-thin (was 1)
       _tag(canvas, chartW, bidY, bidPx.toStringAsFixed(digits), bid, bold: true);
     }
     final askPx = askPrice;
     if (askPx != null) {
       final askY = y(askPx);
       if (askY >= priceTop && askY <= priceTop + chartH) {
-        _hline(canvas, askY, chartW, ask, dashed: true);
+        _hline(canvas, askY, chartW, ask, dashed: true, width: 0.5);
         _tag(canvas, chartW, askY, askPx.toStringAsFixed(digits), ask, bold: true);
       }
     }
@@ -2647,10 +2655,10 @@ class _CandlePainter extends CustomPainter {
   }
 
   void _tag(Canvas c, double chartW, double yy, String txt, Color color, {bool bold = false}) {
-    final t = _TextCache.get(txt, 9.5, Colors.white, bold ? FontWeight.w800 : FontWeight.w700);
-    final rect = Rect.fromLTWH(chartW + 1, yy - 8, axisW - 2, 16);
+    final t = _TextCache.get(txt, _kPriceFont, Colors.white, bold ? FontWeight.w800 : FontWeight.w700);
+    final rect = Rect.fromLTWH(chartW + 1, yy - t.height / 2 - 2, axisW - 2, t.height + 4);
     c.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), Paint()..color = color);
-    t.paint(c, Offset(chartW + 5, yy - 6));
+    t.paint(c, Offset(chartW + 5, yy - t.height / 2));
   }
 
   @override

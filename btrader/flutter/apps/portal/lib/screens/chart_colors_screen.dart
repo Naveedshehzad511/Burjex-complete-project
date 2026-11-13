@@ -10,6 +10,8 @@ import '../widgets/color_picker.dart';
 Color chartThemeColor(BuildContext context, ChartColorKey k) {
   final t = Theme.of(context);
   final tc = t.extension<TradeColors>()!;
+  final d = chartDefaultColor(k, t.brightness);
+  if (d != null) return d;
   return switch (k) {
     ChartColorKey.background => t.scaffoldBackgroundColor,
     ChartColorKey.foreground => t.colorScheme.onSurface,
