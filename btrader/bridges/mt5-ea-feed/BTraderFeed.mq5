@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//|  BTraderFeed.mq5  v7                                              |
+//|  BTraderFeed.mq5  v8                                              |
 //|  Pushes an MT5 client terminal's bid/ask to the B-Trader ingest  |
 //|  endpoint over HTTPS, and repairs chart holes from MT5 history.  |
 //|  NO Manager API — runs on ANY MT5 terminal logged into a broker. |
@@ -23,6 +23,15 @@
 //|   whole — the chart matches MT5. The forming bar stays live.      |
 //|   Only for a terminal that is ALSO this feed's tick source.       |
 //|                                                                    |
+//|  ── Trading sessions (v8) ──────────────────────────────────    |
+//|   Every InpSessionsEverySec, and at once when the broker's UTC    |
+//|   offset changes (DST), each symbol's trade sessions              |
+//|   (SymbolInfoSessionTrade, broker server time) are converted to   |
+//|   UTC and sent to /ingest/sessions. B-Trader opens and closes     |
+//|   trading by them (weekend, daily breaks, holiday edits the       |
+//|   broker makes to its sessions). A symbol whose trading is        |
+//|   disabled, or that has no session, is sent as closed all week.   |
+//|                                                                    |
 //|  ── Terminal setup (REQUIRED) ─────────────────────────────────   |
 //|   Tools > Options > Expert Advisors > tick "Allow WebRequest for   |
 //|   listed URL" and add the InpFeedHost value. Attach the EA to ONE  |
@@ -30,7 +39,7 @@
 //|   ONE copy of this EA (and no other bridge) against a feed host.   |
 //+------------------------------------------------------------------+
 #property copyright "B-Trader"
-#property version   "7.0"
+#property version   "8.0"
 #property strict
 
 input string InpFeedHost          = "https://feed.burjexprime.net"; // must be allow-listed in the terminal
@@ -46,6 +55,7 @@ input int    InpRepairEverySec    = 300;    // how often the recent window is re
 input int    InpRepairWindowMin   = 360;    // recent window re-sent each time (restart the EA for older holes)
 input string InpStripSuffix       = "";     // optional LOCAL suffix strip (usually leave empty; map in B-Trader)
 input bool   InpVerbose           = false;  // log each POST result
+input int    InpSessionsEverySec  = 600;    // how often trade sessions are re-sent (also sent at once on a UTC offset change)
 
 // Timeframes market-data stores (W1 / MN are rolled up from D1 there).
 const string          TF_CODE[]   = {"1m", "5m", "15m", "30m", "1h", "4h", "1d"};
@@ -56,6 +66,9 @@ string g_symbols[];
 long   g_cursor[];      // time_msc of the newest tick already handled, per symbol
 string g_tickUrl;
 string g_candleUrl;
+string g_sessionsUrl;
+ulong  g_lastSessions;
+ulong  g_lastOffsetCheck;
 int    g_offsetSec;     // broker server time minus UTC
 
 // Candle repair jobs (symbol index, timeframe index, bar count, attempts).
@@ -83,6 +96,7 @@ int OnInit()
       host = StringSubstr(host, 0, StringLen(host) - 1);
    g_tickUrl   = host + "/ingest";
    g_candleUrl = host + "/ingest/candles";
+   g_sessionsUrl = host + "/ingest/sessions";
 
    // Build the symbol set.
    if(StringLen(InpSymbols) > 0)
@@ -116,9 +130,12 @@ int OnInit()
    g_lastRepair = GetTickCount64();
    g_lastStats = GetTickCount64();
    if(InpRepairCandles) EnqueueRepair(InpBackfillHours * 60);
+   g_lastOffsetCheck = GetTickCount64();
+   g_lastSessions = 0;
+   SendSessions();
 
    EventSetMillisecondTimer(MathMax(50, InpPollMs));
-   PrintFormat("BTraderFeed v7: streaming %d symbol(s) -> %s (server UTC offset %ds, candle repair %s)",
+   PrintFormat("BTraderFeed v8: streaming %d symbol(s) -> %s (server UTC offset %ds, candle repair %s)",
                ArraySize(g_symbols), g_tickUrl, g_offsetSec, InpRepairCandles ? "on" : "off");
    return(INIT_SUCCEEDED);
 }
@@ -126,7 +143,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
-   PrintFormat("BTraderFeed v7 stopped (reason %d).", reason);
+   PrintFormat("BTraderFeed v8 stopped (reason %d).", reason);
 }
 
 //+------------------------------------------------------------------+
@@ -136,6 +153,22 @@ void OnDeinit(const int reason)
 void OnTimer()
 {
    SendTicks();
+
+   // Trade sessions: on a schedule, and at once when the broker's UTC offset changes (DST switch).
+   ulong nowT = GetTickCount64();
+   if(nowT - g_lastOffsetCheck >= 60000)
+   {
+      g_lastOffsetCheck = nowT;
+      int off = ServerOffsetSec();
+      if(off != g_offsetSec)
+      {
+         PrintFormat("BTraderFeed v8: server UTC offset changed %ds -> %ds; re-sending trade sessions", g_offsetSec, off);
+         g_offsetSec = off;
+         g_lastSessions = 0;
+      }
+   }
+   if(g_lastSessions == 0 || nowT - g_lastSessions >= (ulong)MathMax(60, InpSessionsEverySec) * 1000)
+      SendSessions();
 
    if(InpRepairCandles)
    {
@@ -151,7 +184,7 @@ void OnTimer()
 
    if(GetTickCount64() - g_lastStats >= 60000)
    {
-      PrintFormat("BTraderFeed v7: last 60s ticks_sent=%I64d too_old=%I64d backlog_skips=%I64d posts_ok=%I64d posts_failed=%I64d repair_bars=%I64d",
+      PrintFormat("BTraderFeed v8: last 60s ticks_sent=%I64d too_old=%I64d backlog_skips=%I64d posts_ok=%I64d posts_failed=%I64d repair_bars=%I64d",
                   g_ticksSent, g_ticksTooOld, g_backlogSkips, g_postsOk, g_postsFailed, g_barsSent);
       g_ticksSent = g_ticksTooOld = g_backlogSkips = g_postsOk = g_postsFailed = g_barsSent = 0;
       g_lastStats = GetTickCount64();
@@ -293,6 +326,75 @@ void RunRepairJob()
    if(Post(g_candleUrl, "{\"symbol\":\"" + MapName(g_symbols[sym]) + "\",\"tf\":\"" + TF_CODE[tf] +
                         "\",\"authoritative\":true,\"bars\":[" + body + "]}"))
       g_barsSent += count;
+}
+
+//+------------------------------------------------------------------+
+//|  Trade sessions in UTC: {day 0=Sun..6, open "HH:MM", close        |
+//|  "HH:MM" or "24:00"}; a window crossing UTC midnight is split.     |
+//+------------------------------------------------------------------+
+string Hhmm(const int mins)
+{
+   return StringFormat("%02d:%02d", mins / 60, mins % 60);
+}
+
+string SymbolSessionsJson(const string sym)
+{
+   const int WEEK = 7 * 1440;
+   string out = "";
+   int count = 0;
+   long mode = SymbolInfoInteger(sym, SYMBOL_TRADE_MODE);
+   if(mode != SYMBOL_TRADE_MODE_DISABLED)
+   {
+      for(int d = 0; d < 7; d++)
+      {
+         for(uint k = 0; k < 16; k++)
+         {
+            datetime from, to;
+            if(!SymbolInfoSessionTrade(sym, (ENUM_DAY_OF_WEEK)d, k, from, to)) break;
+            int f = (int)((long)from / 60), t = (int)((long)to / 60);
+            if(t < f) t += 1440; // a session that ends on the next day
+            int len = t - f;
+            if(len <= 0) continue;
+            if(len > WEEK) len = WEEK;
+            int start = ((d * 1440 + f - g_offsetSec / 60) % WEEK + WEEK) % WEEK;
+            int end = start + len;
+            while(start < end)
+            {
+               int day = start / 1440;
+               int dayEnd = (day + 1) * 1440;
+               int pieceEnd = MathMin(end, dayEnd);
+               if(count > 0) out += ",";
+               out += "{\"day\":" + IntegerToString(day % 7) + ",\"open\":\"" + Hhmm(start % 1440) +
+                      "\",\"close\":\"" + (pieceEnd == dayEnd ? "24:00" : Hhmm(pieceEnd % 1440)) + "\"}";
+               count++;
+               start = pieceEnd;
+            }
+         }
+      }
+   }
+   // Disabled, or no session at all: closed all week (a window that never matches).
+   if(count == 0) out = "{\"day\":0,\"open\":\"00:00\",\"close\":\"00:00\"}";
+   return "[" + out + "]";
+}
+
+void SendSessions()
+{
+   g_lastSessions = GetTickCount64();
+   if(g_lastSessions == 0) g_lastSessions = 1;
+   string body = "";
+   int n = ArraySize(g_symbols);
+   for(int i = 0; i < n; i++)
+   {
+      if(i > 0) body += ",";
+      body += "{\"symbol\":\"" + MapName(g_symbols[i]) + "\",\"sessions\":" + SymbolSessionsJson(g_symbols[i]) + "}";
+   }
+   if(n == 0) return;
+   if(Post(g_sessionsUrl, "{\"offsetSec\":" + IntegerToString(g_offsetSec) + ",\"symbols\":[" + body + "]}"))
+   {
+      if(InpVerbose) PrintFormat("BTraderFeed v8: trade sessions sent for %d symbol(s)", n);
+   }
+   else
+      g_lastSessions = GetTickCount64() - (ulong)MathMax(60, InpSessionsEverySec) * 1000 + 60000; // retry in about a minute
 }
 
 //+------------------------------------------------------------------+

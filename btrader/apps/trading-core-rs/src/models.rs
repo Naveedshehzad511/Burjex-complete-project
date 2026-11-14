@@ -137,7 +137,13 @@ SELECT id, "tenantId", symbol, class::text AS class, enabled, digits,
        "marginRate"::float8 AS "marginRate", "marginPercent"::float8 AS "marginPercent",
        "quoteCurrency", "baseCurrency", "slippagePoints", "spreadMarkup", "stopsLevel",
        "newsMode", "newsSpreadPoints", "newsHaltOpens", "forceBook"::text AS "forceBook",
-       "groupId", "tradingSessions"
+       "groupId",
+       -- Effective sessions: admin-set ones win; else the broker's own (MT5 EA, fresh within 3 days); else
+       -- NULL and the class default applies (sessions.rs). Same rule as the gateway's effectiveSessions().
+       CASE WHEN jsonb_typeof("tradingSessions"::jsonb) = 'array' AND jsonb_array_length("tradingSessions"::jsonb) > 0
+            THEN "tradingSessions"::jsonb
+            WHEN "brokerSessionsAt" > now() - interval '3 days' THEN "brokerSessions"::jsonb
+       END AS "tradingSessions"
 FROM symbols
 "#;
 

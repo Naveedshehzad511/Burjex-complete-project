@@ -93,10 +93,19 @@ pub fn session_closes_at(sessions: &[SessionWindow], instrument_class: &str, now
         let mins = now.hour() as i32 * 60 + now.minute() as i32;
         let mut best: Option<DateTime<Utc>> = None;
         for s in sessions {
-            let close_m = minutes(&s.close);
+            let mut close_m = minutes(&s.close);
             let open_m = minutes(&s.open);
             let mut close_day = s.day;
-            if open_m > close_m {
+            if close_m >= 24 * 60 {
+                // "24:00" (broker sessions split at UTC midnight): when the next day's window opens at
+                // 00:00 the session simply continues, so this is not a close.
+                let next = (s.day + 1) % 7;
+                if sessions.iter().any(|o| o.day == next && minutes(&o.open) == 0) {
+                    continue;
+                }
+                close_day = next;
+                close_m = 0;
+            } else if open_m > close_m {
                 close_day = (s.day + 1) % 7;
             }
             let add_days = (close_day as i32 - day as i32 + 7) % 7;

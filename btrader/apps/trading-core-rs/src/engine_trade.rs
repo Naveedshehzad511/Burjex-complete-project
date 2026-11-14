@@ -475,7 +475,11 @@ impl Engine {
                       s."quoteCurrency", s."baseCurrency", s."minLot"::float8 AS "minLot", s."lotStep"::float8 AS "lotStep",
                       s.id AS sid, s."groupId" AS "symGroupId", s.class::text AS class, s."spreadMarkup", s."newsMode",
                       s."newsSpreadPoints", s."forceBook"::text AS "forceBook", s.enabled, s."slippagePoints",
-                      s."stopsLevel", s."newsHaltOpens", s."tradingSessions", s."tenantId"
+                      s."stopsLevel", s."newsHaltOpens", s."tenantId",
+                      CASE WHEN jsonb_typeof(s."tradingSessions"::jsonb) = 'array' AND jsonb_array_length(s."tradingSessions"::jsonb) > 0
+            THEN s."tradingSessions"::jsonb
+            WHEN s."brokerSessionsAt" > now() - interval '3 days' THEN s."brokerSessions"::jsonb
+       END AS "tradingSessions"
                FROM positions p
                JOIN accounts a ON a.id = p."accountId"
                JOIN symbols s ON s.id = p."symbolId"

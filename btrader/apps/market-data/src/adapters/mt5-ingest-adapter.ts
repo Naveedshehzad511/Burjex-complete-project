@@ -12,6 +12,40 @@ export interface CandleBar {
   v: number;
 }
 
+/** One trading-session window in UTC: day 0=Sunday..6, "HH:MM" (close may be "24:00"). */
+export interface SessionWindowIn {
+  day: number;
+  open: string;
+  close: string;
+}
+
+/** A symbol's broker trade sessions as the MT5 EA sent them (POST /ingest/sessions). */
+export interface SymbolSessionsIn {
+  symbol: string;
+  sessions: SessionWindowIn[];
+}
+
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Validate one symbol's windows. Returns null when anything is malformed: a bad list is ignored as a whole
+ * (the previous good copy stays), never stored half-right.
+ */
+export function cleanSessions(raw: unknown): SessionWindowIn[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 200) return null;
+  const out: SessionWindowIn[] = [];
+  for (const w of raw) {
+    const day = Number((w as any)?.day);
+    const open = String((w as any)?.open ?? '');
+    const close = String((w as any)?.close ?? '');
+    if (!Number.isInteger(day) || day < 0 || day > 6) return null;
+    if (!HHMM.test(open)) return null;
+    if (!(HHMM.test(close) || close === '24:00')) return null;
+    out.push({ day, open, close });
+  }
+  return out;
+}
+
 /** Resolved feed source for an incoming token (multi-source ingestion). */
 export interface FeedSource {
   code: string;            // provider code stamped on each tick (e.g. "LP4")
@@ -54,6 +88,7 @@ export class Mt5IngestAdapter implements LpBridgeAdapter {
   private lastTickAt = 0;
   private tickHandler?: (t: RawTick) => void;
   private candleHandler?: (symbol: string, tf: string, bars: CandleBar[], mode: BridgeMode) => void;
+  private sessionsHandler?: (source: FeedSource, symbols: SymbolSessionsIn[]) => void;
   private statusHandler?: (s: 'connected' | 'disconnected' | 'error', d?: string) => void;
 
   constructor(private readonly opts: Mt5IngestOptions) {}
@@ -91,6 +126,10 @@ export class Mt5IngestAdapter implements LpBridgeAdapter {
   onCandles(h: (symbol: string, tf: string, bars: CandleBar[], mode: BridgeMode) => void): void {
     this.candleHandler = h;
   }
+  /** Register a handler for the broker's trade sessions (POST /ingest/sessions from the MT5 EA, v8+). */
+  onSessions(h: (source: FeedSource, symbols: SymbolSessionsIn[]) => void): void {
+    this.sessionsHandler = h;
+  }
   onStatus(h: (s: 'connected' | 'disconnected' | 'error', d?: string) => void): void {
     this.statusHandler = h;
   }
@@ -105,7 +144,8 @@ export class Mt5IngestAdapter implements LpBridgeAdapter {
     }
     const isTicks = req.method === 'POST' && (req.url === '/ingest' || req.url === '/');
     const isCandles = req.method === 'POST' && req.url === '/ingest/candles';
-    if (!isTicks && !isCandles) {
+    const isSessions = req.method === 'POST' && req.url === '/ingest/sessions';
+    if (!isTicks && !isCandles && !isSessions) {
       return this.json(res, 404, { error: 'not found' });
     }
     const rawToken = req.headers['x-feed-token'];
@@ -136,6 +176,7 @@ export class Mt5IngestAdapter implements LpBridgeAdapter {
         return this.json(res, 400, { error: 'invalid json' });
       }
       if (isCandles) return this.handleCandles(parsed, res);
+      if (isSessions) return this.handleSessions(parsed, source, res);
 
       const ticks: any[] = Array.isArray(parsed?.ticks)
         ? parsed.ticks
@@ -174,6 +215,21 @@ export class Mt5IngestAdapter implements LpBridgeAdapter {
     if (fromProvider) return fromProvider;
     if (this.opts.token && token === this.opts.token) return { code: 'default', tenantId: null };
     return null;
+  }
+
+  private handleSessions(parsed: any, source: FeedSource, res: http.ServerResponse): void {
+    const list: any[] = Array.isArray(parsed?.symbols) ? parsed.symbols : [];
+    const sfx = this.opts.stripSuffix?.toUpperCase();
+    const out: SymbolSessionsIn[] = [];
+    for (const e of list) {
+      let symbol = String(e?.symbol ?? '').trim().toUpperCase();
+      if (!symbol) continue;
+      if (sfx && symbol.endsWith(sfx)) symbol = symbol.slice(0, symbol.length - sfx.length);
+      const sessions = cleanSessions(e?.sessions);
+      if (sessions) out.push({ symbol, sessions });
+    }
+    this.json(res, 200, { ok: true, accepted: out.length });
+    if (out.length) setImmediate(() => this.sessionsHandler?.(source, out));
   }
 
   private handleCandles(parsed: any, res: http.ServerResponse): void {

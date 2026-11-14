@@ -707,6 +707,12 @@ model Symbol {
 
   // Sessions: JSON array of {day, open, close} in tenant tz. Empty = 24/7.
   tradingSessions Json?
+  // The broker's own trading sessions for this symbol, as the MT5 feed EA reads them (SymbolInfoSessionTrade),
+  // already converted to UTC {day, open, close} windows ("24:00" = end of day). Written by market-data from
+  // POST /ingest/sessions; refreshed every few minutes and whenever the broker's UTC offset changes (DST).
+  // Used when no admin sessions are set and the copy is fresh (brokerSessionsAt within 3 days).
+  brokerSessions   Json?
+  brokerSessionsAt DateTime?
 
   sortOrder      Int            @default(0)
   createdAt      DateTime       @default(now())

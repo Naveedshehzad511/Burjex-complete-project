@@ -81,3 +81,25 @@ export function isSymbolTradableNow(
   if ((instrumentClass ?? '').toUpperCase() === 'CRYPTO') return true;
   return isForexWeekOpen(now);
 }
+
+/** Broker sessions older than this are not trusted (the MT5 EA stopped sending them). */
+export const BROKER_SESSIONS_MAX_AGE_MS = 3 * 86_400_000;
+
+/**
+ * The sessions a symbol actually trades by - the same rule as the engine's SYMBOL_SELECT
+ * (trading-core-rs/src/models.rs):
+ *  1. admin-set `tradingSessions`, when it is a non-empty list;
+ *  2. otherwise the broker's own sessions from the MT5 EA (`brokerSessions`), when refreshed within 3 days;
+ *  3. otherwise null, and the class default applies (crypto 24/7, forex week at 17:00 New York).
+ */
+export function effectiveSessions(
+  row: { tradingSessions?: unknown; brokerSessions?: unknown; brokerSessionsAt?: Date | string | null },
+  now: Date = new Date(),
+): unknown {
+  if (Array.isArray(row.tradingSessions) && row.tradingSessions.length > 0) return row.tradingSessions;
+  const at = row.brokerSessionsAt ? new Date(row.brokerSessionsAt).getTime() : NaN;
+  if (Array.isArray(row.brokerSessions) && row.brokerSessions.length > 0 && now.getTime() - at <= BROKER_SESSIONS_MAX_AGE_MS) {
+    return row.brokerSessions;
+  }
+  return null;
+}

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { prisma } from '@btrader/db';
-import { isSymbolTradableNow } from './sessions.util';
+import { effectiveSessions, isSymbolTradableNow } from './sessions.util';
 
 /** Symbol management — full contract spec, admin-driven (no hardcoded instruments). */
 @Injectable()
@@ -90,15 +90,19 @@ export class SymbolsService {
       }
     }
 
-    const rows = await prisma.symbol.findMany({
-      where,
-      include: { group: true },
-      orderBy: [{ sortOrder: 'asc' }, { symbol: 'asc' }],
-    });
+    const now = new Date();
+    // `tradingSessions` is served as the EFFECTIVE schedule (admin-set, else the broker's own from the MT5
+    // feed), so the app and the engine always judge "market open" by the same windows.
+    const rows = (
+      await prisma.symbol.findMany({
+        where,
+        include: { group: true },
+        orderBy: [{ sortOrder: 'asc' }, { symbol: 'asc' }],
+      })
+    ).map((r) => ({ ...r, tradingSessions: effectiveSessions(r, now) as typeof r.tradingSessions }));
 
     // Evaluated once per request, from a single `now` — never per-symbol
     // hardcoded — so every row in one response reflects the same instant.
-    const now = new Date();
     const withTradable = (rows2: typeof rows) =>
       rows2.map((r) => ({ ...r, tradable: isSymbolTradableNow(r.tradingSessions, r.class, now) }));
 

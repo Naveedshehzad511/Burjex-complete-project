@@ -23,6 +23,7 @@ import {
 import { MockAdapter } from './adapters/mock-adapter';
 import { GenericWsAdapter } from './adapters/generic-ws-adapter';
 import { Mt5IngestAdapter, FeedSource } from './adapters/mt5-ingest-adapter';
+import { storeBrokerSessions } from './sessions/broker-sessions';
 import { NullAdapter } from './adapters/null-adapter';
 import { CandleEngine, CandleUpdate, CanonicalCandle, DEFAULT_CHART_PRICE, bucketStart } from './candles/engine';
 import { selectFlushRows } from './candles/flush';
@@ -1190,6 +1191,26 @@ async function main() {
   // not overwrite these OHLC bars — brokers can quote ticks on a different level
   // than chart rates (observed on BTCUSD: TickLast≈627xx vs Chart≈625xx).
   if (adapter instanceof Mt5IngestAdapter) {
+    // Broker trade sessions: mapped to B-Trader symbols the same way as ticks (provider symbol map /
+    // suffix), only from the tenant's primary feed (or the legacy feed), then stored on the symbol.
+    adapter.onSessions((source, list) => {
+      const resolve = (tenantId: string | null, raw: string) => {
+        const out: Array<{ tenantId: string; symbol: string }> = [];
+        if (tenantId == null) {
+          for (const [tid, idx] of symbolIndex) if (idx.has(raw)) out.push({ tenantId: tid, symbol: raw });
+          return out;
+        }
+        const p = providers.byCode.get(source.code);
+        if (!p || !p.isPrimaryFeed) return out;
+        const sym = resolveCanonical(p, raw, symbolIndex.get(tenantId));
+        if (sym) out.push({ tenantId, symbol: sym });
+        return out;
+      };
+      const write = (tenantId: string, symbol: string, json: string) =>
+        prisma.$executeRaw`UPDATE symbols SET "brokerSessions" = ${json}::jsonb, "brokerSessionsAt" = now()
+                           WHERE "tenantId" = ${tenantId} AND symbol = ${symbol}`;
+      void storeBrokerSessions(source, list, resolve, write);
+    });
     mt5CandleIngestWired = true;
     adapter.onCandles((symbol, tf, bars, mode) => {
       void persistBridgeCandles(symbol, tf, bars, { defaultBook, allBook }, mode);
