@@ -90,7 +90,11 @@ class MoversSection extends ConsumerWidget {
       const SizedBox(height: 22),
       Row(children: [
         Expanded(child: Text(_gainers ? 'Top Gainers' : 'Top Losers', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
-        if (state.stale && data != null) _StaleNote(asOf: data.asOf),
+        // A failed refresh, or a side the server sent empty: these are the last good cards, from then.
+        if (data != null && (state.stale || (_gainers ? data.gainersAsOf : data.losersAsOf) != data.asOf))
+          _StaleNote(asOf: _gainers ? data.gainersAsOf : data.losersAsOf)
+        else if (cards.isNotEmpty && cards.every((m) => !m.live))
+          const _LastSessionNote(),
       ]),
       const SizedBox(height: 12),
       body,
@@ -113,6 +117,17 @@ class _StaleNote extends StatelessWidget {
       Text('Updated $hh:$mm', style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
     ]);
   }
+}
+
+/// The market is closed for every card shown: they are each symbol's last trading day, not live moves.
+class _LastSessionNote extends StatelessWidget {
+  const _LastSessionNote();
+  @override
+  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.history, size: 15, color: Theme.of(context).hintColor),
+        const SizedBox(width: 4),
+        Text('Last session', style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
+      ]);
 }
 
 /// The cards, side by side, scrolling sideways. The card width follows the screen width, the height follows the content.
