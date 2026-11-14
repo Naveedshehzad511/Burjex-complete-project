@@ -94,14 +94,10 @@ impl Gate {
             Gate::Open => None,
             Gate::Closed => Some(BtError::new(MARKET_CLOSED, MSG_MARKET_CLOSED)),
             Gate::NoPrice => Some(BtError::new(NO_PRICE, format!("{MSG_PRICE_UNAVAILABLE} (no price received)"))),
-            Gate::Stale(age) => Some(BtError::new(
-                NO_PRICE,
-                format!("{MSG_PRICE_UNAVAILABLE} (last price is {}s old)", age / 1000),
-            )),
-            Gate::Frozen(still) => Some(BtError::new(
-                NO_PRICE,
-                format!("{MSG_PRICE_UNAVAILABLE} (the price feed has not moved for {}s)", still / 1000),
-            )),
+            // The broker stopped sending prices (daily break, weekend, holiday): the client is told the
+            // market is closed (client's request, 2026-11-14). The code stays NO_PRICE so logs and
+            // callers can still tell a silent feed from a closed session.
+            Gate::Stale(_) | Gate::Frozen(_) => Some(BtError::new(NO_PRICE, MSG_MARKET_CLOSED)),
         }
     }
 
@@ -175,12 +171,15 @@ mod tests {
         let closed = Gate::Closed.error().unwrap();
         assert_eq!(closed.code, MARKET_CLOSED);
         assert_eq!(closed.message, "Market is closed");
-        for gate in [Gate::NoPrice, Gate::Stale(21_000), Gate::Frozen(130_000)] {
+        let none = Gate::NoPrice.error().unwrap();
+        assert_eq!(none.code, NO_PRICE);
+        assert!(none.message.starts_with("Live market price is unavailable"), "{}", none.message);
+        // Prices stopped: the client reads "Market is closed", the code still says NO_PRICE.
+        for gate in [Gate::Stale(21_000), Gate::Frozen(130_000)] {
             let e = gate.error().unwrap();
             assert_eq!(e.code, NO_PRICE);
-            assert!(e.message.starts_with("Live market price is unavailable"), "{}", e.message);
+            assert_eq!(e.message, "Market is closed");
         }
-        assert!(Gate::Stale(21_000).error().unwrap().message.contains("21s"));
         assert!(Gate::Open.error().is_none());
         assert!(Gate::Open.into_result().is_ok());
         assert!(Gate::Closed.into_result().is_err());
