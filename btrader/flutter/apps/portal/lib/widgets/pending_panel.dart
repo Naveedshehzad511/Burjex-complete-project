@@ -320,6 +320,10 @@ class _PendingPanelState extends State<PendingPanel> {
   /// doesn't hide fields the user is actively looking at.
   bool _stopLevelsOpen = false;
 
+  /// Existing pending order: which action the bottom button does - MT5 Android's "Delete order | Modify order"
+  /// tabs. Modify (Apply changes) by default; back to Modify whenever another order is selected.
+  bool _deleteMode = false;
+
   @override
   void initState() {
     super.initState();
@@ -330,6 +334,7 @@ class _PendingPanelState extends State<PendingPanel> {
   void didUpdateWidget(covariant PendingPanel old) {
     super.didUpdateWidget(old);
     if (!identical(old.edit, widget.edit)) _stopLevelsOpen = false;
+    if (old.edit.id != widget.edit.id || old.edit.isOrder != widget.edit.isOrder) _deleteMode = false;
     _sync();
   }
 
@@ -724,7 +729,22 @@ class _PendingPanelState extends State<PendingPanel> {
           ],
         ]);
       }
+      if (e.isOrder && _deleteMode) {
+        return FilledButton(
+          key: const ValueKey('order-delete'),
+          onPressed: widget.busy ? null : widget.onCancelOrder,
+          style: FilledButton.styleFrom(
+            backgroundColor: tc.loss,
+            foregroundColor: Colors.white,
+            minimumSize: Size.fromHeight(height),
+            shape: const StadiumBorder(),
+            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          ),
+          child: Text(widget.busy ? 'Working…' : 'Delete order'),
+        );
+      }
       return FilledButton(
+        key: e.isOrder ? const ValueKey('order-modify') : null,
         onPressed: (widget.busy || !valid) ? null : widget.onApply,
         style: FilledButton.styleFrom(
           backgroundColor: accent,
@@ -737,11 +757,30 @@ class _PendingPanelState extends State<PendingPanel> {
       );
     }
 
+    // Existing pending order: MT5 Android's "Delete order | Modify order" tabs above the button.
+    Widget orderActionTabs() => SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
+          _ModeTab(
+            key: const ValueKey('order-tab-delete'),
+            label: 'Delete order',
+            selected: _deleteMode,
+            color: tc.loss,
+            onTap: widget.busy ? null : () => setState(() => _deleteMode = true),
+          ),
+          _ModeTab(
+            key: const ValueKey('order-tab-modify'),
+            label: 'Modify order',
+            selected: !_deleteMode,
+            color: cs.primary,
+            onTap: widget.busy ? null : () => setState(() => _deleteMode = false),
+          ),
+        ]));
+
     // ── Collapsed content ────────────────────────────────────────────────────
     // MT5's minimised order bar: just the order-type row and Place — the chart
     // stays as visible as possible. The handle and collapsed header are pinned
     // outside the scrollable body (see the return statement below).
     Widget collapsed() => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (e.isOrder) orderActionTabs(),
           const SizedBox(height: 4),
           placeRow(height: 44),
         ]);
@@ -805,12 +844,8 @@ class _PendingPanelState extends State<PendingPanel> {
             ),
           ],
           const SizedBox(height: 8),
+          if (e.isOrder) ...[orderActionTabs(), const SizedBox(height: 4)],
           placeRow(height: 46),
-          if (e.isOrder)
-            TextButton(
-              onPressed: widget.busy ? null : widget.onCancelOrder,
-              child: Text('Cancel this order', style: TextStyle(color: tc.loss, fontWeight: FontWeight.w700)),
-            ),
         ]);
 
     // Collapsed content also shows the server error, if any, above Place.
@@ -824,6 +859,7 @@ class _PendingPanelState extends State<PendingPanel> {
               child: Text(widget.serverError!, style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.w600, fontSize: 13)),
             ),
             const SizedBox(height: 10),
+            if (e.isOrder) orderActionTabs(),
             placeRow(height: 44),
           ]);
 
@@ -863,7 +899,7 @@ class _PendingPanelState extends State<PendingPanel> {
 /// One order-mode tab (collapsed row — MT5's "Execution · Buy Limit · Sell Limit · …").
 /// The selected tab is coloured by its side and underlined.
 class _ModeTab extends StatelessWidget {
-  const _ModeTab({required this.label, required this.selected, required this.color, required this.onTap});
+  const _ModeTab({super.key, required this.label, required this.selected, required this.color, required this.onTap});
   final String label;
   final bool selected;
   final Color color;
