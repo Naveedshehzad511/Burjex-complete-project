@@ -192,9 +192,9 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
               border: Border.all(color: const Color(0x55E5484D)),
             ),
             child: const Row(children: [
-              Icon(Icons.wifi_off_rounded, size: 16, color: Color(0xFFE5484D)),
+              Icon(Icons.schedule_rounded, size: 16, color: Color(0xFFE5484D)),
               SizedBox(width: 8),
-              Expanded(child: Text('No live price — market trading is paused until the feed updates.',
+              Expanded(child: Text('Market closed — trading resumes when the market opens.',
                   style: TextStyle(fontSize: 12.5))),
             ]),
           ),

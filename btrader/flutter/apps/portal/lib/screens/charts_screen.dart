@@ -1693,7 +1693,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                       symbol: spec.isEmpty ? _symbol : spec.first.displaySymbol,
                       tf: selectedTf.mt5Label,
                       description: spec.isEmpty ? null : spec.first.description,
-                      closed: !tradable,
+                      closed: !dealsOn, // closed session, or the broker's prices have stopped
                       onTap: () => _pickSymbol(context, symbols),
                     ),
                   ),
@@ -1766,7 +1766,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           livePl: ref.read(livePositionProvider),
           quotes: {if (rawQuote2 != null) win.symbol: rawQuote2},
           symbols: ref.watch(symbolsProvider).valueOrNull ?? const <TradeSymbol>[]);
-      final tradable2 = _tradableNow(spec2.isEmpty ? null : spec2.first);
+      final tradable2 = _tradableNow(spec2.isEmpty ? null : spec2.first) && ref.watch(symbolFeedLiveProvider(win.symbol));
 
       return series2.when(
         loading: () =>

@@ -30,7 +30,10 @@ String? orderActionBlock({
   if (spec != null && !isSymbolTradableNow(spec, (utcNow ?? DateTime.now()).toUtc())) {
     return kMarketClosedMessage;
   }
-  if (!hasQuote || !feedLive) return kPriceUnavailableMessage;
+  // The broker stopped sending prices (daily break, weekend, holiday): to the client that is a closed
+  // market, so it reads the same as one (client's request, 2026-11-14).
+  if (!feedLive) return kMarketClosedMessage;
+  if (!hasQuote) return kPriceUnavailableMessage;
   return null;
 }
 
