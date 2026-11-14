@@ -41,6 +41,7 @@ class _Loaded {
   _Loaded(this.controller);
   final WebViewController controller;
   DateTime? loadedAt; // null until the page has finished loading
+  bool failed = false; // the page or TradingView's own frame inside it could not load (e.g. no internet)
   // The current owner's callbacks (the view is handed from one Home visit to the next).
   void Function(String url)? onOpen;
   VoidCallback? onLoaded;
@@ -86,7 +87,16 @@ class _NewsFeedViewState extends State<NewsFeedView> {
           onFinished(entry);
         },
         onWebResourceError: (e) {
-          if (e.isForMainFrame ?? false) onError(entry);
+          // Our page is a small shell; TradingView draws the list in a frame of its own inside it. With no
+          // internet that frame fails while the shell still "finishes", and Android then shows its own
+          // "Webpage not available" page inside it. Treat that frame (and the embed script) like the page itself.
+          final url = e.url ?? '';
+          final widgetFrame = url.contains('/embed-widget/') || url.contains('/external-embedding/');
+          if ((e.isForMainFrame ?? false) || widgetFrame) {
+            if (entry.failed) return;
+            entry.failed = true;
+            onError(entry);
+          }
         },
       ))
       ..loadHtmlString(html, baseUrl: kNewsBaseUrl);
@@ -123,7 +133,9 @@ class _NewsFeedViewState extends State<NewsFeedView> {
       }
       _shown = _create(
         html,
-        onFinished: (e) => e.onLoaded?.call(),
+        onFinished: (e) {
+          if (!e.failed) e.onLoaded?.call(); // a frame error that came first must not be undone
+        },
         onError: (e) {
           _cache.remove(html);
           e.onFailed?.call();
@@ -147,8 +159,12 @@ class _NewsFeedViewState extends State<NewsFeedView> {
     try {
       final fresh = _create(
         html,
-        onFinished: (e) {
+        onFinished: (e) async {
           if (!mounted || !identical(_pending, e)) return;
+          // TradingView's frame reports its failure just after the shell finishes: wait a moment, and never swap
+          // a copy that failed in place of the good one on screen.
+          await Future<void>.delayed(const Duration(seconds: 2));
+          if (!mounted || !identical(_pending, e) || e.failed) return;
           _pendingTimeout?.cancel();
           e
             ..onOpen = widget.onOpen
