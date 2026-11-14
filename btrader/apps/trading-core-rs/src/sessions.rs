@@ -38,10 +38,33 @@ pub fn is_market_open(sessions: &[SessionWindow], now: DateTime<Utc>) -> bool {
     false
 }
 
+/// UTC offset of New York (hours): -4 in US daylight time (2nd Sunday of March 07:00 UTC to 1st Sunday of
+/// November 06:00 UTC), else -5. The forex week opens and closes at 17:00 New York time, so in UTC it moves with
+/// US daylight saving: 21:00 UTC in summer, 22:00 UTC in winter.
+pub fn new_york_offset_hours(now: DateTime<Utc>) -> i64 {
+    use chrono::NaiveDate;
+    let y = now.year();
+    let first_sunday = |month: u32| -> u32 {
+        let wd = NaiveDate::from_ymd_opt(y, month, 1).unwrap().weekday().num_days_from_sunday();
+        1 + (7 - wd) % 7
+    };
+    let start = NaiveDate::from_ymd_opt(y, 3, first_sunday(3) + 7).unwrap().and_hms_opt(7, 0, 0).unwrap().and_utc();
+    let end = NaiveDate::from_ymd_opt(y, 11, first_sunday(11)).unwrap().and_hms_opt(6, 0, 0).unwrap().and_utc();
+    if now >= start && now < end {
+        -4
+    } else {
+        -5
+    }
+}
+
+/// The forex week roll, 17:00 New York time (Friday close / Sunday open).
+const FX_ROLL_NY_HOUR: u32 = 17;
+
 pub fn is_forex_week_open(now: DateTime<Utc>) -> bool {
-    let day = now.weekday().num_days_from_sunday();
-    let mins = now.hour() as i32 * 60 + now.minute() as i32;
-    let roll = 21 * 60;
+    let ny = now + chrono::Duration::hours(new_york_offset_hours(now));
+    let day = ny.weekday().num_days_from_sunday();
+    let mins = ny.hour() as i32 * 60 + ny.minute() as i32;
+    let roll = FX_ROLL_NY_HOUR as i32 * 60;
     if day == 6 {
         return false;
     }
@@ -98,18 +121,25 @@ pub fn session_closes_at(sessions: &[SessionWindow], instrument_class: &str, now
         let d = now.date_naive() + chrono::Duration::days(1);
         return d.and_hms_opt(0, 0, 0).unwrap().and_utc();
     }
-    let roll = 21;
-    let day = now.weekday().num_days_from_sunday();
-    let mins = now.hour() as i32 * 60 + now.minute() as i32;
+    // Next Friday 17:00 New York time, in UTC.
+    let ny = now + chrono::Duration::hours(new_york_offset_hours(now));
+    let day = ny.weekday().num_days_from_sunday();
+    let mins = ny.hour() as i32 * 60 + ny.minute() as i32;
     let mut add = (5 - day as i32 + 7) % 7;
-    if day == 5 && mins >= roll * 60 {
+    if day == 5 && mins >= FX_ROLL_NY_HOUR as i32 * 60 {
         add = 7;
     }
     if day == 6 {
         add = 6;
     }
-    let d = (now + chrono::Duration::days(add as i64)).date_naive();
-    d.and_hms_opt(roll as u32, 0, 0).unwrap().and_utc()
+    let local = (ny + chrono::Duration::days(add as i64))
+        .date_naive()
+        .and_hms_opt(FX_ROLL_NY_HOUR, 0, 0)
+        .unwrap()
+        .and_utc();
+    // `local` is New York wall time written as UTC: shift it back by the offset in force at that moment.
+    let guess = local - chrono::Duration::hours(new_york_offset_hours(now));
+    local - chrono::Duration::hours(new_york_offset_hours(guess))
 }
 
 pub fn parse_sessions(raw: Option<&serde_json::Value>) -> Vec<SessionWindow> {

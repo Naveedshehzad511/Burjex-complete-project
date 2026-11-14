@@ -284,10 +284,25 @@ bool _isMarketOpen(List<TradingSessionWindow> sessions, DateTime utcNow) {
   return false;
 }
 
+/// UTC offset of New York in hours: -4 in US daylight time (2nd Sunday of March 07:00 UTC to 1st Sunday of
+/// November 06:00 UTC), else -5. Mirrors `new_york_offset_hours` in the trading engine.
+int newYorkOffsetHours(DateTime utcNow) {
+  final y = utcNow.year;
+  int firstSunday(int month) => 1 + (7 - DateTime.utc(y, month, 1).weekday % 7) % 7;
+  final start = DateTime.utc(y, 3, firstSunday(3) + 7, 7);
+  final end = DateTime.utc(y, 11, firstSunday(11), 6);
+  final t = utcNow.toUtc();
+  return !t.isBefore(start) && t.isBefore(end) ? -4 : -5;
+}
+
+/// The forex week opens (Sunday) and closes (Friday) at 17:00 New York time: 21:00 UTC in summer, 22:00 UTC in winter.
+const _kFxRollNyHour = 17;
+
 bool _isForexWeekOpen(DateTime utcNow) {
-  final day = utcNow.weekday % 7;
-  final mins = utcNow.hour * 60 + utcNow.minute;
-  const roll = 21 * 60; // 21:00 UTC, the standard FX week open/close roll
+  final ny = utcNow.toUtc().add(Duration(hours: newYorkOffsetHours(utcNow)));
+  final day = ny.weekday % 7;
+  final mins = ny.hour * 60 + ny.minute;
+  const roll = _kFxRollNyHour * 60;
   if (day == 6) return false; // Saturday: always closed
   if (day == 0 && mins < roll) return false; // Sunday before the week opens
   if (day == 5 && mins >= roll) return false; // Friday after the week closes
@@ -302,7 +317,7 @@ bool _isForexWeekOpen(DateTime utcNow) {
 ///  1. Explicit session windows, if the admin configured any.
 ///  2. Otherwise: CRYPTO trades round the clock.
 ///  3. Otherwise: the standard forex week (closed all Saturday, plus the
-///     Friday/Sunday 21:00 UTC roll).
+///     Friday/Sunday 17:00 New York roll: 21:00 UTC in summer, 22:00 UTC in winter).
 bool isSymbolTradableNow(TradeSymbol symbol, DateTime utcNow) {
   if (symbol.tradingSessions.isNotEmpty) {
     return _isMarketOpen(symbol.tradingSessions, utcNow);

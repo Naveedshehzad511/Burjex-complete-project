@@ -40,10 +40,27 @@ function isMarketOpen(sessions: TradingSessionWindow[], now: Date): boolean {
   return false;
 }
 
+/**
+ * UTC offset of New York in hours: -4 in US daylight time (2nd Sunday of March 07:00 UTC to 1st Sunday of
+ * November 06:00 UTC), else -5. Mirrors `new_york_offset_hours` in trading-core-rs/src/sessions.rs.
+ */
+export function newYorkOffsetHours(now: Date): number {
+  const y = now.getUTCFullYear();
+  const firstSunday = (month: number) => 1 + ((7 - new Date(Date.UTC(y, month, 1)).getUTCDay()) % 7);
+  const start = Date.UTC(y, 2, firstSunday(2) + 7, 7);
+  const end = Date.UTC(y, 10, firstSunday(10), 6);
+  const t = now.getTime();
+  return t >= start && t < end ? -4 : -5;
+}
+
+/** The forex week opens (Sunday) and closes (Friday) at 17:00 New York time: 21:00 UTC in summer, 22:00 UTC in winter. */
+const FX_ROLL_NY_HOUR = 17;
+
 function isForexWeekOpen(now: Date): boolean {
-  const day = now.getUTCDay();
-  const mins = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const roll = 21 * 60; // 21:00 UTC, the standard FX week open/close roll
+  const ny = new Date(now.getTime() + newYorkOffsetHours(now) * 3600_000);
+  const day = ny.getUTCDay();
+  const mins = ny.getUTCHours() * 60 + ny.getUTCMinutes();
+  const roll = FX_ROLL_NY_HOUR * 60;
   if (day === 6) return false; // Saturday: always closed
   if (day === 0 && mins < roll) return false; // before the week opens Sunday
   if (day === 5 && mins >= roll) return false; // after the week closes Friday
