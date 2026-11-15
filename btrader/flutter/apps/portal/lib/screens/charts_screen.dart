@@ -1314,7 +1314,11 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     // MT5-compact sizing: scales gently with screen width (clamped so phones,
     // tablets and desktop all keep the same tight proportions).
     final uiK = (MediaQuery.sizeOf(context).width / 420).clamp(0.9, 1.15);
-    final toolIcon = 20.0 * uiK;
+    // Icon scale (iPhone keeps Android's size: MT5 iOS's icons are the same, thin and small).
+    const iosK = 1.0;
+    final toolIcon = 20.0 * uiK * iosK;
+    // iPhone toolbar height (MT5 iOS); Android / web keep 40.
+    final barH = (iosGlass ? 44.0 : 40.0) * uiK;
     Widget tool(IconData i, String tip, VoidCallback onTap,
             {bool active = false, Widget? child}) =>
         IconButton(
@@ -1322,7 +1326,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           visualDensity: VisualDensity.compact,
           iconSize: toolIcon,
           padding: EdgeInsets.zero,
-          constraints: BoxConstraints.tightFor(width: 36 * uiK, height: 36 * uiK),
+          constraints: BoxConstraints.tightFor(width: 36 * uiK * iosK, height: 36 * uiK * iosK),
           isSelected: active,
           style: active
               ? IconButton.styleFrom(
@@ -1346,9 +1350,12 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
 
     // MT5 chart toolbar: ☰ ✛ ƒ ✎  M1  ◔ ▭ — the order-mode and Buy/Sell toggles on the
     // right. Tapping the timeframe swaps the row for the full timeframe strip.
-    final Widget crosshairBtn = tool(Icons.add, 'Crosshair', () => setState(() => _crosshair = !_crosshair), active: _crosshair);
+    // iPhone: the crosshair "+" and the Buy / Sell panel switch a little bigger (client's request).
+    final iosBig = iosGlass ? 1.15 : 1.0;
+    final Widget crosshairBtn = tool(Icons.add, 'Crosshair', () => setState(() => _crosshair = !_crosshair), active: _crosshair,
+        child: Icon(Icons.add, size: toolIcon * iosBig, color: _crosshair ? cs.primary : null));
     final Widget indicatorsBtn = tool(Icons.functions, 'Indicators', () => showIndicatorsSheet(context),
-        child: Badge(isLabelVisible: activeIndicators > 0, label: Text('$activeIndicators'), child: const Icon(Icons.functions)));
+        child: Badge(isLabelVisible: activeIndicators > 0, label: Text('$activeIndicators'), child: Icon(Icons.functions, size: toolIcon)));
     final Widget chartTypeBtn =
         tool(Icons.timeline, 'Chart type', () => _showChartSettings(context), active: _type != ChartType.candles);
     final Widget tfBtn = TextButton(
@@ -1366,18 +1373,26 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     final Widget panelBtn = tool(trade.panelVisible ? Icons.toggle_on : Icons.toggle_off_outlined,
         trade.panelVisible ? 'Hide Buy / Sell' : 'Show Buy / Sell', () => ref.read(chartTradeProvider.notifier).togglePanel(),
         child: Mt5TradePanelIcon(
-            key: const ValueKey('mt5-panel-icon'), size: toolIcon * 0.92, sell: tc.sell, buy: tc.buy, on: trade.panelVisible));
+            key: const ValueKey('mt5-panel-icon'), size: toolIcon * 0.92 * iosBig, sell: tc.sell, buy: tc.buy, on: trade.panelVisible));
 
     // iPhone: MT5 iOS arrangement on a glass bar - timeframe left, chart tools centred, order
     // controls right. Same buttons and actions as below; Android and web keep their row.
+    // MT5 iOS look: a flat, solid, full-width bar (square corners, no margin) with a thin line and a soft
+    // shadow under it; not see-through, so the chart and the SELL / BUY panel never bleed into it.
     final iosHeader = Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 2),
-      child: GlassSurface(
-        radius: GlassTheme.buttonRadius,
-        shadow: false,
+      padding: EdgeInsets.zero,
+      child: DecoratedBox(
+        key: const ValueKey('ios-chart-toolbar-bg'),
+        decoration: BoxDecoration(
+          color: Color.alphaBlend(cs.onSurface.withValues(alpha: 0.025), cs.surface),
+          border: Border(bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6), width: 0.8)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.07), blurRadius: 6, offset: const Offset(0, 2)),
+          ],
+        ),
         child: SizedBox(
           key: const ValueKey('ios-chart-toolbar'),
-          height: 40 * uiK,
+          height: barH,
           child: _tfStripOpen
               ? tfStrip
               : Row(children: [
@@ -1912,7 +1927,7 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
           Column(children: [
           // Space reserved for the floating toolbar (40 * uiK) + its 1 px rule; the iPhone glass bar also has its
           // 4 + 2 px margin (see iosHeader), so the SELL / BUY panel below is never covered.
-          SizedBox(height: 40 * uiK + 1 + (iosGlass ? 6 : 0)),
+          SizedBox(height: barH + 1),
           const ActiveAccountBar(compact: true, onlyWhenSpecial: true),
           if (trade.panelVisible && !bottomPanel) tradePanel,
           Expanded(
