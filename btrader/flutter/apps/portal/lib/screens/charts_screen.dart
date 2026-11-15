@@ -2050,8 +2050,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                   _serverError = null;
                 }),
                 onCancelOrder: _cancelPendingOrder,
-                // Phone apps: MT5's selected-trade panel (Delete / Close first, Modify on any change).
-                mt5Actions: !kIsWeb,
+                // MT5's selected-trade panel (Delete / Close first, Modify on any change): phone apps and website.
+                mt5Actions: true,
                 // iPhone only: MT5 iOS's swipe-to-confirm action bar (Android keeps its tabs).
                 iosSwipe: iosGlass,
                 onClosePosition: _closeSelectedPosition,

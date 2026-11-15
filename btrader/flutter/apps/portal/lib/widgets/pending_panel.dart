@@ -306,9 +306,9 @@ class PendingPanel extends StatefulWidget {
   final bool expanded;
   final ValueChanged<bool>? onExpandedChanged;
 
-  /// Phone apps (Android / iPhone): MT5's selected-trade panel - a pending order opens on "Delete order", a
-  /// position on "Close position", and changing SL / TP / price / volume switches to Modify. False on the
-  /// website (Modify by default, no position tabs).
+  /// MT5's selected-trade panel - a pending order opens on "Delete order", a position on "Close position", and
+  /// changing SL / TP / price / volume switches to Modify. The chart passes true (phone apps and website); false
+  /// keeps the older layout (Modify by default, no position tabs).
   final bool mt5Actions;
 
   /// Closes the selected position (MT5's "Close position"). Null hides the position tabs.
