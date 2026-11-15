@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:btrader_core/btrader_core.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -754,6 +755,64 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
     }
   }
 
+  /// The open position selected on the chart, from the live list (null when it is gone).
+  Position? _selectedPosition() {
+    final e = _edit;
+    if (e == null || !e.isPosition) return null;
+    for (final p in ref.read(accountPositionsProvider).valueOrNull ?? const <Position>[]) {
+      if (p.id == e.id) return p;
+    }
+    return null;
+  }
+
+  /// MT5 "Close position" for the position selected on the chart: the same request and bookkeeping as the
+  /// Trade screen's close. The panel closes only when the server confirms; a refusal leaves everything as is.
+  Future<void> _closeSelectedPosition() async {
+    final e = _edit;
+    if (e == null || !e.isPosition || _applying) return;
+    if (_readonly) return _toastReadonly();
+    final tc = Theme.of(context).extension<TradeColors>()!;
+    final p = _selectedPosition();
+    if (p == null) {
+      setState(() => _edit = null);
+      return;
+    }
+    final block = orderBlockFor(ref.read, p.symbol);
+    if (block != null) {
+      SoundService.instance.error();
+      ToastHost.show('Could not close', block, accent: tc.loss);
+      return;
+    }
+    setState(() {
+      _applying = true;
+      _serverError = null;
+    });
+    final closes = ref.read(positionClosesProvider);
+    Object? res;
+    var failure = 'Close failed';
+    try {
+      res = await ref.read(apiClientProvider).post('/positions/${p.id}/close', {});
+    } catch (err) {
+      res = null;
+      failure = apiErrorMessage(err, fallback: 'Close failed');
+    }
+    if (!mounted) return;
+    if (closes.applyCloseResponse(res, id: p.id, openVolume: p.volume, requestedVolume: null)) {
+      SoundService.instance.tradeClose();
+      setState(() {
+        _applying = false;
+        if (identical(_edit, e)) _edit = null;
+      });
+    } else {
+      SoundService.instance.error();
+      ToastHost.show('Close failed', failure, accent: tc.loss);
+      setState(() {
+        _applying = false;
+        _serverError = failure;
+      });
+    }
+  }
+
   Future<void> _cancelPendingOrder() async {
     final e = _edit;
     if (e == null || !e.isOrder || _applying) return;
@@ -1469,7 +1528,8 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                           // is dimmed while the panel is hidden.
                           child: Mt5TradePanelIcon(
                               key: const ValueKey('mt5-panel-icon'),
-                              size: toolIcon * 0.92,
+                              // Android: a little bigger, as on iPhone (client's request); the website is unchanged.
+                              size: toolIcon * 0.92 * (!kIsWeb && defaultTargetPlatform == TargetPlatform.android ? 1.15 : 1.0),
                               sell: tc.sell,
                               buy: tc.buy,
                               on: trade.panelVisible)),
@@ -1990,6 +2050,15 @@ class _ChartsScreenState extends ConsumerState<ChartsScreen> {
                   _serverError = null;
                 }),
                 onCancelOrder: _cancelPendingOrder,
+                // Phone apps: MT5's selected-trade panel (Delete / Close first, Modify on any change).
+                mt5Actions: !kIsWeb,
+                // iPhone only: MT5 iOS's swipe-to-confirm action bar (Android keeps its tabs).
+                iosSwipe: iosGlass,
+                onClosePosition: _closeSelectedPosition,
+                closePositionLabel: () {
+                  final p = _selectedPosition();
+                  return p == null ? null : 'Close ${p.side} ${p.volume.toStringAsFixed(2)}';
+                }(),
               )),
             ),
           // "Trading panel at the bottom": the same panel, directly above the bottom navigation.

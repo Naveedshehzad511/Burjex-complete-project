@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:btrader_core/btrader_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 
 /// What the chart's edit panel is working on.
 enum EditKind { draft, order, position }
@@ -68,14 +69,20 @@ class ChartEdit {
   ChartEdit.order({required String this.id, required this.orderType, required this.side, required this.entry, this.sl, this.tp, required this.volume, this.hasStopField = false, this.limit})
       : kind = EditKind.order,
         draftType = null,
-        originalVolume = volume;
+        originalVolume = volume,
+        originalSig = '$entry|$limit|$sl|$tp|$volume';
   ChartEdit.position({required String this.id, required this.side, required this.entry, this.sl, this.tp})
       : kind = EditKind.position,
         draftType = null,
         orderType = null,
-        volume = null;
+        volume = null,
+        originalSig = '$entry|null|$sl|$tp|null';
 
   final EditKind kind;
+
+  /// An existing order's / position's values as the server has them (entry|limit|sl|tp|volume), so the panel
+  /// can tell when the user changed anything - on the panel or by dragging a line.
+  String originalSig = '';
   OrderType? draftType; // draft only (changes when the user picks another type)
   final String? id;
   String? orderType; // existing order: BUY_LIMIT | SELL_STOP | ...
@@ -261,6 +268,10 @@ class PendingPanel extends StatefulWidget {
     required this.onApply,
     required this.onClose,
     required this.onCancelOrder,
+    this.onClosePosition,
+    this.closePositionLabel,
+    this.mt5Actions = false,
+    this.iosSwipe = false,
     this.onMarket,
     this.marketEnabled = true,
     this.expanded = true,
@@ -295,6 +306,21 @@ class PendingPanel extends StatefulWidget {
   final bool expanded;
   final ValueChanged<bool>? onExpandedChanged;
 
+  /// Phone apps (Android / iPhone): MT5's selected-trade panel - a pending order opens on "Delete order", a
+  /// position on "Close position", and changing SL / TP / price / volume switches to Modify. False on the
+  /// website (Modify by default, no position tabs).
+  final bool mt5Actions;
+
+  /// Closes the selected position (MT5's "Close position"). Null hides the position tabs.
+  final VoidCallback? onClosePosition;
+
+  /// The close button's text, e.g. "Close SELL 0.01".
+  final String? closePositionLabel;
+
+  /// iPhone: MT5 iOS's selected-trade bar - a compact rounded "→ Delete Order / Modify Order / Close Position /
+  /// Modify Position" control on the left that runs only when swiped all the way right, SL / TP on the right.
+  final bool iosSwipe;
+
   @override
   State<PendingPanel> createState() => _PendingPanelState();
 }
@@ -320,13 +346,28 @@ class _PendingPanelState extends State<PendingPanel> {
   /// doesn't hide fields the user is actively looking at.
   bool _stopLevelsOpen = false;
 
-  /// Existing pending order: which action the bottom button does - MT5 Android's "Delete order | Modify order"
-  /// tabs. Modify (Apply changes) by default; back to Modify whenever another order is selected.
+  /// Selected order / position: which action the bottom button does - MT5's "Delete order | Modify order" or
+  /// "Close position | Modify position" tabs. On the phone apps a new selection starts on Delete / Close; on
+  /// the website on Modify. Reset whenever another order or position is selected.
   bool _deleteMode = false;
+
+  /// The selected trade's values when it was selected; once they change (SL / TP / price / volume edited on
+  /// the panel or by dragging a line), the panel switches to Modify, as MT5 does.
+  String _baseline = '';
+
+  static String _sig(ChartEdit e) => '${e.entry}|${e.limit}|${e.sl}|${e.tp}|${e.volume}';
+
+  bool get _hasActionTabs => widget.edit.isOrder || (widget.edit.isPosition && widget.mt5Actions && widget.onClosePosition != null);
+
+  void _resetAction() {
+    _deleteMode = widget.mt5Actions && _hasActionTabs;
+    _baseline = widget.edit.originalSig.isNotEmpty ? widget.edit.originalSig : _sig(widget.edit);
+  }
 
   @override
   void initState() {
     super.initState();
+    _resetAction();
     _sync();
   }
 
@@ -334,7 +375,7 @@ class _PendingPanelState extends State<PendingPanel> {
   void didUpdateWidget(covariant PendingPanel old) {
     super.didUpdateWidget(old);
     if (!identical(old.edit, widget.edit)) _stopLevelsOpen = false;
-    if (old.edit.id != widget.edit.id || old.edit.isOrder != widget.edit.isOrder) _deleteMode = false;
+    if (old.edit.id != widget.edit.id || old.edit.kind != widget.edit.kind) _resetAction();
     _sync();
   }
 
@@ -407,6 +448,8 @@ class _PendingPanelState extends State<PendingPanel> {
 
   @override
   Widget build(BuildContext context) {
+    // Any change to the selected trade (SL / TP / price / volume) switches to Modify, as on MT5.
+    if (_deleteMode && _sig(widget.edit) != _baseline) _deleteMode = false;
     final e = widget.edit;
     final tc = Theme.of(context).extension<TradeColors>()!;
     final cs = Theme.of(context).colorScheme;
@@ -503,6 +546,39 @@ class _PendingPanelState extends State<PendingPanel> {
     // is filled and tapping it again removes that level (a toggle). Exact values are typed
     // in the Stop Levels fields of the expanded ticket.
     Widget collapsedHeader() {
+      if (widget.iosSwipe && _hasActionTabs) {
+        final del = _deleteMode;
+        final String label = e.isPosition ? (del ? 'Close Position' : 'Modify Position') : (del ? 'Delete Order' : 'Modify Order');
+        final Color color = del ? (e.isPosition ? cs.primary : tc.loss) : const Color(0xFF4A55B8);
+        final VoidCallback? run = widget.busy
+            ? null
+            : del
+                ? (e.isPosition ? widget.onClosePosition : widget.onCancelOrder)
+                : (errs.isEmpty ? widget.onApply : null);
+        return Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 6),
+          child: Row(children: [
+            _SwipeAction(
+              key: ValueKey('ios-swipe-${e.isPosition ? 'position' : 'order'}-${del ? 'main' : 'modify'}'),
+              label: widget.busy ? 'Working…' : label,
+              color: color,
+              onConfirm: run,
+            ),
+            const Spacer(),
+            _CircleIconButton(label: 'SL', color: tc.loss, filled: e.sl != null, onTap: widget.busy ? null : (e.sl == null ? widget.onAddSl : widget.onRemoveSl)),
+            const SizedBox(width: 8),
+            _CircleIconButton(label: 'TP', color: tc.profit, filled: e.tp != null, onTap: widget.busy ? null : (e.tp == null ? widget.onAddTp : widget.onRemoveTp)),
+            IconButton(
+              key: const ValueKey('panel-toggle'),
+              tooltip: 'Expand order panel',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.keyboard_arrow_up_rounded, color: cs.primary),
+              style: IconButton.styleFrom(side: BorderSide(color: cs.primary, width: 1.4), shape: const CircleBorder(), padding: EdgeInsets.zero, fixedSize: const Size(32, 32), minimumSize: const Size(32, 32)),
+              onPressed: () => widget.onExpandedChanged?.call(true),
+            ),
+          ]),
+        );
+      }
       return Row(children: [
         Text(widget.symbolLabel, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: cs.primary)),
         Icon(Icons.unfold_more, size: 18, color: cs.primary),
@@ -729,6 +805,20 @@ class _PendingPanelState extends State<PendingPanel> {
           ],
         ]);
       }
+      if (e.isPosition && _hasActionTabs && _deleteMode) {
+        return OutlinedButton(
+          key: const ValueKey('position-close'),
+          onPressed: widget.busy ? null : widget.onClosePosition,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: cs.primary,
+            side: BorderSide(color: cs.primary, width: 1.6),
+            minimumSize: Size.fromHeight(height),
+            shape: const StadiumBorder(),
+            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          ),
+          child: Text(widget.busy ? 'Working…' : (widget.closePositionLabel ?? 'Close position')),
+        );
+      }
       if (e.isOrder && _deleteMode) {
         return FilledButton(
           key: const ValueKey('order-delete'),
@@ -744,7 +834,7 @@ class _PendingPanelState extends State<PendingPanel> {
         );
       }
       return FilledButton(
-        key: e.isOrder ? const ValueKey('order-modify') : null,
+        key: e.isOrder ? const ValueKey('order-modify') : (e.isPosition ? const ValueKey('position-modify') : null),
         onPressed: (widget.busy || !valid) ? null : widget.onApply,
         style: FilledButton.styleFrom(
           backgroundColor: accent,
@@ -758,17 +848,18 @@ class _PendingPanelState extends State<PendingPanel> {
     }
 
     // Existing pending order: MT5 Android's "Delete order | Modify order" tabs above the button.
+    // Open position (phone apps): "Close position | Modify position".
     Widget orderActionTabs() => SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
           _ModeTab(
-            key: const ValueKey('order-tab-delete'),
-            label: 'Delete order',
+            key: ValueKey(e.isPosition ? 'position-tab-close' : 'order-tab-delete'),
+            label: e.isPosition ? 'Close position' : 'Delete order',
             selected: _deleteMode,
-            color: tc.loss,
-            onTap: widget.busy ? null : () => setState(() => _deleteMode = true),
+            color: e.isPosition ? cs.primary : tc.loss,
+            onTap: widget.busy ? null : () => setState(() { _deleteMode = true; _baseline = _sig(e); }),
           ),
           _ModeTab(
-            key: const ValueKey('order-tab-modify'),
-            label: 'Modify order',
+            key: ValueKey(e.isPosition ? 'position-tab-modify' : 'order-tab-modify'),
+            label: e.isPosition ? 'Modify position' : 'Modify order',
             selected: !_deleteMode,
             color: cs.primary,
             onTap: widget.busy ? null : () => setState(() => _deleteMode = false),
@@ -779,8 +870,10 @@ class _PendingPanelState extends State<PendingPanel> {
     // MT5's minimised order bar: just the order-type row and Place — the chart
     // stays as visible as possible. The handle and collapsed header are pinned
     // outside the scrollable body (see the return statement below).
-    Widget collapsed() => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (e.isOrder) orderActionTabs(),
+    Widget collapsed() => widget.iosSwipe && _hasActionTabs
+        ? const SizedBox.shrink()
+        : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (_hasActionTabs) orderActionTabs(),
           const SizedBox(height: 4),
           placeRow(height: 44),
         ]);
@@ -844,7 +937,7 @@ class _PendingPanelState extends State<PendingPanel> {
             ),
           ],
           const SizedBox(height: 8),
-          if (e.isOrder) ...[orderActionTabs(), const SizedBox(height: 4)],
+          if (_hasActionTabs) ...[orderActionTabs(), const SizedBox(height: 4)],
           placeRow(height: 46),
         ]);
 
@@ -858,9 +951,11 @@ class _PendingPanelState extends State<PendingPanel> {
               decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(10)),
               child: Text(widget.serverError!, style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.w600, fontSize: 13)),
             ),
-            const SizedBox(height: 10),
-            if (e.isOrder) orderActionTabs(),
-            placeRow(height: 44),
+            if (!(widget.iosSwipe && _hasActionTabs)) ...[
+              const SizedBox(height: 10),
+              if (_hasActionTabs) orderActionTabs(),
+              placeRow(height: 44),
+            ],
           ]);
 
     return Material(
@@ -966,3 +1061,99 @@ class _StepIconButton extends StatelessWidget {
   Widget build(BuildContext context) => IconButton(onPressed: onTap, visualDensity: VisualDensity.compact, icon: Icon(icon, size: 20));
 }
 
+
+
+/// iPhone (MT5 iOS): a compact rounded action with an arrow knob. The action runs only when the knob is
+/// dragged all the way to the right; an incomplete swipe springs back and does nothing. A tap does nothing.
+class _SwipeAction extends StatefulWidget {
+  const _SwipeAction({super.key, required this.label, required this.color, required this.onConfirm});
+  final String label;
+  final Color color;
+  final VoidCallback? onConfirm;
+
+  @override
+  State<_SwipeAction> createState() => _SwipeActionState();
+}
+
+class _SwipeActionState extends State<_SwipeAction> with SingleTickerProviderStateMixin {
+  static const double _w = 200, _h = 40, _knob = 32, _pad = 4;
+  double _dx = 0;
+  late final AnimationController _back = AnimationController(vsync: this, duration: const Duration(milliseconds: 180))
+    ..addListener(() => setState(() => _dx = _from * (1 - _back.value)));
+  double _from = 0;
+
+  double get _max => _w - _knob - _pad * 2;
+
+  @override
+  void dispose() {
+    _back.dispose();
+    super.dispose();
+  }
+
+  void _end() {
+    if (widget.onConfirm != null && _dx >= _max * 0.9) {
+      HapticFeedback.mediumImpact();
+      widget.onConfirm!();
+    }
+    _from = _dx;
+    _back.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onConfirm != null;
+    final c = enabled ? widget.color : widget.color.withValues(alpha: 0.45);
+    final t = _max <= 0 ? 0.0 : (_dx / _max).clamp(0.0, 1.0);
+    return Semantics(
+      button: true,
+      label: '${widget.label}, swipe right to confirm',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: enabled ? (_) => _back.stop() : null,
+        onHorizontalDragUpdate: enabled ? (d) => setState(() => _dx = (_dx + d.delta.dx).clamp(0.0, _max)) : null,
+        onHorizontalDragEnd: enabled ? (_) => _end() : null,
+        onHorizontalDragCancel: enabled ? _end : null,
+        child: SizedBox(
+          width: _w,
+          height: _h,
+          child: Stack(children: [
+            // The pill fills in from the left while it is swiped (feedback).
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: c,
+                  borderRadius: BorderRadius.circular(_h / 2),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: Padding(
+                padding: EdgeInsets.only(left: _knob + _pad * 2),
+                child: Center(
+                  child: Opacity(
+                    opacity: 1 - t * 0.8,
+                    child: Text(widget.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: _pad + _dx,
+              top: (_h - _knob) / 2,
+              child: Container(
+                width: _knob,
+                height: _knob,
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.28), shape: BoxShape.circle),
+                child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 20),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
