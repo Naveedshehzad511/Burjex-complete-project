@@ -25,14 +25,15 @@ String? orderActionBlock({
   required TradeSymbol? spec,
   required bool hasQuote,
   required bool feedLive,
+  bool anyFeedLive = true,
   DateTime? utcNow,
 }) {
   if (spec != null && !isSymbolTradableNow(spec, (utcNow ?? DateTime.now()).toUtc())) {
     return kMarketClosedMessage;
   }
-  // The broker stopped sending prices (daily break, weekend, holiday): to the client that is a closed
-  // market, so it reads the same as one (client's request, 2026-11-14).
-  if (!feedLive) return kMarketClosedMessage;
+  // The broker stopped this symbol's prices while others keep coming (daily break, weekend, holiday): a
+  // closed market (client's request, 2026-11-14). No prices at all is the connection, not the market.
+  if (!feedLive) return anyFeedLive ? kMarketClosedMessage : kPriceUnavailableMessage;
   if (!hasQuote) return kPriceUnavailableMessage;
   return null;
 }
@@ -58,6 +59,7 @@ String? orderBlockFor(ProviderReader read, String symbol) {
     spec: spec,
     hasQuote: true,
     feedLive: read(symbolFeedLiveProvider(symbol)),
+    anyFeedLive: read(anyFeedLiveProvider),
   );
 }
 

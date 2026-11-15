@@ -182,7 +182,8 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
       body: ListView(padding: const EdgeInsets.all(12), children: [
         const AccountPanel(),
         const SizedBox(height: 12),
-        if (stale)
+        // "Market closed" only when the broker stopped this symbol while others tick (not for a lost connection).
+        if (stale && q != null && ref.watch(anyFeedLiveProvider))
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

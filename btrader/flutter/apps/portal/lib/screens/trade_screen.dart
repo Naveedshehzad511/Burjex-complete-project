@@ -215,7 +215,7 @@ class _TradeScreenState extends ConsumerState<TradeScreen> {
               final syms = ref.watch(symbolsProvider).valueOrNull ?? const <TradeSymbol>[];
               final spec = syms.where((x) => x.symbol == p.symbol);
               final open = (spec.isEmpty || isSymbolTradableNow(spec.first, DateTime.now().toUtc())) &&
-                  ref.watch(symbolFeedLiveProvider(p.symbol));
+                  !feedSaysClosed(symbolLive: ref.watch(symbolFeedLiveProvider(p.symbol)), anyLive: ref.watch(anyFeedLiveProvider));
               // A long closes at the Bid, a short at the Ask (same rule as the P/L resolver).
               final cur = q == null ? null : (p.side == 'BUY' ? q.bid : q.ask);
               final plNow = resolvePositionPl(p, livePl: live, quotes: ref.watch(quotesProvider), symbols: syms, snap: ref.watch(livePositionNotifierProvider), accountCurrency: ref.watch(activeAccountCurrencyProvider));

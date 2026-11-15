@@ -387,6 +387,11 @@ class QuotesNotifier extends StateNotifier<Map<String, Tick>> {
   /// Local arrival time of the symbol's last valid update, or null when none arrived yet.
   int? lastValidRxMs(String symbol) => _lastValidRx[symbol];
 
+  /// Local arrival time of the last valid update of ANY symbol. While other symbols keep updating, one silent
+  /// symbol means the broker stopped it (a closed market); when nothing updates at all it is the connection.
+  int? _lastAnyValidRx;
+  int? get lastAnyValidRxMs => _lastAnyValidRx;
+
   /// Accept a tick unless it is strictly older than the one already held.
   ///
   /// The socket can deliver out of order after a reconnect, a batched bridge
@@ -422,6 +427,7 @@ class QuotesNotifier extends StateNotifier<Map<String, Tick>> {
     if (prev != null && t.ts > 0 && prev.ts > 0 && t.ts < prev.ts) return;
     if (prev == null || t.ts > prev.ts || t.bid != prev.bid || t.ask != prev.ask) {
       _lastValidRx[t.symbol] = _nowMs();
+      _lastAnyValidRx = _lastValidRx[t.symbol];
     }
     _pending[t.symbol] = t;
     _flush ??= Timer(const Duration(milliseconds: 16), _publish);
@@ -481,7 +487,8 @@ class FeedLiveNotifier extends StateNotifier<bool> {
   }
 
   static bool _isLive(QuotesNotifier quotes, String symbol, int since, Duration grace) =>
-      quotes.nowMs - (quotes.lastValidRxMs(symbol) ?? since) <= grace.inMilliseconds;
+      quotes.nowMs - ((symbol == kAnyFeed ? quotes.lastAnyValidRxMs : quotes.lastValidRxMs(symbol)) ?? since) <=
+      grace.inMilliseconds;
 
   final QuotesNotifier _quotes;
   final String symbol;
@@ -511,6 +518,18 @@ final symbolFeedLiveProvider = StateNotifierProvider.autoDispose.family<FeedLive
   ref.listen<Tick?>(quotesProvider.select((m) => m[symbol]), (_, __) => notifier.check());
   return notifier;
 });
+
+/// The [symbolFeedLiveProvider] key for "any symbol at all": live while the app receives prices for anything.
+const String kAnyFeed = '*';
+
+/// True while the app receives prices for any symbol (the connection and the broker feed are up). False when
+/// nothing has updated for [kFeedGrace]: no internet, a dropped connection or a stopped feed - not a closed
+/// market, so the app then does not say "Market closed".
+final anyFeedLiveProvider = Provider.autoDispose<bool>((ref) => ref.watch(symbolFeedLiveProvider(kAnyFeed)));
+
+/// The broker stopped this symbol's prices while others keep coming (daily break, weekend, holiday): a closed
+/// market. A silent connection is not.
+bool feedSaysClosed({required bool symbolLive, required bool anyLive}) => !symbolLive && anyLive;
 
 /// Fetches the server's last-known-quote snapshot once and seeds [quotesProvider]
 /// so symbols that aren't currently ticking still show their last real price
