@@ -288,20 +288,28 @@ def wrap_email_html(inner_html: str, layout: EmailGlobalLayout, ctx: dict[str, A
     border-radius:8px !important;padding:10px 16px !important;text-decoration:none !important;display:inline-block !important;
     font-weight:600 !important;
   }}
+  /* Phones: no grey frame around the card, smaller inner margins, so the text uses the full width. */
+  @media only screen and (max-width:620px) {{
+    .em-outer {{ padding:0 !important; }}
+    .em-card {{ width:100% !important;min-width:0 !important;border-radius:0 !important;border-left:0 !important;border-right:0 !important;box-shadow:none !important; }}
+    .em-body {{ padding:20px 16px 24px !important; }}
+    .em-foot {{ padding:18px 16px 20px !important; }}
+    .em-note {{ padding:0 16px 16px !important; }}
+  }}
 </style>
 </head>
 <body style="margin:0;padding:0;background:#eef2f6;-webkit-text-size-adjust:100%;font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2f6;padding:32px 16px;">
+<table role="presentation" class="em-outer" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2f6;padding:24px 12px;">
 <tr><td align="center">
-<table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(15,23,42,.06);border:1px solid #e2e8f0;">
+<table role="presentation" class="em-card" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(15,23,42,.06);border:1px solid #e2e8f0;">
 <tr><td style="padding:0;background:{header_color};border-bottom:1px solid rgba(0,0,0,.12);">
 {header_inner}
 <div style="color:rgba(255,255,255,.92);font-size:14px;line-height:1.5;text-align:{align};{extra_pad}">{header_extra}</div>
 </td></tr>
-<tr><td style="padding:32px 32px 36px;color:#1e293b;font-size:16px;line-height:1.65;">
+<tr><td class="em-body" style="padding:32px 32px 36px;color:#1e293b;font-size:16px;line-height:1.65;">
 {inner_html}
 </td></tr>
-<tr><td style="padding:24px 32px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:13px;line-height:1.55;color:#64748b;">
+<tr><td class="em-foot" style="padding:24px 32px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:13px;line-height:1.55;color:#64748b;">
 <p style="margin:0 0 14px;color:#475569;">{disc}</p>
 <p style="margin:0 0 10px;white-space:pre-line;">{addr}</p>
 {support_line}
@@ -309,7 +317,7 @@ def wrap_email_html(inner_html: str, layout: EmailGlobalLayout, ctx: dict[str, A
 <div style="margin-top:18px;padding-top:16px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:12px;">{footer_extra}</div>
 </td></tr>
 </table>
-<p style="margin:20px 0 0;font-size:11px;color:#94a3b8;text-align:center;max-width:600px;">This is an automated message. Please do not reply if this inbox is not monitored.</p>
+<p class="em-note" style="margin:20px 0 0;font-size:11px;color:#94a3b8;text-align:center;max-width:600px;">This is an automated message. Please do not reply if this inbox is not monitored.</p>
 </td></tr></table>
 </body></html>"""
 
